@@ -1,0 +1,27 @@
+{
+  "description": "A $device_boot event with power_on reset reason",
+  "input": {
+    "event": "$device_boot",
+    "config": {
+      "device_model": "X3-Pro",
+      "firmware_version": "3.4.1",
+      "environment": "production"
+    },
+    "properties": {
+      "reset_reason": "power_on"
+    }
+  },
+  "expected": {
+    "event": "$device_boot",
+    "distinct_id": "dev_a3f2c1d4e5f6",
+    "properties": {
+      "$device_id": "dev_a3f2c1d4e5f6",
+      "$device_model": "X3-Pro",
+      "$firmware_version": "3.4.1",
+      "$sdk_platform": "*",
+      "$sdk_version": "*",
+      "$environment": "production",
+      "reset_reason": "power_on"
+    }
+  }
+}

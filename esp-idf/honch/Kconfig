@@ -1,0 +1,19 @@
+menu "Honch SDK"
+
+    config HONCH_LOG_VERBOSE
+        bool "Enable verbose logging"
+        default n
+        help
+            Enable extra debug logging from the Honch SDK.
+            Adds detailed logs for queue operations, encoding,
+            and transport activity.
+
+    config HONCH_MAX_QUEUE_DEPTH
+        int "Maximum event queue depth"
+        default 256
+        range 16 1024
+        help
+            Maximum number of events that can be stored in the
+            NVS-backed queue before the oldest events are dropped.
+
+endmenu

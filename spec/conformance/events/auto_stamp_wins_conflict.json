@@ -1,0 +1,24 @@
+{
+  "description": "Auto-stamped properties overwrite user-supplied properties with the same key",
+  "input": {
+    "event": "test_event",
+    "config": {
+      "device_model": "X3-Pro",
+      "firmware_version": "3.4.1",
+      "environment": "staging"
+    },
+    "properties": {
+      "$device_model": "SHOULD_BE_OVERWRITTEN",
+      "$sdk_platform": "SHOULD_BE_OVERWRITTEN",
+      "custom_key": "preserved"
+    }
+  },
+  "expected": {
+    "event": "test_event",
+    "properties": {
+      "$device_model": "X3-Pro",
+      "$sdk_platform": "*",
+      "custom_key": "preserved"
+    }
+  }
+}

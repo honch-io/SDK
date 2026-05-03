@@ -1,0 +1,31 @@
+{
+  "description": "A custom event with an active session and user properties",
+  "input": {
+    "event": "hdr_burst_used",
+    "config": {
+      "device_model": "X3-Pro",
+      "firmware_version": "3.4.1",
+      "environment": "production"
+    },
+    "session_id": "sess_550e8400-e29b-41d4-a716-446655440000",
+    "properties": {
+      "duration": 3.2,
+      "mode": "auto"
+    }
+  },
+  "expected": {
+    "event": "hdr_burst_used",
+    "distinct_id": "dev_a3f2c1d4e5f6",
+    "properties": {
+      "$device_id": "dev_a3f2c1d4e5f6",
+      "$device_model": "X3-Pro",
+      "$firmware_version": "3.4.1",
+      "$sdk_platform": "*",
+      "$sdk_version": "*",
+      "$environment": "production",
+      "$session_id": "sess_550e8400-e29b-41d4-a716-446655440000",
+      "duration": 3.2,
+      "mode": "auto"
+    }
+  }
+}

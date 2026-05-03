@@ -1,0 +1,41 @@
+{
+  "description": "A minimal valid batch envelope with one event",
+  "input": {
+    "api_key": "test_key_123",
+    "events": [
+      {
+        "event": "button_pressed",
+        "distinct_id": "dev_a3f2c1d4e5f6",
+        "timestamp": "2026-05-01T10:15:32.000Z",
+        "properties": {
+          "$device_id": "dev_a3f2c1d4e5f6",
+          "$device_model": "X3-Pro",
+          "$firmware_version": "3.4.1",
+          "$sdk_platform": "esp-idf",
+          "$sdk_version": "0.1.0",
+          "$environment": "production",
+          "pin": 0
+        }
+      }
+    ]
+  },
+  "expected": {
+    "token": "test_key_123",
+    "batch": [
+      {
+        "event": "button_pressed",
+        "distinct_id": "dev_a3f2c1d4e5f6",
+        "timestamp": "2026-05-01T10:15:32.000Z",
+        "properties": {
+          "$device_id": "dev_a3f2c1d4e5f6",
+          "$device_model": "X3-Pro",
+          "$firmware_version": "3.4.1",
+          "$sdk_platform": "esp-idf",
+          "$sdk_version": "0.1.0",
+          "$environment": "production",
+          "pin": 0
+        }
+      }
+    ]
+  }
+}

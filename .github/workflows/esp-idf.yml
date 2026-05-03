@@ -1,0 +1,30 @@
+name: ESP-IDF Build
+
+on:
+  push:
+    paths:
+      - 'sdks/esp-idf/**'
+      - 'sdks/spec/**'
+  pull_request:
+    paths:
+      - 'sdks/esp-idf/**'
+      - 'sdks/spec/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:v5.3
+    strategy:
+      matrix:
+        target: [esp32, esp32s3, esp32c3]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build example for ${{ matrix.target }}
+        working-directory: sdks/esp-idf/example
+        shell: bash
+        run: |
+          . $IDF_PATH/export.sh
+          idf.py set-target ${{ matrix.target }}
+          idf.py build
