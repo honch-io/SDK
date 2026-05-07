@@ -34,6 +34,10 @@ target_link_libraries(honch_c_core
         CURL::libcurl
 )
 
+target_compile_definitions(honch_c_core PRIVATE
+    _POSIX_C_SOURCE=200809L
+)
+
 target_compile_options(honch_c_core PRIVATE
     $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
 )
@@ -46,7 +50,12 @@ if(HONCH_BUILD_TESTS)
     )
 
     target_link_libraries(honch_c_core_tests PRIVATE honch_c_core)
-    target_compile_definitions(honch_c_core_tests PRIVATE HONCH_TESTING)
+    target_compile_definitions(honch_c_core_tests PRIVATE
+        HONCH_TESTING
+        _POSIX_C_SOURCE=200809L
+        _DEFAULT_SOURCE
+        _DARWIN_C_SOURCE
+    )
     target_compile_options(honch_c_core_tests PRIVATE
         $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
     )
