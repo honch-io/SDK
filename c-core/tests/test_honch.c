@@ -612,7 +612,7 @@ static void test_flush_drains_multiple_batches(void)
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
     EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 0);
     EXPECT_EQ_INT(transport.calls, 2);
-    EXPECT_TRUE(strcmp(transport.last_url, "http://collector.local/v1/batch") == 0);
+    EXPECT_TRUE(strcmp(transport.last_url, "http://collector.local/batch") == 0);
     EXPECT_TRUE(strcmp(transport.last_api_key, "test-key") == 0);
     EXPECT_STR_CONTAINS(transport.last_payload, "\"token\":\"test-key\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"third\"");
