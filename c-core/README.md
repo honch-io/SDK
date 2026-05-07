@@ -19,6 +19,7 @@ Implemented:
 - persistent generated `device_id`
 - persistent current `distinct_id`
 - persistent event context properties
+- automatic core lifecycle events for boot, shutdown, and reset
 - explicit event tracking and flushing
 - reset behavior for factory-reset-style identity rotation
 - local mock collector for development
@@ -213,6 +214,7 @@ Current C tests cover:
 - configured and generated device ID access
 - persistent properties on future events
 - session start/end events and `$session_id` event context
+- boot, shutdown, and reset lifecycle events
 - identify payload and persisted `distinct_id`
 - bounded queue drop-oldest behavior
 - retryable flush preserving pending events
