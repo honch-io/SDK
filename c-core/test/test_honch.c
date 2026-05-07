@@ -353,6 +353,25 @@ static void test_generated_device_id_persists(void)
     honch_shutdown(client);
 }
 
+static void test_existing_invalid_state_path_fails_init(void)
+{
+    char queue_dir[128];
+    char state_dir[180];
+    char device_path[220];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    snprintf(state_dir, sizeof(state_dir), "%s/state", queue_dir);
+    snprintf(device_path, sizeof(device_path), "%s/device_id", state_dir);
+    EXPECT_EQ_INT(mkdir(state_dir, 0700), 0);
+    EXPECT_EQ_INT(mkdir(device_path, 0700), 0);
+
+    honch_config_t config = test_config(queue_dir);
+    config.device_id = NULL;
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_ERROR_IO);
+    EXPECT_TRUE(client == NULL);
+}
+
 static void test_configured_device_id_accessor(void)
 {
     char queue_dir[128];
@@ -917,6 +936,7 @@ int main(void)
     test_track_persists_event();
     test_strict_json_validation();
     test_generated_device_id_persists();
+    test_existing_invalid_state_path_fails_init();
     test_configured_device_id_accessor();
     test_set_property_emits_event_and_autostamp_conflicts_win();
     test_session_events_and_context();

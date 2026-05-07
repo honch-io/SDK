@@ -1,8 +1,10 @@
 #include "honch_internal.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static honch_status_t honch_state_path(honch_client_t *client, const char *name, char **out)
@@ -32,12 +34,19 @@ static honch_status_t honch_read_optional_state_file(
         return status;
     }
 
+    struct stat info;
+    if (stat(path, &info) != 0) {
+        int saved_errno = errno;
+        free(path);
+        if (saved_errno == ENOENT) {
+            *out = NULL;
+            return HONCH_OK;
+        }
+        return HONCH_ERROR_IO;
+    }
+
     status = honch_read_file(path, out);
     free(path);
-    if (status == HONCH_ERROR_IO) {
-        *out = NULL;
-        return HONCH_OK;
-    }
     if (status == HONCH_OK && *out != NULL) {
         honch_trim_trailing_ws(*out);
     }
