@@ -32,6 +32,10 @@ typedef struct honch_config {
     size_t max_queued_events;
     size_t max_event_bytes;
     unsigned int transport_timeout_ms;
+    unsigned int flush_interval_seconds;
+    size_t flush_event_threshold;
+    unsigned int flush_retry_initial_ms;
+    unsigned int flush_retry_max_ms;
     int (*battery_callback)(void);
     int battery_low_threshold;
 } honch_config_t;

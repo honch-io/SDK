@@ -15,6 +15,8 @@
 #define HONCH_DEFAULT_MAX_EVENT_BYTES 16384u
 #define HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS 10000u
 #define HONCH_DEFAULT_BATTERY_LOW_THRESHOLD 15
+#define HONCH_DEFAULT_FLUSH_RETRY_INITIAL_MS 1000u
+#define HONCH_DEFAULT_FLUSH_RETRY_MAX_MS 300000u
 #define HONCH_MAX_EVENT_NAME 128u
 #define HONCH_MAX_DISTINCT_ID 256u
 #define HONCH_MAX_PROPERTY_KEY 128u
@@ -44,6 +46,8 @@ typedef enum honch_http_result {
 
 struct honch_client {
     pthread_mutex_t mutex;
+    pthread_cond_t scheduler_cond;
+    pthread_t scheduler_thread;
     char *api_key;
     char *endpoint_url;
     char *device_id;
@@ -61,6 +65,17 @@ struct honch_client {
     size_t max_queued_events;
     size_t max_event_bytes;
     unsigned int transport_timeout_ms;
+    unsigned int flush_interval_seconds;
+    size_t flush_event_threshold;
+    unsigned int flush_retry_initial_ms;
+    unsigned int flush_retry_max_ms;
+    uint64_t next_interval_flush_ms;
+    uint64_t next_retry_flush_ms;
+    unsigned int current_retry_delay_ms;
+    bool scheduler_enabled;
+    bool scheduler_started;
+    bool scheduler_stop;
+    bool scheduler_flush_requested;
     int (*battery_callback)(void);
     int battery_low_threshold;
     bool battery_low_emitted;
@@ -104,6 +119,7 @@ honch_status_t honch_state_reset(honch_client_t *client);
 
 honch_status_t honch_queue_enqueue(honch_client_t *client, const char *event_json);
 honch_status_t honch_queue_clear(honch_client_t *client);
+honch_status_t honch_queue_count_pending(honch_client_t *client, size_t *count);
 honch_status_t honch_queue_flush_locked(honch_client_t *client);
 
 honch_status_t honch_transport_post_batch(
