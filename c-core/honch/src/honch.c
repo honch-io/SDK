@@ -24,21 +24,6 @@ static honch_status_t honch_validate_distinct_id(const char *distinct_id)
     return HONCH_OK;
 }
 
-static honch_status_t honch_validate_property_key(const char *key)
-{
-    if (honch_is_blank(key) || strlen(key) > HONCH_MAX_PROPERTY_KEY ||
-        honch_property_key_is_reserved(key)) {
-        return HONCH_ERROR_INVALID_ARGUMENT;
-    }
-
-    for (const unsigned char *cursor = (const unsigned char *)key; *cursor != '\0'; cursor++) {
-        if (*cursor < 0x20u) {
-            return HONCH_ERROR_INVALID_ARGUMENT;
-        }
-    }
-    return HONCH_OK;
-}
-
 bool honch_property_key_is_reserved(const char *key)
 {
     static const char *reserved[] = {
@@ -47,7 +32,6 @@ bool honch_property_key_is_reserved(const char *key)
         "$device_model",
         "$environment",
         "$firmware_version",
-        "$sdk_name",
         "$sdk_platform",
         "$sdk_version",
         "$session_id",
@@ -129,9 +113,6 @@ static honch_status_t honch_append_properties_object(
         status = honch_json_append_object_members(buffer, properties_json, &has_members);
     }
     if (status == HONCH_OK) {
-        status = honch_state_append_properties(client, buffer, &has_members);
-    }
-    if (status == HONCH_OK) {
         status = honch_append_property_pair(buffer, &has_members, "$device_id", client->device_id);
     }
     if (status == HONCH_OK && client->session_id != NULL) {
@@ -150,9 +131,6 @@ static honch_status_t honch_append_properties_object(
         char level_json[4];
         snprintf(level_json, sizeof(level_json), "%d", battery_level);
         status = honch_append_raw_property_pair(buffer, &has_members, "$battery_level", level_json);
-    }
-    if (status == HONCH_OK) {
-        status = honch_append_property_pair(buffer, &has_members, "$sdk_name", HONCH_SDK_NAME);
     }
     if (status == HONCH_OK) {
         status = honch_append_property_pair(buffer, &has_members, "$sdk_version", HONCH_SDK_VERSION);
@@ -174,13 +152,8 @@ static honch_status_t honch_build_event(
     int battery_level,
     char **out)
 {
-    char uuid[33];
-    honch_status_t status = honch_random_hex(uuid);
-    if (status != HONCH_OK) {
-        return status;
-    }
     char timestamp[25];
-    status = honch_now_iso8601(timestamp);
+    honch_status_t status = honch_now_iso8601(timestamp);
     if (status != HONCH_OK) {
         return status;
     }
@@ -191,15 +164,9 @@ static honch_status_t honch_build_event(
         return status;
     }
 
-    status = honch_buffer_append(&buffer, "{\"uuid\":");
+    status = honch_buffer_append(&buffer, "{\"event\":");
     if (status == HONCH_OK) {
-        status = honch_json_append_string(&buffer, uuid);
-    }
-    if (status == HONCH_OK) {
-        status = honch_buffer_append(&buffer, ",\"timestamp\":");
-    }
-    if (status == HONCH_OK) {
-        status = honch_json_append_string(&buffer, timestamp);
+        status = honch_json_append_string(&buffer, event_name);
     }
     if (status == HONCH_OK) {
         status = honch_buffer_append(&buffer, ",\"distinct_id\":");
@@ -208,10 +175,10 @@ static honch_status_t honch_build_event(
         status = honch_json_append_string(&buffer, client->distinct_id);
     }
     if (status == HONCH_OK) {
-        status = honch_buffer_append(&buffer, ",\"event\":");
+        status = honch_buffer_append(&buffer, ",\"timestamp\":");
     }
     if (status == HONCH_OK) {
-        status = honch_json_append_string(&buffer, event_name);
+        status = honch_json_append_string(&buffer, timestamp);
     }
     if (status == HONCH_OK) {
         status = honch_buffer_append(&buffer, ",");
@@ -600,6 +567,9 @@ honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
     next->endpoint_url = honch_strdup(config->endpoint_url);
     next->queue_directory = honch_strdup(config->queue_directory);
     next->batch_size = config->batch_size == 0u ? HONCH_DEFAULT_BATCH_SIZE : config->batch_size;
+    if (next->batch_size > HONCH_MAX_BATCH_SIZE) {
+        next->batch_size = HONCH_MAX_BATCH_SIZE;
+    }
     next->max_queued_events = config->max_queued_events == 0u ? HONCH_DEFAULT_MAX_QUEUED_EVENTS : config->max_queued_events;
     next->max_event_bytes = config->max_event_bytes == 0u ? HONCH_DEFAULT_MAX_EVENT_BYTES : config->max_event_bytes;
     next->transport_timeout_ms = config->transport_timeout_ms == 0u ?
@@ -722,14 +692,35 @@ honch_status_t honch_identify(honch_client_t *client, const char *distinct_id, c
 
 honch_status_t honch_set_property(honch_client_t *client, const char *key, const char *value_json)
 {
-    if (client == NULL || honch_validate_property_key(key) != HONCH_OK ||
-        value_json == NULL || !honch_json_is_value(value_json)) {
+    if (client == NULL || key == NULL || !honch_json_is_value(value_json)) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    pthread_mutex_lock(&client->mutex);
-    honch_status_t status = honch_state_set_property(client, key, value_json);
-    pthread_mutex_unlock(&client->mutex);
+    const char *value = value_json == NULL ? "null" : value_json;
+    honch_buffer_t properties;
+    honch_status_t status = honch_buffer_init(&properties, strlen(key) + strlen(value) + 16u);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    status = honch_buffer_append(&properties, "{");
+    if (status == HONCH_OK) {
+        status = honch_json_append_string(&properties, key);
+    }
+    if (status == HONCH_OK) {
+        status = honch_buffer_append(&properties, ":");
+    }
+    if (status == HONCH_OK) {
+        status = honch_buffer_append(&properties, value);
+    }
+    if (status == HONCH_OK) {
+        status = honch_buffer_append(&properties, "}");
+    }
+    if (status == HONCH_OK) {
+        status = honch_track(client, "$set_property", properties.data);
+    }
+
+    honch_buffer_free(&properties);
     return status;
 }
 

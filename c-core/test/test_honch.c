@@ -280,7 +280,7 @@ static void test_strict_json_validation(void)
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 1);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 2);
 
     honch_shutdown(client);
 }
@@ -327,32 +327,41 @@ static void test_configured_device_id_accessor(void)
     honch_shutdown(client);
 }
 
-static void test_set_property_attaches_to_future_events(void)
+static void test_set_property_emits_event_and_autostamp_conflicts_win(void)
 {
     char queue_dir[128];
     make_temp_dir(queue_dir, sizeof(queue_dir));
     honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
 
     fake_transport_context_t transport = {.response_code = 202L};
     honch_test_set_transport(fake_transport, &transport);
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_set_property(client, "$session_id", "\"session-1\""), HONCH_ERROR_INVALID_ARGUMENT);
     EXPECT_EQ_INT(honch_set_property(client, "screen_group", "\"diagnostics\""), HONCH_OK);
-    EXPECT_EQ_INT(
-        honch_track(client, "screen_viewed", "{\"screen\":\"diagnostics\",\"$device_id\":\"spoofed\"}"),
-        HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "reserved_only", "{\"\\u0024sdk_platform\":\"spoofed\"}"), HONCH_OK);
+    EXPECT_EQ_INT(honch_set_property(client, "nullable", NULL), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$set_property\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"screen_group\":\"diagnostics\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"nullable\":null");
+
+    transport.last_payload[0] = '\0';
+    EXPECT_EQ_INT(
+        honch_track(client, "screen_viewed", "{\"screen\":\"diagnostics\",\"$device_id\":\"spoofed\",\"\\u0024sdk_platform\":\"spoofed\"}"),
+        HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"screen_group\":\"diagnostics\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$device_id\":\"device-1\"");
     EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"$device_id\":\"spoofed\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$device_model\":\"X3-Pro\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$firmware_version\":\"3.4.1\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$sdk_platform\":\"c-posix\"");
     EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"$sdk_platform\":\"spoofed\"");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"$sdk_name\":");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"uuid\":");
     char timestamp[32];
     EXPECT_TRUE(extract_timestamp(transport.last_payload, timestamp, sizeof(timestamp)) != 0);
     EXPECT_TRUE(is_iso8601_timestamp(timestamp));
@@ -667,6 +676,33 @@ static void test_flush_drains_multiple_batches(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_batch_size_is_capped_to_esp_limit(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 100u;
+    config.max_queued_events = 100u;
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    for (int i = 0; i < 60; i++) {
+        EXPECT_EQ_INT(honch_track(client, "cap_event", NULL), HONCH_OK);
+    }
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+
+    char pending_dir[160];
+    snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 0);
+    EXPECT_EQ_INT(transport.calls, 2);
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
 static void test_gzip_payload_round_trips(void)
 {
     const char *payload = "{\"token\":\"test-key\",\"batch\":[]}";
@@ -794,7 +830,7 @@ int main(void)
     test_strict_json_validation();
     test_generated_device_id_persists();
     test_configured_device_id_accessor();
-    test_set_property_attaches_to_future_events();
+    test_set_property_emits_event_and_autostamp_conflicts_win();
     test_session_events_and_context();
     test_lifecycle_events_are_queued();
     test_firmware_update_emitted_when_version_changes();
@@ -805,6 +841,7 @@ int main(void)
     test_background_flush_threshold_drains_queue();
     test_background_flush_retries_with_backoff();
     test_flush_drains_multiple_batches();
+    test_batch_size_is_capped_to_esp_limit();
     test_gzip_payload_round_trips();
     test_flush_rejected_moves_events_to_dead_letter();
     test_reset_clears_queued_events();

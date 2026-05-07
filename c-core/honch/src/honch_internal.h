@@ -8,9 +8,9 @@
 #include <stdint.h>
 #include <pthread.h>
 
-#define HONCH_SDK_NAME "honch-c-core"
 #define HONCH_SDK_VERSION "0.2.0"
 #define HONCH_DEFAULT_BATCH_SIZE 20u
+#define HONCH_MAX_BATCH_SIZE 50u
 #define HONCH_DEFAULT_MAX_QUEUED_EVENTS 1000u
 #define HONCH_DEFAULT_MAX_EVENT_BYTES 16384u
 #define HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS 10000u
