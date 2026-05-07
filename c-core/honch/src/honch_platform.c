@@ -59,7 +59,6 @@ void honch_free_client_fields(honch_client_t *client)
     free(client->pending_directory);
     free(client->dead_directory);
     free(client->state_directory);
-    free(client->properties_directory);
     free(client->distinct_id);
     free(client->session_id);
 }
