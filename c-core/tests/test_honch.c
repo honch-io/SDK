@@ -499,8 +499,9 @@ static void test_identify_payload_and_persistence(void)
 
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$identify\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"distinct_id\":\"user-1\"");
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"$anon_distinct_id\":\"device-1\"");
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"$set\":{\"plan\":\"beta\"}");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"plan\":\"beta\"");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"$anon_distinct_id\"");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"$set\"");
 
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
