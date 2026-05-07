@@ -26,7 +26,7 @@ Implemented:
 - persisted firmware version change detection
 - persistent event context properties
 - battery level auto-stamping and low-battery lifecycle events
-- automatic core lifecycle events for boot, shutdown, and reset
+- automatic core lifecycle events for boot and shutdown
 - explicit event tracking and flushing
 - reset behavior for factory-reset-style identity rotation
 - local mock collector for development
@@ -247,8 +247,8 @@ Queue behavior:
 - when full, the oldest event is dropped before accepting a new event
 - retryable failures keep files in `pending/`
 - permanent rejections move attempted files to `dead/`
-- `honch_reset` clears pending/dead queues before queuing a fresh `$device_reset`
-  event and rotating identity state
+- `honch_reset` rotates identity state and clears pending/dead queues as a
+  factory-reset boundary
 
 ## Test Coverage
 
@@ -264,7 +264,7 @@ Current C tests cover:
 - configured and generated device ID access
 - persistent properties on future events
 - session start/end events and `$session_id` event context
-- boot, shutdown, and reset lifecycle events
+- boot and shutdown lifecycle events
 - firmware update detection
 - battery callback, `$battery_level`, and `$battery_low`
 - identify payload and persisted `distinct_id`
@@ -273,7 +273,7 @@ Current C tests cover:
 - background threshold flush and retry backoff
 - multi-batch flush
 - permanent rejection dead-letter behavior
-- reset queue clearing while preserving `$device_reset`
+- reset queue clearing
 - reset identity behavior
 
 Run:
