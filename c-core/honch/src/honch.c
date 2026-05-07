@@ -909,6 +909,31 @@ const char *honch_get_device_id(honch_client_t *client)
     return client->device_id;
 }
 
+honch_status_t honch_copy_device_id(honch_client_t *client, char *buffer, size_t buffer_size)
+{
+    if (client == NULL || buffer == NULL || buffer_size == 0u) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    pthread_mutex_lock(&client->mutex);
+
+    honch_status_t status = HONCH_OK;
+    size_t length = strlen(client->device_id);
+    size_t needed = 0u;
+    status = honch_size_add(length, 1u, &needed);
+    if (status == HONCH_OK && needed > buffer_size) {
+        status = HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    if (status == HONCH_OK) {
+        memcpy(buffer, client->device_id, needed);
+    } else {
+        buffer[0] = '\0';
+    }
+
+    pthread_mutex_unlock(&client->mutex);
+    return status;
+}
+
 const char *honch_status_string(honch_status_t status)
 {
     switch (status) {

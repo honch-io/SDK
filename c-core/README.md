@@ -127,6 +127,7 @@ honch_status_t honch_flush(honch_client_t *client);
 honch_status_t honch_reset(honch_client_t *client);
 void honch_shutdown(honch_client_t *client);
 const char *honch_get_device_id(honch_client_t *client);
+honch_status_t honch_copy_device_id(honch_client_t *client, char *buffer, size_t buffer_size);
 const char *honch_status_string(honch_status_t status);
 ```
 
@@ -153,9 +154,10 @@ Optional config:
 - `battery_callback`: returns `0`-`100`, or negative when unknown
 - `battery_low_threshold`: defaults to `15`
 
-`honch_get_device_id` returns the active device ID for the client, or `NULL` for
-an invalid client. The returned pointer is owned by the SDK and remains valid
-until `honch_reset` or `honch_shutdown`.
+`honch_get_device_id` returns a borrowed pointer for single-threaded callers.
+The returned pointer is owned by the SDK and remains valid until `honch_reset`
+or `honch_shutdown`. Use `honch_copy_device_id` when another thread may reset or
+shut down the client while the ID is being read.
 
 `honch_session_start` starts an in-memory analytics session, queues a
 `$session_start` event, and attaches the generated `$session_id` to later

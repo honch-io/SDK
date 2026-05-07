@@ -379,9 +379,17 @@ static void test_configured_device_id_accessor(void)
     honch_config_t config = test_config(queue_dir);
 
     honch_client_t *client = NULL;
+    char copied_id[16];
     EXPECT_TRUE(honch_get_device_id(NULL) == NULL);
+    EXPECT_EQ_INT(honch_copy_device_id(NULL, copied_id, sizeof(copied_id)), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ_INT(honch_copy_device_id(client, NULL, sizeof(copied_id)), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ_INT(honch_copy_device_id(client, copied_id, 0u), HONCH_ERROR_INVALID_ARGUMENT);
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
     EXPECT_TRUE(strcmp(honch_get_device_id(client), "device-1") == 0);
+    EXPECT_EQ_INT(honch_copy_device_id(client, copied_id, 4u), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_TRUE(copied_id[0] == '\0');
+    EXPECT_EQ_INT(honch_copy_device_id(client, copied_id, sizeof(copied_id)), HONCH_OK);
+    EXPECT_TRUE(strcmp(copied_id, "device-1") == 0);
 
     honch_shutdown(client);
 }
