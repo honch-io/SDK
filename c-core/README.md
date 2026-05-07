@@ -19,6 +19,7 @@ Implemented:
 - persistent generated `device_id`
 - persistent current `distinct_id`
 - ISO-8601 UTC event timestamps
+- tokenized batch flush envelopes
 - persisted firmware version change detection
 - persistent event context properties
 - battery level auto-stamping and low-battery lifecycle events
@@ -223,6 +224,7 @@ Current C tests cover:
 - init validation
 - event persistence
 - ISO-8601 timestamp encoding
+- tokenized batch envelope encoding
 - strict JSON validation for public property input
 - generated `device_id` persistence
 - configured and generated device ID access

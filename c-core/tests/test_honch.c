@@ -527,6 +527,7 @@ static void test_flush_drains_multiple_batches(void)
     EXPECT_EQ_INT(transport.calls, 2);
     EXPECT_TRUE(strcmp(transport.last_url, "http://collector.local/v1/batch") == 0);
     EXPECT_TRUE(strcmp(transport.last_api_key, "test-key") == 0);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"token\":\"test-key\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"third\"");
 
     honch_shutdown(client);
