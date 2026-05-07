@@ -60,6 +60,31 @@ static int read_text_file(const char *path, char *out, size_t size)
     return 1;
 }
 
+static int read_first_json_file(const char *directory, char *out, size_t size)
+{
+    DIR *dir = opendir(directory);
+    if (dir == NULL) {
+        return 0;
+    }
+
+    int result = 0;
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        size_t length = strlen(entry->d_name);
+        if (length < 5u || strcmp(entry->d_name + length - 5u, ".json") != 0) {
+            continue;
+        }
+
+        char path[320];
+        snprintf(path, sizeof(path), "%s/%s", directory, entry->d_name);
+        result = read_text_file(path, out, size);
+        break;
+    }
+
+    closedir(dir);
+    return result;
+}
+
 typedef struct fake_transport_context {
     long response_code;
     int calls;
@@ -123,7 +148,7 @@ static void test_track_persists_event(void)
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 1);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 2);
 
     honch_shutdown(client);
 }
@@ -143,7 +168,7 @@ static void test_strict_json_validation(void)
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 1);
 
     honch_shutdown(client);
 }
@@ -245,6 +270,37 @@ static void test_session_events_and_context(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_lifecycle_events_are_queued(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$device_boot\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"reset_reason\":\"unknown\"");
+
+    EXPECT_EQ_INT(honch_reset(client), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$device_reset\"");
+
+    char pending_dir[160];
+    char shutdown_event[4096];
+    snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
+    honch_shutdown(client);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 1);
+    EXPECT_TRUE(read_first_json_file(pending_dir, shutdown_event, sizeof(shutdown_event)) != 0);
+    EXPECT_STR_CONTAINS(shutdown_event, "\"event\":\"$device_shutdown\"");
+
+    honch_test_set_transport(NULL, NULL);
+}
+
 static void test_identify_payload_and_persistence(void)
 {
     char queue_dir[128];
@@ -313,7 +369,7 @@ static void test_flush_retry_keeps_events(void)
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 1);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 2);
 
     honch_shutdown(client);
 }
@@ -367,7 +423,7 @@ static void test_flush_rejected_moves_events_to_dead_letter(void)
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
     snprintf(dead_dir, sizeof(dead_dir), "%s/dead", queue_dir);
     EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 0);
-    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".json"), 1);
+    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".json"), 2);
 
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
@@ -412,6 +468,7 @@ int main(void)
     test_configured_device_id_accessor();
     test_set_property_attaches_to_future_events();
     test_session_events_and_context();
+    test_lifecycle_events_are_queued();
     test_identify_payload_and_persistence();
     test_queue_limit_drops_oldest();
     test_flush_retry_keeps_events();

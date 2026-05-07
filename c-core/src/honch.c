@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+static const char HONCH_BOOT_PROPERTIES[] = "{\"reset_reason\":\"unknown\"}";
+
 static honch_status_t honch_validate_event_name(const char *event_name)
 {
     if (honch_is_blank(event_name) || strlen(event_name) > HONCH_MAX_EVENT_NAME) {
@@ -275,6 +277,7 @@ honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
         config->transport_timeout_ms;
 
     honch_status_t status = HONCH_OK;
+    bool mutex_initialized = false;
     if (next->api_key == NULL || next->endpoint_url == NULL || next->queue_directory == NULL) {
         status = HONCH_ERROR_OUT_OF_MEMORY;
     }
@@ -283,9 +286,17 @@ honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
     }
     if (status == HONCH_OK && pthread_mutex_init(&next->mutex, NULL) != 0) {
         status = HONCH_ERROR_IO;
+    } else if (status == HONCH_OK) {
+        mutex_initialized = true;
+    }
+    if (status == HONCH_OK) {
+        status = honch_track_locked(next, "$device_boot", HONCH_BOOT_PROPERTIES);
     }
 
     if (status != HONCH_OK) {
+        if (mutex_initialized) {
+            pthread_mutex_destroy(&next->mutex);
+        }
         honch_free_client_fields(next);
         free(next);
         return status;
@@ -469,6 +480,11 @@ honch_status_t honch_reset(honch_client_t *client)
 
     pthread_mutex_lock(&client->mutex);
     honch_status_t status = honch_state_reset(client);
+    if (status == HONCH_OK) {
+        free(client->session_id);
+        client->session_id = NULL;
+        status = honch_track_locked(client, "$device_reset", NULL);
+    }
     pthread_mutex_unlock(&client->mutex);
     return status;
 }
@@ -478,6 +494,10 @@ void honch_shutdown(honch_client_t *client)
     if (client == NULL) {
         return;
     }
+
+    pthread_mutex_lock(&client->mutex);
+    (void)honch_track_locked(client, "$device_shutdown", NULL);
+    pthread_mutex_unlock(&client->mutex);
 
     pthread_mutex_destroy(&client->mutex);
     honch_free_client_fields(client);
