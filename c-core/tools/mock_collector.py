@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 class CollectorHandler(BaseHTTPRequestHandler):
     def do_POST(self):
-        if self.path != "/v1/batch":
+        if self.path != "/batch":
             self.send_response(404)
             self.end_headers()
             return

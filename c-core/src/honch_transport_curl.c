@@ -29,7 +29,7 @@ static size_t honch_discard_response(char *ptr, size_t size, size_t nmemb, void 
 
 static honch_status_t honch_batch_url(const char *endpoint_url, char **out)
 {
-    const char *suffix = "/v1/batch";
+    const char *suffix = "/batch";
     size_t endpoint_length = strlen(endpoint_url);
     while (endpoint_length > 0u && endpoint_url[endpoint_length - 1u] == '/') {
         endpoint_length--;
