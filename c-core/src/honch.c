@@ -704,25 +704,7 @@ honch_status_t honch_identify(honch_client_t *client, const char *distinct_id, c
     client->distinct_id = next_distinct_id;
     next_distinct_id = NULL;
 
-    honch_buffer_t properties;
-    honch_status_t status = honch_buffer_init(&properties, 256u);
-    bool has_members = false;
-    if (status == HONCH_OK) {
-        status = honch_buffer_append(&properties, "{");
-    }
-    if (status == HONCH_OK) {
-        status = honch_append_property_pair(&properties, &has_members, "$anon_distinct_id", previous_distinct_id);
-    }
-    if (status == HONCH_OK) {
-        status = honch_append_raw_property_pair(&properties, &has_members, "$set", traits_json == NULL ? "{}" : traits_json);
-    }
-    if (status == HONCH_OK) {
-        status = honch_buffer_append(&properties, "}");
-    }
-
-    if (status == HONCH_OK) {
-        status = honch_track_locked(client, "$identify", properties.data);
-    }
+    honch_status_t status = honch_track_locked(client, "$identify", traits_json);
     if (status == HONCH_OK) {
         status = honch_state_save_distinct_id(client);
     }
@@ -734,7 +716,6 @@ honch_status_t honch_identify(honch_client_t *client, const char *distinct_id, c
     }
 
     free(previous_distinct_id);
-    honch_buffer_free(&properties);
     pthread_mutex_unlock(&client->mutex);
     return status;
 }
