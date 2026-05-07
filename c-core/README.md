@@ -21,6 +21,7 @@ Implemented:
 - ISO-8601 UTC event timestamps
 - tokenized batch flush envelopes
 - gzip-compressed JSON flush requests
+- isolated batch encoder boundary for the future CBOR transition
 - opt-in background flushing with retry backoff and jitter
 - persisted firmware version change detection
 - persistent event context properties

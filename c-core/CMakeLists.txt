@@ -19,6 +19,7 @@ find_package(ZLIB REQUIRED)
 
 add_library(honch_c_core
     src/honch.c
+    src/honch_encoder.c
     src/honch_json.c
     src/honch_platform.c
     src/honch_queue.c

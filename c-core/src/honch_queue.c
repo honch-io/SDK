@@ -86,50 +86,6 @@ honch_status_t honch_queue_count_pending(honch_client_t *client, size_t *count)
     return status;
 }
 
-static honch_status_t honch_build_batch(honch_client_t *client, const honch_file_list_t *files, size_t count, char **out)
-{
-    honch_buffer_t buffer;
-    honch_status_t status = honch_buffer_init(&buffer, 1024u);
-    if (status != HONCH_OK) {
-        return status;
-    }
-
-    status = honch_buffer_append(&buffer, "{\"token\":");
-    if (status == HONCH_OK) {
-        status = honch_json_append_string(&buffer, client->api_key);
-    }
-    if (status == HONCH_OK) {
-        status = honch_buffer_append(&buffer, ",\"batch\":[");
-    }
-    for (size_t i = 0u; status == HONCH_OK && i < count; i++) {
-        char *event_json = NULL;
-        status = honch_read_file(files->items[i].path, &event_json);
-        if (status != HONCH_OK) {
-            break;
-        }
-
-        if (i > 0u) {
-            status = honch_buffer_append(&buffer, ",");
-        }
-        if (status == HONCH_OK) {
-            status = honch_buffer_append(&buffer, event_json);
-        }
-        free(event_json);
-    }
-
-    if (status == HONCH_OK) {
-        status = honch_buffer_append(&buffer, "]}");
-    }
-
-    if (status != HONCH_OK) {
-        honch_buffer_free(&buffer);
-        return status;
-    }
-
-    *out = buffer.data;
-    return HONCH_OK;
-}
-
 static honch_status_t honch_delete_files(const honch_file_list_t *files, size_t count)
 {
     honch_status_t status = HONCH_OK;
@@ -188,7 +144,7 @@ honch_status_t honch_queue_flush_locked(honch_client_t *client)
 
         size_t count = files.count < client->batch_size ? files.count : client->batch_size;
         char *payload = NULL;
-        status = honch_build_batch(client, &files, count, &payload);
+        status = honch_encoder_build_batch_json(client, &files, count, &payload);
         if (status != HONCH_OK) {
             honch_file_list_free(&files);
             return status;
