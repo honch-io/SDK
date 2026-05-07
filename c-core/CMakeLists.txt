@@ -4,6 +4,7 @@ project(honch_c_core C)
 
 option(HONCH_BUILD_TESTS "Build Honch C/POSIX SDK tests" ON)
 option(HONCH_BUILD_EXAMPLES "Build Honch C/POSIX SDK examples" ON)
+option(HONCH_BUILD_E2E "Build Honch C/POSIX SDK real ingest E2E test" OFF)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -66,6 +67,25 @@ if(HONCH_BUILD_TESTS)
     )
 
     add_test(NAME honch_c_core_tests COMMAND honch_c_core_tests)
+
+    if(HONCH_BUILD_E2E)
+        add_executable(honch_c_core_e2e
+            test/test_e2e_capture.c
+        )
+
+        target_link_libraries(honch_c_core_e2e PRIVATE honch_c_core)
+        target_compile_definitions(honch_c_core_e2e PRIVATE
+            _POSIX_C_SOURCE=200809L
+            _DEFAULT_SOURCE
+            _DARWIN_C_SOURCE
+        )
+        target_compile_options(honch_c_core_e2e PRIVATE
+            $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
+        )
+
+        add_test(NAME honch_c_core_e2e COMMAND honch_c_core_e2e)
+        set_tests_properties(honch_c_core_e2e PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
 endif()
 
 if(HONCH_BUILD_EXAMPLES)
