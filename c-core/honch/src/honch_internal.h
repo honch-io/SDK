@@ -84,6 +84,9 @@ bool honch_is_blank(const char *value);
 bool honch_property_key_is_reserved(const char *key);
 char *honch_strdup(const char *value);
 void honch_free_client_fields(honch_client_t *client);
+honch_status_t honch_size_add(size_t left, size_t right, size_t *out);
+honch_status_t honch_size_add3(size_t first, size_t second, size_t third, size_t *out);
+honch_status_t honch_size_mul(size_t left, size_t right, size_t *out);
 
 honch_status_t honch_buffer_init(honch_buffer_t *buffer, size_t initial_capacity);
 void honch_buffer_free(honch_buffer_t *buffer);
