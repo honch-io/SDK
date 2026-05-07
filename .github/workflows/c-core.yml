@@ -1,0 +1,41 @@
+name: C/POSIX SDK
+
+on:
+  push:
+    paths:
+      - "c-core/**"
+      - ".github/workflows/c-core.yml"
+  pull_request:
+    paths:
+      - "c-core/**"
+      - ".github/workflows/c-core.yml"
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake libcurl4-openssl-dev
+
+      - name: Configure
+        working-directory: c-core
+        run: cmake -S . -B build -DHONCH_BUILD_TESTS=ON -DHONCH_BUILD_EXAMPLES=ON
+
+      - name: Build
+        working-directory: c-core
+        run: cmake --build build
+
+      - name: Test
+        working-directory: c-core
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Check Python tooling
+        working-directory: c-core
+        run: python3 -m py_compile tools/mock_collector.py
