@@ -102,6 +102,7 @@ honch_status_t honch_state_append_properties(honch_client_t *client, honch_buffe
 honch_status_t honch_state_reset(honch_client_t *client);
 
 honch_status_t honch_queue_enqueue(honch_client_t *client, const char *event_json);
+honch_status_t honch_queue_clear(honch_client_t *client);
 honch_status_t honch_queue_flush_locked(honch_client_t *client);
 
 honch_status_t honch_transport_post_batch(

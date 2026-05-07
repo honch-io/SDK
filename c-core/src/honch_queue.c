@@ -125,6 +125,26 @@ static honch_status_t honch_delete_files(const honch_file_list_t *files, size_t 
     return status;
 }
 
+static honch_status_t honch_delete_queue_directory(const char *directory)
+{
+    honch_file_list_t files = {0};
+    honch_status_t status = honch_list_files_with_suffix(directory, ".json", &files);
+    if (status == HONCH_OK) {
+        status = honch_delete_files(&files, files.count);
+    }
+    honch_file_list_free(&files);
+    return status;
+}
+
+honch_status_t honch_queue_clear(honch_client_t *client)
+{
+    honch_status_t status = honch_delete_queue_directory(client->pending_directory);
+    if (status == HONCH_OK) {
+        status = honch_delete_queue_directory(client->dead_directory);
+    }
+    return status;
+}
+
 static honch_status_t honch_dead_letter_files(honch_client_t *client, const honch_file_list_t *files, size_t count)
 {
     honch_status_t status = HONCH_OK;
