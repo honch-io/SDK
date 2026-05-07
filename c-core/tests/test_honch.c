@@ -205,9 +205,22 @@ static honch_config_t test_config(const char *queue_dir)
 
 static void test_init_validation(void)
 {
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+
     honch_client_t *client = NULL;
     honch_config_t config = test_config(NULL);
 
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_TRUE(client == NULL);
+
+    config = test_config(queue_dir);
+    config.device_model = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_TRUE(client == NULL);
+
+    config = test_config(queue_dir);
+    config.firmware_version = "";
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_ERROR_INVALID_ARGUMENT);
     EXPECT_TRUE(client == NULL);
 }
