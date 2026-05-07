@@ -24,7 +24,7 @@ Implemented:
 - isolated batch encoder boundary for the future CBOR transition
 - opt-in background flushing with retry backoff and jitter
 - persisted firmware version change detection
-- persistent event context properties
+- `$set_property` event API parity with the ESP-IDF SDK
 - battery level auto-stamping and low-battery lifecycle events
 - automatic core lifecycle events for boot and shutdown
 - explicit event tracking and flushing
@@ -142,7 +142,7 @@ Optional config:
 
 - `device_id`: generated and persisted when omitted
 - `environment`: defaults to `production`
-- `batch_size`
+- `batch_size`: defaults to `20`, capped at `50`
 - `max_queued_events`
 - `max_event_bytes`
 - `transport_timeout_ms`
@@ -163,8 +163,10 @@ events until `honch_session_end` queues `$session_end`.
 
 Auto-stamped property keys such as `$device_id`, `$session_id`, and
 `$sdk_platform` are owned by the SDK. Per-event properties using those keys are
-ignored so the SDK-stamped values win, and `honch_set_property` rejects them for
-persistent context.
+ignored so the SDK-stamped values win.
+
+`honch_set_property` queues a `$set_property` event whose properties contain the
+provided key/value pair. It does not persist context onto future events.
 
 When `battery_callback` is configured, valid readings are stamped as
 `$battery_level`. The SDK queues `$battery_low` once when the level drops below
@@ -232,7 +234,7 @@ The SDK stores state and queued events under `queue_directory`.
   state/
     device_id              generated or configured device identity
     distinct_id            current analytics identity
-    properties/            persistent event context values
+    firmware_version        last-seen firmware version for update detection
 ```
 
 Queue behavior:
@@ -240,6 +242,7 @@ Queue behavior:
 - events are written atomically
 - startup removes temporary write files
 - queue length is bounded by `max_queued_events`
+- flush requests are sent in batches capped at 50 events
 - when full, the oldest event is dropped before accepting a new event
 - retryable failures keep files in `pending/`
 - permanent rejections move attempted files to `dead/`
@@ -258,7 +261,8 @@ Current C tests cover:
 - strict JSON validation for public property input
 - generated `device_id` persistence
 - configured and generated device ID access
-- persistent properties on future events
+- `$set_property` event emission
+- auto-stamped property conflict handling
 - session start/end events and `$session_id` event context
 - boot and shutdown lifecycle events
 - firmware update detection

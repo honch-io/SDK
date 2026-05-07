@@ -6,7 +6,7 @@ It demonstrates:
 
 - generated persistent `device_id`
 - user identification
-- persistent event context with `honch_set_property`
+- `$set_property` event emission with `honch_set_property`
 - realistic hardware events
 - explicit flush to the configured capture endpoint
 
