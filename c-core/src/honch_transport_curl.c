@@ -1,10 +1,12 @@
 #include "honch_internal.h"
 
 #include <curl/curl.h>
+#include <limits.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <zlib.h>
 
 #ifdef HONCH_TESTING
 static honch_test_transport_fn honch_test_transport = NULL;
@@ -60,6 +62,59 @@ static honch_status_t honch_map_response(long response_code, honch_http_result_t
     return HONCH_ERROR_REJECTED;
 }
 
+static honch_status_t honch_gzip_payload(const char *payload, unsigned char **out, size_t *out_size)
+{
+    *out = NULL;
+    *out_size = 0u;
+
+    size_t payload_size = strlen(payload);
+    if (payload_size > UINT_MAX) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    z_stream stream;
+    memset(&stream, 0, sizeof(stream));
+    int zstatus = deflateInit2(
+        &stream,
+        Z_DEFAULT_COMPRESSION,
+        Z_DEFLATED,
+        MAX_WBITS + 16,
+        8,
+        Z_DEFAULT_STRATEGY);
+    if (zstatus != Z_OK) {
+        return HONCH_ERROR_IO;
+    }
+
+    uLong bound = deflateBound(&stream, (uLong)payload_size);
+    if (bound > UINT_MAX) {
+        deflateEnd(&stream);
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    unsigned char *compressed = (unsigned char *)malloc((size_t)bound);
+    if (compressed == NULL) {
+        deflateEnd(&stream);
+        return HONCH_ERROR_OUT_OF_MEMORY;
+    }
+
+    stream.next_in = (Bytef *)payload;
+    stream.avail_in = (uInt)payload_size;
+    stream.next_out = compressed;
+    stream.avail_out = (uInt)bound;
+
+    zstatus = deflate(&stream, Z_FINISH);
+    if (zstatus != Z_STREAM_END) {
+        free(compressed);
+        deflateEnd(&stream);
+        return HONCH_ERROR_IO;
+    }
+
+    *out_size = (size_t)stream.total_out;
+    *out = compressed;
+    deflateEnd(&stream);
+    return HONCH_OK;
+}
+
 honch_status_t honch_transport_post_batch(
     honch_client_t *client,
     const char *payload,
@@ -84,10 +139,19 @@ honch_status_t honch_transport_post_batch(
     }
 #endif
 
+    unsigned char *compressed_payload = NULL;
+    size_t compressed_payload_size = 0u;
+    status = honch_gzip_payload(payload, &compressed_payload, &compressed_payload_size);
+    if (status != HONCH_OK) {
+        free(url);
+        return status;
+    }
+
     pthread_once(&honch_curl_once, honch_curl_global_init_once);
 
     CURL *curl = curl_easy_init();
     if (curl == NULL) {
+        free(compressed_payload);
         free(url);
         *result = HONCH_HTTP_RETRY;
         return HONCH_ERROR_TRANSPORT;
@@ -96,6 +160,7 @@ honch_status_t honch_transport_post_batch(
     honch_buffer_t auth;
     status = honch_buffer_init(&auth, strlen(client->api_key) + 32u);
     if (status != HONCH_OK) {
+        free(compressed_payload);
         free(url);
         curl_easy_cleanup(curl);
         return status;
@@ -106,6 +171,7 @@ honch_status_t honch_transport_post_batch(
         status = honch_buffer_append(&auth, client->api_key);
     }
     if (status != HONCH_OK) {
+        free(compressed_payload);
         honch_buffer_free(&auth);
         free(url);
         curl_easy_cleanup(curl);
@@ -115,6 +181,18 @@ honch_status_t honch_transport_post_batch(
     struct curl_slist *headers = NULL;
     struct curl_slist *next_header = curl_slist_append(headers, "Content-Type: application/json");
     if (next_header == NULL) {
+        free(compressed_payload);
+        honch_buffer_free(&auth);
+        free(url);
+        curl_easy_cleanup(curl);
+        return HONCH_ERROR_OUT_OF_MEMORY;
+    }
+    headers = next_header;
+
+    next_header = curl_slist_append(headers, "Content-Encoding: gzip");
+    if (next_header == NULL) {
+        curl_slist_free_all(headers);
+        free(compressed_payload);
         honch_buffer_free(&auth);
         free(url);
         curl_easy_cleanup(curl);
@@ -125,6 +203,7 @@ honch_status_t honch_transport_post_batch(
     next_header = curl_slist_append(headers, auth.data);
     if (next_header == NULL) {
         curl_slist_free_all(headers);
+        free(compressed_payload);
         honch_buffer_free(&auth);
         free(url);
         curl_easy_cleanup(curl);
@@ -134,8 +213,8 @@ honch_status_t honch_transport_post_batch(
 
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)strlen(payload));
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, (const char *)compressed_payload);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)compressed_payload_size);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, honch_discard_response);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, (long)client->transport_timeout_ms);
@@ -148,6 +227,7 @@ honch_status_t honch_transport_post_batch(
     }
 
     curl_slist_free_all(headers);
+    free(compressed_payload);
     honch_buffer_free(&auth);
     free(url);
     curl_easy_cleanup(curl);

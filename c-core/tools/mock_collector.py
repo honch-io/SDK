@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import gzip
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -13,6 +14,14 @@ class CollectorHandler(BaseHTTPRequestHandler):
 
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length)
+        if self.headers.get("Content-Encoding", "").lower() == "gzip":
+            try:
+                body = gzip.decompress(body)
+            except OSError:
+                self.send_response(400)
+                self.end_headers()
+                return
+
         try:
             payload = json.loads(body.decode("utf-8"))
         except json.JSONDecodeError:
