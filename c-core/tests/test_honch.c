@@ -527,6 +527,40 @@ static void test_flush_rejected_moves_events_to_dead_letter(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_reset_clears_queued_events_and_preserves_reset_event(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+
+    fake_transport_context_t transport = {.response_code = 400L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "stale_event", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_ERROR_REJECTED);
+
+    char pending_dir[160];
+    char dead_dir[160];
+    snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
+    snprintf(dead_dir, sizeof(dead_dir), "%s/dead", queue_dir);
+    EXPECT_TRUE(count_files_with_suffix(dead_dir, ".json") > 0u);
+
+    transport.response_code = 202L;
+    EXPECT_EQ_INT(honch_reset(client), HONCH_OK);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 1);
+    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".json"), 0);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$device_reset\"");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"event\":\"stale_event\"");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"event\":\"$device_boot\"");
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
 static void test_reset_generates_new_identity_and_clears_properties(void)
 {
     char queue_dir[128];
@@ -548,6 +582,10 @@ static void test_reset_generates_new_identity_and_clears_properties(void)
     EXPECT_EQ_INT(honch_reset(client), HONCH_OK);
     EXPECT_TRUE(read_text_file(device_file, new_id, sizeof(new_id)) != 0);
     EXPECT_TRUE(strcmp(old_id, new_id) != 0);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$device_reset\"");
+
+    transport.last_payload[0] = '\0';
     EXPECT_EQ_INT(honch_track(client, "after_reset", NULL), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
     EXPECT_STR_NOT_CONTAINS(transport.last_payload, "session-1");
@@ -574,6 +612,7 @@ int main(void)
     test_flush_retry_keeps_events();
     test_flush_drains_multiple_batches();
     test_flush_rejected_moves_events_to_dead_letter();
+    test_reset_clears_queued_events_and_preserves_reset_event();
     test_reset_generates_new_identity_and_clears_properties();
 
     if (failures != 0) {

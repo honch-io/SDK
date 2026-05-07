@@ -212,6 +212,8 @@ Queue behavior:
 - when full, the oldest event is dropped before accepting a new event
 - retryable failures keep files in `pending/`
 - permanent rejections move attempted files to `dead/`
+- `honch_reset` clears pending/dead queues before queuing a fresh `$device_reset`
+  event and rotating identity state
 
 ## Test Coverage
 
@@ -232,6 +234,7 @@ Current C tests cover:
 - retryable flush preserving pending events
 - multi-batch flush
 - permanent rejection dead-letter behavior
+- reset queue clearing while preserving `$device_reset`
 - reset identity behavior
 
 Run:
