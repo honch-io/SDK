@@ -44,6 +44,10 @@ static honch_status_t honch_read_optional_state_file(
         }
         return HONCH_ERROR_IO;
     }
+    if (!S_ISREG(info.st_mode)) {
+        free(path);
+        return HONCH_ERROR_IO;
+    }
 
     status = honch_read_file(path, out);
     free(path);
