@@ -138,13 +138,13 @@ Required config:
 
 - `api_key`
 - `endpoint_url`
+- `device_model`
+- `firmware_version`
 - `queue_directory`
 
 Optional config:
 
 - `device_id`: generated and persisted when omitted
-- `device_model`
-- `firmware_version`
 - `environment`: defaults to `production`
 - `batch_size`
 - `max_queued_events`

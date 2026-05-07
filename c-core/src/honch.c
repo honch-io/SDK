@@ -110,10 +110,10 @@ static honch_status_t honch_append_properties_object(
     if (status == HONCH_OK && client->session_id != NULL) {
         status = honch_append_property_pair(buffer, &has_members, "$session_id", client->session_id);
     }
-    if (status == HONCH_OK && client->device_model != NULL) {
+    if (status == HONCH_OK) {
         status = honch_append_property_pair(buffer, &has_members, "$device_model", client->device_model);
     }
-    if (status == HONCH_OK && client->firmware_version != NULL) {
+    if (status == HONCH_OK) {
         status = honch_append_property_pair(buffer, &has_members, "$firmware_version", client->firmware_version);
     }
     if (status == HONCH_OK && client->environment != NULL) {
@@ -557,7 +557,8 @@ static honch_status_t honch_emit_firmware_update_locked(honch_client_t *client)
 honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
 {
     if (client == NULL || config == NULL || honch_is_blank(config->api_key) ||
-        honch_is_blank(config->endpoint_url) || honch_is_blank(config->queue_directory)) {
+        honch_is_blank(config->endpoint_url) || honch_is_blank(config->device_model) ||
+        honch_is_blank(config->firmware_version) || honch_is_blank(config->queue_directory)) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
