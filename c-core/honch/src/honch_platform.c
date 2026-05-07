@@ -263,7 +263,7 @@ honch_status_t honch_mkdir_p(const char *path)
     return HONCH_OK;
 }
 
-honch_status_t honch_read_file(const char *path, char **out)
+static honch_status_t honch_read_file_impl(const char *path, size_t max_bytes, bool enforce_limit, char **out)
 {
     FILE *file = fopen(path, "rb");
     if (file == NULL) {
@@ -280,28 +280,47 @@ honch_status_t honch_read_file(const char *path, char **out)
         fclose(file);
         return HONCH_ERROR_IO;
     }
+    size_t data_size = (size_t)size;
+    if (enforce_limit && data_size > max_bytes) {
+        fclose(file);
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    if (data_size == (size_t)-1) {
+        fclose(file);
+        return HONCH_ERROR_OUT_OF_MEMORY;
+    }
 
     if (fseek(file, 0, SEEK_SET) != 0) {
         fclose(file);
         return HONCH_ERROR_IO;
     }
 
-    char *data = (char *)malloc((size_t)size + 1u);
+    char *data = (char *)malloc(data_size + 1u);
     if (data == NULL) {
         fclose(file);
         return HONCH_ERROR_OUT_OF_MEMORY;
     }
 
-    size_t read_count = fread(data, 1u, (size_t)size, file);
+    size_t read_count = fread(data, 1u, data_size, file);
     fclose(file);
-    if (read_count != (size_t)size) {
+    if (read_count != data_size) {
         free(data);
         return HONCH_ERROR_IO;
     }
 
-    data[size] = '\0';
+    data[data_size] = '\0';
     *out = data;
     return HONCH_OK;
+}
+
+honch_status_t honch_read_file(const char *path, char **out)
+{
+    return honch_read_file_impl(path, 0u, false, out);
+}
+
+honch_status_t honch_read_file_limited(const char *path, size_t max_bytes, char **out)
+{
+    return honch_read_file_impl(path, max_bytes, true, out);
 }
 
 honch_status_t honch_write_file_atomic(const char *directory, const char *filename, const char *content)
