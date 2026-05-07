@@ -104,7 +104,8 @@ honch_status_t honch_encoder_build_batch_json(
     honch_client_t *client,
     const honch_file_list_t *files,
     size_t count,
-    char **out);
+    char **out,
+    size_t *invalid_index);
 
 uint64_t honch_now_millis(void);
 honch_status_t honch_now_iso8601(char out[25]);
@@ -112,6 +113,7 @@ honch_status_t honch_random_hex(char out[33]);
 honch_status_t honch_join_path(char **out, const char *left, const char *right);
 honch_status_t honch_mkdir_p(const char *path);
 honch_status_t honch_read_file(const char *path, char **out);
+honch_status_t honch_read_file_limited(const char *path, size_t max_bytes, char **out);
 honch_status_t honch_write_file_atomic(const char *directory, const char *filename, const char *content);
 honch_status_t honch_list_files_with_suffix(const char *directory, const char *suffix, honch_file_list_t *list);
 void honch_file_list_free(honch_file_list_t *list);

@@ -144,7 +144,17 @@ honch_status_t honch_queue_flush_locked(honch_client_t *client)
 
         size_t count = files.count < client->batch_size ? files.count : client->batch_size;
         char *payload = NULL;
-        status = honch_encoder_build_batch_json(client, &files, count, &payload);
+        size_t invalid_index = count;
+        status = honch_encoder_build_batch_json(client, &files, count, &payload, &invalid_index);
+        if (status == HONCH_ERROR_INVALID_ARGUMENT && invalid_index < count) {
+            honch_status_t dead_status = honch_move_to_dead(client, &files.items[invalid_index]);
+            honch_file_list_free(&files);
+            if (dead_status != HONCH_OK) {
+                return dead_status;
+            }
+            final_status = HONCH_ERROR_REJECTED;
+            continue;
+        }
         if (status != HONCH_OK) {
             honch_file_list_free(&files);
             return status;

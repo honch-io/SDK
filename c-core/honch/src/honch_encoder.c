@@ -6,8 +6,11 @@ honch_status_t honch_encoder_build_batch_json(
     honch_client_t *client,
     const honch_file_list_t *files,
     size_t count,
-    char **out)
+    char **out,
+    size_t *invalid_index)
 {
+    *invalid_index = count;
+
     honch_buffer_t buffer;
     honch_status_t status = honch_buffer_init(&buffer, 1024u);
     if (status != HONCH_OK) {
@@ -24,8 +27,17 @@ honch_status_t honch_encoder_build_batch_json(
 
     for (size_t i = 0u; status == HONCH_OK && i < count; i++) {
         char *event_json = NULL;
-        status = honch_read_file(files->items[i].path, &event_json);
+        status = honch_read_file_limited(files->items[i].path, client->max_event_bytes, &event_json);
         if (status != HONCH_OK) {
+            if (status == HONCH_ERROR_INVALID_ARGUMENT) {
+                *invalid_index = i;
+            }
+            break;
+        }
+        if (!honch_json_is_object(event_json)) {
+            free(event_json);
+            *invalid_index = i;
+            status = HONCH_ERROR_INVALID_ARGUMENT;
             break;
         }
 

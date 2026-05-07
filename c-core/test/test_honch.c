@@ -90,6 +90,21 @@ static int read_text_file(const char *path, char *out, size_t size)
     return 1;
 }
 
+static int write_text_file(const char *path, const char *content)
+{
+    FILE *file = fopen(path, "wb");
+    if (file == NULL) {
+        return 0;
+    }
+
+    size_t length = strlen(content);
+    int ok = fwrite(content, 1u, length, file) == length;
+    if (fclose(file) != 0) {
+        ok = 0;
+    }
+    return ok;
+}
+
 static int read_first_json_file(const char *directory, char *out, size_t size)
 {
     DIR *dir = opendir(directory);
@@ -612,6 +627,54 @@ static void test_flush_retry_keeps_events(void)
     honch_shutdown(client);
 }
 
+static void test_flush_dead_letters_invalid_persisted_queue_files(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+    config.max_event_bytes = 512u;
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "valid_after_corrupt", NULL), HONCH_OK);
+
+    char pending_dir[160];
+    char dead_dir[160];
+    char malformed_path[240];
+    char oversized_path[240];
+    snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
+    snprintf(dead_dir, sizeof(dead_dir), "%s/dead", queue_dir);
+    snprintf(malformed_path, sizeof(malformed_path), "%s/00000000000000000000-malformed.json", pending_dir);
+    snprintf(oversized_path, sizeof(oversized_path), "%s/00000000000000000001-oversized.json", pending_dir);
+
+    EXPECT_TRUE(write_text_file(malformed_path, "{\"event\":") != 0);
+
+    char oversized[700];
+    const char prefix[] = "{\"event\":\"oversized\",\"properties\":{\"x\":\"";
+    size_t pos = sizeof(prefix) - 1u;
+    memcpy(oversized, prefix, pos);
+    memset(oversized + pos, 'a', 620u);
+    pos += 620u;
+    oversized[pos++] = '"';
+    oversized[pos++] = '}';
+    oversized[pos++] = '}';
+    oversized[pos] = '\0';
+    EXPECT_TRUE(write_text_file(oversized_path, oversized) != 0);
+
+    EXPECT_EQ_INT(honch_flush(client), HONCH_ERROR_REJECTED);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".json"), 2);
+    EXPECT_EQ_INT(transport.calls, 1);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"valid_after_corrupt\"");
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
 static void test_background_flush_threshold_drains_queue(void)
 {
     char queue_dir[128];
@@ -863,6 +926,7 @@ int main(void)
     test_identify_payload_and_persistence();
     test_queue_limit_drops_oldest();
     test_flush_retry_keeps_events();
+    test_flush_dead_letters_invalid_persisted_queue_files();
     test_background_flush_threshold_drains_queue();
     test_background_flush_retries_with_backoff();
     test_flush_drains_multiple_batches();
