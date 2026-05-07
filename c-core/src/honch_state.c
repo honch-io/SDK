@@ -211,6 +211,37 @@ honch_status_t honch_state_save_distinct_id(honch_client_t *client)
     return honch_write_state_file(client, "distinct_id", client->distinct_id);
 }
 
+honch_status_t honch_state_check_firmware_version(honch_client_t *client, bool *changed, char **previous_version)
+{
+    *changed = false;
+    *previous_version = NULL;
+    if (honch_is_blank(client->firmware_version)) {
+        return HONCH_OK;
+    }
+
+    char *stored_version = NULL;
+    honch_status_t status = honch_read_optional_state_file(client, "firmware_version", &stored_version);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    if (!honch_is_blank(stored_version) && strcmp(stored_version, client->firmware_version) != 0) {
+        *previous_version = stored_version;
+        stored_version = NULL;
+        *changed = true;
+    }
+
+    status = honch_write_state_file(client, "firmware_version", client->firmware_version);
+    if (status != HONCH_OK) {
+        free(*previous_version);
+        *previous_version = NULL;
+        *changed = false;
+    }
+
+    free(stored_version);
+    return status;
+}
+
 honch_status_t honch_state_set_property(honch_client_t *client, const char *key, const char *value_json)
 {
     char *filename = NULL;

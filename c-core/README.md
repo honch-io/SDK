@@ -18,6 +18,7 @@ Implemented:
 - persistent local queue before network delivery
 - persistent generated `device_id`
 - persistent current `distinct_id`
+- persisted firmware version change detection
 - persistent event context properties
 - automatic core lifecycle events for boot, shutdown, and reset
 - explicit event tracking and flushing
@@ -215,6 +216,7 @@ Current C tests cover:
 - persistent properties on future events
 - session start/end events and `$session_id` event context
 - boot, shutdown, and reset lifecycle events
+- firmware update detection
 - identify payload and persisted `distinct_id`
 - bounded queue drop-oldest behavior
 - retryable flush preserving pending events

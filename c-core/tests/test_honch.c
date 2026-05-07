@@ -301,6 +301,36 @@ static void test_lifecycle_events_are_queued(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_firmware_update_emitted_when_version_changes(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+    config.firmware_version = "1.0.0";
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"event\":\"$firmware_update\"");
+    honch_shutdown(client);
+
+    transport.last_payload[0] = '\0';
+    config.firmware_version = "1.1.0";
+    client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$firmware_update\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"previous_version\":\"1.0.0\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"new_version\":\"1.1.0\"");
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
 static void test_identify_payload_and_persistence(void)
 {
     char queue_dir[128];
@@ -469,6 +499,7 @@ int main(void)
     test_set_property_attaches_to_future_events();
     test_session_events_and_context();
     test_lifecycle_events_are_queued();
+    test_firmware_update_emitted_when_version_changes();
     test_identify_payload_and_persistence();
     test_queue_limit_drops_oldest();
     test_flush_retry_keeps_events();
