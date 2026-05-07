@@ -27,13 +27,16 @@ int main(void)
 
     status = honch_identify(client, "local-user-001", "{\"role\":\"developer\"}");
     if (status == HONCH_OK) {
-        status = honch_set_property(client, "$session_id", "\"local-diagnostics\"");
+        status = honch_session_start(client, "local-diagnostics");
     }
     if (status == HONCH_OK) {
         status = honch_track(client, "button_pressed", "{\"button\":\"power\"}");
     }
     if (status == HONCH_OK) {
         status = honch_track(client, "screen_viewed", "{\"screen\":\"diagnostics\"}");
+    }
+    if (status == HONCH_OK) {
+        status = honch_session_end(client);
     }
     if (status == HONCH_OK) {
         status = honch_flush(client);

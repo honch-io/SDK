@@ -215,6 +215,36 @@ static void test_set_property_attaches_to_future_events(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_session_events_and_context(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_session_start(NULL, "recording"), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ_INT(honch_session_end(NULL), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_session_end(client), HONCH_OK);
+    EXPECT_EQ_INT(honch_session_start(client, "recording"), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "recording_started", "{\"mode\":\"hdr\"}"), HONCH_OK);
+    EXPECT_EQ_INT(honch_session_end(client), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$session_start\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"recording_started\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$session_end\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"session_name\":\"recording\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$session_id\":\"sess_");
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
 static void test_identify_payload_and_persistence(void)
 {
     char queue_dir[128];
@@ -381,6 +411,7 @@ int main(void)
     test_generated_device_id_persists();
     test_configured_device_id_accessor();
     test_set_property_attaches_to_future_events();
+    test_session_events_and_context();
     test_identify_payload_and_persistence();
     test_queue_limit_drops_oldest();
     test_flush_retry_keeps_events();

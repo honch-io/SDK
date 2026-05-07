@@ -103,6 +103,9 @@ static honch_status_t honch_append_properties_object(
     if (status == HONCH_OK) {
         status = honch_append_property_pair(buffer, &has_members, "$device_id", client->device_id);
     }
+    if (status == HONCH_OK && client->session_id != NULL) {
+        status = honch_append_property_pair(buffer, &has_members, "$session_id", client->session_id);
+    }
     if (status == HONCH_OK && client->device_model != NULL) {
         status = honch_append_property_pair(buffer, &has_members, "$device_model", client->device_model);
     }
@@ -188,6 +191,65 @@ static honch_status_t honch_build_event(
     return HONCH_OK;
 }
 
+static honch_status_t honch_track_locked(honch_client_t *client, const char *event_name, const char *properties_json)
+{
+    char *event = NULL;
+    honch_status_t status = honch_build_event(client, event_name, properties_json, &event);
+    if (status == HONCH_OK) {
+        status = honch_queue_enqueue(client, event);
+    }
+
+    free(event);
+    return status;
+}
+
+static honch_status_t honch_new_session_id(char **out)
+{
+    char random[33];
+    honch_status_t status = honch_random_hex(random);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    char *session_id = (char *)malloc(38u);
+    if (session_id == NULL) {
+        return HONCH_ERROR_OUT_OF_MEMORY;
+    }
+
+    snprintf(session_id, 38u, "sess_%s", random);
+    *out = session_id;
+    return HONCH_OK;
+}
+
+static honch_status_t honch_build_session_start_properties(const char *session_name, char **out)
+{
+    *out = NULL;
+    if (honch_is_blank(session_name)) {
+        return HONCH_OK;
+    }
+
+    honch_buffer_t properties;
+    honch_status_t status = honch_buffer_init(&properties, strlen(session_name) + 32u);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    status = honch_buffer_append(&properties, "{\"session_name\":");
+    if (status == HONCH_OK) {
+        status = honch_json_append_string(&properties, session_name);
+    }
+    if (status == HONCH_OK) {
+        status = honch_buffer_append(&properties, "}");
+    }
+    if (status != HONCH_OK) {
+        honch_buffer_free(&properties);
+        return status;
+    }
+
+    *out = properties.data;
+    return HONCH_OK;
+}
+
 honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
 {
     if (client == NULL || config == NULL || honch_is_blank(config->api_key) ||
@@ -242,13 +304,7 @@ honch_status_t honch_track(honch_client_t *client, const char *event_name, const
 
     pthread_mutex_lock(&client->mutex);
 
-    char *event = NULL;
-    honch_status_t status = honch_build_event(client, event_name, properties_json, &event);
-    if (status == HONCH_OK) {
-        status = honch_queue_enqueue(client, event);
-    }
-
-    free(event);
+    honch_status_t status = honch_track_locked(client, event_name, properties_json);
     pthread_mutex_unlock(&client->mutex);
     return status;
 }
@@ -324,6 +380,71 @@ honch_status_t honch_set_property(honch_client_t *client, const char *key, const
 
     pthread_mutex_lock(&client->mutex);
     honch_status_t status = honch_state_set_property(client, key, value_json);
+    pthread_mutex_unlock(&client->mutex);
+    return status;
+}
+
+honch_status_t honch_session_start(honch_client_t *client, const char *session_name)
+{
+    if (client == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    char *session_id = NULL;
+    honch_status_t status = honch_new_session_id(&session_id);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    char *properties_json = NULL;
+    status = honch_build_session_start_properties(session_name, &properties_json);
+    if (status != HONCH_OK) {
+        free(session_id);
+        return status;
+    }
+
+    pthread_mutex_lock(&client->mutex);
+
+    if (client->session_id != NULL) {
+        status = honch_track_locked(client, "$session_end", NULL);
+        if (status == HONCH_OK) {
+            free(client->session_id);
+            client->session_id = NULL;
+        }
+    }
+    if (status == HONCH_OK) {
+        client->session_id = session_id;
+        session_id = NULL;
+        status = honch_track_locked(client, "$session_start", properties_json);
+        if (status != HONCH_OK) {
+            free(client->session_id);
+            client->session_id = NULL;
+        }
+    }
+
+    pthread_mutex_unlock(&client->mutex);
+    free(properties_json);
+    free(session_id);
+    return status;
+}
+
+honch_status_t honch_session_end(honch_client_t *client)
+{
+    if (client == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    pthread_mutex_lock(&client->mutex);
+
+    honch_status_t status = HONCH_OK;
+    if (client->session_id != NULL) {
+        status = honch_track_locked(client, "$session_end", NULL);
+        if (status == HONCH_OK) {
+            free(client->session_id);
+            client->session_id = NULL;
+        }
+    }
+
     pthread_mutex_unlock(&client->mutex);
     return status;
 }
