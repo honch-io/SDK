@@ -75,6 +75,17 @@ honch_status_t honch_queue_enqueue(honch_client_t *client, const char *event_jso
     return honch_write_file_atomic(client->pending_directory, filename, event_json);
 }
 
+honch_status_t honch_queue_count_pending(honch_client_t *client, size_t *count)
+{
+    honch_file_list_t files = {0};
+    honch_status_t status = honch_list_queue_files(client, &files);
+    if (status == HONCH_OK) {
+        *count = files.count;
+    }
+    honch_file_list_free(&files);
+    return status;
+}
+
 static honch_status_t honch_build_batch(honch_client_t *client, const honch_file_list_t *files, size_t count, char **out)
 {
     honch_buffer_t buffer;

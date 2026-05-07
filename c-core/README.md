@@ -21,6 +21,7 @@ Implemented:
 - ISO-8601 UTC event timestamps
 - tokenized batch flush envelopes
 - gzip-compressed JSON flush requests
+- opt-in background flushing with retry backoff and jitter
 - persisted firmware version change detection
 - persistent event context properties
 - battery level auto-stamping and low-battery lifecycle events
@@ -140,6 +141,10 @@ Optional config:
 - `max_queued_events`
 - `max_event_bytes`
 - `transport_timeout_ms`
+- `flush_interval_seconds`: enables interval-based background flushing when nonzero
+- `flush_event_threshold`: enables threshold-based background flushing when nonzero
+- `flush_retry_initial_ms`: defaults to `1000`
+- `flush_retry_max_ms`: defaults to `300000`
 - `battery_callback`: returns `0`-`100`, or negative when unknown
 - `battery_low_threshold`: defaults to `15`
 
@@ -154,6 +159,11 @@ events until `honch_session_end` queues `$session_end`.
 When `battery_callback` is configured, valid readings are stamped as
 `$battery_level`. The SDK queues `$battery_low` once when the level drops below
 `battery_low_threshold`, then arms it again after the level recovers.
+
+Background flushing is opt-in for C/POSIX. Set `flush_interval_seconds` or
+`flush_event_threshold` to start a worker thread. Retryable transport failures
+use exponential backoff with jitter, and shutdown performs a synchronous flush
+when the background worker is enabled.
 
 ## Basic Usage
 
@@ -174,6 +184,8 @@ int main(void)
         .max_queued_events = 100,
         .max_event_bytes = 8192,
         .transport_timeout_ms = 10000,
+        .flush_interval_seconds = 60,
+        .flush_event_threshold = 30,
         .battery_callback = NULL,
         .battery_low_threshold = 15
     };
@@ -240,6 +252,7 @@ Current C tests cover:
 - identify payload and persisted `distinct_id`
 - bounded queue drop-oldest behavior
 - retryable flush preserving pending events
+- background threshold flush and retry backoff
 - multi-batch flush
 - permanent rejection dead-letter behavior
 - reset queue clearing while preserving `$device_reset`

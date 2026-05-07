@@ -14,6 +14,7 @@ if(HONCH_BUILD_TESTS)
 endif()
 
 find_package(CURL REQUIRED)
+find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
 
 add_library(honch_c_core
@@ -33,6 +34,7 @@ target_include_directories(honch_c_core
 target_link_libraries(honch_c_core
     PRIVATE
         CURL::libcurl
+        Threads::Threads
         ZLIB::ZLIB
 )
 

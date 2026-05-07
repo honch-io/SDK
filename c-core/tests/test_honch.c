@@ -128,7 +128,9 @@ static int count_substring(const char *haystack, const char *needle)
 
 typedef struct fake_transport_context {
     long response_code;
-    int calls;
+    long next_response_code;
+    int switch_after_calls;
+    volatile int calls;
     char last_url[256];
     char last_api_key[128];
     char last_payload[16384];
@@ -143,11 +145,37 @@ static honch_status_t fake_transport(
 {
     fake_transport_context_t *context = (fake_transport_context_t *)userdata;
     context->calls++;
+    long response_code = context->response_code;
+    if (context->switch_after_calls > 0 && context->calls > context->switch_after_calls) {
+        response_code = context->next_response_code;
+    }
     snprintf(context->last_url, sizeof(context->last_url), "%s", url);
     snprintf(context->last_api_key, sizeof(context->last_api_key), "%s", api_key);
     snprintf(context->last_payload, sizeof(context->last_payload), "%s", payload);
-    *http_status = context->response_code;
+    *http_status = response_code;
     return HONCH_OK;
+}
+
+static int wait_for_transport_calls(fake_transport_context_t *context, int calls)
+{
+    for (int attempt = 0; attempt < 200; attempt++) {
+        if (context->calls >= calls) {
+            return 1;
+        }
+        usleep(10000u);
+    }
+    return 0;
+}
+
+static int wait_for_file_count(const char *directory, const char *suffix, size_t count)
+{
+    for (int attempt = 0; attempt < 200; attempt++) {
+        if (count_files_with_suffix(directory, suffix) == count) {
+            return 1;
+        }
+        usleep(10000u);
+    }
+    return 0;
 }
 
 static int test_battery_level = -1;
@@ -504,6 +532,65 @@ static void test_flush_retry_keeps_events(void)
     honch_shutdown(client);
 }
 
+static void test_background_flush_threshold_drains_queue(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+    config.flush_event_threshold = 2u;
+    config.flush_retry_initial_ms = 10u;
+    config.flush_retry_max_ms = 20u;
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "threshold_event", NULL), HONCH_OK);
+    EXPECT_TRUE(wait_for_transport_calls(&transport, 1) != 0);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$device_boot\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"threshold_event\"");
+
+    char pending_dir[160];
+    snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
+    EXPECT_TRUE(wait_for_file_count(pending_dir, ".json", 0u) != 0);
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
+static void test_background_flush_retries_with_backoff(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+    config.flush_event_threshold = 2u;
+    config.flush_retry_initial_ms = 10u;
+    config.flush_retry_max_ms = 20u;
+
+    fake_transport_context_t transport = {
+        .response_code = 500L,
+        .next_response_code = 202L,
+        .switch_after_calls = 1
+    };
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "retry_event", NULL), HONCH_OK);
+    EXPECT_TRUE(wait_for_transport_calls(&transport, 2) != 0);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"retry_event\"");
+
+    char pending_dir[160];
+    snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
+    EXPECT_TRUE(wait_for_file_count(pending_dir, ".json", 0u) != 0);
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
 static void test_flush_drains_multiple_batches(void)
 {
     char queue_dir[128];
@@ -643,6 +730,8 @@ int main(void)
     test_identify_payload_and_persistence();
     test_queue_limit_drops_oldest();
     test_flush_retry_keeps_events();
+    test_background_flush_threshold_drains_queue();
+    test_background_flush_retries_with_backoff();
     test_flush_drains_multiple_batches();
     test_flush_rejected_moves_events_to_dead_letter();
     test_reset_clears_queued_events_and_preserves_reset_event();
