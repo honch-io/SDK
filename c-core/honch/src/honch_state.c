@@ -69,26 +69,6 @@ static honch_status_t honch_copy_or_null(char **out, const char *value)
     return *out == NULL ? HONCH_ERROR_OUT_OF_MEMORY : HONCH_OK;
 }
 
-static honch_status_t honch_hex_filename(const char *key, char **out)
-{
-    static const char hex[] = "0123456789abcdef";
-    size_t key_length = strlen(key);
-    size_t filename_length = (key_length * 2u) + 6u;
-    char *filename = (char *)malloc(filename_length);
-    if (filename == NULL) {
-        return HONCH_ERROR_OUT_OF_MEMORY;
-    }
-
-    for (size_t i = 0u; i < key_length; i++) {
-        unsigned char ch = (unsigned char)key[i];
-        filename[i * 2u] = hex[(ch >> 4u) & 0x0fu];
-        filename[(i * 2u) + 1u] = hex[ch & 0x0fu];
-    }
-    memcpy(filename + (key_length * 2u), ".prop", 6u);
-    *out = filename;
-    return HONCH_OK;
-}
-
 static honch_status_t honch_remove_tmp_files(const char *directory)
 {
     honch_file_list_t tmp_files = {0};
@@ -120,9 +100,6 @@ honch_status_t honch_state_prepare(honch_client_t *client, const honch_config_t 
         status = honch_join_path(&client->state_directory, client->queue_directory, "state");
     }
     if (status == HONCH_OK) {
-        status = honch_join_path(&client->properties_directory, client->state_directory, "properties");
-    }
-    if (status == HONCH_OK) {
         status = honch_mkdir_p(client->pending_directory);
     }
     if (status == HONCH_OK) {
@@ -132,16 +109,10 @@ honch_status_t honch_state_prepare(honch_client_t *client, const honch_config_t 
         status = honch_mkdir_p(client->state_directory);
     }
     if (status == HONCH_OK) {
-        status = honch_mkdir_p(client->properties_directory);
-    }
-    if (status == HONCH_OK) {
         status = honch_remove_tmp_files(client->pending_directory);
     }
     if (status == HONCH_OK) {
         status = honch_remove_tmp_files(client->state_directory);
-    }
-    if (status == HONCH_OK) {
-        status = honch_remove_tmp_files(client->properties_directory);
     }
     if (status != HONCH_OK) {
         return status;
@@ -251,136 +222,6 @@ honch_status_t honch_state_check_firmware_version(honch_client_t *client, bool *
     return status;
 }
 
-honch_status_t honch_state_set_property(honch_client_t *client, const char *key, const char *value_json)
-{
-    char *filename = NULL;
-    honch_status_t status = honch_hex_filename(key, &filename);
-    if (status != HONCH_OK) {
-        return status;
-    }
-
-    honch_buffer_t record;
-    status = honch_buffer_init(&record, strlen(key) + strlen(value_json) + 32u);
-    if (status == HONCH_OK) {
-        status = honch_buffer_append(&record, "{\"key\":");
-    }
-    if (status == HONCH_OK) {
-        status = honch_json_append_string(&record, key);
-    }
-    if (status == HONCH_OK) {
-        status = honch_buffer_append(&record, ",\"value\":");
-    }
-    if (status == HONCH_OK) {
-        status = honch_buffer_append(&record, value_json);
-    }
-    if (status == HONCH_OK) {
-        status = honch_buffer_append(&record, "}");
-    }
-    if (status == HONCH_OK) {
-        status = honch_write_file_atomic(client->properties_directory, filename, record.data);
-    }
-
-    honch_buffer_free(&record);
-    free(filename);
-    return status;
-}
-
-static honch_status_t honch_append_property_record(
-    honch_buffer_t *buffer,
-    const char *record_json,
-    bool *has_members)
-{
-    const char *key_marker = "\"key\":";
-    const char *value_marker = "\"value\":";
-    const char *key_start = strstr(record_json, key_marker);
-    const char *value_start = strstr(record_json, value_marker);
-    if (key_start == NULL || value_start == NULL || value_start <= key_start) {
-        return HONCH_ERROR_IO;
-    }
-
-    key_start += strlen(key_marker);
-    while (*key_start == ' ' || *key_start == '\t' || *key_start == '\n' || *key_start == '\r') {
-        key_start++;
-    }
-    const char *key_end = value_start;
-    while (key_end > key_start &&
-           (key_end[-1] == ' ' || key_end[-1] == '\t' || key_end[-1] == '\n' || key_end[-1] == '\r' ||
-            key_end[-1] == ',')) {
-        key_end--;
-    }
-
-    if (key_end > key_start + 1 && key_start[0] == '"' && key_end[-1] == '"') {
-        size_t key_length = (size_t)(key_end - key_start - 2);
-        if (key_length <= HONCH_MAX_PROPERTY_KEY) {
-            char key[HONCH_MAX_PROPERTY_KEY + 1u];
-            memcpy(key, key_start + 1, key_length);
-            key[key_length] = '\0';
-            if (honch_property_key_is_reserved(key)) {
-                return HONCH_OK;
-            }
-        }
-    }
-
-    value_start += strlen(value_marker);
-    while (*value_start == ' ' || *value_start == '\t' || *value_start == '\n' || *value_start == '\r') {
-        value_start++;
-    }
-    const char *value_end = record_json + strlen(record_json);
-    while (value_end > value_start &&
-           (value_end[-1] == ' ' || value_end[-1] == '\t' ||
-            value_end[-1] == '\n' || value_end[-1] == '\r')) {
-        value_end--;
-    }
-    if (value_end > value_start && value_end[-1] == '}') {
-        value_end--;
-    }
-    while (value_end > value_start &&
-           (value_end[-1] == ' ' || value_end[-1] == '\t' ||
-            value_end[-1] == '\n' || value_end[-1] == '\r')) {
-        value_end--;
-    }
-
-    honch_status_t status = HONCH_OK;
-    if (*has_members) {
-        status = honch_buffer_append(buffer, ",");
-    }
-    if (status == HONCH_OK) {
-        status = honch_buffer_append_n(buffer, key_start, (size_t)(key_end - key_start));
-    }
-    if (status == HONCH_OK) {
-        status = honch_buffer_append(buffer, ":");
-    }
-    if (status == HONCH_OK) {
-        status = honch_buffer_append_n(buffer, value_start, (size_t)(value_end - value_start));
-    }
-    if (status == HONCH_OK) {
-        *has_members = true;
-    }
-    return status;
-}
-
-honch_status_t honch_state_append_properties(honch_client_t *client, honch_buffer_t *buffer, bool *has_members)
-{
-    honch_file_list_t files = {0};
-    honch_status_t status = honch_list_files_with_suffix(client->properties_directory, ".prop", &files);
-    if (status != HONCH_OK) {
-        honch_file_list_free(&files);
-        return status;
-    }
-
-    for (size_t i = 0u; status == HONCH_OK && i < files.count; i++) {
-        char *record = NULL;
-        status = honch_read_file(files.items[i].path, &record);
-        if (status == HONCH_OK) {
-            status = honch_append_property_record(buffer, record, has_members);
-        }
-        free(record);
-    }
-
-    honch_file_list_free(&files);
-    return status;
-}
-
 honch_status_t honch_state_reset(honch_client_t *client)
 {
     char next_device_id[33];
@@ -402,15 +243,6 @@ honch_status_t honch_state_reset(honch_client_t *client)
     status = honch_write_state_file(client, "device_id", device_id);
     if (status == HONCH_OK) {
         status = honch_write_state_file(client, "distinct_id", distinct_id);
-    }
-
-    if (status == HONCH_OK) {
-        honch_file_list_t properties = {0};
-        status = honch_list_files_with_suffix(client->properties_directory, ".prop", &properties);
-        for (size_t i = 0u; status == HONCH_OK && i < properties.count; i++) {
-            status = honch_unlink_if_exists(properties.items[i].path);
-        }
-        honch_file_list_free(&properties);
     }
 
     if (status == HONCH_OK) {

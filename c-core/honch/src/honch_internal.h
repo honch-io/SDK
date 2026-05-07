@@ -19,7 +19,6 @@
 #define HONCH_DEFAULT_FLUSH_RETRY_MAX_MS 300000u
 #define HONCH_MAX_EVENT_NAME 128u
 #define HONCH_MAX_DISTINCT_ID 256u
-#define HONCH_MAX_PROPERTY_KEY 128u
 
 typedef struct honch_buffer {
     char *data;
@@ -58,7 +57,6 @@ struct honch_client {
     char *pending_directory;
     char *dead_directory;
     char *state_directory;
-    char *properties_directory;
     char *distinct_id;
     char *session_id;
     size_t batch_size;
@@ -122,8 +120,6 @@ honch_status_t honch_unlink_if_exists(const char *path);
 honch_status_t honch_state_prepare(honch_client_t *client, const honch_config_t *config);
 honch_status_t honch_state_save_distinct_id(honch_client_t *client);
 honch_status_t honch_state_check_firmware_version(honch_client_t *client, bool *changed, char **previous_version);
-honch_status_t honch_state_set_property(honch_client_t *client, const char *key, const char *value_json);
-honch_status_t honch_state_append_properties(honch_client_t *client, honch_buffer_t *buffer, bool *has_members);
 honch_status_t honch_state_reset(honch_client_t *client);
 
 honch_status_t honch_queue_enqueue(honch_client_t *client, const char *event_json);
