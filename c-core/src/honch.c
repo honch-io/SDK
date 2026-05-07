@@ -90,7 +90,8 @@ static honch_status_t honch_append_raw_property_pair(
 static honch_status_t honch_append_properties_object(
     honch_client_t *client,
     honch_buffer_t *buffer,
-    const char *properties_json)
+    const char *properties_json,
+    int battery_level)
 {
     bool has_members = false;
     honch_status_t status = honch_buffer_append(buffer, "\"properties\":{");
@@ -117,6 +118,11 @@ static honch_status_t honch_append_properties_object(
     if (status == HONCH_OK && client->environment != NULL) {
         status = honch_append_property_pair(buffer, &has_members, "$environment", client->environment);
     }
+    if (status == HONCH_OK && battery_level >= 0 && battery_level <= 100) {
+        char level_json[4];
+        snprintf(level_json, sizeof(level_json), "%d", battery_level);
+        status = honch_append_raw_property_pair(buffer, &has_members, "$battery_level", level_json);
+    }
     if (status == HONCH_OK) {
         status = honch_append_property_pair(buffer, &has_members, "$sdk_name", HONCH_SDK_NAME);
     }
@@ -137,6 +143,7 @@ static honch_status_t honch_build_event(
     honch_client_t *client,
     const char *event_name,
     const char *properties_json,
+    int battery_level,
     char **out)
 {
     char uuid[33];
@@ -174,7 +181,7 @@ static honch_status_t honch_build_event(
         status = honch_buffer_append(&buffer, ",");
     }
     if (status == HONCH_OK) {
-        status = honch_append_properties_object(client, &buffer, properties_json);
+        status = honch_append_properties_object(client, &buffer, properties_json, battery_level);
     }
     if (status == HONCH_OK) {
         status = honch_buffer_append(&buffer, "}");
@@ -193,16 +200,65 @@ static honch_status_t honch_build_event(
     return HONCH_OK;
 }
 
-static honch_status_t honch_track_locked(honch_client_t *client, const char *event_name, const char *properties_json)
+static int honch_read_battery_level(honch_client_t *client)
 {
+    if (client->battery_callback == NULL) {
+        return -1;
+    }
+
+    return client->battery_callback();
+}
+
+static honch_status_t honch_track_locked_internal(
+    honch_client_t *client,
+    const char *event_name,
+    const char *properties_json,
+    bool check_battery_low);
+
+static honch_status_t honch_emit_battery_low_locked(honch_client_t *client, int battery_level)
+{
+    if (battery_level < 0) {
+        return HONCH_OK;
+    }
+
+    if (battery_level >= client->battery_low_threshold) {
+        client->battery_low_emitted = false;
+        return HONCH_OK;
+    }
+
+    if (client->battery_low_emitted) {
+        return HONCH_OK;
+    }
+
+    client->battery_low_emitted = true;
+    char properties_json[32];
+    snprintf(properties_json, sizeof(properties_json), "{\"level\":%d}", battery_level);
+    return honch_track_locked_internal(client, "$battery_low", properties_json, false);
+}
+
+static honch_status_t honch_track_locked_internal(
+    honch_client_t *client,
+    const char *event_name,
+    const char *properties_json,
+    bool check_battery_low)
+{
+    int battery_level = honch_read_battery_level(client);
     char *event = NULL;
-    honch_status_t status = honch_build_event(client, event_name, properties_json, &event);
+    honch_status_t status = honch_build_event(client, event_name, properties_json, battery_level, &event);
     if (status == HONCH_OK) {
         status = honch_queue_enqueue(client, event);
+    }
+    if (status == HONCH_OK && check_battery_low) {
+        status = honch_emit_battery_low_locked(client, battery_level);
     }
 
     free(event);
     return status;
+}
+
+static honch_status_t honch_track_locked(honch_client_t *client, const char *event_name, const char *properties_json)
+{
+    return honch_track_locked_internal(client, event_name, properties_json, true);
 }
 
 static honch_status_t honch_new_session_id(char **out)
@@ -331,6 +387,10 @@ honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
     next->transport_timeout_ms = config->transport_timeout_ms == 0u ?
         HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS :
         config->transport_timeout_ms;
+    next->battery_callback = config->battery_callback;
+    next->battery_low_threshold = config->battery_low_threshold > 0 ?
+        config->battery_low_threshold :
+        HONCH_DEFAULT_BATTERY_LOW_THRESHOLD;
 
     honch_status_t status = HONCH_OK;
     bool mutex_initialized = false;
@@ -417,12 +477,8 @@ honch_status_t honch_identify(honch_client_t *client, const char *distinct_id, c
         status = honch_buffer_append(&properties, "}");
     }
 
-    char *event = NULL;
     if (status == HONCH_OK) {
-        status = honch_build_event(client, "$identify", properties.data, &event);
-    }
-    if (status == HONCH_OK) {
-        status = honch_queue_enqueue(client, event);
+        status = honch_track_locked(client, "$identify", properties.data);
     }
     if (status == HONCH_OK) {
         status = honch_state_save_distinct_id(client);
@@ -435,7 +491,6 @@ honch_status_t honch_identify(honch_client_t *client, const char *distinct_id, c
     }
 
     free(previous_distinct_id);
-    free(event);
     honch_buffer_free(&properties);
     pthread_mutex_unlock(&client->mutex);
     return status;
