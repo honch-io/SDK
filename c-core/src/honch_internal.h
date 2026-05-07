@@ -83,6 +83,7 @@ struct honch_client {
 };
 
 bool honch_is_blank(const char *value);
+bool honch_property_key_is_reserved(const char *key);
 char *honch_strdup(const char *value);
 void honch_free_client_fields(honch_client_t *client);
 
@@ -97,7 +98,7 @@ honch_status_t honch_json_append_string(honch_buffer_t *buffer, const char *valu
 bool honch_json_is_object(const char *json);
 bool honch_json_is_value(const char *json);
 bool honch_json_object_has_members(const char *json);
-honch_status_t honch_json_append_object_members(honch_buffer_t *buffer, const char *json);
+honch_status_t honch_json_append_object_members(honch_buffer_t *buffer, const char *json, bool *has_members);
 
 honch_status_t honch_encoder_build_batch_json(
     honch_client_t *client,

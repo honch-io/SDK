@@ -315,15 +315,21 @@ static void test_set_property_attaches_to_future_events(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_set_property(client, "$session_id", "\"session-1\""), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "screen_viewed", "{\"screen\":\"diagnostics\"}"), HONCH_OK);
+    EXPECT_EQ_INT(honch_set_property(client, "$session_id", "\"session-1\""), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ_INT(honch_set_property(client, "screen_group", "\"diagnostics\""), HONCH_OK);
+    EXPECT_EQ_INT(
+        honch_track(client, "screen_viewed", "{\"screen\":\"diagnostics\",\"$device_id\":\"spoofed\"}"),
+        HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "reserved_only", "{\"\\u0024sdk_platform\":\"spoofed\"}"), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"$session_id\":\"session-1\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"screen_group\":\"diagnostics\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$device_id\":\"device-1\"");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"$device_id\":\"spoofed\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$device_model\":\"X3-Pro\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$firmware_version\":\"3.4.1\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$sdk_platform\":\"c-posix\"");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"$sdk_platform\":\"spoofed\"");
     char timestamp[32];
     EXPECT_TRUE(extract_timestamp(transport.last_payload, timestamp, sizeof(timestamp)) != 0);
     EXPECT_TRUE(is_iso8601_timestamp(timestamp));
@@ -711,7 +717,7 @@ static void test_reset_generates_new_identity_and_clears_properties(void)
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
     EXPECT_TRUE(read_text_file(device_file, old_id, sizeof(old_id)) != 0);
-    EXPECT_EQ_INT(honch_set_property(client, "$session_id", "\"session-1\""), HONCH_OK);
+    EXPECT_EQ_INT(honch_set_property(client, "legacy_context", "\"session-1\""), HONCH_OK);
     EXPECT_EQ_INT(honch_reset(client), HONCH_OK);
     EXPECT_TRUE(read_text_file(device_file, new_id, sizeof(new_id)) != 0);
     EXPECT_TRUE(strcmp(old_id, new_id) != 0);

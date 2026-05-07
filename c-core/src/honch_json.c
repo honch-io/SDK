@@ -29,6 +29,111 @@ static bool honch_json_parse_hex4(honch_json_parser_t *parser)
     return true;
 }
 
+static int honch_json_hex_digit_value(char ch)
+{
+    if (ch >= '0' && ch <= '9') {
+        return ch - '0';
+    }
+    if (ch >= 'a' && ch <= 'f') {
+        return ch - 'a' + 10;
+    }
+    if (ch >= 'A' && ch <= 'F') {
+        return ch - 'A' + 10;
+    }
+    return -1;
+}
+
+static bool honch_json_decode_string_token(honch_json_parser_t *parser, honch_buffer_t *decoded)
+{
+    if (*parser->cursor != '"') {
+        return false;
+    }
+    parser->cursor++;
+
+    while (*parser->cursor != '\0') {
+        unsigned char ch = (unsigned char)*parser->cursor;
+        if (ch == '"') {
+            parser->cursor++;
+            return true;
+        }
+        if (ch < 0x20u) {
+            return false;
+        }
+        if (ch != '\\') {
+            if (honch_buffer_append_n(decoded, (const char *)parser->cursor, 1u) != HONCH_OK) {
+                return false;
+            }
+            parser->cursor++;
+            continue;
+        }
+
+        parser->cursor++;
+        char escaped = *parser->cursor;
+        switch (escaped) {
+            case '"':
+            case '\\':
+            case '/':
+                if (honch_buffer_append_n(decoded, &escaped, 1u) != HONCH_OK) {
+                    return false;
+                }
+                parser->cursor++;
+                break;
+            case 'b':
+                if (honch_buffer_append(decoded, "\b") != HONCH_OK) {
+                    return false;
+                }
+                parser->cursor++;
+                break;
+            case 'f':
+                if (honch_buffer_append(decoded, "\f") != HONCH_OK) {
+                    return false;
+                }
+                parser->cursor++;
+                break;
+            case 'n':
+                if (honch_buffer_append(decoded, "\n") != HONCH_OK) {
+                    return false;
+                }
+                parser->cursor++;
+                break;
+            case 'r':
+                if (honch_buffer_append(decoded, "\r") != HONCH_OK) {
+                    return false;
+                }
+                parser->cursor++;
+                break;
+            case 't':
+                if (honch_buffer_append(decoded, "\t") != HONCH_OK) {
+                    return false;
+                }
+                parser->cursor++;
+                break;
+            case 'u': {
+                parser->cursor++;
+                int codepoint = 0;
+                for (size_t i = 0u; i < 4u; i++) {
+                    int digit = honch_json_hex_digit_value(parser->cursor[i]);
+                    if (digit < 0) {
+                        return false;
+                    }
+                    codepoint = (codepoint << 4) | digit;
+                }
+                parser->cursor += 4;
+
+                char decoded_char = codepoint <= 0x7f ? (char)codepoint : '?';
+                if (honch_buffer_append_n(decoded, &decoded_char, 1u) != HONCH_OK) {
+                    return false;
+                }
+                break;
+            }
+            default:
+                return false;
+        }
+    }
+
+    return false;
+}
+
 static bool honch_json_parse_string(honch_json_parser_t *parser)
 {
     if (*parser->cursor != '"') {
@@ -266,33 +371,84 @@ bool honch_json_object_has_members(const char *json)
     return *cursor != '}';
 }
 
-honch_status_t honch_json_append_object_members(honch_buffer_t *buffer, const char *json)
+honch_status_t honch_json_append_object_members(honch_buffer_t *buffer, const char *json, bool *has_members)
 {
     if (!honch_json_object_has_members(json)) {
         return HONCH_OK;
     }
 
-    const char *start = json;
-    while (*start == ' ' || *start == '\t' || *start == '\n' || *start == '\r') {
-        start++;
+    honch_json_parser_t parser = {.cursor = json};
+    honch_json_skip_ws(&parser);
+    if (*parser.cursor != '{') {
+        return HONCH_ERROR_INVALID_ARGUMENT;
     }
-    start++;
-    while (*start == ' ' || *start == '\t' || *start == '\n' || *start == '\r') {
-        start++;
-    }
+    parser.cursor++;
 
-    const char *end = json + strlen(json);
-    while (end > start && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\n' || end[-1] == '\r')) {
-        end--;
-    }
-    if (end > start && end[-1] == '}') {
-        end--;
-    }
-    while (end > start && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\n' || end[-1] == '\r')) {
-        end--;
-    }
+    for (;;) {
+        honch_json_skip_ws(&parser);
+        if (*parser.cursor == '}') {
+            return HONCH_OK;
+        }
 
-    return honch_buffer_append_n(buffer, start, (size_t)(end - start));
+        const char *key_start = parser.cursor;
+        honch_buffer_t key;
+        honch_status_t status = honch_buffer_init(&key, 32u);
+        if (status != HONCH_OK) {
+            return status;
+        }
+        bool decoded = honch_json_decode_string_token(&parser, &key);
+        const char *key_end = parser.cursor;
+        if (!decoded) {
+            honch_buffer_free(&key);
+            return HONCH_ERROR_INVALID_ARGUMENT;
+        }
+
+        honch_json_skip_ws(&parser);
+        if (*parser.cursor != ':') {
+            honch_buffer_free(&key);
+            return HONCH_ERROR_INVALID_ARGUMENT;
+        }
+        parser.cursor++;
+        honch_json_skip_ws(&parser);
+
+        const char *value_start = parser.cursor;
+        if (!honch_json_parse_value(&parser)) {
+            honch_buffer_free(&key);
+            return HONCH_ERROR_INVALID_ARGUMENT;
+        }
+        const char *value_end = parser.cursor;
+
+        if (!honch_property_key_is_reserved(key.data)) {
+            if (*has_members) {
+                status = honch_buffer_append(buffer, ",");
+            }
+            if (status == HONCH_OK) {
+                status = honch_buffer_append_n(buffer, key_start, (size_t)(key_end - key_start));
+            }
+            if (status == HONCH_OK) {
+                status = honch_buffer_append(buffer, ":");
+            }
+            if (status == HONCH_OK) {
+                status = honch_buffer_append_n(buffer, value_start, (size_t)(value_end - value_start));
+            }
+            if (status != HONCH_OK) {
+                honch_buffer_free(&key);
+                return status;
+            }
+            *has_members = true;
+        }
+
+        honch_buffer_free(&key);
+
+        honch_json_skip_ws(&parser);
+        if (*parser.cursor == '}') {
+            return HONCH_OK;
+        }
+        if (*parser.cursor != ',') {
+            return HONCH_ERROR_INVALID_ARGUMENT;
+        }
+        parser.cursor++;
+    }
 }
 
 honch_status_t honch_json_append_string(honch_buffer_t *buffer, const char *value)
