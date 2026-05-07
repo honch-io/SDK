@@ -51,6 +51,7 @@ honch_status_t honch_reset(honch_client_t *client);
 void honch_shutdown(honch_client_t *client);
 
 const char *honch_get_device_id(honch_client_t *client);
+honch_status_t honch_copy_device_id(honch_client_t *client, char *buffer, size_t buffer_size);
 const char *honch_status_string(honch_status_t status);
 
 #ifdef HONCH_TESTING
