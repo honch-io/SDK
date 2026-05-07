@@ -20,6 +20,7 @@ Implemented:
 - persistent current `distinct_id`
 - ISO-8601 UTC event timestamps
 - tokenized batch flush envelopes
+- gzip-compressed JSON flush requests
 - persisted firmware version change detection
 - persistent event context properties
 - battery level auto-stamping and low-battery lifecycle events
@@ -57,6 +58,7 @@ Requirements:
 - CMake 3.20+
 - C11 compiler
 - libcurl
+- zlib
 - Python 3 for the mock collector
 
 From this directory:
@@ -96,6 +98,7 @@ The mock collector prints only summaries, for example:
 ```
 
 It does not print API keys, traits, or event payloads.
+It accepts the SDK's gzip-compressed JSON requests.
 
 ## Public API
 
@@ -225,6 +228,7 @@ Current C tests cover:
 - event persistence
 - ISO-8601 timestamp encoding
 - tokenized batch envelope encoding
+- gzip-compressed transport requests
 - strict JSON validation for public property input
 - generated `device_id` persistence
 - configured and generated device ID access
