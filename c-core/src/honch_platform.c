@@ -9,6 +9,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <time.h>
 #include <unistd.h>
 
 bool honch_is_blank(const char *value)
@@ -164,6 +165,32 @@ uint64_t honch_now_millis(void)
     }
 
     return ((uint64_t)tv.tv_sec * 1000u) + ((uint64_t)tv.tv_usec / 1000u);
+}
+
+honch_status_t honch_now_iso8601(char out[25])
+{
+    struct timeval tv;
+    if (gettimeofday(&tv, NULL) != 0) {
+        return HONCH_ERROR_IO;
+    }
+
+    struct tm utc;
+    if (gmtime_r(&tv.tv_sec, &utc) == NULL) {
+        return HONCH_ERROR_IO;
+    }
+
+    int written = snprintf(
+        out,
+        25u,
+        "%04d-%02d-%02dT%02d:%02d:%02d.%03ldZ",
+        utc.tm_year + 1900,
+        utc.tm_mon + 1,
+        utc.tm_mday,
+        utc.tm_hour,
+        utc.tm_min,
+        utc.tm_sec,
+        tv.tv_usec / 1000L);
+    return written == 24 ? HONCH_OK : HONCH_ERROR_IO;
 }
 
 honch_status_t honch_random_hex(char out[33])
