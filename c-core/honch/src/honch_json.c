@@ -8,6 +8,8 @@ typedef struct honch_json_parser {
     const char *cursor;
 } honch_json_parser_t;
 
+#define HONCH_JSON_MAX_DEPTH 64u
+
 static void honch_json_skip_ws(honch_json_parser_t *parser)
 {
     while (*parser->cursor == ' ' || *parser->cursor == '\t' ||
@@ -16,7 +18,7 @@ static void honch_json_skip_ws(honch_json_parser_t *parser)
     }
 }
 
-static bool honch_json_parse_value(honch_json_parser_t *parser);
+static bool honch_json_parse_value(honch_json_parser_t *parser, size_t depth);
 
 static bool honch_json_parse_hex4(honch_json_parser_t *parser)
 {
@@ -233,8 +235,12 @@ static bool honch_json_parse_number(honch_json_parser_t *parser)
     return parser->cursor > start;
 }
 
-static bool honch_json_parse_array(honch_json_parser_t *parser)
+static bool honch_json_parse_array(honch_json_parser_t *parser, size_t depth)
 {
+    if (depth > HONCH_JSON_MAX_DEPTH) {
+        return false;
+    }
+
     if (*parser->cursor != '[') {
         return false;
     }
@@ -247,7 +253,7 @@ static bool honch_json_parse_array(honch_json_parser_t *parser)
 
     for (;;) {
         honch_json_skip_ws(parser);
-        if (!honch_json_parse_value(parser)) {
+        if (!honch_json_parse_value(parser, depth)) {
             return false;
         }
         honch_json_skip_ws(parser);
@@ -262,8 +268,12 @@ static bool honch_json_parse_array(honch_json_parser_t *parser)
     }
 }
 
-static bool honch_json_parse_object(honch_json_parser_t *parser)
+static bool honch_json_parse_object(honch_json_parser_t *parser, size_t depth)
 {
+    if (depth > HONCH_JSON_MAX_DEPTH) {
+        return false;
+    }
+
     if (*parser->cursor != '{') {
         return false;
     }
@@ -285,7 +295,7 @@ static bool honch_json_parse_object(honch_json_parser_t *parser)
         }
         parser->cursor++;
         honch_json_skip_ws(parser);
-        if (!honch_json_parse_value(parser)) {
+        if (!honch_json_parse_value(parser, depth)) {
             return false;
         }
         honch_json_skip_ws(parser);
@@ -300,14 +310,14 @@ static bool honch_json_parse_object(honch_json_parser_t *parser)
     }
 }
 
-static bool honch_json_parse_value(honch_json_parser_t *parser)
+static bool honch_json_parse_value(honch_json_parser_t *parser, size_t depth)
 {
     honch_json_skip_ws(parser);
     switch (*parser->cursor) {
         case '{':
-            return honch_json_parse_object(parser);
+            return honch_json_parse_object(parser, depth + 1u);
         case '[':
-            return honch_json_parse_array(parser);
+            return honch_json_parse_array(parser, depth + 1u);
         case '"':
             return honch_json_parse_string(parser);
         case 't':
@@ -329,7 +339,7 @@ bool honch_json_is_value(const char *json)
 
     honch_json_parser_t parser = {.cursor = json};
     honch_json_skip_ws(&parser);
-    if (!honch_json_parse_value(&parser)) {
+    if (!honch_json_parse_value(&parser, 0u)) {
         return false;
     }
     honch_json_skip_ws(&parser);
@@ -344,7 +354,7 @@ bool honch_json_is_object(const char *json)
 
     honch_json_parser_t parser = {.cursor = json};
     honch_json_skip_ws(&parser);
-    if (!honch_json_parse_object(&parser)) {
+    if (!honch_json_parse_object(&parser, 1u)) {
         return false;
     }
     honch_json_skip_ws(&parser);
@@ -412,7 +422,7 @@ honch_status_t honch_json_append_object_members(honch_buffer_t *buffer, const ch
         honch_json_skip_ws(&parser);
 
         const char *value_start = parser.cursor;
-        if (!honch_json_parse_value(&parser)) {
+        if (!honch_json_parse_value(&parser, 1u)) {
             honch_buffer_free(&key);
             return HONCH_ERROR_INVALID_ARGUMENT;
         }
