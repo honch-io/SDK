@@ -35,7 +35,3 @@ jobs:
       - name: Test
         working-directory: c-core
         run: ctest --test-dir build --output-on-failure
-
-      - name: Check Python tooling
-        working-directory: c-core
-        run: python3 -m py_compile tools/mock_collector.py

@@ -37,3 +37,6 @@ __pycache__/
 
 # Local Honch SDK queues/state created by examples and smoke tests
 .honch-*/
+
+# Local agent instructions
+c-core/AGENTS.md
