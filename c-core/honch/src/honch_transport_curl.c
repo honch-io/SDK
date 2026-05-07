@@ -24,6 +24,9 @@ static size_t honch_discard_response(char *ptr, size_t size, size_t nmemb, void 
 {
     (void)ptr;
     (void)userdata;
+    if (size != 0u && nmemb > SIZE_MAX / size) {
+        return 0u;
+    }
     return size * nmemb;
 }
 
@@ -35,7 +38,12 @@ static honch_status_t honch_batch_url(const char *endpoint_url, char **out)
         endpoint_length--;
     }
 
-    size_t total = endpoint_length + strlen(suffix) + 1u;
+    size_t total = 0u;
+    honch_status_t status = honch_size_add3(endpoint_length, strlen(suffix), 1u, &total);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
     char *url = (char *)malloc(total);
     if (url == NULL) {
         return HONCH_ERROR_OUT_OF_MEMORY;
@@ -169,7 +177,11 @@ honch_status_t honch_transport_post_batch(
     }
 
     honch_buffer_t auth;
-    status = honch_buffer_init(&auth, strlen(client->api_key) + 32u);
+    size_t auth_capacity = 0u;
+    status = honch_size_add(strlen(client->api_key), 32u, &auth_capacity);
+    if (status == HONCH_OK) {
+        status = honch_buffer_init(&auth, auth_capacity);
+    }
     if (status != HONCH_OK) {
         free(compressed_payload);
         free(url);

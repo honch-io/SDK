@@ -12,6 +12,36 @@
 #include <time.h>
 #include <unistd.h>
 
+honch_status_t honch_size_add(size_t left, size_t right, size_t *out)
+{
+    if (left > SIZE_MAX - right) {
+        return HONCH_ERROR_OUT_OF_MEMORY;
+    }
+
+    *out = left + right;
+    return HONCH_OK;
+}
+
+honch_status_t honch_size_add3(size_t first, size_t second, size_t third, size_t *out)
+{
+    size_t partial = 0u;
+    honch_status_t status = honch_size_add(first, second, &partial);
+    if (status != HONCH_OK) {
+        return status;
+    }
+    return honch_size_add(partial, third, out);
+}
+
+honch_status_t honch_size_mul(size_t left, size_t right, size_t *out)
+{
+    if (left != 0u && right > SIZE_MAX / left) {
+        return HONCH_ERROR_OUT_OF_MEMORY;
+    }
+
+    *out = left * right;
+    return HONCH_OK;
+}
+
 bool honch_is_blank(const char *value)
 {
     if (value == NULL) {
@@ -34,7 +64,12 @@ char *honch_strdup(const char *value)
     }
 
     size_t length = strlen(value);
-    char *copy = (char *)malloc(length + 1u);
+    size_t total = 0u;
+    if (honch_size_add(length, 1u, &total) != HONCH_OK) {
+        return NULL;
+    }
+
+    char *copy = (char *)malloc(total);
     if (copy == NULL) {
         return NULL;
     }
@@ -65,6 +100,10 @@ void honch_free_client_fields(honch_client_t *client)
 
 honch_status_t honch_buffer_init(honch_buffer_t *buffer, size_t initial_capacity)
 {
+    if (initial_capacity == 0u) {
+        initial_capacity = 1u;
+    }
+
     buffer->data = (char *)malloc(initial_capacity);
     if (buffer->data == NULL) {
         return HONCH_ERROR_OUT_OF_MEMORY;
@@ -110,7 +149,13 @@ honch_status_t honch_buffer_reserve(honch_buffer_t *buffer, size_t needed)
 
 honch_status_t honch_buffer_append_n(honch_buffer_t *buffer, const char *value, size_t length)
 {
-    honch_status_t status = honch_buffer_reserve(buffer, buffer->length + length + 1u);
+    size_t needed = 0u;
+    honch_status_t status = honch_size_add3(buffer->length, length, 1u, &needed);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    status = honch_buffer_reserve(buffer, needed);
     if (status != HONCH_OK) {
         return status;
     }
@@ -140,7 +185,14 @@ honch_status_t honch_buffer_appendf(honch_buffer_t *buffer, const char *format, 
         return HONCH_ERROR_IO;
     }
 
-    honch_status_t status = honch_buffer_reserve(buffer, buffer->length + (size_t)required + 1u);
+    size_t needed = 0u;
+    honch_status_t status = honch_size_add3(buffer->length, (size_t)required, 1u, &needed);
+    if (status != HONCH_OK) {
+        va_end(args);
+        return status;
+    }
+
+    status = honch_buffer_reserve(buffer, needed);
     if (status != HONCH_OK) {
         va_end(args);
         return status;
@@ -223,7 +275,18 @@ honch_status_t honch_join_path(char **out, const char *left, const char *right)
     size_t left_length = strlen(left);
     size_t right_length = strlen(right);
     bool needs_separator = left_length > 0u && left[left_length - 1u] != '/';
-    size_t total = left_length + (needs_separator ? 1u : 0u) + right_length + 1u;
+    size_t total = 0u;
+    honch_status_t status = honch_size_add3(
+        left_length,
+        needs_separator ? 1u : 0u,
+        right_length,
+        &total);
+    if (status == HONCH_OK) {
+        status = honch_size_add(total, 1u, &total);
+    }
+    if (status != HONCH_OK) {
+        return status;
+    }
 
     char *path = (char *)malloc(total);
     if (path == NULL) {
@@ -284,7 +347,8 @@ static honch_status_t honch_read_file_impl(const char *path, size_t max_bytes, b
         fclose(file);
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
-    if (data_size == (size_t)-1) {
+    size_t alloc_size = 0u;
+    if (honch_size_add(data_size, 1u, &alloc_size) != HONCH_OK) {
         fclose(file);
         return HONCH_ERROR_OUT_OF_MEMORY;
     }
@@ -294,7 +358,7 @@ static honch_status_t honch_read_file_impl(const char *path, size_t max_bytes, b
         return HONCH_ERROR_IO;
     }
 
-    char *data = (char *)malloc(data_size + 1u);
+    char *data = (char *)malloc(alloc_size);
     if (data == NULL) {
         fclose(file);
         return HONCH_ERROR_OUT_OF_MEMORY;
@@ -343,7 +407,12 @@ honch_status_t honch_write_file_atomic(const char *directory, const char *filena
     char *final_path = NULL;
     honch_status_t status = HONCH_OK;
 
-    size_t tmp_length = strlen(filename) + 5u;
+    size_t tmp_length = 0u;
+    status = honch_size_add(strlen(filename), 5u, &tmp_length);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
     tmp_name = (char *)malloc(tmp_length);
     if (tmp_name == NULL) {
         return HONCH_ERROR_OUT_OF_MEMORY;
@@ -416,8 +485,22 @@ void honch_file_list_free(honch_file_list_t *list)
 static honch_status_t honch_file_list_append(honch_file_list_t *list, const char *directory, const char *name)
 {
     if (list->count == list->capacity) {
-        size_t next = list->capacity == 0u ? 16u : list->capacity * 2u;
-        honch_file_entry_t *items = (honch_file_entry_t *)realloc(list->items, next * sizeof(*items));
+        size_t next = 0u;
+        honch_status_t status = HONCH_OK;
+        if (list->capacity == 0u) {
+            next = 16u;
+        } else {
+            status = honch_size_mul(list->capacity, 2u, &next);
+        }
+        size_t alloc_size = 0u;
+        if (status == HONCH_OK) {
+            status = honch_size_mul(next, sizeof(*list->items), &alloc_size);
+        }
+        if (status != HONCH_OK) {
+            return status;
+        }
+
+        honch_file_entry_t *items = (honch_file_entry_t *)realloc(list->items, alloc_size);
         if (items == NULL) {
             return HONCH_ERROR_OUT_OF_MEMORY;
         }

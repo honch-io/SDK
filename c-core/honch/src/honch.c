@@ -508,7 +508,11 @@ static honch_status_t honch_build_session_start_properties(const char *session_n
     }
 
     honch_buffer_t properties;
-    honch_status_t status = honch_buffer_init(&properties, strlen(session_name) + 32u);
+    size_t initial_capacity = 0u;
+    honch_status_t status = honch_size_add(strlen(session_name), 32u, &initial_capacity);
+    if (status == HONCH_OK) {
+        status = honch_buffer_init(&properties, initial_capacity);
+    }
     if (status != HONCH_OK) {
         return status;
     }
@@ -534,10 +538,18 @@ static honch_status_t honch_build_firmware_update_properties(
     const char *new_version,
     char **out)
 {
+    size_t initial_capacity = 0u;
+    honch_status_t status = honch_size_add3(
+        strlen(previous_version),
+        strlen(new_version),
+        64u,
+        &initial_capacity);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
     honch_buffer_t properties;
-    honch_status_t status = honch_buffer_init(
-        &properties,
-        strlen(previous_version) + strlen(new_version) + 64u);
+    status = honch_buffer_init(&properties, initial_capacity);
     if (status != HONCH_OK) {
         return status;
     }
@@ -736,7 +748,11 @@ honch_status_t honch_set_property(honch_client_t *client, const char *key, const
 
     const char *value = value_json == NULL ? "null" : value_json;
     honch_buffer_t properties;
-    honch_status_t status = honch_buffer_init(&properties, strlen(key) + strlen(value) + 16u);
+    size_t initial_capacity = 0u;
+    honch_status_t status = honch_size_add3(strlen(key), strlen(value), 16u, &initial_capacity);
+    if (status == HONCH_OK) {
+        status = honch_buffer_init(&properties, initial_capacity);
+    }
     if (status != HONCH_OK) {
         return status;
     }
