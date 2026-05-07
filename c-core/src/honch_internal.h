@@ -85,6 +85,7 @@ bool honch_json_object_has_members(const char *json);
 honch_status_t honch_json_append_object_members(honch_buffer_t *buffer, const char *json);
 
 uint64_t honch_now_millis(void);
+honch_status_t honch_now_iso8601(char out[25]);
 honch_status_t honch_random_hex(char out[33]);
 honch_status_t honch_join_path(char **out, const char *left, const char *right);
 honch_status_t honch_mkdir_p(const char *path);

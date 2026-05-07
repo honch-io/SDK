@@ -14,6 +14,35 @@ static int failures = 0;
 #define EXPECT_STR_CONTAINS(haystack, needle) EXPECT_TRUE(strstr((haystack), (needle)) != NULL)
 #define EXPECT_STR_NOT_CONTAINS(haystack, needle) EXPECT_TRUE(strstr((haystack), (needle)) == NULL)
 
+static int is_iso8601_timestamp(const char *value)
+{
+    return strlen(value) == 24u &&
+           value[4] == '-' &&
+           value[7] == '-' &&
+           value[10] == 'T' &&
+           value[13] == ':' &&
+           value[16] == ':' &&
+           value[19] == '.' &&
+           value[23] == 'Z';
+}
+
+static int extract_timestamp(const char *json, char *out, size_t size)
+{
+    const char *marker = "\"timestamp\":\"";
+    const char *start = strstr(json, marker);
+    if (start == NULL || size < 25u) {
+        return 0;
+    }
+    start += strlen(marker);
+    const char *end = strchr(start, '"');
+    if (end == NULL || (size_t)(end - start) >= size) {
+        return 0;
+    }
+    memcpy(out, start, (size_t)(end - start));
+    out[end - start] = '\0';
+    return 1;
+}
+
 static void make_temp_dir(char *path, size_t size)
 {
     snprintf(path, size, "/tmp/honch-test-%ld-XXXXXX", (long)getpid());
@@ -254,6 +283,9 @@ static void test_set_property_attaches_to_future_events(void)
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$device_model\":\"X3-Pro\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$firmware_version\":\"3.4.1\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$sdk_platform\":\"c-posix\"");
+    char timestamp[32];
+    EXPECT_TRUE(extract_timestamp(transport.last_payload, timestamp, sizeof(timestamp)) != 0);
+    EXPECT_TRUE(is_iso8601_timestamp(timestamp));
 
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);

@@ -151,6 +151,11 @@ static honch_status_t honch_build_event(
     if (status != HONCH_OK) {
         return status;
     }
+    char timestamp[25];
+    status = honch_now_iso8601(timestamp);
+    if (status != HONCH_OK) {
+        return status;
+    }
 
     honch_buffer_t buffer;
     status = honch_buffer_init(&buffer, 1024u);
@@ -163,7 +168,10 @@ static honch_status_t honch_build_event(
         status = honch_json_append_string(&buffer, uuid);
     }
     if (status == HONCH_OK) {
-        status = honch_buffer_appendf(&buffer, ",\"timestamp\":%llu", (unsigned long long)honch_now_millis());
+        status = honch_buffer_append(&buffer, ",\"timestamp\":");
+    }
+    if (status == HONCH_OK) {
+        status = honch_json_append_string(&buffer, timestamp);
     }
     if (status == HONCH_OK) {
         status = honch_buffer_append(&buffer, ",\"distinct_id\":");

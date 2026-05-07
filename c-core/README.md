@@ -18,6 +18,7 @@ Implemented:
 - persistent local queue before network delivery
 - persistent generated `device_id`
 - persistent current `distinct_id`
+- ISO-8601 UTC event timestamps
 - persisted firmware version change detection
 - persistent event context properties
 - battery level auto-stamping and low-battery lifecycle events
@@ -221,6 +222,7 @@ Current C tests cover:
 
 - init validation
 - event persistence
+- ISO-8601 timestamp encoding
 - strict JSON validation for public property input
 - generated `device_id` persistence
 - configured and generated device ID access
