@@ -162,14 +162,31 @@ static void test_generated_device_id_persists(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_TRUE(honch_get_device_id(client) != NULL);
     EXPECT_TRUE(read_text_file(device_file, first_id, sizeof(first_id)) != 0);
     EXPECT_TRUE(strlen(first_id) == 32u);
+    EXPECT_TRUE(strcmp(honch_get_device_id(client), first_id) == 0);
     honch_shutdown(client);
 
     client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
     EXPECT_TRUE(read_text_file(device_file, second_id, sizeof(second_id)) != 0);
     EXPECT_TRUE(strcmp(first_id, second_id) == 0);
+    EXPECT_TRUE(strcmp(honch_get_device_id(client), second_id) == 0);
+    honch_shutdown(client);
+}
+
+static void test_configured_device_id_accessor(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+
+    honch_client_t *client = NULL;
+    EXPECT_TRUE(honch_get_device_id(NULL) == NULL);
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_TRUE(strcmp(honch_get_device_id(client), "device-1") == 0);
+
     honch_shutdown(client);
 }
 
@@ -362,6 +379,7 @@ int main(void)
     test_track_persists_event();
     test_strict_json_validation();
     test_generated_device_id_persists();
+    test_configured_device_id_accessor();
     test_set_property_attaches_to_future_events();
     test_identify_payload_and_persistence();
     test_queue_limit_drops_oldest();

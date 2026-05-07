@@ -363,6 +363,15 @@ void honch_shutdown(honch_client_t *client)
     free(client);
 }
 
+const char *honch_get_device_id(honch_client_t *client)
+{
+    if (client == NULL) {
+        return NULL;
+    }
+
+    return client->device_id;
+}
+
 const char *honch_status_string(honch_status_t status)
 {
     switch (status) {
