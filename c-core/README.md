@@ -32,6 +32,7 @@ Implemented:
 - deterministic C tests using fake transport hooks
 - minimal POSIX example
 - connected camera usage example
+- POSIX GPIO edge-tracking adapter example
 
 Temporary development behavior:
 
@@ -48,6 +49,7 @@ src/                    SDK implementation and internal modules
 tests/                  C test executable
 examples/posix_device/  Minimal smoke example
 examples/connected_camera/
+examples/posix_gpio/    Platform-adapter pattern for GPIO edge events
 tools/mock_collector.py Local development collector
 AGENTS.md              Package-specific agent/workflow rules
 ```
@@ -90,6 +92,12 @@ Run the connected camera example:
 
 ```sh
 ./build/examples/connected_camera/honch_connected_camera_example
+```
+
+Run the GPIO adapter example:
+
+```sh
+./build/examples/posix_gpio/honch_posix_gpio_example
 ```
 
 The mock collector prints only summaries, for example:
@@ -164,6 +172,10 @@ Background flushing is opt-in for C/POSIX. Set `flush_interval_seconds` or
 `flush_event_threshold` to start a worker thread. Retryable transport failures
 use exponential backoff with jitter, and shutdown performs a synchronous flush
 when the background worker is enabled.
+
+GPIO tracking is intentionally kept out of the reusable C core. Use a
+platform adapter, like `examples/posix_gpio`, to translate GPIO edge samples into
+normal `honch_track` calls.
 
 ## Basic Usage
 
