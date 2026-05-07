@@ -323,6 +323,20 @@ honch_status_t honch_read_file_limited(const char *path, size_t max_bytes, char 
     return honch_read_file_impl(path, max_bytes, true, out);
 }
 
+static honch_status_t honch_fsync_directory(const char *directory)
+{
+    int fd = open(directory, O_RDONLY);
+    if (fd < 0) {
+        return HONCH_ERROR_IO;
+    }
+
+    honch_status_t status = fsync(fd) == 0 ? HONCH_OK : HONCH_ERROR_IO;
+    if (close(fd) != 0 && status == HONCH_OK) {
+        status = HONCH_ERROR_IO;
+    }
+    return status;
+}
+
 honch_status_t honch_write_file_atomic(const char *directory, const char *filename, const char *content)
 {
     char *tmp_name = NULL;
@@ -366,6 +380,9 @@ honch_status_t honch_write_file_atomic(const char *directory, const char *filena
 
     if (status == HONCH_OK && rename(tmp_path, final_path) != 0) {
         status = HONCH_ERROR_IO;
+    }
+    if (status == HONCH_OK) {
+        status = honch_fsync_directory(directory);
     }
 
     if (status != HONCH_OK && tmp_path != NULL) {
