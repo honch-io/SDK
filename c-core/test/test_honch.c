@@ -270,11 +270,36 @@ static void test_strict_json_validation(void)
     char queue_dir[128];
     make_temp_dir(queue_dir, sizeof(queue_dir));
     honch_config_t config = test_config(queue_dir);
+    config.max_event_bytes = 512u;
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
     EXPECT_EQ_INT(honch_track(client, "bad_event", "[]"), HONCH_ERROR_INVALID_ARGUMENT);
     EXPECT_EQ_INT(honch_track(client, "bad_event", "{\"unterminated\""), HONCH_ERROR_INVALID_ARGUMENT);
+
+    char deep_json[256];
+    size_t pos = 0u;
+    memcpy(deep_json + pos, "{\"x\":", 5u);
+    pos += 5u;
+    for (size_t i = 0u; i < 80u; i++) {
+        deep_json[pos++] = '[';
+    }
+    deep_json[pos++] = '0';
+    for (size_t i = 0u; i < 80u; i++) {
+        deep_json[pos++] = ']';
+    }
+    deep_json[pos++] = '}';
+    deep_json[pos] = '\0';
+    EXPECT_EQ_INT(honch_track(client, "deep_event", deep_json), HONCH_ERROR_INVALID_ARGUMENT);
+
+    char oversized_json[640];
+    memcpy(oversized_json, "{\"x\":\"", 6u);
+    memset(oversized_json + 6u, 'a', 600u);
+    oversized_json[606] = '"';
+    oversized_json[607] = '}';
+    oversized_json[608] = '\0';
+    EXPECT_EQ_INT(honch_track(client, "large_event", oversized_json), HONCH_ERROR_INVALID_ARGUMENT);
+
     EXPECT_EQ_INT(honch_set_property(client, "modes", "[\"hdr\",\"night\"]"), HONCH_OK);
     EXPECT_EQ_INT(honch_set_property(client, "bad", "\"unterminated"), HONCH_ERROR_INVALID_ARGUMENT);
 

@@ -24,6 +24,43 @@ static honch_status_t honch_validate_distinct_id(const char *distinct_id)
     return HONCH_OK;
 }
 
+static bool honch_cstring_exceeds(const char *value, size_t max_length)
+{
+    if (value == NULL) {
+        return false;
+    }
+
+    size_t remaining = max_length;
+    while (*value != '\0') {
+        if (remaining == 0u) {
+            return true;
+        }
+        remaining--;
+        value++;
+    }
+    return false;
+}
+
+static honch_status_t honch_validate_json_object_input(
+    honch_client_t *client,
+    const char *json)
+{
+    if (honch_cstring_exceeds(json, client->max_event_bytes) || !honch_json_is_object(json)) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    return HONCH_OK;
+}
+
+static honch_status_t honch_validate_json_value_input(
+    honch_client_t *client,
+    const char *json)
+{
+    if (honch_cstring_exceeds(json, client->max_event_bytes) || !honch_json_is_value(json)) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    return HONCH_OK;
+}
+
 bool honch_property_key_is_reserved(const char *key)
 {
     static const char *reserved[] = {
@@ -641,7 +678,7 @@ honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
 honch_status_t honch_track(honch_client_t *client, const char *event_name, const char *properties_json)
 {
     if (client == NULL || honch_validate_event_name(event_name) != HONCH_OK ||
-        !honch_json_is_object(properties_json)) {
+        honch_validate_json_object_input(client, properties_json) != HONCH_OK) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
@@ -655,7 +692,7 @@ honch_status_t honch_track(honch_client_t *client, const char *event_name, const
 honch_status_t honch_identify(honch_client_t *client, const char *distinct_id, const char *traits_json)
 {
     if (client == NULL || honch_validate_distinct_id(distinct_id) != HONCH_OK ||
-        !honch_json_is_object(traits_json)) {
+        honch_validate_json_object_input(client, traits_json) != HONCH_OK) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
@@ -692,7 +729,8 @@ honch_status_t honch_identify(honch_client_t *client, const char *distinct_id, c
 
 honch_status_t honch_set_property(honch_client_t *client, const char *key, const char *value_json)
 {
-    if (client == NULL || key == NULL || !honch_json_is_value(value_json)) {
+    if (client == NULL || key == NULL ||
+        honch_validate_json_value_input(client, value_json) != HONCH_OK) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
