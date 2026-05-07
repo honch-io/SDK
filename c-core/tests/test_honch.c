@@ -6,6 +6,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <zlib.h>
 
 static int failures = 0;
 
@@ -176,6 +177,28 @@ static int wait_for_file_count(const char *directory, const char *suffix, size_t
         usleep(10000u);
     }
     return 0;
+}
+
+static int gunzip_to_buffer(const unsigned char *compressed, size_t compressed_size, char *out, size_t out_size)
+{
+    z_stream stream;
+    memset(&stream, 0, sizeof(stream));
+    stream.next_in = (Bytef *)compressed;
+    stream.avail_in = (uInt)compressed_size;
+    stream.next_out = (Bytef *)out;
+    stream.avail_out = (uInt)(out_size - 1u);
+
+    int status = inflateInit2(&stream, MAX_WBITS + 16);
+    if (status != Z_OK) {
+        return 0;
+    }
+
+    status = inflate(&stream, Z_FINISH);
+    if (status == Z_STREAM_END && stream.total_out < out_size) {
+        out[stream.total_out] = '\0';
+    }
+    inflateEnd(&stream);
+    return status == Z_STREAM_END;
 }
 
 static int test_battery_level = -1;
@@ -644,6 +667,26 @@ static void test_flush_drains_multiple_batches(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_gzip_payload_round_trips(void)
+{
+    const char *payload = "{\"token\":\"test-key\",\"batch\":[]}";
+    unsigned char *compressed = NULL;
+    size_t compressed_size = 0u;
+
+    EXPECT_EQ_INT(honch_test_gzip_payload(NULL, &compressed, &compressed_size), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ_INT(honch_test_gzip_payload(payload, &compressed, &compressed_size), HONCH_OK);
+    EXPECT_TRUE(compressed != NULL);
+    EXPECT_TRUE(compressed_size > 10u);
+    EXPECT_TRUE(compressed[0] == 0x1fu);
+    EXPECT_TRUE(compressed[1] == 0x8bu);
+
+    char decoded[256];
+    EXPECT_TRUE(gunzip_to_buffer(compressed, compressed_size, decoded, sizeof(decoded)) != 0);
+    EXPECT_TRUE(strcmp(decoded, payload) == 0);
+
+    free(compressed);
+}
+
 static void test_flush_rejected_moves_events_to_dead_letter(void)
 {
     char queue_dir[128];
@@ -762,6 +805,7 @@ int main(void)
     test_background_flush_threshold_drains_queue();
     test_background_flush_retries_with_backoff();
     test_flush_drains_multiple_batches();
+    test_gzip_payload_round_trips();
     test_flush_rejected_moves_events_to_dead_letter();
     test_reset_clears_queued_events();
     test_reset_generates_new_identity_and_clears_properties();

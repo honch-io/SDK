@@ -115,6 +115,17 @@ static honch_status_t honch_gzip_payload(const char *payload, unsigned char **ou
     return HONCH_OK;
 }
 
+#ifdef HONCH_TESTING
+honch_status_t honch_test_gzip_payload(const char *payload, unsigned char **out, size_t *out_size)
+{
+    if (payload == NULL || out == NULL || out_size == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    return honch_gzip_payload(payload, out, out_size);
+}
+#endif
+
 honch_status_t honch_transport_post_batch(
     honch_client_t *client,
     const char *payload,
