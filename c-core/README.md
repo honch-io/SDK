@@ -110,6 +110,7 @@ honch_status_t honch_set_property(honch_client_t *client, const char *key, const
 honch_status_t honch_flush(honch_client_t *client);
 honch_status_t honch_reset(honch_client_t *client);
 void honch_shutdown(honch_client_t *client);
+const char *honch_get_device_id(honch_client_t *client);
 const char *honch_status_string(honch_status_t status);
 ```
 
@@ -129,6 +130,10 @@ Optional config:
 - `max_queued_events`
 - `max_event_bytes`
 - `transport_timeout_ms`
+
+`honch_get_device_id` returns the active device ID for the client, or `NULL` for
+an invalid client. The returned pointer is owned by the SDK and remains valid
+until `honch_reset` or `honch_shutdown`.
 
 ## Basic Usage
 
@@ -198,6 +203,7 @@ Current C tests cover:
 - event persistence
 - strict JSON validation for public property input
 - generated `device_id` persistence
+- configured and generated device ID access
 - persistent properties on future events
 - identify payload and persisted `distinct_id`
 - bounded queue drop-oldest behavior
