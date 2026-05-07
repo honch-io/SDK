@@ -7,6 +7,7 @@
 
 # Build outputs
 build/
+build-*/
 cmake-build-*/
 CMakeFiles/
 CMakeCache.txt

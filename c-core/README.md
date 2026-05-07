@@ -70,6 +70,19 @@ ctest --test-dir build --output-on-failure
 
 The C targets build with warnings enabled and warnings treated as errors.
 
+## E2E Capture Test
+
+The real ingest E2E test is opt-in and requires a capture endpoint and token.
+It is not run by default because it sends events to the configured service.
+
+```sh
+export HONCH_E2E_ENDPOINT="https://capture.example.com"
+export HONCH_E2E_TOKEN="honch_..."
+cmake -S . -B build-e2e -DHONCH_BUILD_TESTS=ON -DHONCH_BUILD_E2E=ON
+cmake --build build-e2e
+ctest --test-dir build-e2e --output-on-failure -R honch_c_core_e2e
+```
+
 ## Examples
 
 Run the minimal example:
@@ -258,6 +271,7 @@ Current C tests cover:
 - permanent rejection dead-letter behavior
 - reset queue clearing
 - reset identity behavior
+- opt-in real capture E2E flush
 
 Run:
 
