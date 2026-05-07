@@ -32,6 +32,8 @@ typedef struct honch_config {
     size_t max_queued_events;
     size_t max_event_bytes;
     unsigned int transport_timeout_ms;
+    int (*battery_callback)(void);
+    int battery_low_threshold;
 } honch_config_t;
 
 honch_status_t honch_init(honch_client_t **client, const honch_config_t *config);

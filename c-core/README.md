@@ -20,6 +20,7 @@ Implemented:
 - persistent current `distinct_id`
 - persisted firmware version change detection
 - persistent event context properties
+- battery level auto-stamping and low-battery lifecycle events
 - automatic core lifecycle events for boot, shutdown, and reset
 - explicit event tracking and flushing
 - reset behavior for factory-reset-style identity rotation
@@ -134,6 +135,8 @@ Optional config:
 - `max_queued_events`
 - `max_event_bytes`
 - `transport_timeout_ms`
+- `battery_callback`: returns `0`-`100`, or negative when unknown
+- `battery_low_threshold`: defaults to `15`
 
 `honch_get_device_id` returns the active device ID for the client, or `NULL` for
 an invalid client. The returned pointer is owned by the SDK and remains valid
@@ -142,6 +145,10 @@ until `honch_reset` or `honch_shutdown`.
 `honch_session_start` starts an in-memory analytics session, queues a
 `$session_start` event, and attaches the generated `$session_id` to later
 events until `honch_session_end` queues `$session_end`.
+
+When `battery_callback` is configured, valid readings are stamped as
+`$battery_level`. The SDK queues `$battery_low` once when the level drops below
+`battery_low_threshold`, then arms it again after the level recovers.
 
 ## Basic Usage
 
@@ -161,7 +168,9 @@ int main(void)
         .batch_size = 10,
         .max_queued_events = 100,
         .max_event_bytes = 8192,
-        .transport_timeout_ms = 10000
+        .transport_timeout_ms = 10000,
+        .battery_callback = NULL,
+        .battery_low_threshold = 15
     };
 
     honch_client_t *client = NULL;
@@ -217,6 +226,7 @@ Current C tests cover:
 - session start/end events and `$session_id` event context
 - boot, shutdown, and reset lifecycle events
 - firmware update detection
+- battery callback, `$battery_level`, and `$battery_low`
 - identify payload and persisted `distinct_id`
 - bounded queue drop-oldest behavior
 - retryable flush preserving pending events

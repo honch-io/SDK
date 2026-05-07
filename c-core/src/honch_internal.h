@@ -14,6 +14,7 @@
 #define HONCH_DEFAULT_MAX_QUEUED_EVENTS 1000u
 #define HONCH_DEFAULT_MAX_EVENT_BYTES 16384u
 #define HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS 10000u
+#define HONCH_DEFAULT_BATTERY_LOW_THRESHOLD 15
 #define HONCH_MAX_EVENT_NAME 128u
 #define HONCH_MAX_DISTINCT_ID 256u
 #define HONCH_MAX_PROPERTY_KEY 128u
@@ -60,6 +61,9 @@ struct honch_client {
     size_t max_queued_events;
     size_t max_event_bytes;
     unsigned int transport_timeout_ms;
+    int (*battery_callback)(void);
+    int battery_low_threshold;
+    bool battery_low_emitted;
     uint64_t sequence;
 };
 

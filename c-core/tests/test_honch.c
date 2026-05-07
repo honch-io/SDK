@@ -85,6 +85,18 @@ static int read_first_json_file(const char *directory, char *out, size_t size)
     return result;
 }
 
+static int count_substring(const char *haystack, const char *needle)
+{
+    int count = 0;
+    const char *cursor = haystack;
+    size_t needle_length = strlen(needle);
+    while ((cursor = strstr(cursor, needle)) != NULL) {
+        count++;
+        cursor += needle_length;
+    }
+    return count;
+}
+
 typedef struct fake_transport_context {
     long response_code;
     int calls;
@@ -107,6 +119,13 @@ static honch_status_t fake_transport(
     snprintf(context->last_payload, sizeof(context->last_payload), "%s", payload);
     *http_status = context->response_code;
     return HONCH_OK;
+}
+
+static int test_battery_level = -1;
+
+static int test_battery_callback(void)
+{
+    return test_battery_level;
 }
 
 static honch_config_t test_config(const char *queue_dir)
@@ -331,6 +350,55 @@ static void test_firmware_update_emitted_when_version_changes(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_battery_callback_stamps_level_and_emits_low_event(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+    config.battery_callback = test_battery_callback;
+    config.battery_low_threshold = 20;
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    test_battery_level = 87;
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "battery_nominal", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$battery_level\":87");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"event\":\"$battery_low\"");
+
+    test_battery_level = 12;
+    EXPECT_EQ_INT(honch_track(client, "battery_sample", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$battery_low\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"level\":12");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$battery_level\":12");
+    EXPECT_EQ_INT(count_substring(transport.last_payload, "\"event\":\"$battery_low\""), 1);
+
+    test_battery_level = 10;
+    EXPECT_EQ_INT(honch_track(client, "battery_still_low", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"event\":\"$battery_low\"");
+
+    test_battery_level = 55;
+    EXPECT_EQ_INT(honch_track(client, "battery_recovered", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"event\":\"$battery_low\"");
+
+    test_battery_level = 9;
+    EXPECT_EQ_INT(honch_track(client, "battery_low_again", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$battery_low\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"level\":9");
+
+    honch_shutdown(client);
+    test_battery_level = -1;
+    honch_test_set_transport(NULL, NULL);
+}
+
 static void test_identify_payload_and_persistence(void)
 {
     char queue_dir[128];
@@ -500,6 +568,7 @@ int main(void)
     test_session_events_and_context();
     test_lifecycle_events_are_queued();
     test_firmware_update_emitted_when_version_changes();
+    test_battery_callback_stamps_level_and_emits_low_event();
     test_identify_payload_and_persistence();
     test_queue_limit_drops_oldest();
     test_flush_retry_keeps_events();
