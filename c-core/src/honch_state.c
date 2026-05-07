@@ -300,6 +300,18 @@ static honch_status_t honch_append_property_record(
         key_end--;
     }
 
+    if (key_end > key_start + 1 && key_start[0] == '"' && key_end[-1] == '"') {
+        size_t key_length = (size_t)(key_end - key_start - 2);
+        if (key_length <= HONCH_MAX_PROPERTY_KEY) {
+            char key[HONCH_MAX_PROPERTY_KEY + 1u];
+            memcpy(key, key_start + 1, key_length);
+            key[key_length] = '\0';
+            if (honch_property_key_is_reserved(key)) {
+                return HONCH_OK;
+            }
+        }
+    }
+
     value_start += strlen(value_marker);
     while (*value_start == ' ' || *value_start == '\t' || *value_start == '\n' || *value_start == '\r') {
         value_start++;

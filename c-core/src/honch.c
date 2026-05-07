@@ -26,7 +26,8 @@ static honch_status_t honch_validate_distinct_id(const char *distinct_id)
 
 static honch_status_t honch_validate_property_key(const char *key)
 {
-    if (honch_is_blank(key) || strlen(key) > HONCH_MAX_PROPERTY_KEY) {
+    if (honch_is_blank(key) || strlen(key) > HONCH_MAX_PROPERTY_KEY ||
+        honch_property_key_is_reserved(key)) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
@@ -36,6 +37,33 @@ static honch_status_t honch_validate_property_key(const char *key)
         }
     }
     return HONCH_OK;
+}
+
+bool honch_property_key_is_reserved(const char *key)
+{
+    static const char *reserved[] = {
+        "$battery_level",
+        "$device_id",
+        "$device_model",
+        "$environment",
+        "$firmware_version",
+        "$sdk_name",
+        "$sdk_platform",
+        "$sdk_version",
+        "$session_id",
+        "$wifi_rssi"
+    };
+
+    if (key == NULL) {
+        return false;
+    }
+
+    for (size_t i = 0u; i < sizeof(reserved) / sizeof(reserved[0]); i++) {
+        if (strcmp(key, reserved[i]) == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static honch_status_t honch_append_property_pair(
@@ -98,8 +126,7 @@ static honch_status_t honch_append_properties_object(
     honch_status_t status = honch_buffer_append(buffer, "\"properties\":{");
 
     if (status == HONCH_OK && honch_json_object_has_members(properties_json)) {
-        status = honch_json_append_object_members(buffer, properties_json);
-        has_members = true;
+        status = honch_json_append_object_members(buffer, properties_json, &has_members);
     }
     if (status == HONCH_OK) {
         status = honch_state_append_properties(client, buffer, &has_members);

@@ -165,6 +165,11 @@ until `honch_reset` or `honch_shutdown`.
 `$session_start` event, and attaches the generated `$session_id` to later
 events until `honch_session_end` queues `$session_end`.
 
+Auto-stamped property keys such as `$device_id`, `$session_id`, and
+`$sdk_platform` are owned by the SDK. Per-event properties using those keys are
+ignored so the SDK-stamped values win, and `honch_set_property` rejects them for
+persistent context.
+
 When `battery_callback` is configured, valid readings are stamped as
 `$battery_level`. The SDK queues `$battery_low` once when the level drops below
 `battery_low_threshold`, then arms it again after the level recovers.
