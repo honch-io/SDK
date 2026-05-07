@@ -20,7 +20,7 @@ class CollectorHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        if not isinstance(payload.get("batch"), list):
+        if not isinstance(payload.get("token"), str) or not isinstance(payload.get("batch"), list):
             self.send_response(400)
             self.end_headers()
             return
