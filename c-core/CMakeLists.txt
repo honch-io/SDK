@@ -18,18 +18,18 @@ find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
 
 add_library(honch_c_core
-    src/honch.c
-    src/honch_encoder.c
-    src/honch_json.c
-    src/honch_platform.c
-    src/honch_queue.c
-    src/honch_state.c
-    src/honch_transport_curl.c
+    honch/src/honch.c
+    honch/src/honch_encoder.c
+    honch/src/honch_json.c
+    honch/src/honch_platform.c
+    honch/src/honch_queue.c
+    honch/src/honch_state.c
+    honch/src/honch_transport_curl.c
 )
 
 target_include_directories(honch_c_core
     PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/honch/include
 )
 
 target_link_libraries(honch_c_core
@@ -51,7 +51,7 @@ if(HONCH_BUILD_TESTS)
     target_compile_definitions(honch_c_core PRIVATE HONCH_TESTING)
 
     add_executable(honch_c_core_tests
-        tests/test_honch.c
+        test/test_honch.c
     )
 
     target_link_libraries(honch_c_core_tests PRIVATE honch_c_core)
@@ -69,7 +69,7 @@ if(HONCH_BUILD_TESTS)
 endif()
 
 if(HONCH_BUILD_EXAMPLES)
-    add_subdirectory(examples/posix_device)
-    add_subdirectory(examples/connected_camera)
-    add_subdirectory(examples/posix_gpio)
+    add_subdirectory(example/posix_device)
+    add_subdirectory(example/connected_camera)
+    add_subdirectory(example/posix_gpio)
 endif()

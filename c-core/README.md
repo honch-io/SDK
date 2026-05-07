@@ -29,7 +29,6 @@ Implemented:
 - automatic core lifecycle events for boot and shutdown
 - explicit event tracking and flushing
 - reset behavior for factory-reset-style identity rotation
-- local mock collector for development
 - deterministic C tests using fake transport hooks
 - minimal POSIX example
 - connected camera usage example
@@ -37,7 +36,6 @@ Implemented:
 
 Temporary development behavior:
 
-- the local mock collector path still uses JSON
 - the current transport implementation is a development harness, not the final CBOR ingest contract
 
 Do not optimize around the current JSON ingest API as the long-term contract. The package is expected to move to CBOR when the shared ingest API/spec update lands.
@@ -45,14 +43,12 @@ Do not optimize around the current JSON ingest API as the long-term contract. Th
 ## Layout
 
 ```text
-include/honch/          Public C headers
-src/                    SDK implementation and internal modules
-tests/                  C test executable
-examples/posix_device/  Minimal smoke example
-examples/connected_camera/
-examples/posix_gpio/    Platform-adapter pattern for GPIO edge events
-tools/mock_collector.py Local development collector
-AGENTS.md              Package-specific agent/workflow rules
+honch/include/          Public C headers
+honch/src/              SDK implementation and internal modules
+test/                   C test executables
+example/posix_device/   Minimal smoke example
+example/connected_camera/
+example/posix_gpio/     Platform-adapter pattern for GPIO edge events
 ```
 
 ## Build
@@ -63,7 +59,6 @@ Requirements:
 - C11 compiler
 - libcurl
 - zlib
-- Python 3 for the mock collector
 
 From this directory:
 
@@ -75,47 +70,35 @@ ctest --test-dir build --output-on-failure
 
 The C targets build with warnings enabled and warnings treated as errors.
 
-## Local Smoke Test
-
-Start the local collector:
-
-```sh
-python3 tools/mock_collector.py --port 8765
-```
+## Examples
 
 Run the minimal example:
 
 ```sh
-./build/examples/posix_device/honch_posix_example
+./build/example/posix_device/honch_posix_example
 ```
 
 Run the connected camera example:
 
 ```sh
-./build/examples/connected_camera/honch_connected_camera_example
+./build/example/connected_camera/honch_connected_camera_example
 ```
 
 Run the GPIO adapter example:
 
 ```sh
-./build/examples/posix_gpio/honch_posix_gpio_example
+./build/example/posix_gpio/honch_posix_gpio_example
 ```
 
-The mock collector prints only summaries, for example:
-
-```json
-{"accepted": 5}
-```
-
-It does not print API keys, traits, or event payloads.
-It accepts the SDK's gzip-compressed JSON requests.
+The examples use the configured `endpoint_url` and are intended to run against a
+real capture endpoint or an explicit local development service.
 
 ## Public API
 
 Header:
 
 ```text
-include/honch/honch.h
+honch/include/honch/honch.h
 ```
 
 API:
@@ -180,7 +163,7 @@ use exponential backoff with jitter, and shutdown performs a synchronous flush
 when the background worker is enabled.
 
 GPIO tracking is intentionally kept out of the reusable C core. Use a
-platform adapter, like `examples/posix_gpio`, to translate GPIO edge samples into
+platform adapter, like `example/posix_gpio`, to translate GPIO edge samples into
 normal `honch_track` calls.
 
 ## Basic Usage

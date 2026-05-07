@@ -8,7 +8,7 @@ It demonstrates:
 - user identification
 - persistent event context with `honch_set_property`
 - realistic hardware events
-- explicit flush to the local mock collector
+- explicit flush to the configured capture endpoint
 
 ## Run
 
@@ -19,22 +19,10 @@ cmake -S . -B build -DHONCH_BUILD_TESTS=ON -DHONCH_BUILD_EXAMPLES=ON
 cmake --build build
 ```
 
-Start the mock collector:
-
-```sh
-python3 tools/mock_collector.py --port 8765
-```
-
 Run the camera simulation:
 
 ```sh
-./build/examples/connected_camera/honch_connected_camera_example
-```
-
-The mock collector prints only a summary, such as:
-
-```json
-{"accepted": 5}
+./build/example/connected_camera/honch_connected_camera_example
 ```
 
 The example stores local SDK state and queued events under:
