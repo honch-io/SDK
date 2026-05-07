@@ -107,6 +107,8 @@ honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
 honch_status_t honch_track(honch_client_t *client, const char *event_name, const char *properties_json);
 honch_status_t honch_identify(honch_client_t *client, const char *distinct_id, const char *traits_json);
 honch_status_t honch_set_property(honch_client_t *client, const char *key, const char *value_json);
+honch_status_t honch_session_start(honch_client_t *client, const char *session_name);
+honch_status_t honch_session_end(honch_client_t *client);
 honch_status_t honch_flush(honch_client_t *client);
 honch_status_t honch_reset(honch_client_t *client);
 void honch_shutdown(honch_client_t *client);
@@ -134,6 +136,10 @@ Optional config:
 `honch_get_device_id` returns the active device ID for the client, or `NULL` for
 an invalid client. The returned pointer is owned by the SDK and remains valid
 until `honch_reset` or `honch_shutdown`.
+
+`honch_session_start` starts an in-memory analytics session, queues a
+`$session_start` event, and attaches the generated `$session_id` to later
+events until `honch_session_end` queues `$session_end`.
 
 ## Basic Usage
 
@@ -163,8 +169,9 @@ int main(void)
     }
 
     honch_identify(client, "user-123", "{\"plan\":\"beta\"}");
-    honch_set_property(client, "$session_id", "\"recording-session-001\"");
+    honch_session_start(client, "recording");
     honch_track(client, "recording_started", "{\"mode\":\"hdr\",\"resolution\":\"4k\"}");
+    honch_session_end(client);
     honch_flush(client);
 
     honch_shutdown(client);
@@ -205,6 +212,7 @@ Current C tests cover:
 - generated `device_id` persistence
 - configured and generated device ID access
 - persistent properties on future events
+- session start/end events and `$session_id` event context
 - identify payload and persisted `distinct_id`
 - bounded queue drop-oldest behavior
 - retryable flush preserving pending events

@@ -40,7 +40,7 @@ int main(void)
 
     status = honch_identify(client, "user-camera-demo-001", "{\"plan\":\"field_trial\"}");
     if (status == HONCH_OK) {
-        status = honch_set_property(client, "$session_id", "\"recording-session-001\"");
+        status = honch_session_start(client, "recording");
     }
     if (status == HONCH_OK) {
         status = honch_set_property(client, "$firmware_channel", "\"beta\"");
@@ -55,6 +55,13 @@ int main(void)
         send_event(client, "recording_started", "{\"mode\":\"hdr\",\"resolution\":\"4k\",\"fps\":60}") != 0 ||
         send_event(client, "recording_stopped", "{\"duration_seconds\":42,\"storage_used_mb\":512}") != 0 ||
         send_event(client, "battery_warning", "{\"battery_level\":12}") != 0) {
+        honch_shutdown(client);
+        return 1;
+    }
+
+    status = honch_session_end(client);
+    if (status != HONCH_OK) {
+        fprintf(stderr, "honch_session_end failed: %s\n", honch_status_string(status));
         honch_shutdown(client);
         return 1;
     }

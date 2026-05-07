@@ -60,6 +60,7 @@ void honch_free_client_fields(honch_client_t *client)
     free(client->state_directory);
     free(client->properties_directory);
     free(client->distinct_id);
+    free(client->session_id);
 }
 
 honch_status_t honch_buffer_init(honch_buffer_t *buffer, size_t initial_capacity)
