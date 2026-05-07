@@ -252,6 +252,62 @@ static honch_status_t honch_build_session_start_properties(const char *session_n
     return HONCH_OK;
 }
 
+static honch_status_t honch_build_firmware_update_properties(
+    const char *previous_version,
+    const char *new_version,
+    char **out)
+{
+    honch_buffer_t properties;
+    honch_status_t status = honch_buffer_init(
+        &properties,
+        strlen(previous_version) + strlen(new_version) + 64u);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    status = honch_buffer_append(&properties, "{\"previous_version\":");
+    if (status == HONCH_OK) {
+        status = honch_json_append_string(&properties, previous_version);
+    }
+    if (status == HONCH_OK) {
+        status = honch_buffer_append(&properties, ",\"new_version\":");
+    }
+    if (status == HONCH_OK) {
+        status = honch_json_append_string(&properties, new_version);
+    }
+    if (status == HONCH_OK) {
+        status = honch_buffer_append(&properties, "}");
+    }
+    if (status != HONCH_OK) {
+        honch_buffer_free(&properties);
+        return status;
+    }
+
+    *out = properties.data;
+    return HONCH_OK;
+}
+
+static honch_status_t honch_emit_firmware_update_locked(honch_client_t *client)
+{
+    bool changed = false;
+    char *previous_version = NULL;
+    honch_status_t status = honch_state_check_firmware_version(client, &changed, &previous_version);
+    if (status != HONCH_OK || !changed) {
+        free(previous_version);
+        return status;
+    }
+
+    char *properties_json = NULL;
+    status = honch_build_firmware_update_properties(previous_version, client->firmware_version, &properties_json);
+    if (status == HONCH_OK) {
+        status = honch_track_locked(client, "$firmware_update", properties_json);
+    }
+
+    free(properties_json);
+    free(previous_version);
+    return status;
+}
+
 honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
 {
     if (client == NULL || config == NULL || honch_is_blank(config->api_key) ||
@@ -288,6 +344,9 @@ honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
         status = HONCH_ERROR_IO;
     } else if (status == HONCH_OK) {
         mutex_initialized = true;
+    }
+    if (status == HONCH_OK) {
+        status = honch_emit_firmware_update_locked(next);
     }
     if (status == HONCH_OK) {
         status = honch_track_locked(next, "$device_boot", HONCH_BOOT_PROPERTIES);
