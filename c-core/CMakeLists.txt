@@ -73,7 +73,7 @@ if(HONCH_BUILD_TESTS)
             test/test_e2e_capture.c
         )
 
-        target_link_libraries(honch_c_core_e2e PRIVATE honch_c_core)
+        target_link_libraries(honch_c_core_e2e PRIVATE honch_c_core CURL::libcurl)
         target_compile_definitions(honch_c_core_e2e PRIVATE
             _POSIX_C_SOURCE=200809L
             _DEFAULT_SOURCE
