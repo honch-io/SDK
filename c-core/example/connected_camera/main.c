@@ -1,6 +1,25 @@
 #include "honch/honch.h"
 
+#include <stdlib.h>
 #include <stdio.h>
+
+static const char *env_or_default(const char *name, const char *fallback)
+{
+    const char *value = getenv(name);
+    if (value != NULL && value[0] != '\0') {
+        return value;
+    }
+    return fallback;
+}
+
+static const char *required_env(const char *name)
+{
+    const char *value = getenv(name);
+    if (value == NULL || value[0] == '\0') {
+        return NULL;
+    }
+    return value;
+}
 
 static int send_event(honch_client_t *client, const char *name, const char *properties_json)
 {
@@ -15,9 +34,17 @@ static int send_event(honch_client_t *client, const char *name, const char *prop
 
 int main(void)
 {
+    const char *api_key = required_env("HONCH_API_KEY");
+    const char *endpoint_url = env_or_default("HONCH_CAPTURE_ENDPOINT", "http://127.0.0.1:8001");
+
+    if (api_key == NULL) {
+        fprintf(stderr, "HONCH_API_KEY is required.\n");
+        return 1;
+    }
+
     honch_config_t config = {
-        .api_key = "local-dev-key",
-        .endpoint_url = "http://127.0.0.1:8765",
+        .api_key = api_key,
+        .endpoint_url = endpoint_url,
         .device_id = NULL,
         .device_model = "ActionCam X1",
         .firmware_version = "1.2.3-dev",

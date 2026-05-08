@@ -83,6 +83,22 @@ cmake --build build-e2e
 ctest --test-dir build-e2e --output-on-failure -R honch_c_core_e2e
 ```
 
+To verify the full local pipeline through ClickHouse, also provide the project
+ID and ClickHouse endpoint:
+
+```sh
+export HONCH_E2E_ENDPOINT="http://127.0.0.1:8001"
+export HONCH_E2E_TOKEN="honch_..."
+export HONCH_E2E_PROJECT_ID="<project-id>"
+export HONCH_E2E_CLICKHOUSE_URL="http://127.0.0.1:8123"
+export HONCH_E2E_CLICKHOUSE_DATABASE="platform"
+ctest --test-dir build-e2e --output-on-failure -R honch_c_core_e2e
+```
+
+When the ClickHouse variables are set, the test sends a unique event and polls
+ClickHouse until that event appears. This is the mode CI should use when it
+starts the local capture, Pub/Sub emulator, worker, and ClickHouse stack.
+
 ## Examples
 
 Run the minimal example:
