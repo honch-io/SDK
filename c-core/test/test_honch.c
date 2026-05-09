@@ -105,31 +105,6 @@ static int write_text_file(const char *path, const char *content)
     return ok;
 }
 
-static int read_first_json_file(const char *directory, char *out, size_t size)
-{
-    DIR *dir = opendir(directory);
-    if (dir == NULL) {
-        return 0;
-    }
-
-    int result = 0;
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
-        size_t length = strlen(entry->d_name);
-        if (length < 5u || strcmp(entry->d_name + length - 5u, ".json") != 0) {
-            continue;
-        }
-
-        char path[320];
-        snprintf(path, sizeof(path), "%s/%s", directory, entry->d_name);
-        result = read_text_file(path, out, size);
-        break;
-    }
-
-    closedir(dir);
-    return result;
-}
-
 static int count_substring(const char *haystack, const char *needle)
 {
     int count = 0;
@@ -337,9 +312,13 @@ static void test_shutdown_reports_status(void)
 
     EXPECT_EQ_INT(honch_shutdown(NULL), HONCH_ERROR_NOT_INITIALIZED);
 
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
     EXPECT_EQ_INT(honch_shutdown(client), HONCH_OK);
+    honch_test_set_transport(NULL, NULL);
 }
 
 static void test_track_persists_event(void)
@@ -639,12 +618,32 @@ static void test_lifecycle_events_are_queued(void)
     EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"event\":\"$device_reset\"");
 
     char pending_dir[160];
-    char shutdown_event[4096];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
-    honch_shutdown(client);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 1);
-    EXPECT_TRUE(read_first_json_file(pending_dir, shutdown_event, sizeof(shutdown_event)) != 0);
-    EXPECT_STR_CONTAINS(shutdown_event, "\"event\":\"$device_shutdown\"");
+    transport.last_payload[0] = '\0';
+    EXPECT_EQ_INT(honch_shutdown(client), HONCH_OK);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 0);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$device_shutdown\"");
+
+    honch_test_set_transport(NULL, NULL);
+}
+
+static void test_shutdown_flush_reports_transport_error(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+
+    fake_transport_context_t transport = {.response_code = 500L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "queued_before_shutdown", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_shutdown(client), HONCH_ERROR_SERVER);
+    EXPECT_TRUE(transport.calls > 0);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"queued_before_shutdown\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$device_shutdown\"");
 
     honch_test_set_transport(NULL, NULL);
 }
@@ -1201,6 +1200,7 @@ int main(void)
     test_auto_properties_callback_cannot_override_sdk_owned_properties();
     test_session_events_and_context();
     test_lifecycle_events_are_queued();
+    test_shutdown_flush_reports_transport_error();
     test_firmware_update_emitted_when_version_changes();
     test_battery_callback_stamps_level_and_emits_low_event();
     test_identify_payload_and_persistence();
