@@ -805,6 +805,28 @@ static void test_identify_payload_and_persistence(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_identify_does_not_queue_event_when_persistence_fails(void)
+{
+    char queue_dir[128];
+    char state_dir[160];
+    char pending_dir[160];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    snprintf(state_dir, sizeof(state_dir), "%s/state", queue_dir);
+    snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
+    honch_config_t config = test_config(queue_dir);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 1);
+    EXPECT_EQ_INT(chmod(state_dir, 0500), 0);
+
+    EXPECT_EQ_INT(honch_identify(client, "user-1", "{\"plan\":\"beta\"}"), HONCH_ERROR_IO);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 1);
+
+    EXPECT_EQ_INT(chmod(state_dir, 0700), 0);
+    honch_shutdown(client);
+}
+
 static void test_queue_limit_drops_oldest(void)
 {
     char queue_dir[128];
@@ -1254,6 +1276,7 @@ int main(void)
     test_battery_callback_stamps_level_and_emits_low_event();
     test_battery_low_uses_same_sample_for_event_properties();
     test_identify_payload_and_persistence();
+    test_identify_does_not_queue_event_when_persistence_fails();
     test_queue_limit_drops_oldest();
     test_flush_retry_keeps_events();
     test_flush_retryable_http_status_keeps_events_until_success();

@@ -192,7 +192,12 @@ honch_status_t honch_state_prepare(honch_client_t *client, const honch_config_t 
 
 honch_status_t honch_state_save_distinct_id(honch_client_t *client)
 {
-    return honch_write_state_file(client, "distinct_id", client->distinct_id);
+    return honch_state_save_distinct_id_value(client, client->distinct_id);
+}
+
+honch_status_t honch_state_save_distinct_id_value(honch_client_t *client, const char *distinct_id)
+{
+    return honch_write_state_file(client, "distinct_id", distinct_id);
 }
 
 honch_status_t honch_state_check_firmware_version(honch_client_t *client, bool *changed, char **previous_version)
