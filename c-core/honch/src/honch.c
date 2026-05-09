@@ -789,22 +789,33 @@ honch_status_t honch_identify(honch_client_t *client, const char *distinct_id, c
         return HONCH_ERROR_OUT_OF_MEMORY;
     }
 
+    honch_status_t status = honch_state_save_distinct_id_value(client, next_distinct_id);
+    if (status != HONCH_OK) {
+        free(previous_distinct_id);
+        free(next_distinct_id);
+        pthread_mutex_unlock(&client->mutex);
+        return status;
+    }
+
     free(client->distinct_id);
     client->distinct_id = next_distinct_id;
     next_distinct_id = NULL;
 
-    honch_status_t status = honch_track_locked(client, "$identify", traits_json);
-    if (status == HONCH_OK) {
-        status = honch_state_save_distinct_id(client);
-    }
-
+    int battery_level = honch_read_battery_level(client);
+    status = honch_track_locked_internal(client, "$identify", traits_json, battery_level, false);
     if (status != HONCH_OK) {
-        free(client->distinct_id);
-        client->distinct_id = previous_distinct_id;
-        previous_distinct_id = NULL;
+        honch_status_t rollback_status = honch_state_save_distinct_id_value(client, previous_distinct_id);
+        if (rollback_status == HONCH_OK) {
+            free(client->distinct_id);
+            client->distinct_id = previous_distinct_id;
+            previous_distinct_id = NULL;
+        } else {
+            status = rollback_status;
+        }
     }
 
     free(previous_distinct_id);
+    free(next_distinct_id);
     pthread_mutex_unlock(&client->mutex);
     return status;
 }
