@@ -1218,6 +1218,28 @@ static void test_reset_clears_queued_events(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_reset_does_not_queue_event_when_state_reset_fails(void)
+{
+    char queue_dir[128];
+    char state_dir[160];
+    char pending_dir[160];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    snprintf(state_dir, sizeof(state_dir), "%s/state", queue_dir);
+    snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
+    honch_config_t config = test_config(queue_dir);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 1);
+    EXPECT_EQ_INT(chmod(state_dir, 0500), 0);
+
+    EXPECT_EQ_INT(honch_reset(client), HONCH_ERROR_IO);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 1);
+
+    EXPECT_EQ_INT(chmod(state_dir, 0700), 0);
+    honch_shutdown(client);
+}
+
 static void test_reset_generates_new_identity_and_clears_properties(void)
 {
     char queue_dir[128];
@@ -1290,6 +1312,7 @@ int main(void)
     test_gzip_payload_round_trips();
     test_flush_rejected_moves_events_to_dead_letter();
     test_reset_clears_queued_events();
+    test_reset_does_not_queue_event_when_state_reset_fails();
     test_reset_generates_new_identity_and_clears_properties();
 
     if (failures != 0) {
