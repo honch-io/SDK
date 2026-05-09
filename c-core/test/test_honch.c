@@ -263,6 +263,37 @@ static void test_init_validation(void)
     EXPECT_TRUE(client == NULL);
 }
 
+static void test_esp_idf_status_aliases(void)
+{
+    EXPECT_EQ_INT(HONCH_ERR_INVALID_ARG, HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ_INT(HONCH_ERR_NOT_INITIALIZED, HONCH_ERROR_NOT_INITIALIZED);
+    EXPECT_EQ_INT(HONCH_ERR_ALREADY_INITIALIZED, HONCH_ERROR_ALREADY_INITIALIZED);
+    EXPECT_EQ_INT(HONCH_ERR_NO_MEM, HONCH_ERROR_OUT_OF_MEMORY);
+    EXPECT_EQ_INT(HONCH_ERR_QUEUE_FULL, HONCH_ERROR_QUEUE_FULL);
+    EXPECT_EQ_INT(HONCH_ERR_NVS, HONCH_ERROR_IO);
+    EXPECT_EQ_INT(HONCH_ERR_TRANSPORT, HONCH_ERROR_TRANSPORT);
+    EXPECT_EQ_INT(HONCH_ERR_TIMEOUT, HONCH_ERROR_TIMEOUT);
+    EXPECT_EQ_INT(HONCH_ERR_INTERNAL, HONCH_ERROR_INTERNAL);
+    EXPECT_TRUE(strcmp(honch_status_string(HONCH_ERROR_NOT_INITIALIZED), "not initialized") == 0);
+    EXPECT_TRUE(strcmp(honch_status_string(HONCH_ERROR_ALREADY_INITIALIZED), "already initialized") == 0);
+    EXPECT_TRUE(strcmp(honch_status_string(HONCH_ERROR_QUEUE_FULL), "queue full") == 0);
+    EXPECT_TRUE(strcmp(honch_status_string(HONCH_ERROR_TIMEOUT), "timeout") == 0);
+    EXPECT_TRUE(strcmp(honch_status_string(HONCH_ERROR_INTERNAL), "internal error") == 0);
+}
+
+static void test_shutdown_reports_status(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+
+    EXPECT_EQ_INT(honch_shutdown(NULL), HONCH_ERROR_NOT_INITIALIZED);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_shutdown(client), HONCH_OK);
+}
+
 static void test_track_persists_event(void)
 {
     char queue_dir[128];
@@ -974,6 +1005,8 @@ static void test_reset_generates_new_identity_and_clears_properties(void)
 int main(void)
 {
     test_init_validation();
+    test_esp_idf_status_aliases();
+    test_shutdown_reports_status();
     test_track_persists_event();
     test_strict_json_validation();
     test_generated_device_id_persists();

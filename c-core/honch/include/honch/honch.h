@@ -17,8 +17,25 @@ typedef enum honch_status {
     HONCH_ERROR_TRANSPORT = 4,
     HONCH_ERROR_RATE_LIMITED = 5,
     HONCH_ERROR_SERVER = 6,
-    HONCH_ERROR_REJECTED = 7
+    HONCH_ERROR_REJECTED = 7,
+    HONCH_ERROR_NOT_INITIALIZED = 8,
+    HONCH_ERROR_ALREADY_INITIALIZED = 9,
+    HONCH_ERROR_QUEUE_FULL = 10,
+    HONCH_ERROR_TIMEOUT = 11,
+    HONCH_ERROR_INTERNAL = 12
 } honch_status_t;
+
+typedef honch_status_t honch_err_t;
+
+#define HONCH_ERR_INVALID_ARG HONCH_ERROR_INVALID_ARGUMENT
+#define HONCH_ERR_NOT_INITIALIZED HONCH_ERROR_NOT_INITIALIZED
+#define HONCH_ERR_ALREADY_INITIALIZED HONCH_ERROR_ALREADY_INITIALIZED
+#define HONCH_ERR_NO_MEM HONCH_ERROR_OUT_OF_MEMORY
+#define HONCH_ERR_QUEUE_FULL HONCH_ERROR_QUEUE_FULL
+#define HONCH_ERR_NVS HONCH_ERROR_IO
+#define HONCH_ERR_TRANSPORT HONCH_ERROR_TRANSPORT
+#define HONCH_ERR_TIMEOUT HONCH_ERROR_TIMEOUT
+#define HONCH_ERR_INTERNAL HONCH_ERROR_INTERNAL
 
 typedef struct honch_config {
     const char *api_key;
@@ -48,7 +65,7 @@ honch_status_t honch_session_start(honch_client_t *client, const char *session_n
 honch_status_t honch_session_end(honch_client_t *client);
 honch_status_t honch_flush(honch_client_t *client);
 honch_status_t honch_reset(honch_client_t *client);
-void honch_shutdown(honch_client_t *client);
+honch_status_t honch_shutdown(honch_client_t *client);
 
 const char *honch_get_device_id(honch_client_t *client);
 honch_status_t honch_copy_device_id(honch_client_t *client, char *buffer, size_t buffer_size);

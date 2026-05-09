@@ -878,19 +878,22 @@ honch_status_t honch_reset(honch_client_t *client)
     return status;
 }
 
-void honch_shutdown(honch_client_t *client)
+honch_status_t honch_shutdown(honch_client_t *client)
 {
     if (client == NULL) {
-        return;
+        return HONCH_ERROR_NOT_INITIALIZED;
     }
 
     bool flush_on_shutdown = client->scheduler_enabled;
     honch_scheduler_stop(client);
 
     pthread_mutex_lock(&client->mutex);
-    (void)honch_track_locked(client, "$device_shutdown", NULL);
+    honch_status_t status = honch_track_locked(client, "$device_shutdown", NULL);
     if (flush_on_shutdown) {
-        (void)honch_queue_flush_locked(client);
+        honch_status_t flush_status = honch_queue_flush_locked(client);
+        if (status == HONCH_OK) {
+            status = flush_status;
+        }
     }
     pthread_mutex_unlock(&client->mutex);
 
@@ -898,6 +901,7 @@ void honch_shutdown(honch_client_t *client)
     pthread_mutex_destroy(&client->mutex);
     honch_free_client_fields(client);
     free(client);
+    return status;
 }
 
 const char *honch_get_device_id(honch_client_t *client)
@@ -953,6 +957,16 @@ const char *honch_status_string(honch_status_t status)
             return "server error";
         case HONCH_ERROR_REJECTED:
             return "rejected";
+        case HONCH_ERROR_NOT_INITIALIZED:
+            return "not initialized";
+        case HONCH_ERROR_ALREADY_INITIALIZED:
+            return "already initialized";
+        case HONCH_ERROR_QUEUE_FULL:
+            return "queue full";
+        case HONCH_ERROR_TIMEOUT:
+            return "timeout";
+        case HONCH_ERROR_INTERNAL:
+            return "internal error";
         default:
             return "unknown";
     }
