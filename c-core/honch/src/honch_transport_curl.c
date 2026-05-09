@@ -176,36 +176,10 @@ honch_status_t honch_transport_post_batch(
         return HONCH_ERROR_TRANSPORT;
     }
 
-    honch_buffer_t auth;
-    size_t auth_capacity = 0u;
-    status = honch_size_add(strlen(client->api_key), 32u, &auth_capacity);
-    if (status == HONCH_OK) {
-        status = honch_buffer_init(&auth, auth_capacity);
-    }
-    if (status != HONCH_OK) {
-        free(compressed_payload);
-        free(url);
-        curl_easy_cleanup(curl);
-        return status;
-    }
-
-    status = honch_buffer_append(&auth, "Authorization: Bearer ");
-    if (status == HONCH_OK) {
-        status = honch_buffer_append(&auth, client->api_key);
-    }
-    if (status != HONCH_OK) {
-        free(compressed_payload);
-        honch_buffer_free(&auth);
-        free(url);
-        curl_easy_cleanup(curl);
-        return status;
-    }
-
     struct curl_slist *headers = NULL;
     struct curl_slist *next_header = curl_slist_append(headers, "Content-Type: application/json");
     if (next_header == NULL) {
         free(compressed_payload);
-        honch_buffer_free(&auth);
         free(url);
         curl_easy_cleanup(curl);
         return HONCH_ERROR_OUT_OF_MEMORY;
@@ -216,18 +190,6 @@ honch_status_t honch_transport_post_batch(
     if (next_header == NULL) {
         curl_slist_free_all(headers);
         free(compressed_payload);
-        honch_buffer_free(&auth);
-        free(url);
-        curl_easy_cleanup(curl);
-        return HONCH_ERROR_OUT_OF_MEMORY;
-    }
-    headers = next_header;
-
-    next_header = curl_slist_append(headers, auth.data);
-    if (next_header == NULL) {
-        curl_slist_free_all(headers);
-        free(compressed_payload);
-        honch_buffer_free(&auth);
         free(url);
         curl_easy_cleanup(curl);
         return HONCH_ERROR_OUT_OF_MEMORY;
@@ -251,7 +213,6 @@ honch_status_t honch_transport_post_batch(
 
     curl_slist_free_all(headers);
     free(compressed_payload);
-    honch_buffer_free(&auth);
     free(url);
     curl_easy_cleanup(curl);
 
