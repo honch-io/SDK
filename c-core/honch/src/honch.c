@@ -952,16 +952,13 @@ honch_status_t honch_shutdown(honch_client_t *client)
         return HONCH_ERROR_NOT_INITIALIZED;
     }
 
-    bool flush_on_shutdown = client->scheduler_enabled;
     honch_scheduler_stop(client);
 
     pthread_mutex_lock(&client->mutex);
     honch_status_t status = honch_track_locked(client, "$device_shutdown", NULL);
-    if (flush_on_shutdown) {
-        honch_status_t flush_status = honch_queue_flush_locked(client);
-        if (status == HONCH_OK) {
-            status = flush_status;
-        }
+    honch_status_t flush_status = honch_queue_flush_locked(client);
+    if (status == HONCH_OK) {
+        status = flush_status;
     }
     pthread_mutex_unlock(&client->mutex);
 

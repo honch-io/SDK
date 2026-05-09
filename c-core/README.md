@@ -186,7 +186,7 @@ shut down the client while the ID is being read.
 
 `honch_shutdown` returns `HONCH_ERROR_NOT_INITIALIZED` when called without a
 client, matching the ESP-IDF SDK's shutdown-before-init behavior. For a valid
-client, it queues `$device_shutdown`, performs the configured shutdown flush,
+client, it queues `$device_shutdown`, attempts a synchronous shutdown flush,
 frees the client, and returns the first shutdown error encountered or
 `HONCH_OK`.
 
@@ -239,8 +239,8 @@ Background flushing is enabled by default to match the ESP-IDF SDK. When
 ESP-IDF defaults of 60 seconds and 30 queued events. Set
 `disable_background_flush` nonzero to keep events queued until an explicit
 `honch_flush` call. Retryable transport failures use exponential backoff with
-jitter, and shutdown performs a synchronous flush when the background worker is
-enabled.
+jitter. Shutdown always attempts a synchronous best-effort flush for a valid
+client, even when background flushing is disabled.
 
 GPIO tracking is intentionally kept out of the reusable C core. Use a platform
 adapter, like `example/posix_gpio`, to debounce platform-specific GPIO edge
