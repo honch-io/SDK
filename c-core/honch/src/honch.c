@@ -685,8 +685,12 @@ honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
     next->transport_timeout_ms = config->transport_timeout_ms == 0u ?
         HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS :
         config->transport_timeout_ms;
-    next->flush_interval_seconds = config->flush_interval_seconds;
-    next->flush_event_threshold = config->flush_event_threshold;
+    next->flush_interval_seconds = config->flush_interval_seconds == 0u ?
+        HONCH_DEFAULT_FLUSH_INTERVAL_SECONDS :
+        config->flush_interval_seconds;
+    next->flush_event_threshold = config->flush_event_threshold == 0u ?
+        HONCH_DEFAULT_FLUSH_EVENT_THRESHOLD :
+        config->flush_event_threshold;
     next->flush_retry_initial_ms = config->flush_retry_initial_ms == 0u ?
         HONCH_DEFAULT_FLUSH_RETRY_INITIAL_MS :
         config->flush_retry_initial_ms;
@@ -696,7 +700,8 @@ honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
     if (next->flush_retry_max_ms < next->flush_retry_initial_ms) {
         next->flush_retry_max_ms = next->flush_retry_initial_ms;
     }
-    next->scheduler_enabled = next->flush_interval_seconds > 0u || next->flush_event_threshold > 0u;
+    next->scheduler_enabled = config->disable_background_flush == 0 &&
+        (next->flush_interval_seconds > 0u || next->flush_event_threshold > 0u);
     next->battery_callback = config->battery_callback;
     next->battery_low_threshold = config->battery_low_threshold > 0 ?
         config->battery_low_threshold :

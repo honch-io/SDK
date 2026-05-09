@@ -283,7 +283,8 @@ static honch_config_t test_config(const char *queue_dir)
         .batch_size = 2u,
         .max_queued_events = 10u,
         .max_event_bytes = 8192u,
-        .transport_timeout_ms = 1000u
+        .transport_timeout_ms = 1000u,
+        .disable_background_flush = 1
     };
     return config;
 }
@@ -888,6 +889,7 @@ static void test_background_flush_threshold_drains_queue(void)
     make_temp_dir(queue_dir, sizeof(queue_dir));
     honch_config_t config = test_config(queue_dir);
     config.batch_size = 10u;
+    config.disable_background_flush = 0;
     config.flush_event_threshold = 2u;
     config.flush_retry_initial_ms = 10u;
     config.flush_retry_max_ms = 20u;
@@ -916,6 +918,7 @@ static void test_background_flush_retries_with_backoff(void)
     make_temp_dir(queue_dir, sizeof(queue_dir));
     honch_config_t config = test_config(queue_dir);
     config.batch_size = 10u;
+    config.disable_background_flush = 0;
     config.flush_event_threshold = 2u;
     config.flush_retry_initial_ms = 10u;
     config.flush_retry_max_ms = 20u;
@@ -936,6 +939,70 @@ static void test_background_flush_retries_with_backoff(void)
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
     EXPECT_TRUE(wait_for_file_count(pending_dir, ".json", 0u) != 0);
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
+static void test_background_flush_uses_esp_idf_default_threshold(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 50u;
+    config.max_queued_events = 100u;
+    config.disable_background_flush = 0;
+    config.flush_retry_initial_ms = 10u;
+    config.flush_retry_max_ms = 20u;
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    for (int i = 0; i < 29; i++) {
+        EXPECT_EQ_INT(honch_track(client, "default_threshold_event", NULL), HONCH_OK);
+    }
+
+    EXPECT_TRUE(wait_for_transport_calls(&transport, 1) != 0);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"default_threshold_event\"");
+
+    char pending_dir[160];
+    snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
+    EXPECT_TRUE(wait_for_file_count(pending_dir, ".json", 0u) != 0);
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
+static void test_background_flush_can_be_explicitly_disabled(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 50u;
+    config.max_queued_events = 100u;
+    config.disable_background_flush = 1;
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    for (int i = 0; i < 35; i++) {
+        EXPECT_EQ_INT(honch_track(client, "disabled_background_event", NULL), HONCH_OK);
+    }
+
+    usleep(50000u);
+    EXPECT_EQ_INT(transport.calls, 0);
+
+    char pending_dir[160];
+    snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".json"), 36);
+
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_TRUE(transport.calls > 0);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"disabled_background_event\"");
 
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
@@ -1143,6 +1210,8 @@ int main(void)
     test_flush_dead_letters_invalid_persisted_queue_files();
     test_background_flush_threshold_drains_queue();
     test_background_flush_retries_with_backoff();
+    test_background_flush_uses_esp_idf_default_threshold();
+    test_background_flush_can_be_explicitly_disabled();
     test_flush_drains_multiple_batches();
     test_batch_size_is_capped_to_esp_limit();
     test_gzip_payload_round_trips();
