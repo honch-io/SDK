@@ -237,9 +237,10 @@ ESP-IDF defaults of 60 seconds and 30 queued events. Set
 jitter, and shutdown performs a synchronous flush when the background worker is
 enabled.
 
-GPIO tracking is intentionally kept out of the reusable C core. Use a
-platform adapter, like `example/posix_gpio`, to translate GPIO edge samples into
-normal `honch_track` calls.
+GPIO tracking is intentionally kept out of the reusable C core. Use a platform
+adapter, like `example/posix_gpio`, to debounce platform-specific GPIO edge
+signals and translate accepted edges into normal `honch_track` calls with at
+least a `{"pin": <number>}` property.
 
 ## Basic Usage
 
