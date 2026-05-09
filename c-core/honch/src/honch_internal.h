@@ -76,6 +76,8 @@ struct honch_client {
     bool scheduler_flush_requested;
     int (*battery_callback)(void);
     int battery_low_threshold;
+    honch_auto_properties_fn auto_properties_callback;
+    void *auto_properties_userdata;
     bool battery_low_emitted;
     uint64_t sequence;
 };

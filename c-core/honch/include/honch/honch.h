@@ -37,6 +37,16 @@ typedef honch_status_t honch_err_t;
 #define HONCH_ERR_TIMEOUT HONCH_ERROR_TIMEOUT
 #define HONCH_ERR_INTERNAL HONCH_ERROR_INTERNAL
 
+typedef honch_status_t (*honch_property_sink_fn)(
+    void *ctx,
+    const char *key,
+    const char *json_value);
+
+typedef honch_status_t (*honch_auto_properties_fn)(
+    void *userdata,
+    honch_property_sink_fn sink,
+    void *sink_ctx);
+
 typedef struct honch_config {
     const char *api_key;
     const char *endpoint_url;
@@ -55,6 +65,8 @@ typedef struct honch_config {
     unsigned int flush_retry_max_ms;
     int (*battery_callback)(void);
     int battery_low_threshold;
+    honch_auto_properties_fn auto_properties_callback;
+    void *auto_properties_userdata;
 } honch_config_t;
 
 honch_status_t honch_init(honch_client_t **client, const honch_config_t *config);
