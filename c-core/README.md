@@ -175,6 +175,8 @@ Optional config:
 - `flush_retry_max_ms`: defaults to `300000`
 - `battery_callback`: returns `0`-`100`, or negative when unknown
 - `battery_low_threshold`: defaults to `15`
+- `auto_properties_callback`: optional platform adapter hook for automatic event properties
+- `auto_properties_userdata`: caller-owned context passed to `auto_properties_callback`
 
 `honch_get_device_id` returns a borrowed pointer for single-threaded callers.
 The returned pointer is owned by the SDK and remains valid until `honch_reset`
@@ -201,6 +203,30 @@ provided key/value pair. It does not persist context onto future events.
 When `battery_callback` is configured, valid readings are stamped as
 `$battery_level`. The SDK queues `$battery_low` once when the level drops below
 `battery_low_threshold`, then arms it again after the level recovers.
+
+`auto_properties_callback` lets platform adapters add automatic event
+properties without putting platform-specific code in the reusable core. The
+callback receives a typed sink and can add raw JSON values:
+
+```c
+static honch_status_t add_platform_properties(
+    void *userdata,
+    honch_property_sink_fn sink,
+    void *sink_ctx)
+{
+    int rssi = *(int *)userdata;
+    char value[16];
+    snprintf(value, sizeof(value), "%d", rssi);
+    return sink(sink_ctx, "$wifi_rssi", value);
+}
+```
+
+The SDK validates each key and JSON value before appending it. Adapter
+properties are added after user properties and before SDK-owned properties, so
+core-owned values such as `$device_id`, `$sdk_platform`, and `$firmware_version`
+cannot be overridden by either user input or an adapter. The callback runs while
+the SDK is constructing an event, so it should return quickly and must not call
+back into Honch APIs for the same client.
 
 Background flushing is opt-in for C/POSIX. Set `flush_interval_seconds` or
 `flush_event_threshold` to start a worker thread. Retryable transport failures

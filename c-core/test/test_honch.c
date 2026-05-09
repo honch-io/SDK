@@ -223,6 +223,53 @@ static int test_battery_callback(void)
     return test_battery_level;
 }
 
+static int test_auto_properties_calls = 0;
+
+static honch_status_t test_auto_properties_success(
+    void *userdata,
+    honch_property_sink_fn sink,
+    void *sink_ctx)
+{
+    int *rssi = (int *)userdata;
+    char rssi_json[16];
+    snprintf(rssi_json, sizeof(rssi_json), "%d", *rssi);
+    test_auto_properties_calls++;
+
+    honch_status_t status = sink(sink_ctx, "$wifi_rssi", rssi_json);
+    if (status == HONCH_OK) {
+        status = sink(sink_ctx, "adapter_property", "\"adapter-value\"");
+    }
+    return status;
+}
+
+static honch_status_t test_auto_properties_invalid(
+    void *userdata,
+    honch_property_sink_fn sink,
+    void *sink_ctx)
+{
+    (void)userdata;
+    test_auto_properties_calls++;
+    return sink(sink_ctx, "$wifi_rssi", "\"unterminated");
+}
+
+static honch_status_t test_auto_properties_spoof_reserved(
+    void *userdata,
+    honch_property_sink_fn sink,
+    void *sink_ctx)
+{
+    (void)userdata;
+    test_auto_properties_calls++;
+
+    honch_status_t status = sink(sink_ctx, "$device_id", "\"spoofed-device\"");
+    if (status == HONCH_OK) {
+        status = sink(sink_ctx, "$sdk_platform", "\"spoofed-platform\"");
+    }
+    if (status == HONCH_OK) {
+        status = sink(sink_ctx, "$wifi_rssi", "-67");
+    }
+    return status;
+}
+
 static honch_config_t test_config(const char *queue_dir)
 {
     honch_config_t config = {
@@ -463,6 +510,75 @@ static void test_set_property_emits_event_and_autostamp_conflicts_win(void)
     char timestamp[32];
     EXPECT_TRUE(extract_timestamp(transport.last_payload, timestamp, sizeof(timestamp)) != 0);
     EXPECT_TRUE(is_iso8601_timestamp(timestamp));
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
+static void test_auto_properties_callback_adds_platform_properties(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    int rssi = -62;
+    test_auto_properties_calls = 0;
+
+    honch_config_t config = test_config(queue_dir);
+    config.auto_properties_callback = test_auto_properties_success;
+    config.auto_properties_userdata = &rssi;
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "platform_event", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_TRUE(test_auto_properties_calls >= 2);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"platform_event\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$wifi_rssi\":-62");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"adapter_property\":\"adapter-value\"");
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
+static void test_auto_properties_callback_rejects_invalid_json_value(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    test_auto_properties_calls = 0;
+
+    honch_config_t config = test_config(queue_dir);
+    config.auto_properties_callback = test_auto_properties_invalid;
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_TRUE(client == NULL);
+    EXPECT_EQ_INT(test_auto_properties_calls, 1);
+}
+
+static void test_auto_properties_callback_cannot_override_sdk_owned_properties(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    test_auto_properties_calls = 0;
+
+    honch_config_t config = test_config(queue_dir);
+    config.auto_properties_callback = test_auto_properties_spoof_reserved;
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "reserved_spoof_attempt", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"reserved_spoof_attempt\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$wifi_rssi\":-67");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$device_id\":\"device-1\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$sdk_platform\":\"c-posix\"");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "spoofed-device");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "spoofed-platform");
 
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
@@ -1013,6 +1129,9 @@ int main(void)
     test_existing_invalid_state_path_fails_init();
     test_configured_device_id_accessor();
     test_set_property_emits_event_and_autostamp_conflicts_win();
+    test_auto_properties_callback_adds_platform_properties();
+    test_auto_properties_callback_rejects_invalid_json_value();
+    test_auto_properties_callback_cannot_override_sdk_owned_properties();
     test_session_events_and_context();
     test_lifecycle_events_are_queued();
     test_firmware_update_emitted_when_version_changes();

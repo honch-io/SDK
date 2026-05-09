@@ -137,6 +137,64 @@ static honch_status_t honch_append_raw_property_pair(
     return status;
 }
 
+static bool honch_auto_property_key_is_allowed(const char *key)
+{
+    if (key == NULL) {
+        return false;
+    }
+
+    return !honch_property_key_is_reserved(key) || strcmp(key, "$wifi_rssi") == 0;
+}
+
+typedef struct honch_auto_property_sink_context {
+    honch_client_t *client;
+    honch_buffer_t *buffer;
+    bool *has_members;
+} honch_auto_property_sink_context_t;
+
+static honch_status_t honch_auto_property_sink(
+    void *ctx,
+    const char *key,
+    const char *json_value)
+{
+    honch_auto_property_sink_context_t *sink_context = (honch_auto_property_sink_context_t *)ctx;
+    if (sink_context == NULL || honch_is_blank(key) ||
+        honch_validate_json_value_input(sink_context->client, json_value) != HONCH_OK) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!honch_auto_property_key_is_allowed(key)) {
+        return HONCH_OK;
+    }
+
+    return honch_append_raw_property_pair(
+        sink_context->buffer,
+        sink_context->has_members,
+        key,
+        json_value);
+}
+
+static honch_status_t honch_append_auto_properties(
+    honch_client_t *client,
+    honch_buffer_t *buffer,
+    bool *has_members)
+{
+    if (client->auto_properties_callback == NULL) {
+        return HONCH_OK;
+    }
+
+    honch_auto_property_sink_context_t sink_context = {
+        .client = client,
+        .buffer = buffer,
+        .has_members = has_members
+    };
+
+    return client->auto_properties_callback(
+        client->auto_properties_userdata,
+        honch_auto_property_sink,
+        &sink_context);
+}
+
 static honch_status_t honch_append_properties_object(
     honch_client_t *client,
     honch_buffer_t *buffer,
@@ -148,6 +206,9 @@ static honch_status_t honch_append_properties_object(
 
     if (status == HONCH_OK && honch_json_object_has_members(properties_json)) {
         status = honch_json_append_object_members(buffer, properties_json, &has_members);
+    }
+    if (status == HONCH_OK) {
+        status = honch_append_auto_properties(client, buffer, &has_members);
     }
     if (status == HONCH_OK) {
         status = honch_append_property_pair(buffer, &has_members, "$device_id", client->device_id);
@@ -640,6 +701,8 @@ honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
     next->battery_low_threshold = config->battery_low_threshold > 0 ?
         config->battery_low_threshold :
         HONCH_DEFAULT_BATTERY_LOW_THRESHOLD;
+    next->auto_properties_callback = config->auto_properties_callback;
+    next->auto_properties_userdata = config->auto_properties_userdata;
 
     honch_status_t status = HONCH_OK;
     bool mutex_initialized = false;
