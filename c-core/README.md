@@ -22,7 +22,7 @@ Implemented:
 - tokenized batch flush envelopes
 - gzip-compressed JSON flush requests
 - isolated batch encoder boundary for the future CBOR transition
-- opt-in background flushing with retry backoff and jitter
+- default background flushing with retry backoff and jitter
 - persisted firmware version change detection
 - `$set_property` event API parity with the ESP-IDF SDK
 - battery level auto-stamping and low-battery lifecycle events
@@ -169,10 +169,11 @@ Optional config:
 - `max_queued_events`
 - `max_event_bytes`
 - `transport_timeout_ms`
-- `flush_interval_seconds`: enables interval-based background flushing when nonzero
-- `flush_event_threshold`: enables threshold-based background flushing when nonzero
+- `flush_interval_seconds`: defaults to `60`
+- `flush_event_threshold`: defaults to `30`
 - `flush_retry_initial_ms`: defaults to `1000`
 - `flush_retry_max_ms`: defaults to `300000`
+- `disable_background_flush`: set nonzero to disable the background worker
 - `battery_callback`: returns `0`-`100`, or negative when unknown
 - `battery_low_threshold`: defaults to `15`
 - `auto_properties_callback`: optional platform adapter hook for automatic event properties
@@ -228,10 +229,13 @@ cannot be overridden by either user input or an adapter. The callback runs while
 the SDK is constructing an event, so it should return quickly and must not call
 back into Honch APIs for the same client.
 
-Background flushing is opt-in for C/POSIX. Set `flush_interval_seconds` or
-`flush_event_threshold` to start a worker thread. Retryable transport failures
-use exponential backoff with jitter, and shutdown performs a synchronous flush
-when the background worker is enabled.
+Background flushing is enabled by default to match the ESP-IDF SDK. When
+`flush_interval_seconds` or `flush_event_threshold` are zero, the SDK uses the
+ESP-IDF defaults of 60 seconds and 30 queued events. Set
+`disable_background_flush` nonzero to keep events queued until an explicit
+`honch_flush` call. Retryable transport failures use exponential backoff with
+jitter, and shutdown performs a synchronous flush when the background worker is
+enabled.
 
 GPIO tracking is intentionally kept out of the reusable C core. Use a
 platform adapter, like `example/posix_gpio`, to translate GPIO edge samples into
@@ -258,6 +262,7 @@ int main(void)
         .transport_timeout_ms = 10000,
         .flush_interval_seconds = 60,
         .flush_event_threshold = 30,
+        .disable_background_flush = 0,
         .battery_callback = NULL,
         .battery_low_threshold = 15
     };

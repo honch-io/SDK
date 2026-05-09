@@ -63,6 +63,7 @@ typedef struct honch_config {
     size_t flush_event_threshold;
     unsigned int flush_retry_initial_ms;
     unsigned int flush_retry_max_ms;
+    int disable_background_flush;
     int (*battery_callback)(void);
     int battery_low_threshold;
     honch_auto_properties_fn auto_properties_callback;
