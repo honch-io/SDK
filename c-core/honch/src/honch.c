@@ -314,6 +314,7 @@ static honch_status_t honch_track_locked_internal(
     honch_client_t *client,
     const char *event_name,
     const char *properties_json,
+    int battery_level,
     bool check_battery_low);
 static void honch_scheduler_notify_after_enqueue_locked(honch_client_t *client);
 
@@ -335,16 +336,16 @@ static honch_status_t honch_emit_battery_low_locked(honch_client_t *client, int 
     client->battery_low_emitted = true;
     char properties_json[32];
     snprintf(properties_json, sizeof(properties_json), "{\"level\":%d}", battery_level);
-    return honch_track_locked_internal(client, "$battery_low", properties_json, false);
+    return honch_track_locked_internal(client, "$battery_low", properties_json, battery_level, false);
 }
 
 static honch_status_t honch_track_locked_internal(
     honch_client_t *client,
     const char *event_name,
     const char *properties_json,
+    int battery_level,
     bool check_battery_low)
 {
-    int battery_level = honch_read_battery_level(client);
     char *event = NULL;
     honch_status_t status = honch_build_event(client, event_name, properties_json, battery_level, &event);
     if (status == HONCH_OK) {
@@ -363,7 +364,8 @@ static honch_status_t honch_track_locked_internal(
 
 static honch_status_t honch_track_locked(honch_client_t *client, const char *event_name, const char *properties_json)
 {
-    return honch_track_locked_internal(client, event_name, properties_json, true);
+    int battery_level = honch_read_battery_level(client);
+    return honch_track_locked_internal(client, event_name, properties_json, battery_level, true);
 }
 
 static uint64_t honch_scheduler_interval_ms(honch_client_t *client)

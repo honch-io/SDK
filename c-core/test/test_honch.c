@@ -198,6 +198,18 @@ static int test_battery_callback(void)
     return test_battery_level;
 }
 
+static int test_battery_sequence[8];
+static size_t test_battery_sequence_count = 0u;
+static size_t test_battery_sequence_index = 0u;
+
+static int test_battery_sequence_callback(void)
+{
+    if (test_battery_sequence_index >= test_battery_sequence_count) {
+        return -1;
+    }
+    return test_battery_sequence[test_battery_sequence_index++];
+}
+
 static int test_auto_properties_calls = 0;
 
 static honch_status_t test_auto_properties_success(
@@ -727,6 +739,43 @@ static void test_battery_callback_stamps_level_and_emits_low_event(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_battery_low_uses_same_sample_for_event_properties(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+    config.battery_callback = test_battery_sequence_callback;
+    config.battery_low_threshold = 20;
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    test_battery_sequence[0] = 87;
+    test_battery_sequence[1] = 10;
+    test_battery_sequence[2] = 80;
+    test_battery_sequence_count = 3u;
+    test_battery_sequence_index = 0u;
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "battery_sample", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+
+    const char *low_event = strstr(transport.last_payload, "\"event\":\"$battery_low\"");
+    EXPECT_TRUE(low_event != NULL);
+    if (low_event != NULL) {
+        EXPECT_STR_CONTAINS(low_event, "\"level\":10");
+        EXPECT_STR_CONTAINS(low_event, "\"$battery_level\":10");
+        EXPECT_STR_NOT_CONTAINS(low_event, "\"$battery_level\":80");
+    }
+
+    honch_shutdown(client);
+    test_battery_sequence_count = 0u;
+    test_battery_sequence_index = 0u;
+    honch_test_set_transport(NULL, NULL);
+}
+
 static void test_identify_payload_and_persistence(void)
 {
     char queue_dir[128];
@@ -1203,6 +1252,7 @@ int main(void)
     test_shutdown_flush_reports_transport_error();
     test_firmware_update_emitted_when_version_changes();
     test_battery_callback_stamps_level_and_emits_low_event();
+    test_battery_low_uses_same_sample_for_event_properties();
     test_identify_payload_and_persistence();
     test_queue_limit_drops_oldest();
     test_flush_retry_keeps_events();
