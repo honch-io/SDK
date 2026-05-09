@@ -201,6 +201,11 @@ ignored so the SDK-stamped values win.
 `honch_set_property` queues a `$set_property` event whose properties contain the
 provided key/value pair. It does not persist context onto future events.
 
+JSON-shaped public inputs are validated at the API boundary. `properties_json`
+and `traits_json` must be valid JSON objects, and `value_json` must be a valid
+JSON value. Malformed JSON returns `HONCH_ERROR_INVALID_ARGUMENT`; C/POSIX
+intentionally fails closed instead of silently dropping invalid user properties.
+
 When `battery_callback` is configured, valid readings are stamped as
 `$battery_level`. The SDK queues `$battery_low` once when the level drops below
 `battery_low_threshold`, then arms it again after the level recovers.
