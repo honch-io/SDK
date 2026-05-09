@@ -141,11 +141,17 @@ honch_status_t honch_session_start(honch_client_t *client, const char *session_n
 honch_status_t honch_session_end(honch_client_t *client);
 honch_status_t honch_flush(honch_client_t *client);
 honch_status_t honch_reset(honch_client_t *client);
-void honch_shutdown(honch_client_t *client);
+honch_status_t honch_shutdown(honch_client_t *client);
 const char *honch_get_device_id(honch_client_t *client);
 honch_status_t honch_copy_device_id(honch_client_t *client, char *buffer, size_t buffer_size);
 const char *honch_status_string(honch_status_t status);
 ```
+
+`honch_status_t` is the canonical C/POSIX status type. For ESP-IDF source
+compatibility, the public header also exposes `honch_err_t` as an alias and
+defines `HONCH_ERR_*` names that map to the corresponding portable
+`HONCH_ERROR_*` statuses. ESP-IDF's NVS-specific storage error maps to
+`HONCH_ERROR_IO` in C/POSIX.
 
 Required config:
 
@@ -174,6 +180,12 @@ Optional config:
 The returned pointer is owned by the SDK and remains valid until `honch_reset`
 or `honch_shutdown`. Use `honch_copy_device_id` when another thread may reset or
 shut down the client while the ID is being read.
+
+`honch_shutdown` returns `HONCH_ERROR_NOT_INITIALIZED` when called without a
+client, matching the ESP-IDF SDK's shutdown-before-init behavior. For a valid
+client, it queues `$device_shutdown`, performs the configured shutdown flush,
+frees the client, and returns the first shutdown error encountered or
+`HONCH_OK`.
 
 `honch_session_start` starts an in-memory analytics session, queues a
 `$session_start` event, and attaches the generated `$session_id` to later
