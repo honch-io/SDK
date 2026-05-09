@@ -72,32 +72,31 @@ The C targets build with warnings enabled and warnings treated as errors.
 
 ## E2E Capture Test
 
-The real ingest E2E test is opt-in and requires a capture endpoint and token.
-It is not run by default because it sends events to the configured service.
+The real ingest E2E test is opt-in because it sends events to the configured
+service. It includes local-stack defaults for the Honch development E2E stack,
+and every value can be overridden with environment variables.
 
 ```sh
-export HONCH_E2E_ENDPOINT="https://capture.example.com"
-export HONCH_E2E_TOKEN="honch_..."
 cmake -S . -B build-e2e -DHONCH_BUILD_TESTS=ON -DHONCH_BUILD_E2E=ON
 cmake --build build-e2e
 ctest --test-dir build-e2e --output-on-failure -R honch_c_core_e2e
 ```
 
-To verify the full local pipeline through ClickHouse, also provide the project
-ID and ClickHouse endpoint:
+Default local E2E settings:
 
-```sh
-export HONCH_E2E_ENDPOINT="http://127.0.0.1:8001"
-export HONCH_E2E_TOKEN="honch_..."
-export HONCH_E2E_PROJECT_ID="<project-id>"
-export HONCH_E2E_CLICKHOUSE_URL="http://127.0.0.1:8123"
-export HONCH_E2E_CLICKHOUSE_DATABASE="platform"
-ctest --test-dir build-e2e --output-on-failure -R honch_c_core_e2e
-```
+- `HONCH_E2E_ENDPOINT`: `http://127.0.0.1:8001`
+- `HONCH_E2E_CAPTURE_HEALTH_URL`: `http://127.0.0.1:8001/health`
+- `HONCH_E2E_WORKER_HEALTH_URL`: `http://127.0.0.1:8080/`
+- `HONCH_E2E_TOKEN`: `honch_e2e_test_key`
+- `HONCH_E2E_PROJECT_ID`: `00000000-0000-0000-0000-000000000002`
+- `HONCH_E2E_CLICKHOUSE_URL`: `http://127.0.0.1:8123`
+- `HONCH_E2E_CLICKHOUSE_DATABASE`: `platform`
 
-When the ClickHouse variables are set, the test sends a unique event and polls
-ClickHouse until that event appears. This is the mode CI should use when it
-starts the local capture, Pub/Sub emulator, worker, and ClickHouse stack.
+The test verifies capture health, worker health, ClickHouse reachability, SDK
+validation failures, batching, lifecycle events, identify, user properties,
+reserved-property protection, auto properties, battery-low telemetry, sessions,
+device ID persistence across restart, reset identity rotation, and ingested
+ClickHouse rows.
 
 ## Examples
 
