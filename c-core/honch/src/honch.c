@@ -943,10 +943,7 @@ honch_status_t honch_reset(honch_client_t *client)
     }
 
     pthread_mutex_lock(&client->mutex);
-    honch_status_t status = honch_track_locked(client, "$device_reset", NULL);
-    if (status == HONCH_OK) {
-        status = honch_state_reset(client);
-    }
+    honch_status_t status = honch_state_reset(client);
     if (status == HONCH_OK) {
         free(client->session_id);
         client->session_id = NULL;
