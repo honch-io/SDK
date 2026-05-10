@@ -23,6 +23,7 @@ class Honch:
         self.identity = IdentityStore(self.queue.state_dir, self.platform, self.config.device_id)
         self.session_id = None
         self.battery_low_emitted = False
+        self._connectivity_connected = None
         self.scheduler = Scheduler(self)
 
         changed, previous = self.identity.check_firmware_version(self.config.firmware_version)
@@ -77,6 +78,23 @@ class Honch:
             return
         self._track_internal("$session_end", {}, check_battery_low=True)
         self.session_id = None
+
+    def connectivity_changed(self, connected):
+        if connected is not True and connected is not False:
+            raise InvalidArgumentError("connected must be a boolean")
+        if self._connectivity_connected == connected:
+            return
+        state = "connected" if connected else "disconnected"
+        self._track_internal("$connectivity_change", {"state": state}, check_battery_low=True)
+        self._connectivity_connected = connected
+        if connected:
+            self.scheduler.request_flush()
+
+    def connected(self):
+        self.connectivity_changed(True)
+
+    def disconnected(self):
+        self.connectivity_changed(False)
 
     def flush(self):
         final_error = None
