@@ -1,0 +1,46 @@
+name: MicroPython SDK Tests
+
+on:
+  push:
+    paths:
+      - 'micropython/**'
+      - 'spec/**'
+      - 'sdks/micropython/**'
+      - 'sdks/spec/**'
+      - '.github/workflows/micropython.yml'
+  pull_request:
+    paths:
+      - 'micropython/**'
+      - 'spec/**'
+      - 'sdks/micropython/**'
+      - 'sdks/spec/**'
+      - '.github/workflows/micropython.yml'
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.8', '3.12']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Run host tests
+        shell: bash
+        run: |
+          if [ -d micropython ]; then
+            cd micropython
+          else
+            cd sdks/micropython
+          fi
+
+          python -m compileall honch tests examples
+          python -m unittest discover -v
