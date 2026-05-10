@@ -5,7 +5,6 @@ import unittest
 import honch
 import honch.transport as transport_module
 from honch.errors import (
-    CompressionUnavailableError,
     InvalidArgumentError,
     RejectedError,
     ServerError,
@@ -422,10 +421,14 @@ class HonchSdkBehaviorTests(unittest.TestCase):
             platform=FakePlatform(gzip_enabled=False),
             transport=FakeTransport([202]),
         )
-        with self.assertRaises(CompressionUnavailableError):
-            no_gzip.flush()
-        self.assertEqual(len(pending_files(no_gzip)), 1)
-        self.assertEqual(read_pending_events(no_gzip)[0]["event"], "$device_boot")
+        no_gzip.flush()
+        self.assertEqual(pending_files(no_gzip), [])
+        self.assertEqual(len(no_gzip.transport.calls), 1)
+        self.assertEqual(no_gzip.transport.calls[0]["headers"]["Content-Encoding"], "identity")
+        self.assertEqual(
+            [event["event"] for event in no_gzip.transport.calls[0]["json"]["batch"]],
+            ["$device_boot"],
+        )
 
     @with_tempdir
     def test_flush_dead_letters_invalid_persisted_queue_files_and_flushes_valid_events(self, tmp_path):

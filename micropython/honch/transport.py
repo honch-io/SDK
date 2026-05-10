@@ -4,7 +4,6 @@ except ImportError:
     requests = None
 
 from .errors import (
-    CompressionUnavailableError,
     RateLimitedError,
     RejectedError,
     ServerError,
@@ -42,15 +41,26 @@ def batch_url(endpoint_url):
 
 
 def post_batch(config, platform, transport, payload):
-    compressed = platform.gzip_compress(payload.encode("utf-8"))
+    raw = payload.encode("utf-8")
+    compressed = None
+    try:
+        compressed = platform.gzip_compress(raw)
+    except Exception:
+        compressed = None
+
     if compressed is None:
-        raise CompressionUnavailableError("gzip support is unavailable")
+        body = raw
+        content_encoding = "identity"
+    else:
+        body = compressed
+        content_encoding = "gzip"
+
     status = transport.post(
         batch_url(config.endpoint_url),
-        compressed,
+        body,
         {
             "Content-Type": "application/json",
-            "Content-Encoding": "gzip",
+            "Content-Encoding": content_encoding,
         },
         config.transport_timeout_ms,
     )
