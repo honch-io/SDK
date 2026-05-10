@@ -3,6 +3,7 @@ import os
 import unittest
 
 import honch
+import honch.transport as transport_module
 from honch.errors import (
     CompressionUnavailableError,
     InvalidArgumentError,
@@ -55,6 +56,50 @@ def write_pending_file(client, name, content):
         fh.write(content)
 
 
+class FakeHttpResponse:
+    def __init__(self, status_code=202):
+        self.status_code = status_code
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
+class TimeoutRequests:
+    def __init__(self):
+        self.calls = []
+        self.response = FakeHttpResponse()
+
+    def post(self, url, data=None, headers=None, timeout=None):
+        self.calls.append(
+            {
+                "url": url,
+                "data": data,
+                "headers": headers,
+                "timeout": timeout,
+            }
+        )
+        return self.response
+
+
+class NoTimeoutRequests:
+    def __init__(self):
+        self.calls = []
+        self.response = FakeHttpResponse()
+
+    def post(self, url, data=None, headers=None, timeout=None):
+        if timeout is not None:
+            raise TypeError("unexpected keyword argument 'timeout'")
+        self.calls.append(
+            {
+                "url": url,
+                "data": data,
+                "headers": headers,
+            }
+        )
+        return self.response
+
+
 class HonchSdkTests(unittest.TestCase):
     def test_init_validation_rejects_required_config(self):
         with self.subTest("missing values"):
@@ -74,6 +119,42 @@ class HonchSdkTests(unittest.TestCase):
                     config[key] = ""
                     with self.assertRaises(InvalidArgumentError):
                         honch.Honch(**config)
+
+    def test_http_transport_passes_timeout_when_supported(self):
+        previous = transport_module.requests
+        fake_requests = TimeoutRequests()
+        transport_module.requests = fake_requests
+        try:
+            status = transport_module.HttpTransport().post(
+                "http://collector.local/batch",
+                b"{}",
+                {"Content-Type": "application/json"},
+                2500,
+            )
+        finally:
+            transport_module.requests = previous
+
+        self.assertEqual(status, 202)
+        self.assertEqual(fake_requests.calls[0]["timeout"], 2.5)
+        self.assertTrue(fake_requests.response.closed)
+
+    def test_http_transport_falls_back_when_timeout_keyword_is_unsupported(self):
+        previous = transport_module.requests
+        fake_requests = NoTimeoutRequests()
+        transport_module.requests = fake_requests
+        try:
+            status = transport_module.HttpTransport().post(
+                "http://collector.local/batch",
+                b"{}",
+                {"Content-Type": "application/json"},
+                2500,
+            )
+        finally:
+            transport_module.requests = previous
+
+        self.assertEqual(status, 202)
+        self.assertEqual(len(fake_requests.calls), 1)
+        self.assertTrue(fake_requests.response.closed)
 
 
 class PathShim:
