@@ -258,6 +258,44 @@ class HonchSdkBehaviorTests(unittest.TestCase):
         self.assertEqual(transport.calls[1]["json"]["batch"][-1]["event"], "third")
 
     @with_tempdir
+    def test_flush_preserves_event_creation_timestamp_after_clock_advances(self, tmp_path):
+        platform = FakePlatform()
+        transport = FakeTransport([202])
+        client = make_client(tmp_path, platform=platform, transport=transport, batch_size=10)
+
+        platform.clock.advance(1234)
+        client.track("created_before_flush")
+        queued_timestamp = read_pending_events(client)[-1]["timestamp"]
+        platform.clock.advance(60000)
+
+        client.flush()
+
+        sent_event = next(
+            event
+            for event in transport.calls[0]["json"]["batch"]
+            if event["event"] == "created_before_flush"
+        )
+        self.assertEqual(sent_event["timestamp"], queued_timestamp)
+
+    @with_tempdir
+    def test_connectivity_event_uses_notification_time_without_restamping_queued_events(self, tmp_path):
+        platform = FakePlatform()
+        client = make_client(tmp_path, platform=platform)
+
+        platform.clock.advance(1234)
+        client.track("queued_before_connectivity")
+        queued_timestamp = read_pending_events(client)[-1]["timestamp"]
+        platform.clock.advance(60000)
+
+        client.connected()
+
+        events = read_pending_events(client)
+        queued_event = next(event for event in events if event["event"] == "queued_before_connectivity")
+        connectivity_event = next(event for event in events if event["event"] == "$connectivity_change")
+        self.assertEqual(queued_event["timestamp"], queued_timestamp)
+        self.assertNotEqual(connectivity_event["timestamp"], queued_timestamp)
+
+    @with_tempdir
     def test_generated_device_id_and_identify_persist_across_restart(self, tmp_path):
         queue_dir = str(tmp_path / "state")
         platform = FakePlatform()
