@@ -32,9 +32,11 @@ class Scheduler:
         self._request_flush()
 
     def flush_due(self):
-        if not self.enabled or self.client.queue.count() == 0:
+        if not self.enabled:
             return
         self._flush_requested = False
+        if self.client.queue.count() == 0:
+            return
         now = self.client.platform.now_ms()
         if now < self.next_retry_ms:
             return

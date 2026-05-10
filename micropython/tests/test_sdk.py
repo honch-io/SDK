@@ -593,6 +593,30 @@ class HonchSdkBehaviorTests(unittest.TestCase):
             ["$device_boot", "$connectivity_change"],
         )
 
+    @with_tempdir
+    def test_late_flush_callback_does_not_block_future_requests(self, tmp_path):
+        platform = FakePlatform()
+        transport = FakeTransport([202])
+        client = make_client(
+            tmp_path,
+            platform=platform,
+            transport=transport,
+            disable_background_flush=False,
+            flush_event_threshold=100,
+            flush_interval_seconds=60,
+        )
+
+        client.connected()
+        self.assertEqual(len(platform.flush_requests), 1)
+
+        client.flush()
+        platform.flush_requests[0].fire()
+
+        client.disconnected()
+        client.connected()
+
+        self.assertEqual(len(platform.flush_requests), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
