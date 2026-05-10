@@ -20,7 +20,7 @@ Implemented:
 - persistent current `distinct_id`
 - ISO-8601 UTC event timestamps
 - tokenized batch flush envelopes
-- gzip-compressed JSON flush requests
+- gzip-compressed JSON flush requests with identity fallback when compression is unavailable
 - isolated batch encoder boundary for the future CBOR transition
 - default background flushing with retry backoff and jitter
 - persisted firmware version change detection
@@ -323,7 +323,7 @@ Current C tests cover:
 - event persistence
 - ISO-8601 timestamp encoding
 - tokenized batch envelope encoding
-- gzip-compressed transport requests
+- gzip-compressed transport requests with identity fallback when compression is unavailable
 - strict JSON validation for public property input
 - generated `device_id` persistence
 - configured and generated device ID access

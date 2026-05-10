@@ -117,6 +117,8 @@ static int count_substring(const char *haystack, const char *needle)
     return count;
 }
 
+static int gunzip_to_buffer(const unsigned char *compressed, size_t compressed_size, char *out, size_t out_size);
+
 typedef struct fake_transport_context {
     long response_code;
     long next_response_code;
@@ -125,12 +127,15 @@ typedef struct fake_transport_context {
     char last_url[256];
     char last_api_key[128];
     char last_payload[16384];
+    char last_content_encoding[32];
 } fake_transport_context_t;
 
 static honch_status_t fake_transport(
     const char *url,
     const char *api_key,
-    const char *payload,
+    const unsigned char *body,
+    size_t body_size,
+    const char *content_encoding,
     void *userdata,
     long *http_status)
 {
@@ -142,7 +147,22 @@ static honch_status_t fake_transport(
     }
     snprintf(context->last_url, sizeof(context->last_url), "%s", url);
     snprintf(context->last_api_key, sizeof(context->last_api_key), "%s", api_key);
-    snprintf(context->last_payload, sizeof(context->last_payload), "%s", payload);
+    snprintf(context->last_content_encoding, sizeof(context->last_content_encoding), "%s", content_encoding);
+    if (strcmp(content_encoding, "gzip") == 0) {
+        char decoded[sizeof(context->last_payload)];
+        if (gunzip_to_buffer(body, body_size, decoded, sizeof(decoded))) {
+            snprintf(context->last_payload, sizeof(context->last_payload), "%s", decoded);
+        } else {
+            snprintf(context->last_payload, sizeof(context->last_payload), "%s", "");
+        }
+    } else {
+        size_t copy_size = body_size;
+        if (copy_size >= sizeof(context->last_payload)) {
+            copy_size = sizeof(context->last_payload) - 1u;
+        }
+        memcpy(context->last_payload, body, copy_size);
+        context->last_payload[copy_size] = '\0';
+    }
     *http_status = response_code;
     return HONCH_OK;
 }
@@ -1155,6 +1175,30 @@ static void test_gzip_payload_round_trips(void)
     free(compressed);
 }
 
+static void test_flush_falls_back_to_identity_when_compression_fails(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+    honch_test_set_compression_failure(1);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+
+    EXPECT_EQ_INT(transport.calls, 1);
+    EXPECT_TRUE(strcmp(transport.last_content_encoding, "identity") == 0);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$device_boot\"");
+
+    honch_shutdown(client);
+    honch_test_set_compression_failure(0);
+    honch_test_set_transport(NULL, NULL);
+}
+
 static void test_flush_rejected_moves_events_to_dead_letter(void)
 {
     char queue_dir[128];
@@ -1310,6 +1354,7 @@ int main(void)
     test_flush_drains_multiple_batches();
     test_batch_size_is_capped_to_esp_limit();
     test_gzip_payload_round_trips();
+    test_flush_falls_back_to_identity_when_compression_fails();
     test_flush_rejected_moves_events_to_dead_letter();
     test_reset_clears_queued_events();
     test_reset_does_not_queue_event_when_state_reset_fails();
