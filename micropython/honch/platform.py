@@ -55,6 +55,9 @@ class DefaultPlatform:
     def start_periodic(self, interval_ms, callback):
         return None
 
+    def request_flush(self, callback):
+        return False
+
 
 def dumps_compact(value):
     try:

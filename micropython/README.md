@@ -126,11 +126,14 @@ for boards that provide compression through another module.
 
 ## Background Flush
 
-Threshold flushing is handled in the core after enqueue. Interval flushing uses
-an optional `platform.start_periodic(interval_ms, callback)` adapter so board
-code can choose the right timer, thread, or event-loop primitive. Explicit
-`flush()` is always supported and is the fallback when no interval adapter is
-available.
+Threshold flushing is notification-driven. When `flush_event_threshold` is
+reached, the SDK calls an optional `platform.request_flush(callback)` adapter;
+the adapter should schedule `callback` to run later on the board's timer, event
+loop, or worker primitive. It must not call the callback inline from `track()`.
+
+Interval flushing uses an optional
+`platform.start_periodic(interval_ms, callback)` adapter. Explicit `flush()` is
+always supported and is the fallback when no background adapter is available.
 
 ## Tests
 

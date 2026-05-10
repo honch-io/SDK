@@ -23,6 +23,9 @@ class BoardPlatform:
     def get_wifi_rssi(self):
         return None
 
+    def request_flush(self, callback):
+        return False
+
 
 def battery_level():
     return -1

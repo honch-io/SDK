@@ -36,6 +36,7 @@ class FakePlatform:
         self.reset_reason = "software"
         self.wifi_rssi = None
         self.periodic = None
+        self.flush_requests = []
 
     def now_ms(self):
         return self.clock.now_ms()
@@ -61,6 +62,11 @@ class FakePlatform:
         self.periodic = FakePeriodic(interval_ms, callback)
         return self.periodic
 
+    def request_flush(self, callback):
+        request = FakeDeferredFlush(callback)
+        self.flush_requests.append(request)
+        return True
+
 
 class FakePeriodic:
     def __init__(self, interval_ms, callback):
@@ -73,6 +79,14 @@ class FakePeriodic:
 
     def stop(self):
         self.stopped = True
+
+
+class FakeDeferredFlush:
+    def __init__(self, callback):
+        self.callback = callback
+
+    def fire(self):
+        self.callback()
 
 
 class FakeTransport:
