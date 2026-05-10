@@ -1,5 +1,5 @@
 from . import platform as fs
-from .errors import InvalidArgumentError, StorageError
+from .errors import StorageError
 
 
 class PersistentQueue:
@@ -50,9 +50,6 @@ class PersistentQueue:
                 text = fs.read_text(path)
             except OSError as exc:
                 raise StorageError(str(exc))
-            if len(text) > self.max_event_bytes:
-                self.move_to_dead([name])
-                raise InvalidArgumentError("persisted event exceeds max_event_bytes")
             batch.append((name, text))
         return batch
 

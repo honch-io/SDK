@@ -74,6 +74,10 @@ def decode_event(text):
 
 def build_batch(api_key, event_texts):
     events = [decode_event(text) for text in event_texts]
+    return build_batch_from_events(api_key, events)
+
+
+def build_batch_from_events(api_key, events):
     return dumps_compact({"token": api_key, "batch": events})
 
 

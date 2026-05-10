@@ -1,5 +1,5 @@
 from .config import HonchConfig
-from .encoder import build_batch, build_event, encode_event
+from .encoder import build_batch_from_events, build_event, decode_event, encode_event
 from .errors import InvalidArgumentError, RejectedError
 from .identity import IdentityStore
 from .platform import DefaultPlatform
@@ -82,8 +82,25 @@ class Honch:
         final_error = None
         while self.queue.count() > 0:
             batch = self.queue.read_batch(self.config.batch_size)
-            names = [item[0] for item in batch]
-            payload = build_batch(self.config.api_key, [item[1] for item in batch])
+            names = []
+            events = []
+            invalid_names = []
+            for name, text in batch:
+                if len(text) > self.config.max_event_bytes:
+                    invalid_names.append(name)
+                    continue
+                try:
+                    events.append(decode_event(text))
+                except (TypeError, ValueError):
+                    invalid_names.append(name)
+                    continue
+                names.append(name)
+            if invalid_names:
+                self.queue.move_to_dead(invalid_names)
+                final_error = RejectedError("invalid persisted event")
+            if not events:
+                continue
+            payload = build_batch_from_events(self.config.api_key, events)
             try:
                 post_batch(self.config, self.platform, self.transport, payload)
             except RejectedError as exc:

@@ -1,6 +1,5 @@
 import json
 import os
-import re
 import unittest
 
 import honch
@@ -49,6 +48,11 @@ def read_pending_events(client):
         with open(os.path.join(client.queue.pending_dir, name), "r", encoding="utf-8") as fh:
             events.append(json.load(fh))
     return events
+
+
+def write_pending_file(client, name, content):
+    with open(os.path.join(client.queue.pending_dir, name), "w", encoding="utf-8") as fh:
+        fh.write(content)
 
 
 class HonchSdkTests(unittest.TestCase):
@@ -248,6 +252,56 @@ class HonchSdkBehaviorTests(unittest.TestCase):
             no_gzip.flush()
         self.assertEqual(len(pending_files(no_gzip)), 1)
         self.assertEqual(read_pending_events(no_gzip)[0]["event"], "$device_boot")
+
+    @with_tempdir
+    def test_flush_dead_letters_invalid_persisted_queue_files_and_flushes_valid_events(self, tmp_path):
+        transport = FakeTransport([202])
+        client = make_client(
+            tmp_path,
+            transport=transport,
+            batch_size=10,
+            max_event_bytes=512,
+        )
+        client.track("valid_after_corrupt")
+        write_pending_file(client, "00000000000000000000-malformed.json", '{"event":')
+        write_pending_file(
+            client,
+            "00000000000000000001-oversized.json",
+            '{"event":"oversized","properties":{"x":"' + ("a" * 620) + '"}}',
+        )
+
+        with self.assertRaises(RejectedError):
+            client.flush()
+
+        self.assertEqual(pending_files(client), [])
+        self.assertEqual(len(dead_files(client)), 2)
+        self.assertEqual(len(transport.calls), 1)
+        names = [event["event"] for event in transport.calls[0]["json"]["batch"]]
+        self.assertEqual(names, ["$device_boot", "valid_after_corrupt"])
+
+    @with_tempdir
+    def test_flush_dead_letters_invalid_persisted_queue_files_without_empty_transport_call(self, tmp_path):
+        transport = FakeTransport([202])
+        client = make_client(
+            tmp_path,
+            transport=transport,
+            batch_size=10,
+            max_event_bytes=512,
+        )
+        client.flush()
+        write_pending_file(client, "00000000000000000000-malformed.json", '{"event":')
+        write_pending_file(
+            client,
+            "00000000000000000001-oversized.json",
+            '{"event":"oversized","properties":{"x":"' + ("a" * 620) + '"}}',
+        )
+
+        with self.assertRaises(RejectedError):
+            client.flush()
+
+        self.assertEqual(pending_files(client), [])
+        self.assertEqual(len(dead_files(client)), 2)
+        self.assertEqual(len(transport.calls), 1)
 
     @with_tempdir
     def test_background_scheduler_flushes_at_threshold_and_can_be_disabled(self, tmp_path):
