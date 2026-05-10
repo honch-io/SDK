@@ -5,7 +5,7 @@ except ImportError:
 
 from .config import SDK_PLATFORM, SDK_VERSION
 from .platform import dumps_compact
-from .validation import RESERVED_PROPERTIES
+from .validation import RESERVED_PROPERTIES, require_properties
 
 
 def iso8601_ms(millis):
@@ -86,8 +86,4 @@ def _adapter_properties(client):
     if callback is None:
         return {}
     result = callback()
-    if result is None:
-        return {}
-    if not isinstance(result, dict):
-        return {}
-    return result
+    return require_properties(result)

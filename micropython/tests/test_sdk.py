@@ -121,6 +121,42 @@ class HonchSdkBehaviorTests(unittest.TestCase):
         self.assertEqual(tracked["properties"]["$environment"], "production")
 
     @with_tempdir
+    def test_auto_properties_callback_adds_allowed_properties_and_preserves_sdk_owned_values(self, tmp_path):
+        def auto_properties_callback():
+            return {
+                "$wifi_rssi": -67,
+                "$device_id": "spoofed-device",
+                "$sdk_platform": "spoofed-platform",
+                "adapter_property": "adapter-value",
+            }
+
+        client = make_client(tmp_path, auto_properties_callback=auto_properties_callback)
+        client.track("adapter_event")
+
+        event = read_pending_events(client)[-1]
+        self.assertEqual(event["properties"]["adapter_property"], "adapter-value")
+        self.assertEqual(event["properties"]["$wifi_rssi"], -67)
+        self.assertEqual(event["properties"]["$device_id"], "device-1")
+        self.assertEqual(event["properties"]["$sdk_platform"], "micropython")
+        self.assertNotIn("spoofed-device", json.dumps(event))
+
+    @with_tempdir
+    def test_auto_properties_callback_rejects_invalid_output(self, tmp_path):
+        invalid_callbacks = (
+            lambda: ["not", "a", "dict"],
+            lambda: {1: "non-string-key"},
+            lambda: {"unsupported": object()},
+        )
+
+        for index, callback in enumerate(invalid_callbacks):
+            with self.subTest(index=index):
+                with self.assertRaises(InvalidArgumentError):
+                    make_client(
+                        tmp_path / ("invalid-auto-%d" % index),
+                        auto_properties_callback=callback,
+                    )
+
+    @with_tempdir
     def test_flush_sends_gzip_batch_and_drains_multiple_batches(self, tmp_path):
         transport = FakeTransport([202])
         client = make_client(tmp_path, transport=transport, batch_size=2)
