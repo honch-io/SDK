@@ -100,6 +100,11 @@ class NoTimeoutRequests:
         return self.response
 
 
+class BrokenRequests:
+    def post(self, url, data=None, headers=None, timeout=None):
+        raise TypeError("bad payload")
+
+
 class HonchSdkTests(unittest.TestCase):
     def test_init_validation_rejects_required_config(self):
         with self.subTest("missing values"):
@@ -155,6 +160,20 @@ class HonchSdkTests(unittest.TestCase):
         self.assertEqual(status, 202)
         self.assertEqual(len(fake_requests.calls), 1)
         self.assertTrue(fake_requests.response.closed)
+
+    def test_http_transport_propagates_unrelated_typeerror(self):
+        previous = transport_module.requests
+        transport_module.requests = BrokenRequests()
+        try:
+            with self.assertRaises(TypeError):
+                transport_module.HttpTransport().post(
+                    "http://collector.local/batch",
+                    b"{}",
+                    {"Content-Type": "application/json"},
+                    2500,
+                )
+        finally:
+            transport_module.requests = previous
 
 
 class PathShim:

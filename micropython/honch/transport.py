@@ -18,7 +18,9 @@ class HttpTransport:
             raise TransportError("no HTTP transport available")
         try:
             response = requests.post(url, data=body, headers=headers, timeout=timeout_ms / 1000.0)
-        except TypeError:
+        except TypeError as exc:
+            if not _timeout_keyword_unsupported(exc):
+                raise
             response = requests.post(url, data=body, headers=headers)
         try:
             return response.status_code
@@ -26,6 +28,11 @@ class HttpTransport:
             close = getattr(response, "close", None)
             if close is not None:
                 close()
+
+
+def _timeout_keyword_unsupported(exc):
+    message = str(exc).lower()
+    return "timeout" in message and "keyword" in message
 
 
 def batch_url(endpoint_url):
