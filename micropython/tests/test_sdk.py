@@ -304,10 +304,12 @@ class HonchSdkBehaviorTests(unittest.TestCase):
         self.assertEqual(len(transport.calls), 1)
 
     @with_tempdir
-    def test_background_scheduler_flushes_at_threshold_and_can_be_disabled(self, tmp_path):
+    def test_background_scheduler_requests_deferred_flush_at_threshold(self, tmp_path):
+        platform = FakePlatform()
         transport = FakeTransport([202])
         client = make_client(
             tmp_path,
+            platform=platform,
             transport=transport,
             disable_background_flush=False,
             flush_event_threshold=2,
@@ -315,6 +317,12 @@ class HonchSdkBehaviorTests(unittest.TestCase):
         )
 
         client.track("threshold_event")
+
+        self.assertEqual(len(transport.calls), 0)
+        self.assertEqual(len(platform.flush_requests), 1)
+        self.assertEqual(len(pending_files(client)), 2)
+
+        platform.flush_requests[0].fire()
 
         self.assertEqual(pending_files(client), [])
         self.assertEqual(len(transport.calls), 1)
