@@ -95,13 +95,19 @@ class FakeTransport:
         self.calls = []
 
     def post(self, url, body, headers, timeout_ms):
+        headers = dict(headers)
+        encoding = headers.get("Content-Encoding")
+        if encoding == "gzip":
+            payload = json.loads(gzip.decompress(body).decode("utf-8"))
+        else:
+            payload = json.loads(body.decode("utf-8"))
         self.calls.append(
             {
                 "url": url,
                 "body": body,
-                "headers": dict(headers),
+                "headers": headers,
                 "timeout_ms": timeout_ms,
-                "json": json.loads(gzip.decompress(body).decode("utf-8")),
+                "json": payload,
             }
         )
         if len(self.statuses) > 1:

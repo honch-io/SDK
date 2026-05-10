@@ -23,6 +23,19 @@ For development on a connected board:
 mpremote mount . run examples/basic.py
 ```
 
+For a customer-like install on a Pico W, copy the package onto the device and
+drop in a `main.py` that uses the same E2E-style config and event sequence:
+
+```sh
+mpremote connect auto mip install micropython/package.json
+mpremote connect auto fs cp micropython/examples/pico_w_main.py :main.py
+mpremote connect auto reset
+```
+
+Note: `ENDPOINT_URL` in `examples/pico_w_main.py` is set to the local capture
+default used by the host-side E2E test. On a real Pico W, point it at a URL the
+board can reach on your network.
+
 For firmware builds, include the package through `manifest.py`:
 
 ```sh
@@ -145,10 +158,10 @@ leave pending events intact. Permanent `4xx` rejection moves attempted events to
 
 ## Gzip
 
-The shared wire format requires gzip. If the active MicroPython build does not
-provide gzip compression, events remain queued and `flush()` raises
-`CompressionUnavailableError`. Inject a platform adapter with `gzip_compress()`
-for boards that provide compression through another module.
+The SDK will use gzip when the active MicroPython build supports it. If gzip is
+unavailable, it falls back to sending plain JSON with `Content-Encoding:
+identity` so boards like the Pico W can still flush batches. Boards that do
+provide compression can still supply it through `platform.gzip_compress()`.
 
 ## Background Flush
 
@@ -202,10 +215,8 @@ Pending and dead-letter events are persisted as individual JSON files below
 `queue_directory`, so storage cost scales with queued event count and event
 size.
 
-Direct flush requires gzip support. If the active port lacks gzip compression,
-events remain queued and `flush()` raises `CompressionUnavailableError`; provide
-a platform adapter with `gzip_compress()` when the board exposes compression
-through another module or native binding.
+Direct flush uses compression when available, but it is no longer blocked by a
+missing gzip implementation in the firmware.
 
 ## Tests
 
