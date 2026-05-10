@@ -11,6 +11,7 @@
 #ifdef HONCH_TESTING
 static honch_test_transport_fn honch_test_transport = NULL;
 static void *honch_test_transport_userdata = NULL;
+static int honch_test_force_compression_failure = 0;
 #endif
 
 static pthread_once_t honch_curl_once = PTHREAD_ONCE_INIT;
@@ -123,6 +124,53 @@ static honch_status_t honch_gzip_payload(const char *payload, unsigned char **ou
     return HONCH_OK;
 }
 
+static honch_status_t honch_raw_payload(const char *payload, unsigned char **out, size_t *out_size)
+{
+    *out = NULL;
+    *out_size = 0u;
+
+    size_t payload_size = strlen(payload);
+    if (payload_size > SIZE_MAX - 1u) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    unsigned char *body = (unsigned char *)malloc(payload_size + 1u);
+    if (body == NULL) {
+        return HONCH_ERROR_OUT_OF_MEMORY;
+    }
+
+    memcpy(body, payload, payload_size);
+    body[payload_size] = '\0';
+    *out = body;
+    *out_size = payload_size;
+    return HONCH_OK;
+}
+
+static honch_status_t honch_prepare_payload(
+    const char *payload,
+    unsigned char **out,
+    size_t *out_size,
+    const char **content_encoding)
+{
+    *out = NULL;
+    *out_size = 0u;
+    *content_encoding = "identity";
+
+#ifdef HONCH_TESTING
+    if (honch_test_force_compression_failure) {
+        return honch_raw_payload(payload, out, out_size);
+    }
+#endif
+
+    honch_status_t status = honch_gzip_payload(payload, out, out_size);
+    if (status == HONCH_OK) {
+        *content_encoding = "gzip";
+        return HONCH_OK;
+    }
+
+    return honch_raw_payload(payload, out, out_size);
+}
+
 #ifdef HONCH_TESTING
 honch_status_t honch_test_gzip_payload(const char *payload, unsigned char **out, size_t *out_size)
 {
@@ -147,8 +195,24 @@ honch_status_t honch_transport_post_batch(
 
 #ifdef HONCH_TESTING
     if (honch_test_transport != NULL) {
+        unsigned char *transport_payload = NULL;
+        size_t transport_payload_size = 0u;
+        const char *content_encoding = NULL;
+        status = honch_prepare_payload(payload, &transport_payload, &transport_payload_size, &content_encoding);
+        if (status != HONCH_OK) {
+            free(url);
+            return status;
+        }
         long response_code = 0L;
-        status = honch_test_transport(url, client->api_key, payload, honch_test_transport_userdata, &response_code);
+        status = honch_test_transport(
+            url,
+            client->api_key,
+            transport_payload,
+            transport_payload_size,
+            content_encoding,
+            honch_test_transport_userdata,
+            &response_code);
+        free(transport_payload);
         free(url);
         if (status != HONCH_OK) {
             *result = HONCH_HTTP_RETRY;
@@ -160,7 +224,8 @@ honch_status_t honch_transport_post_batch(
 
     unsigned char *compressed_payload = NULL;
     size_t compressed_payload_size = 0u;
-    status = honch_gzip_payload(payload, &compressed_payload, &compressed_payload_size);
+    const char *content_encoding = NULL;
+    status = honch_prepare_payload(payload, &compressed_payload, &compressed_payload_size, &content_encoding);
     if (status != HONCH_OK) {
         free(url);
         return status;
@@ -186,7 +251,9 @@ honch_status_t honch_transport_post_batch(
     }
     headers = next_header;
 
-    next_header = curl_slist_append(headers, "Content-Encoding: gzip");
+    char content_encoding_header[64];
+    snprintf(content_encoding_header, sizeof(content_encoding_header), "Content-Encoding: %s", content_encoding);
+    next_header = curl_slist_append(headers, content_encoding_header);
     if (next_header == NULL) {
         curl_slist_free_all(headers);
         free(compressed_payload);
@@ -229,5 +296,10 @@ void honch_test_set_transport(honch_test_transport_fn transport, void *userdata)
 {
     honch_test_transport = transport;
     honch_test_transport_userdata = userdata;
+}
+
+void honch_test_set_compression_failure(int enabled)
+{
+    honch_test_force_compression_failure = enabled ? 1 : 0;
 }
 #endif
