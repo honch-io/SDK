@@ -488,6 +488,54 @@ class HonchSdkBehaviorTests(unittest.TestCase):
         client.shutdown()
         self.assertTrue(platform.periodic.stopped)
 
+    @with_tempdir
+    def test_connectivity_changed_emits_lifecycle_event_once_per_state(self, tmp_path):
+        platform = FakePlatform()
+        client = make_client(tmp_path, platform=platform)
+
+        client.connected()
+        client.connected()
+        client.disconnected()
+        client.disconnected()
+
+        events = read_pending_events(client)
+        connectivity = [event for event in events if event["event"] == "$connectivity_change"]
+        self.assertEqual(len(connectivity), 2)
+        self.assertEqual(connectivity[0]["properties"]["state"], "connected")
+        self.assertEqual(connectivity[1]["properties"]["state"], "disconnected")
+
+    @with_tempdir
+    def test_connectivity_connected_requests_deferred_flush_without_inline_transport(self, tmp_path):
+        platform = FakePlatform()
+        transport = FakeTransport([202])
+        client = make_client(
+            tmp_path,
+            platform=platform,
+            transport=transport,
+            disable_background_flush=False,
+            flush_event_threshold=100,
+            flush_interval_seconds=60,
+            batch_size=10,
+        )
+
+        client.connected()
+
+        self.assertEqual(len(transport.calls), 0)
+        self.assertEqual(len(platform.flush_requests), 1)
+        self.assertEqual(
+            [event["event"] for event in read_pending_events(client)],
+            ["$device_boot", "$connectivity_change"],
+        )
+
+        platform.flush_requests[0].fire()
+
+        self.assertEqual(pending_files(client), [])
+        self.assertEqual(len(transport.calls), 1)
+        self.assertEqual(
+            [event["event"] for event in transport.calls[0]["json"]["batch"]],
+            ["$device_boot", "$connectivity_change"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

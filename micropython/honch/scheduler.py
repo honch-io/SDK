@@ -26,6 +26,11 @@ class Scheduler:
             return
         self._request_flush()
 
+    def request_flush(self):
+        if not self.enabled:
+            return
+        self._request_flush()
+
     def flush_due(self):
         if not self.enabled or self.client.queue.count() == 0:
             return
