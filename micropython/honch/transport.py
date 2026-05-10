@@ -16,7 +16,10 @@ class HttpTransport:
     def post(self, url, body, headers, timeout_ms):
         if requests is None:
             raise TransportError("no HTTP transport available")
-        response = requests.post(url, data=body, headers=headers)
+        try:
+            response = requests.post(url, data=body, headers=headers, timeout=timeout_ms / 1000.0)
+        except TypeError:
+            response = requests.post(url, data=body, headers=headers)
         try:
             return response.status_code
         finally:
