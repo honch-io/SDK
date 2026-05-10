@@ -78,7 +78,7 @@ Optional:
 - `disable_background_flush`: defaults to `False`
 - `battery_callback`: returns `0`-`100`, or negative/`None` when unknown
 - `battery_low_threshold`: defaults to `15`
-- `auto_properties_callback`: returns a dict of adapter properties
+- `auto_properties_callback`: returns a dict of JSON-compatible adapter properties
 - `platform`: optional board adapter
 - `transport`: optional HTTP adapter
 
@@ -99,6 +99,11 @@ client.get_device_id()
 `properties` and `traits` must be dictionaries containing JSON-compatible
 values. SDK-owned auto properties win over user-supplied properties with the
 same key.
+
+`auto_properties_callback`, when configured, must return `None` or a dictionary
+with string keys and JSON-compatible values. SDK-owned auto properties still win
+over callback-supplied values, except `$wifi_rssi`, which platform adapters may
+provide.
 
 ## Storage Layout
 
