@@ -90,6 +90,9 @@ client.identify(distinct_id, traits=None)
 client.set_property(key, value=None)
 client.session_start(session_name=None)
 client.session_end()
+client.connectivity_changed(connected)
+client.connected()
+client.disconnected()
 client.flush()
 client.reset()
 client.shutdown()
@@ -104,6 +107,24 @@ same key.
 with string keys and JSON-compatible values. SDK-owned auto properties still win
 over callback-supplied values, except `$wifi_rssi`, which platform adapters may
 provide.
+
+### Core Contract Mapping
+
+The shared SDK sheet describes six functions. MicroPython exposes the same
+contract through an explicit client object:
+
+| Shared contract | MicroPython API |
+| --- | --- |
+| `init(config)` | `client = honch.Honch(**config)` |
+| `track(event_name, properties)` | `client.track(event_name, properties)` |
+| `identify(distinct_id, properties)` | `client.identify(distinct_id, traits)` |
+| `set_property(key, value)` | `client.set_property(key, value)` |
+| `flush()` | `client.flush()` |
+| `reset()` | `client.reset()` |
+
+`session_start()`, `session_end()`, `connectivity_changed()`, `shutdown()`, and
+`get_device_id()` are MicroPython lifecycle and inspection extensions around
+that core contract.
 
 ## Storage Layout
 
@@ -139,6 +160,52 @@ loop, or worker primitive. It must not call the callback inline from `track()`.
 Interval flushing uses an optional
 `platform.start_periodic(interval_ms, callback)` adapter. Explicit `flush()` is
 always supported and is the fallback when no background adapter is available.
+
+## Connectivity Changes
+
+Board network code can notify the SDK when connectivity changes:
+
+```python
+client.connected()
+client.disconnected()
+client.connectivity_changed(True)
+client.connectivity_changed(False)
+```
+
+Each state transition queues a `$connectivity_change` lifecycle event with
+`state` set to `"connected"` or `"disconnected"`. Duplicate notifications for
+the current state are ignored. A transition to connected asks the scheduler for
+a deferred flush through `platform.request_flush(callback)` when background
+flush is enabled; the SDK does not perform network work inline from the
+notification call.
+
+## Relay Mode
+
+This package does not currently implement a relay drain API or sealed relay
+envelope. The ESP-IDF and C/POSIX SDKs do not expose that transport contract
+yet, and the shared relay byte format is still reserved for future work.
+
+Honch remains a payload, not a BLE, GATT, USB, UART, pairing, or customer packet
+protocol. Until the shared relay contract is implemented across SDKs,
+MicroPython supports direct HTTPS flush only.
+
+## Footprint Notes
+
+The source package is about 27 KB across the current `honch/*.py` modules before
+`.mpy` compilation, filesystem metadata, or firmware freezing. Exact flash and
+RAM use depends on the board firmware, MicroPython port, enabled modules, and
+whether the package is frozen into the image.
+
+Queue operations keep memory bounded by reading at most `batch_size` events per
+flush, capped at 50, and by rejecting events larger than `max_event_bytes`.
+Pending and dead-letter events are persisted as individual JSON files below
+`queue_directory`, so storage cost scales with queued event count and event
+size.
+
+Direct flush requires gzip support. If the active port lacks gzip compression,
+events remain queued and `flush()` raises `CompressionUnavailableError`; provide
+a platform adapter with `gzip_compress()` when the board exposes compression
+through another module or native binding.
 
 ## Tests
 
