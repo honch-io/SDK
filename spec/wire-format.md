@@ -1,27 +1,26 @@
 # Wire Format
 
-All Honch SDKs send events to the capture endpoint using this format.
+All Honch SDKs send events to the capture endpoint using the CBOR ingest contract.
 
 ## Endpoint
 
 ```
 POST <host>/batch
-Content-Type: application/json
-Content-Encoding: gzip
+Content-Type: application/cbor
 ```
 
-The body is always gzip-compressed JSON.
+The body is an uncompressed CBOR map. SDKs may use gzip only when explicitly configured for a platform that benefits from it.
 
 ## Batch Envelope
 
-```json
+```text
 {
   "token": "<api_key>",
   "batch": [
     {
       "event": "<event_name>",
       "distinct_id": "<distinct_id>",
-      "timestamp": "<ISO-8601 UTC with ms>",
+      "timestamp": 1770000000000,
       "properties": { ... }
     }
   ]
@@ -33,7 +32,7 @@ The body is always gzip-compressed JSON.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `token` | string | Yes | Project API key |
-| `batch` | array | Yes | Array of event objects (1–50 per request) |
+| `batch` | array | Yes | Array of event objects (1-50 per request) |
 
 ### Event Object
 
@@ -41,20 +40,16 @@ The body is always gzip-compressed JSON.
 |-------|------|----------|-------------|
 | `event` | string | Yes | Event name (e.g. `"button_pressed"`, `"$device_boot"`) |
 | `distinct_id` | string | Yes | User or device identifier |
-| `timestamp` | string | Yes | ISO-8601 UTC, millisecond precision (e.g. `"2026-05-01T10:15:32.000Z"`) |
-| `properties` | object | Yes | All event properties (auto-stamped + user-supplied) |
+| `timestamp` | integer | Yes | Epoch milliseconds, set when `track()` is called |
+| `properties` | map | Yes | All event properties (auto-stamped + user-supplied) |
 
-## Timestamps
+## CBOR Profile
 
-- Set at event creation time (`track()` call), not at flush time.
-- Format: `YYYY-MM-DDTHH:MM:SS.mmmZ`
-- Always UTC.
-
-## Compression
-
-- Bodies are always gzip-encoded.
-- The `Content-Encoding: gzip` header must be set.
-- SDKs should use platform-native gzip (e.g. `miniz` on ESP-IDF, `zlib` on POSIX, `NSData` compression on iOS).
+- Use definite-length maps and arrays.
+- Use text keys, not compact integer keys.
+- Encode timestamps as signed epoch milliseconds.
+- Encode properties using JSON-compatible values: text, integer, float, boolean, null, arrays, and maps.
+- Do not use CBOR tags or byte-string property values for v1.
 
 ## Response Codes
 

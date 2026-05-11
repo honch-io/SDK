@@ -206,16 +206,17 @@ honch_err_t honch_track(const char *event, const char *properties_json)
     xSemaphoreTake(s_api_mutex, portMAX_DELAY);
 
     const char *distinct_id = honch_identity_get_distinct_id();
-    char *encoded = honch_encode_event(event, distinct_id, properties_json);
+    honch_payload_t encoded = {0};
+    honch_err_t encode_err = honch_encode_event(event, distinct_id, properties_json, &encoded);
 
     xSemaphoreGive(s_api_mutex);
 
-    if (!encoded) {
-        return HONCH_ERR_NO_MEM;
+    if (encode_err != HONCH_OK) {
+        return encode_err;
     }
 
-    honch_err_t err = honch_queue_push(encoded);
-    // queue_push takes ownership and frees encoded
+    honch_err_t err = honch_queue_push(&encoded);
+    // queue_push takes ownership and frees encoded.
 
     if (err == HONCH_OK) {
         // Check battery while we're at it

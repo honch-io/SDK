@@ -16,6 +16,7 @@ idf_component_register(
         esp_wifi
         esp_event
         esp-tls
+        cbor
         json
         driver
         efuse
