@@ -3,14 +3,14 @@
 
 #include "queue.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 #include "esp_log.h"
-#include "nvs_flash.h"
-#include "nvs.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "nvs.h"
+#include "nvs_flash.h"
 
 #ifdef CONFIG_HONCH_MAX_QUEUE_DEPTH
 #define MAX_QUEUE_DEPTH CONFIG_HONCH_MAX_QUEUE_DEPTH
@@ -46,6 +46,19 @@ static void save_counters(void)
     }
 }
 
+static void erase_key(uint32_t index)
+{
+    char key[16];
+    snprintf(key, sizeof(key), "e_%u", (unsigned)index);
+
+    nvs_handle_t handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle) == ESP_OK) {
+        nvs_erase_key(handle, key);
+        nvs_commit(handle);
+        nvs_close(handle);
+    }
+}
+
 honch_err_t honch_queue_init(void)
 {
     s_mutex = xSemaphoreCreateMutex();
@@ -69,34 +82,24 @@ void honch_queue_deinit(void)
     }
 }
 
-honch_err_t honch_queue_push(char *event_json)
+honch_err_t honch_queue_push(honch_payload_t *payload)
 {
-    if (!event_json) {
+    if (!payload || !payload->data || payload->len == 0) {
         return HONCH_ERR_INVALID_ARG;
     }
     if (!s_mutex) {
-        free(event_json);
+        honch_payload_free(payload);
         return HONCH_ERR_NOT_INITIALIZED;
     }
 
     xSemaphoreTake(s_mutex, portMAX_DELAY);
 
-    // Check if queue is full, drop oldest if so
     while ((s_head - s_tail) >= MAX_QUEUE_DEPTH) {
         ESP_LOGW(TAG, "Queue full, dropping oldest event (idx %u)", (unsigned)s_tail);
-        char key[16];
-        snprintf(key, sizeof(key), "e_%u", (unsigned)s_tail);
-
-        nvs_handle_t handle;
-        if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle) == ESP_OK) {
-            nvs_erase_key(handle, key);
-            nvs_commit(handle);
-            nvs_close(handle);
-        }
+        erase_key(s_tail);
         s_tail++;
     }
 
-    // Store event in NVS
     char key[16];
     snprintf(key, sizeof(key), "e_%u", (unsigned)s_head);
 
@@ -104,16 +107,16 @@ honch_err_t honch_queue_push(char *event_json)
     esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle);
     if (err != ESP_OK) {
         xSemaphoreGive(s_mutex);
-        free(event_json);
+        honch_payload_free(payload);
         return HONCH_ERR_NVS;
     }
 
-    err = nvs_set_str(handle, key, event_json);
+    err = nvs_set_blob(handle, key, payload->data, payload->len);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to write event to NVS: %s", esp_err_to_name(err));
         nvs_close(handle);
         xSemaphoreGive(s_mutex);
-        free(event_json);
+        honch_payload_free(payload);
         return HONCH_ERR_NVS;
     }
 
@@ -123,7 +126,7 @@ honch_err_t honch_queue_push(char *event_json)
     nvs_commit(handle);
     nvs_close(handle);
 
-    free(event_json);
+    honch_payload_free(payload);
 
 #ifdef CONFIG_HONCH_LOG_VERBOSE
     ESP_LOGI(TAG, "Event queued (depth: %u)", (unsigned)(s_head - s_tail));
@@ -133,7 +136,7 @@ honch_err_t honch_queue_push(char *event_json)
     return HONCH_OK;
 }
 
-int honch_queue_pop(char **events_out, int max_events)
+int honch_queue_pop(honch_payload_t *events_out, int max_events)
 {
     if (!s_mutex || !events_out) {
         return 0;
@@ -143,6 +146,7 @@ int honch_queue_pop(char **events_out, int max_events)
 
     int count = 0;
     uint32_t idx = s_tail;
+    bool counters_changed = false;
 
     while (idx < s_head && count < max_events) {
         char key[16];
@@ -154,30 +158,46 @@ int honch_queue_pop(char **events_out, int max_events)
         }
 
         size_t len = 0;
-        esp_err_t err = nvs_get_str(handle, key, NULL, &len);
+        esp_err_t err = nvs_get_blob(handle, key, NULL, &len);
         if (err != ESP_OK || len == 0) {
             nvs_close(handle);
+            erase_key(idx);
+            if (idx == s_tail) {
+                s_tail++;
+                counters_changed = true;
+            }
             idx++;
             continue;
         }
 
-        char *buf = malloc(len);
+        uint8_t *buf = malloc(len);
         if (!buf) {
             nvs_close(handle);
             break;
         }
 
-        err = nvs_get_str(handle, key, buf, &len);
+        err = nvs_get_blob(handle, key, buf, &len);
         nvs_close(handle);
 
         if (err != ESP_OK) {
             free(buf);
+            erase_key(idx);
+            if (idx == s_tail) {
+                s_tail++;
+                counters_changed = true;
+            }
             idx++;
             continue;
         }
 
-        events_out[count++] = buf;
+        events_out[count].data = buf;
+        events_out[count].len = len;
+        count++;
         idx++;
+    }
+
+    if (counters_changed) {
+        save_counters();
     }
 
     xSemaphoreGive(s_mutex);
@@ -215,13 +235,12 @@ honch_err_t honch_queue_confirm(int count)
     return HONCH_OK;
 }
 
-honch_err_t honch_queue_requeue(char **events, int count)
+honch_err_t honch_queue_requeue(honch_payload_t *events, int count)
 {
     // Events are still in NVS since we haven't confirmed them.
     // Just free the memory; they'll be popped again next time.
     for (int i = 0; i < count; i++) {
-        free(events[i]);
-        events[i] = NULL;
+        honch_payload_free(&events[i]);
     }
     return HONCH_OK;
 }
