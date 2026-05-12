@@ -21,16 +21,22 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertRegex(cmake, r"\bcbor\b")
         self.assertRegex(cmake, r"\besp_timer\b")
 
-    def test_transport_sends_raw_application_cbor(self) -> None:
+    def test_transport_sends_application_cbor_with_optional_gzip(self) -> None:
         transport = read("esp-idf/honch/src/transport.c")
         transport_header = read("esp-idf/honch/src/transport.h")
+        kconfig = read("esp-idf/honch/Kconfig")
 
         self.assertIn('"Content-Type", "application/cbor"', transport)
         self.assertNotIn('"Content-Type", "application/json"', transport)
-        self.assertNotIn('"Content-Encoding"', transport)
-        self.assertNotIn("miniz.h", transport)
-        self.assertNotRegex(transport, r"\bmz_")
-        self.assertIn("raw CBOR", transport_header)
+        self.assertIn('"Content-Encoding", "gzip"', transport)
+        self.assertIn("CONFIG_HONCH_ENABLE_GZIP", transport)
+        self.assertIn("CONFIG_HONCH_GZIP_MIN_BYTES", transport)
+        self.assertIn("miniz.h", transport)
+        self.assertRegex(transport, r"\bmz_deflate")
+        self.assertIn("compressed_size < body_len", transport)
+        self.assertIn("falls back to raw CBOR", transport_header)
+        self.assertIn("HONCH_ENABLE_GZIP", kconfig)
+        self.assertIn("HONCH_GZIP_MIN_BYTES", kconfig)
 
     def test_queue_persists_cbor_blobs_not_json_strings(self) -> None:
         queue = read("esp-idf/honch/src/queue.c")

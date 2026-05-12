@@ -17,5 +17,5 @@ typedef enum {
 honch_err_t honch_transport_init(const char *host);
 void honch_transport_deinit(void);
 
-// Send a raw CBOR batch payload.
+// Send a CBOR batch payload. Large batches may be gzipped; gzip failure falls back to raw CBOR.
 honch_transport_result_t honch_transport_send(const uint8_t *body, size_t body_len);
