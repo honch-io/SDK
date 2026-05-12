@@ -9,7 +9,13 @@ POST <host>/batch
 Content-Type: application/cbor
 ```
 
-The body is an uncompressed CBOR map. SDKs may use gzip only when explicitly configured for a platform that benefits from it.
+The canonical payload is a CBOR map. HTTP transports may gzip the CBOR body for larger batches:
+
+```text
+Content-Encoding: gzip
+```
+
+SDKs should use raw CBOR for small batches and fall back to raw CBOR when gzip is disabled, unavailable, fails, or does not reduce payload size. Gzip is a transport optimization over CBOR; it is not a JSON compatibility mode.
 
 ## Batch Envelope
 
@@ -50,6 +56,13 @@ The body is an uncompressed CBOR map. SDKs may use gzip only when explicitly con
 - Encode timestamps as signed epoch milliseconds.
 - Encode properties using JSON-compatible values: text, integer, float, boolean, null, arrays, and maps.
 - Do not use CBOR tags or byte-string property values for v1.
+
+## Compression Policy
+
+- Default HTTP behavior: gzip CBOR batches at or above 1024 bytes when gzip support is available.
+- Send raw CBOR below the threshold.
+- Send raw CBOR if compression fails or the compressed body is not smaller.
+- Capture accepts both raw CBOR and gzipped CBOR.
 
 ## Response Codes
 

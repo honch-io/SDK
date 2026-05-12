@@ -116,6 +116,8 @@ idf.py flash monitor
 **Kconfig options** (set via `idf.py menuconfig`):
 - `CONFIG_HONCH_LOG_VERBOSE` — enable extra debug logging
 - `CONFIG_HONCH_MAX_QUEUE_DEPTH` — max events in NVS queue (default 256)
+- `CONFIG_HONCH_ENABLE_GZIP` — gzip large HTTP CBOR batches when beneficial (default enabled)
+- `CONFIG_HONCH_GZIP_MIN_BYTES` — minimum CBOR payload size before gzip is attempted (default 1024)
 
 ## Troubleshooting
 
