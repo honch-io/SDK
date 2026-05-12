@@ -68,6 +68,12 @@ honch_transport_result_t honch_transport_send(const uint8_t *body, size_t body_l
         } else if (status == 401) {
             ESP_LOGE(TAG, "Authentication failed (HTTP 401) - check API key");
             result = HONCH_TRANSPORT_AUTH_ERROR;
+        } else if (status == 429) {
+            ESP_LOGW(TAG, "Rate limited (HTTP 429)");
+            result = HONCH_TRANSPORT_SERVER_ERROR;
+        } else if (status >= 400 && status < 500) {
+            ESP_LOGE(TAG, "Request rejected (HTTP %d), dropping batch", status);
+            result = HONCH_TRANSPORT_AUTH_ERROR;
         } else {
             ESP_LOGE(TAG, "Server error (HTTP %d)", status);
             result = HONCH_TRANSPORT_SERVER_ERROR;
