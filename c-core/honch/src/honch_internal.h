@@ -111,6 +111,7 @@ bool honch_json_object_has_members(const char *json);
 honch_status_t honch_json_append_object_members(honch_buffer_t *buffer, const char *json, bool *has_members);
 
 honch_status_t honch_cbor_append_text(honch_buffer_t *buffer, const char *value);
+honch_status_t honch_cbor_append_text_n(honch_buffer_t *buffer, const char *value, size_t length);
 honch_status_t honch_cbor_append_int(honch_buffer_t *buffer, int64_t value);
 honch_status_t honch_cbor_append_map(honch_buffer_t *buffer, size_t count);
 honch_status_t honch_cbor_append_array(honch_buffer_t *buffer, size_t count);
