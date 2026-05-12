@@ -7,6 +7,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef HONCH_HAVE_ZLIB
+#include <zlib.h>
+#endif
+
 #ifdef HONCH_TESTING
 static honch_test_transport_fn honch_test_transport = NULL;
 static void *honch_test_transport_userdata = NULL;
@@ -69,6 +73,79 @@ static honch_status_t honch_map_response(long response_code, honch_http_result_t
     return HONCH_ERROR_REJECTED;
 }
 
+#ifdef HONCH_HAVE_ZLIB
+static honch_status_t honch_gzip_payload(
+    const unsigned char *payload,
+    size_t payload_size,
+    unsigned char **out,
+    size_t *out_size)
+{
+    if (payload_size > UINT_MAX) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    uLong bound = compressBound((uLong)payload_size);
+    if (bound > SIZE_MAX - 18u) {
+        return HONCH_ERROR_OUT_OF_MEMORY;
+    }
+
+    unsigned char *compressed = (unsigned char *)malloc((size_t)bound + 18u);
+    if (compressed == NULL) {
+        return HONCH_ERROR_OUT_OF_MEMORY;
+    }
+
+    static const unsigned char header[10] = {
+        0x1fu, 0x8bu, 0x08u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x03u
+    };
+    memcpy(compressed, header, sizeof(header));
+
+    z_stream stream;
+    memset(&stream, 0, sizeof(stream));
+    stream.next_in = (Bytef *)payload;
+    stream.avail_in = (uInt)payload_size;
+    stream.next_out = compressed + sizeof(header);
+    stream.avail_out = (uInt)bound;
+
+    int ret = deflateInit2(
+        &stream,
+        Z_DEFAULT_COMPRESSION,
+        Z_DEFLATED,
+        -MAX_WBITS,
+        9,
+        Z_DEFAULT_STRATEGY);
+    if (ret != Z_OK) {
+        free(compressed);
+        return HONCH_ERROR_TRANSPORT;
+    }
+
+    ret = deflate(&stream, Z_FINISH);
+    if (ret != Z_STREAM_END) {
+        deflateEnd(&stream);
+        free(compressed);
+        return HONCH_ERROR_TRANSPORT;
+    }
+
+    size_t deflated_size = stream.total_out;
+    deflateEnd(&stream);
+
+    uLong crc = crc32(0L, Z_NULL, 0);
+    crc = crc32(crc, payload, (uInt)payload_size);
+    unsigned char *trailer = compressed + sizeof(header) + deflated_size;
+    trailer[0] = (unsigned char)(crc & 0xffu);
+    trailer[1] = (unsigned char)((crc >> 8u) & 0xffu);
+    trailer[2] = (unsigned char)((crc >> 16u) & 0xffu);
+    trailer[3] = (unsigned char)((crc >> 24u) & 0xffu);
+    trailer[4] = (unsigned char)(payload_size & 0xffu);
+    trailer[5] = (unsigned char)((payload_size >> 8u) & 0xffu);
+    trailer[6] = (unsigned char)((payload_size >> 16u) & 0xffu);
+    trailer[7] = (unsigned char)((payload_size >> 24u) & 0xffu);
+
+    *out = compressed;
+    *out_size = sizeof(header) + deflated_size + 8u;
+    return HONCH_OK;
+}
+#endif
+
 honch_status_t honch_transport_post_batch(
     honch_client_t *client,
     const unsigned char *payload,
@@ -81,17 +158,38 @@ honch_status_t honch_transport_post_batch(
         return status;
     }
 
+    const unsigned char *body = payload;
+    size_t body_size = payload_size;
+    const char *content_encoding = "identity";
+    unsigned char *compressed = NULL;
+
+#ifdef HONCH_HAVE_ZLIB
+    if (client->gzip_enabled && payload_size >= client->gzip_min_bytes) {
+        size_t compressed_size = 0u;
+        if (honch_gzip_payload(payload, payload_size, &compressed, &compressed_size) == HONCH_OK &&
+            compressed_size < payload_size) {
+            body = compressed;
+            body_size = compressed_size;
+            content_encoding = "gzip";
+        } else {
+            free(compressed);
+            compressed = NULL;
+        }
+    }
+#endif
+
 #ifdef HONCH_TESTING
     if (honch_test_transport != NULL) {
         long response_code = 0L;
         status = honch_test_transport(
             url,
             client->api_key,
-            payload,
-            payload_size,
-            "identity",
+            body,
+            body_size,
+            content_encoding,
             honch_test_transport_userdata,
             &response_code);
+        free(compressed);
         free(url);
         if (status != HONCH_OK) {
             *result = HONCH_HTTP_RETRY;
@@ -105,6 +203,7 @@ honch_status_t honch_transport_post_batch(
 
     CURL *curl = curl_easy_init();
     if (curl == NULL) {
+        free(compressed);
         free(url);
         *result = HONCH_HTTP_RETRY;
         return HONCH_ERROR_TRANSPORT;
@@ -113,16 +212,28 @@ honch_status_t honch_transport_post_batch(
     struct curl_slist *headers = NULL;
     struct curl_slist *next_header = curl_slist_append(headers, "Content-Type: application/cbor");
     if (next_header == NULL) {
+        free(compressed);
         free(url);
         curl_easy_cleanup(curl);
         return HONCH_ERROR_OUT_OF_MEMORY;
     }
     headers = next_header;
+    if (strcmp(content_encoding, "gzip") == 0) {
+        next_header = curl_slist_append(headers, "Content-Encoding: gzip");
+        if (next_header == NULL) {
+            curl_slist_free_all(headers);
+            free(compressed);
+            free(url);
+            curl_easy_cleanup(curl);
+            return HONCH_ERROR_OUT_OF_MEMORY;
+        }
+        headers = next_header;
+    }
 
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, (const char *)payload);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)payload_size);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, (const char *)body);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)body_size);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, honch_discard_response);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, (long)client->transport_timeout_ms);
@@ -135,6 +246,7 @@ honch_status_t honch_transport_post_batch(
     }
 
     curl_slist_free_all(headers);
+    free(compressed);
     free(url);
     curl_easy_cleanup(curl);
 

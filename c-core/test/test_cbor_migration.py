@@ -14,16 +14,17 @@ def read(relative_path: str) -> str:
 
 
 class CCoreCborMigrationTest(unittest.TestCase):
-    def test_transport_sends_raw_application_cbor(self) -> None:
+    def test_transport_sends_application_cbor_with_optional_gzip(self) -> None:
         transport = read("honch/src/honch_transport_curl.c")
         cmake = read("CMakeLists.txt")
 
         self.assertIn("Content-Type: application/cbor", transport)
         self.assertNotIn("Content-Type: application/json", transport)
-        self.assertNotIn("Content-Encoding", transport)
-        self.assertNotIn("honch_gzip_payload", transport)
-        self.assertNotIn("find_package(ZLIB", cmake)
-        self.assertNotIn("ZLIB::ZLIB", cmake)
+        self.assertIn("Content-Encoding: gzip", transport)
+        self.assertIn("honch_gzip_payload", transport)
+        self.assertIn("compressed_size < payload_size", transport)
+        self.assertIn("find_package(ZLIB", cmake)
+        self.assertIn("ZLIB::ZLIB", cmake)
 
     def test_queue_persists_cbor_blobs_not_json_strings(self) -> None:
         queue = read("honch/src/honch_queue.c")

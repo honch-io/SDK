@@ -19,6 +19,7 @@
 #define HONCH_DEFAULT_BATTERY_LOW_THRESHOLD 15
 #define HONCH_DEFAULT_FLUSH_RETRY_INITIAL_MS 1000u
 #define HONCH_DEFAULT_FLUSH_RETRY_MAX_MS 300000u
+#define HONCH_DEFAULT_GZIP_MIN_BYTES 1024u
 #define HONCH_MAX_EVENT_NAME 128u
 #define HONCH_MAX_DISTINCT_ID 256u
 
@@ -74,6 +75,8 @@ struct honch_client {
     size_t flush_event_threshold;
     unsigned int flush_retry_initial_ms;
     unsigned int flush_retry_max_ms;
+    bool gzip_enabled;
+    size_t gzip_min_bytes;
     uint64_t next_interval_flush_ms;
     uint64_t next_retry_flush_ms;
     unsigned int current_retry_delay_ms;
