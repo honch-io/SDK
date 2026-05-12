@@ -19,6 +19,7 @@ class EspIdfCborMigrationTest(unittest.TestCase):
 
         self.assertIn("espressif/cbor", manifest)
         self.assertRegex(cmake, r"\bcbor\b")
+        self.assertRegex(cmake, r"\besp_timer\b")
 
     def test_transport_sends_raw_application_cbor(self) -> None:
         transport = read("esp-idf/honch/src/transport.c")
