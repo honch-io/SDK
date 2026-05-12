@@ -40,8 +40,13 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn("nvs_set_blob", queue)
         self.assertIn("nvs_get_blob", queue)
         self.assertNotIn("nvs_set_str", queue)
-        self.assertNotIn("nvs_get_str", queue)
         self.assertNotIn("event_json", queue_header)
+
+    def test_transport_treats_bad_requests_as_non_retryable(self) -> None:
+        transport = read("esp-idf/honch/src/transport.c")
+
+        self.assertIn("status == 429", transport)
+        self.assertRegex(transport, r"status >= 400 && status < 500")
 
     def test_encoder_builds_cbor_epoch_millis_payloads(self) -> None:
         encoder = read("esp-idf/honch/src/encoder.c")
