@@ -1,9 +1,10 @@
-import json
 import os
 import unittest
 
 import honch
 import honch.transport as transport_module
+from honch import cbor
+from honch.encoder import decode_event
 from honch.errors import (
     InvalidArgumentError,
     RejectedError,
@@ -35,22 +36,26 @@ def make_client(tmp_path, **overrides):
 
 
 def pending_files(client):
-    return sorted(name for name in os.listdir(client.queue.pending_dir) if name.endswith(".json"))
+    return sorted(name for name in os.listdir(client.queue.pending_dir) if name.endswith(".cbor"))
 
 
 def dead_files(client):
-    return sorted(name for name in os.listdir(client.queue.dead_dir) if name.endswith(".json"))
+    return sorted(name for name in os.listdir(client.queue.dead_dir) if name.endswith(".cbor"))
 
 
 def read_pending_events(client):
     events = []
     for name in pending_files(client):
-        with open(os.path.join(client.queue.pending_dir, name), "r", encoding="utf-8") as fh:
-            events.append(json.load(fh))
+        with open(os.path.join(client.queue.pending_dir, name), "rb") as fh:
+            events.append(decode_event(fh.read()))
     return events
 
 
 def write_pending_file(client, name, content):
+    if isinstance(content, bytes):
+        with open(os.path.join(client.queue.pending_dir, name), "wb") as fh:
+            fh.write(content)
+        return
     with open(os.path.join(client.queue.pending_dir, name), "w", encoding="utf-8") as fh:
         fh.write(content)
 
@@ -132,7 +137,7 @@ class HonchSdkTests(unittest.TestCase):
             status = transport_module.HttpTransport().post(
                 "http://collector.local/batch",
                 b"{}",
-                {"Content-Type": "application/json"},
+                {"Content-Type": "application/cbor"},
                 2500,
             )
         finally:
@@ -150,7 +155,7 @@ class HonchSdkTests(unittest.TestCase):
             status = transport_module.HttpTransport().post(
                 "http://collector.local/batch",
                 b"{}",
-                {"Content-Type": "application/json"},
+                {"Content-Type": "application/cbor"},
                 2500,
             )
         finally:
@@ -168,7 +173,7 @@ class HonchSdkTests(unittest.TestCase):
                 transport_module.HttpTransport().post(
                     "http://collector.local/batch",
                     b"{}",
-                    {"Content-Type": "application/json"},
+                    {"Content-Type": "application/cbor"},
                     2500,
                 )
         finally:
@@ -210,7 +215,7 @@ class HonchSdkBehaviorTests(unittest.TestCase):
         self.assertEqual([event["event"] for event in events], ["$device_boot", "button_pressed"])
         tracked = events[1]
         self.assertEqual(tracked["distinct_id"], "device-1")
-        self.assertRegex(tracked["timestamp"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$")
+        self.assertEqual(tracked["timestamp"], platform.clock.now_ms())
         self.assertEqual(tracked["properties"]["button"], "power")
         self.assertEqual(tracked["properties"]["$device_id"], "device-1")
         self.assertEqual(tracked["properties"]["$device_model"], "X3-Pro")
@@ -237,7 +242,7 @@ class HonchSdkBehaviorTests(unittest.TestCase):
         self.assertEqual(event["properties"]["$wifi_rssi"], -67)
         self.assertEqual(event["properties"]["$device_id"], "device-1")
         self.assertEqual(event["properties"]["$sdk_platform"], "micropython")
-        self.assertNotIn("spoofed-device", json.dumps(event))
+        self.assertNotIn("spoofed-device", event["properties"].values())
 
     @with_tempdir
     def test_auto_properties_callback_rejects_invalid_output(self, tmp_path):
@@ -256,7 +261,7 @@ class HonchSdkBehaviorTests(unittest.TestCase):
                     )
 
     @with_tempdir
-    def test_flush_sends_gzip_batch_and_drains_multiple_batches(self, tmp_path):
+    def test_flush_sends_cbor_batches_and_drains_multiple_batches(self, tmp_path):
         transport = FakeTransport([202])
         client = make_client(tmp_path, transport=transport, batch_size=2)
         client.track("first")
@@ -268,12 +273,27 @@ class HonchSdkBehaviorTests(unittest.TestCase):
         self.assertEqual(pending_files(client), [])
         self.assertEqual(len(transport.calls), 2)
         self.assertEqual(transport.calls[0]["url"], "http://collector.local/batch")
-        self.assertEqual(transport.calls[0]["headers"]["Content-Type"], "application/json")
+        self.assertEqual(transport.calls[0]["headers"]["Content-Type"], "application/cbor")
+        self.assertNotIn("Content-Encoding", transport.calls[0]["headers"])
+        self.assertEqual(transport.calls[0]["payload"]["token"], "test-key")
+        self.assertEqual(len(transport.calls[0]["payload"]["batch"]), 2)
+        self.assertEqual(transport.calls[1]["payload"]["batch"][-1]["event"], "third")
+
+    @with_tempdir
+    def test_flush_gzips_large_cbor_batch_when_beneficial(self, tmp_path):
+        transport = FakeTransport([202])
+        client = make_client(tmp_path, transport=transport, batch_size=10, gzip_min_bytes=1024)
+        client.track("large_payload", {"blob": "a" * 3000})
+
+        client.flush()
+
+        self.assertEqual(len(transport.calls), 1)
+        self.assertEqual(transport.calls[0]["headers"]["Content-Type"], "application/cbor")
         self.assertEqual(transport.calls[0]["headers"]["Content-Encoding"], "gzip")
         self.assertEqual(transport.calls[0]["body"][:2], b"\x1f\x8b")
-        self.assertEqual(transport.calls[0]["json"]["token"], "test-key")
-        self.assertEqual(len(transport.calls[0]["json"]["batch"]), 2)
-        self.assertEqual(transport.calls[1]["json"]["batch"][-1]["event"], "third")
+        sent = transport.calls[0]["payload"]["batch"][-1]
+        self.assertEqual(sent["event"], "large_payload")
+        self.assertEqual(sent["properties"]["blob"], "a" * 3000)
 
     @with_tempdir
     def test_flush_preserves_event_creation_timestamp_after_clock_advances(self, tmp_path):
@@ -290,7 +310,7 @@ class HonchSdkBehaviorTests(unittest.TestCase):
 
         sent_event = next(
             event
-            for event in transport.calls[0]["json"]["batch"]
+            for event in transport.calls[0]["payload"]["batch"]
             if event["event"] == "created_before_flush"
         )
         self.assertEqual(sent_event["timestamp"], queued_timestamp)
@@ -366,7 +386,7 @@ class HonchSdkBehaviorTests(unittest.TestCase):
         client.session_end()
         client.flush()
 
-        events = [event for call in transport.calls for event in call["json"]["batch"]]
+        events = [event for call in transport.calls for event in call["payload"]["batch"]]
         names = [event["event"] for event in events]
         self.assertIn("$firmware_update", names)
         self.assertIn("$battery_low", names)
@@ -424,9 +444,9 @@ class HonchSdkBehaviorTests(unittest.TestCase):
         no_gzip.flush()
         self.assertEqual(pending_files(no_gzip), [])
         self.assertEqual(len(no_gzip.transport.calls), 1)
-        self.assertEqual(no_gzip.transport.calls[0]["headers"]["Content-Encoding"], "identity")
+        self.assertNotIn("Content-Encoding", no_gzip.transport.calls[0]["headers"])
         self.assertEqual(
-            [event["event"] for event in no_gzip.transport.calls[0]["json"]["batch"]],
+            [event["event"] for event in no_gzip.transport.calls[0]["payload"]["batch"]],
             ["$device_boot"],
         )
 
@@ -440,11 +460,11 @@ class HonchSdkBehaviorTests(unittest.TestCase):
             max_event_bytes=512,
         )
         client.track("valid_after_corrupt")
-        write_pending_file(client, "00000000000000000000-malformed.json", '{"event":')
+        write_pending_file(client, "00000000000000000000-malformed.cbor", b"\xa1eevent")
         write_pending_file(
             client,
-            "00000000000000000001-oversized.json",
-            '{"event":"oversized","properties":{"x":"' + ("a" * 620) + '"}}',
+            "00000000000000000001-oversized.cbor",
+            cbor.encode({"event": "oversized", "properties": {"x": "a" * 620}}),
         )
 
         with self.assertRaises(RejectedError):
@@ -453,7 +473,7 @@ class HonchSdkBehaviorTests(unittest.TestCase):
         self.assertEqual(pending_files(client), [])
         self.assertEqual(len(dead_files(client)), 2)
         self.assertEqual(len(transport.calls), 1)
-        names = [event["event"] for event in transport.calls[0]["json"]["batch"]]
+        names = [event["event"] for event in transport.calls[0]["payload"]["batch"]]
         self.assertEqual(names, ["$device_boot", "valid_after_corrupt"])
 
     @with_tempdir
@@ -466,11 +486,11 @@ class HonchSdkBehaviorTests(unittest.TestCase):
             max_event_bytes=512,
         )
         client.flush()
-        write_pending_file(client, "00000000000000000000-malformed.json", '{"event":')
+        write_pending_file(client, "00000000000000000000-malformed.cbor", b"\xa1eevent")
         write_pending_file(
             client,
-            "00000000000000000001-oversized.json",
-            '{"event":"oversized","properties":{"x":"' + ("a" * 620) + '"}}',
+            "00000000000000000001-oversized.cbor",
+            cbor.encode({"event": "oversized", "properties": {"x": "a" * 620}}),
         )
 
         with self.assertRaises(RejectedError):
@@ -504,7 +524,7 @@ class HonchSdkBehaviorTests(unittest.TestCase):
         self.assertEqual(pending_files(client), [])
         self.assertEqual(len(transport.calls), 1)
         self.assertEqual(
-            [event["event"] for event in transport.calls[0]["json"]["batch"]],
+            [event["event"] for event in transport.calls[0]["payload"]["batch"]],
             ["$device_boot", "threshold_event"],
         )
 
@@ -542,7 +562,7 @@ class HonchSdkBehaviorTests(unittest.TestCase):
         self.assertEqual(pending_files(client), [])
         self.assertEqual(len(transport.calls), 1)
         self.assertEqual(
-            [event["event"] for event in transport.calls[0]["json"]["batch"]],
+            [event["event"] for event in transport.calls[0]["payload"]["batch"]],
             ["$device_boot", "interval_event"],
         )
         client.shutdown()
@@ -592,7 +612,7 @@ class HonchSdkBehaviorTests(unittest.TestCase):
         self.assertEqual(pending_files(client), [])
         self.assertEqual(len(transport.calls), 1)
         self.assertEqual(
-            [event["event"] for event in transport.calls[0]["json"]["batch"]],
+            [event["event"] for event in transport.calls[0]["payload"]["batch"]],
             ["$device_boot", "$connectivity_change"],
         )
 

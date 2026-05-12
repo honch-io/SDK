@@ -6,6 +6,7 @@
     ["honch/__init__.py", "honch/__init__.py"],
     ["honch/client.py", "honch/client.py"],
     ["honch/config.py", "honch/config.py"],
+    ["honch/cbor.py", "honch/cbor.py"],
     ["honch/encoder.py", "honch/encoder.py"],
     ["honch/errors.py", "honch/errors.py"],
     ["honch/identity.py", "honch/identity.py"],

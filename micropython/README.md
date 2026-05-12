@@ -4,7 +4,7 @@ MicroPython SDK for Honch analytics on connected hardware.
 
 This package implements the shared Honch SDK contract from `../spec/`:
 
-- gzip-compressed JSON `POST <endpoint>/batch`
+- CBOR `POST <endpoint>/batch` with optional gzip transport compression
 - persistent local queue before delivery
 - persistent device and distinct identity
 - automatic lifecycle events and auto-stamped properties
@@ -88,6 +88,8 @@ Optional:
 - `flush_event_threshold`: defaults to `30`
 - `flush_retry_initial_ms`: defaults to `1000`
 - `flush_retry_max_ms`: defaults to `300000`
+- `disable_gzip`: defaults to `False`; set true to always send raw CBOR
+- `gzip_min_bytes`: defaults to `1024`
 - `disable_background_flush`: defaults to `False`
 - `battery_callback`: returns `0`-`100`, or negative/`None` when unknown
 - `battery_low_threshold`: defaults to `15`
@@ -156,12 +158,16 @@ Events are written before delivery. Retryable network, `429`, and `5xx` errors
 leave pending events intact. Permanent `4xx` rejection moves attempted events to
 `dead/`.
 
-## Gzip
+## Wire Format And Gzip
 
-The SDK will use gzip when the active MicroPython build supports it. If gzip is
-unavailable, it falls back to sending plain JSON with `Content-Encoding:
-identity` so boards like the Pico W can still flush batches. Boards that do
-provide compression can still supply it through `platform.gzip_compress()`.
+The SDK queues and flushes CBOR payloads with `Content-Type:
+application/cbor`. Event timestamps are encoded as epoch milliseconds. Gzip is
+an optional HTTP transport optimization over CBOR, not JSON compatibility.
+
+By default the SDK attempts gzip only for encoded batches at or above 1024
+bytes. If gzip is unavailable, fails, or does not reduce the payload size, the
+SDK sends raw CBOR without `Content-Encoding`. Boards that provide compression
+can supply it through `platform.gzip_compress()`.
 
 ## Background Flush
 
@@ -211,12 +217,12 @@ whether the package is frozen into the image.
 
 Queue operations keep memory bounded by reading at most `batch_size` events per
 flush, capped at 50, and by rejecting events larger than `max_event_bytes`.
-Pending and dead-letter events are persisted as individual JSON files below
+Pending and dead-letter events are persisted as individual CBOR files below
 `queue_directory`, so storage cost scales with queued event count and event
 size.
 
-Direct flush uses compression when available, but it is no longer blocked by a
-missing gzip implementation in the firmware.
+Direct flush uses compression for larger batches when available, but it is not
+blocked by a missing gzip implementation in the firmware.
 
 ## Tests
 

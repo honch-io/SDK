@@ -1,5 +1,6 @@
 import gzip
-import json
+
+from honch import cbor
 
 
 class FakeClock:
@@ -98,16 +99,16 @@ class FakeTransport:
         headers = dict(headers)
         encoding = headers.get("Content-Encoding")
         if encoding == "gzip":
-            payload = json.loads(gzip.decompress(body).decode("utf-8"))
+            payload = cbor.decode(gzip.decompress(body))
         else:
-            payload = json.loads(body.decode("utf-8"))
+            payload = cbor.decode(body)
         self.calls.append(
             {
                 "url": url,
                 "body": body,
                 "headers": headers,
                 "timeout_ms": timeout_ms,
-                "json": payload,
+                "payload": payload,
             }
         )
         if len(self.statuses) > 1:

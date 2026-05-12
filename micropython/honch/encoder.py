@@ -1,30 +1,6 @@
-try:
-    import ujson as json
-except ImportError:
-    import json
-
+from . import cbor
 from .config import SDK_PLATFORM, SDK_VERSION
-from .platform import dumps_compact
 from .validation import RESERVED_PROPERTIES, require_properties
-
-
-def iso8601_ms(millis):
-    try:
-        import time
-        seconds = millis // 1000
-        ms = millis % 1000
-        tm = time.gmtime(seconds)
-        return "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ" % (
-            tm[0],
-            tm[1],
-            tm[2],
-            tm[3],
-            tm[4],
-            tm[5],
-            ms,
-        )
-    except Exception:
-        return "1970-01-01T00:00:00.%03dZ" % (millis % 1000)
 
 
 def build_event(client, event_name, properties, battery_level=None):
@@ -56,29 +32,29 @@ def build_event(client, event_name, properties, battery_level=None):
     return {
         "event": event_name,
         "distinct_id": client.identity.distinct_id,
-        "timestamp": iso8601_ms(client.platform.now_ms()),
+        "timestamp": client.platform.now_ms(),
         "properties": merged,
     }
 
 
 def encode_event(event):
-    return dumps_compact(event)
+    return cbor.encode(event)
 
 
-def decode_event(text):
-    value = json.loads(text)
+def decode_event(data):
+    value = cbor.decode(data)
     if not isinstance(value, dict):
         raise ValueError("event is not an object")
     return value
 
 
-def build_batch(api_key, event_texts):
-    events = [decode_event(text) for text in event_texts]
+def build_batch(api_key, event_bytes):
+    events = [decode_event(data) for data in event_bytes]
     return build_batch_from_events(api_key, events)
 
 
 def build_batch_from_events(api_key, events):
-    return dumps_compact({"token": api_key, "batch": events})
+    return cbor.encode({"token": api_key, "batch": events})
 
 
 def _adapter_properties(client):

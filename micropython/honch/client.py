@@ -103,12 +103,12 @@ class Honch:
             names = []
             events = []
             invalid_names = []
-            for name, text in batch:
-                if len(text) > self.config.max_event_bytes:
+            for name, data in batch:
+                if len(data) > self.config.max_event_bytes:
                     invalid_names.append(name)
                     continue
                 try:
-                    events.append(decode_event(text))
+                    events.append(decode_event(data))
                 except (TypeError, ValueError):
                     invalid_names.append(name)
                     continue

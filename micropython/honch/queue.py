@@ -1,5 +1,5 @@
 from . import platform as fs
-from .errors import StorageError
+from .errors import InvalidArgumentError, StorageError
 
 
 class PersistentQueue:
@@ -20,23 +20,23 @@ class PersistentQueue:
         for name in fs.list_files(directory, ".tmp"):
             fs.remove_if_exists(fs.join_path(directory, name))
 
-    def enqueue(self, event_json):
-        if len(event_json) > self.max_event_bytes:
+    def enqueue(self, event_bytes):
+        if len(event_bytes) > self.max_event_bytes:
             raise InvalidArgumentError("event exceeds max_event_bytes")
         while self.count() >= self.max_queued_events and self.count() > 0:
             oldest = self.pending_files()[0]
             fs.remove_if_exists(fs.join_path(self.pending_dir, oldest))
 
-        filename = "%020d-%06d-%s.json" % (
+        filename = "%020d-%06d-%s.cbor" % (
             self.platform.now_ms(),
             self._sequence,
             self.platform.random_hex(16),
         )
         self._sequence += 1
-        fs.write_text_atomic(self.pending_dir, filename, event_json)
+        fs.write_bytes_atomic(self.pending_dir, filename, event_bytes)
 
     def pending_files(self):
-        return fs.list_files(self.pending_dir, ".json")
+        return fs.list_files(self.pending_dir, ".cbor")
 
     def count(self):
         return len(self.pending_files())
@@ -47,10 +47,10 @@ class PersistentQueue:
         for name in names:
             path = fs.join_path(self.pending_dir, name)
             try:
-                text = fs.read_text(path)
+                data = fs.read_bytes(path)
             except OSError as exc:
                 raise StorageError(str(exc))
-            batch.append((name, text))
+            batch.append((name, data))
         return batch
 
     def delete_pending(self, names):
@@ -65,12 +65,12 @@ class PersistentQueue:
                 fs.os.rename(src, dst)
             except OSError:
                 try:
-                    text = fs.read_text(src)
-                    fs.write_text_atomic(self.dead_dir, name, text)
+                    data = fs.read_bytes(src)
+                    fs.write_bytes_atomic(self.dead_dir, name, data)
                 finally:
                     fs.remove_if_exists(src)
 
     def clear(self):
         for directory in (self.pending_dir, self.dead_dir):
-            for name in fs.list_files(directory, ".json"):
+            for name in fs.list_files(directory, ".cbor"):
                 fs.remove_if_exists(fs.join_path(directory, name))
