@@ -20,7 +20,7 @@ Implemented:
 - persistent current `distinct_id`
 - epoch milliseconds event timestamps
 - tokenized CBOR batch flush envelopes
-- uncompressed `application/cbor` flush requests
+- optional gzip transport compression for large `application/cbor` flush requests
 - default background flushing with retry backoff and jitter
 - persisted firmware version change detection
 - `$set_property` event API parity with the ESP-IDF SDK
@@ -164,6 +164,8 @@ Optional config:
 - `flush_event_threshold`: defaults to `30`
 - `flush_retry_initial_ms`: defaults to `1000`
 - `flush_retry_max_ms`: defaults to `300000`
+- `disable_gzip`: set nonzero to always send raw CBOR
+- `gzip_min_bytes`: minimum encoded CBOR batch size before gzip is attempted; defaults to `1024`
 - `disable_background_flush`: set nonzero to disable the background worker
 - `battery_callback`: returns `0`-`100`, or negative when unknown
 - `battery_low_threshold`: defaults to `15`
@@ -316,7 +318,7 @@ Current C tests cover:
 - event persistence
 - epoch milliseconds timestamp encoding
 - tokenized CBOR batch envelope encoding
-- raw `application/cbor` transport requests
+- raw and gzipped `application/cbor` transport requests
 - strict JSON validation for public property input
 - generated `device_id` persistence
 - configured and generated device ID access
