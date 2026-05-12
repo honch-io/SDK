@@ -70,7 +70,11 @@ static honch_status_t honch_cbor_append_type(honch_buffer_t *buffer, unsigned ch
 
 honch_status_t honch_cbor_append_text(honch_buffer_t *buffer, const char *value)
 {
-    size_t length = strlen(value);
+    return honch_cbor_append_text_n(buffer, value, strlen(value));
+}
+
+honch_status_t honch_cbor_append_text_n(honch_buffer_t *buffer, const char *value, size_t length)
+{
     honch_status_t status = honch_cbor_append_type(buffer, 0x60u, (uint64_t)length);
     if (status != HONCH_OK) {
         return status;
@@ -208,18 +212,62 @@ static honch_status_t honch_json_decode_string(honch_json_to_cbor_parser_t *pars
                 break;
             case 'u': {
                 parser->cursor++;
-                int codepoint = 0;
+                unsigned int codepoint = 0u;
                 for (size_t i = 0u; i < 4u; i++) {
                     int digit = honch_json_hex_digit_value(parser->cursor[i]);
                     if (digit < 0) {
                         return HONCH_ERROR_INVALID_ARGUMENT;
                     }
-                    codepoint = (codepoint << 4) | digit;
+                    codepoint = (codepoint << 4) | (unsigned int)digit;
                 }
                 parser->cursor += 4u;
 
-                char decoded_char = codepoint <= 0x7f ? (char)codepoint : '?';
-                if (honch_buffer_append_n(decoded, &decoded_char, 1u) != HONCH_OK) {
+                if (codepoint >= 0xd800u && codepoint <= 0xdbffu) {
+                    if (parser->cursor[0] != '\\' || parser->cursor[1] != 'u') {
+                        return HONCH_ERROR_INVALID_ARGUMENT;
+                    }
+                    parser->cursor += 2u;
+                    unsigned int low = 0u;
+                    for (size_t i = 0u; i < 4u; i++) {
+                        int digit = honch_json_hex_digit_value(parser->cursor[i]);
+                        if (digit < 0) {
+                            return HONCH_ERROR_INVALID_ARGUMENT;
+                        }
+                        low = (low << 4) | (unsigned int)digit;
+                    }
+                    if (low < 0xdc00u || low > 0xdfffu) {
+                        return HONCH_ERROR_INVALID_ARGUMENT;
+                    }
+                    parser->cursor += 4u;
+                    codepoint = 0x10000u + (((codepoint - 0xd800u) << 10) | (low - 0xdc00u));
+                } else if (codepoint >= 0xdc00u && codepoint <= 0xdfffu) {
+                    return HONCH_ERROR_INVALID_ARGUMENT;
+                }
+
+                char encoded[4];
+                size_t encoded_length = 0u;
+                if (codepoint <= 0x7fu) {
+                    encoded[0] = (char)codepoint;
+                    encoded_length = 1u;
+                } else if (codepoint <= 0x7ffu) {
+                    encoded[0] = (char)(0xc0u | (codepoint >> 6));
+                    encoded[1] = (char)(0x80u | (codepoint & 0x3fu));
+                    encoded_length = 2u;
+                } else if (codepoint <= 0xffffu) {
+                    encoded[0] = (char)(0xe0u | (codepoint >> 12));
+                    encoded[1] = (char)(0x80u | ((codepoint >> 6) & 0x3fu));
+                    encoded[2] = (char)(0x80u | (codepoint & 0x3fu));
+                    encoded_length = 3u;
+                } else if (codepoint <= 0x10ffffu) {
+                    encoded[0] = (char)(0xf0u | (codepoint >> 18));
+                    encoded[1] = (char)(0x80u | ((codepoint >> 12) & 0x3fu));
+                    encoded[2] = (char)(0x80u | ((codepoint >> 6) & 0x3fu));
+                    encoded[3] = (char)(0x80u | (codepoint & 0x3fu));
+                    encoded_length = 4u;
+                } else {
+                    return HONCH_ERROR_INVALID_ARGUMENT;
+                }
+                if (honch_buffer_append_n(decoded, encoded, encoded_length) != HONCH_OK) {
                     return HONCH_ERROR_OUT_OF_MEMORY;
                 }
                 break;
@@ -249,7 +297,7 @@ static honch_status_t honch_json_to_cbor_string(
 
     status = honch_json_decode_string(parser, &decoded);
     if (status == HONCH_OK) {
-        status = honch_cbor_append_text(buffer, decoded.data);
+        status = honch_cbor_append_text_n(buffer, decoded.data, decoded.length);
     }
     honch_buffer_free(&decoded);
     return status;
@@ -425,7 +473,8 @@ static honch_status_t honch_json_to_cbor_object(
                 return status;
             }
             status = honch_json_decode_string(parser, &key);
-            bool include = status == HONCH_OK && (!filter_reserved || !honch_property_key_is_reserved(key.data));
+            bool include = status == HONCH_OK && memchr(key.data, '\0', key.length) == NULL &&
+                (!filter_reserved || !honch_property_key_is_reserved(key.data));
             honch_buffer_free(&key);
             if (status != HONCH_OK) {
                 return status;
@@ -475,9 +524,10 @@ static honch_status_t honch_json_to_cbor_object(
             return status;
         }
         status = honch_json_decode_string(parser, &key);
-        bool include = status == HONCH_OK && (!filter_reserved || !honch_property_key_is_reserved(key.data));
+        bool include = status == HONCH_OK && memchr(key.data, '\0', key.length) == NULL &&
+            (!filter_reserved || !honch_property_key_is_reserved(key.data));
         if (status == HONCH_OK && include && buffer != NULL) {
-            status = honch_cbor_append_text(buffer, key.data);
+            status = honch_cbor_append_text_n(buffer, key.data, key.length);
         }
         honch_buffer_free(&key);
         if (status != HONCH_OK) {
@@ -714,5 +764,67 @@ bool honch_cbor_validate_event(const unsigned char *data, size_t length)
         .length = length,
         .offset = 0u
     };
-    return honch_cbor_skip_value(&reader, 0u) && reader.offset == length;
+    if (reader.offset >= reader.length) {
+        return false;
+    }
+    unsigned char initial = reader.data[reader.offset++];
+    if ((initial & 0xe0u) != 0xa0u) {
+        return false;
+    }
+    uint64_t count = 0u;
+    if (!honch_cbor_read_uint(&reader, (unsigned char)(initial & 0x1fu), &count) || count != 4u) {
+        return false;
+    }
+
+    bool have_event = false;
+    bool have_distinct_id = false;
+    bool have_timestamp = false;
+    bool have_properties = false;
+    for (uint64_t i = 0u; i < count; i++) {
+        if (reader.offset >= reader.length) {
+            return false;
+        }
+        unsigned char key_initial = reader.data[reader.offset++];
+        if ((key_initial & 0xe0u) != 0x60u) {
+            return false;
+        }
+        uint64_t key_length = 0u;
+        if (!honch_cbor_read_uint(&reader, (unsigned char)(key_initial & 0x1fu), &key_length) ||
+            key_length > reader.length - reader.offset) {
+            return false;
+        }
+        const char *key = (const char *)reader.data + reader.offset;
+        reader.offset += (size_t)key_length;
+
+        if (key_length == 5u && memcmp(key, "event", 5u) == 0) {
+            if (reader.offset >= reader.length || (reader.data[reader.offset] & 0xe0u) != 0x60u ||
+                !honch_cbor_skip_value(&reader, 1u)) {
+                return false;
+            }
+            have_event = true;
+        } else if (key_length == 11u && memcmp(key, "distinct_id", 11u) == 0) {
+            if (reader.offset >= reader.length || (reader.data[reader.offset] & 0xe0u) != 0x60u ||
+                !honch_cbor_skip_value(&reader, 1u)) {
+                return false;
+            }
+            have_distinct_id = true;
+        } else if (key_length == 9u && memcmp(key, "timestamp", 9u) == 0) {
+            if (reader.offset >= reader.length ||
+                ((reader.data[reader.offset] & 0xe0u) != 0x00u && (reader.data[reader.offset] & 0xe0u) != 0x20u) ||
+                !honch_cbor_skip_value(&reader, 1u)) {
+                return false;
+            }
+            have_timestamp = true;
+        } else if (key_length == 10u && memcmp(key, "properties", 10u) == 0) {
+            if (reader.offset >= reader.length || (reader.data[reader.offset] & 0xe0u) != 0xa0u ||
+                !honch_cbor_skip_value(&reader, 1u)) {
+                return false;
+            }
+            have_properties = true;
+        } else {
+            return false;
+        }
+    }
+
+    return have_event && have_distinct_id && have_timestamp && have_properties && reader.offset == length;
 }

@@ -92,6 +92,20 @@ static int write_text_file(const char *path, const char *content)
     return ok;
 }
 
+static int write_bytes_file(const char *path, const unsigned char *content, size_t length)
+{
+    FILE *file = fopen(path, "wb");
+    if (file == NULL) {
+        return 0;
+    }
+
+    int ok = fwrite(content, 1u, length, file) == length;
+    if (fclose(file) != 0) {
+        ok = 0;
+    }
+    return ok;
+}
+
 static int count_substring(const char *haystack, const char *needle)
 {
     int count = 0;
@@ -1121,6 +1135,60 @@ static void test_flush_dead_letters_invalid_persisted_queue_files(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_flush_dead_letters_semantically_invalid_cbor_event(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+
+    char pending_dir[160];
+    char dead_dir[160];
+    char invalid_path[240];
+    snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
+    snprintf(dead_dir, sizeof(dead_dir), "%s/dead", queue_dir);
+    snprintf(invalid_path, sizeof(invalid_path), "%s/00000000000000000000-invalid.cbor", pending_dir);
+
+    const unsigned char valid_but_not_event[] = {0xf6};
+    EXPECT_TRUE(write_bytes_file(invalid_path, valid_but_not_event, sizeof(valid_but_not_event)) != 0);
+    EXPECT_EQ_INT(honch_track(client, "valid_after_invalid", "{\"ok\":true}"), HONCH_OK);
+
+    EXPECT_EQ_INT(honch_flush(client), HONCH_ERROR_REJECTED);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".cbor"), 1);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"valid_after_invalid\"");
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
+static void test_cbor_encoding_preserves_json_string_escapes(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "string_escape_event", "{\"accent\":\"\\u00e9\",\"nul\":\"a\\u0000b\"}"), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"accent\":\"\xc3\xa9\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"nul\":\"a\\u0000b\"");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"accent\":\"?\"");
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
 static void test_background_flush_threshold_drains_queue(void)
 {
     char queue_dir[128];
@@ -1473,6 +1541,8 @@ int main(void)
     test_flush_retry_keeps_events();
     test_flush_retryable_http_status_keeps_events_until_success();
     test_flush_dead_letters_invalid_persisted_queue_files();
+    test_flush_dead_letters_semantically_invalid_cbor_event();
+    test_cbor_encoding_preserves_json_string_escapes();
     test_background_flush_threshold_drains_queue();
     test_background_flush_retries_with_backoff();
     test_background_flush_uses_esp_idf_default_threshold();
