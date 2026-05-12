@@ -12,14 +12,15 @@ set(CMAKE_C_EXTENSIONS OFF)
 
 if(HONCH_BUILD_TESTS)
     enable_testing()
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
 endif()
 
 find_package(CURL REQUIRED)
 find_package(Threads REQUIRED)
-find_package(ZLIB REQUIRED)
 
 add_library(honch_c_core
     honch/src/honch.c
+    honch/src/honch_cbor.c
     honch/src/honch_encoder.c
     honch/src/honch_json.c
     honch/src/honch_platform.c
@@ -37,7 +38,6 @@ target_link_libraries(honch_c_core
     PRIVATE
         CURL::libcurl
         Threads::Threads
-        ZLIB::ZLIB
 )
 
 target_compile_definitions(honch_c_core PRIVATE
@@ -67,6 +67,10 @@ if(HONCH_BUILD_TESTS)
     )
 
     add_test(NAME honch_c_core_tests COMMAND honch_c_core_tests)
+    add_test(
+        NAME honch_c_core_cbor_migration_tests
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_cbor_migration.py
+    )
 
     if(HONCH_BUILD_E2E)
         add_executable(honch_c_core_e2e

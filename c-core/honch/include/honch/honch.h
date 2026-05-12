@@ -95,8 +95,6 @@ typedef honch_status_t (*honch_test_transport_fn)(
     long *http_status);
 
 void honch_test_set_transport(honch_test_transport_fn transport, void *userdata);
-void honch_test_set_compression_failure(int enabled);
-honch_status_t honch_test_gzip_payload(const char *payload, unsigned char **out, size_t *out_size);
 #endif
 
 #ifdef __cplusplus

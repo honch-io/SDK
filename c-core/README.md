@@ -8,7 +8,7 @@ This package is intended for:
 - embedded Linux devices
 - future reusable C core work for Zephyr, Arduino, bare-metal C, and MicroPython bindings
 
-The shared cross-SDK contract lives in [`../spec/`](../spec/). This package should stay aligned with that contract, while keeping encoder and transport boundaries isolated so it can move to the planned CBOR ingest format when the org-level API/spec update is ready.
+The shared cross-SDK contract lives in [`../spec/`](../spec/). C/POSIX sends the same CBOR ingest payloads as the ESP-IDF SDK.
 
 ## Current Status
 
@@ -18,10 +18,9 @@ Implemented:
 - persistent local queue before network delivery
 - persistent generated `device_id`
 - persistent current `distinct_id`
-- ISO-8601 UTC event timestamps
-- tokenized batch flush envelopes
-- gzip-compressed JSON flush requests with identity fallback when compression is unavailable
-- isolated batch encoder boundary for the future CBOR transition
+- epoch milliseconds event timestamps
+- tokenized CBOR batch flush envelopes
+- uncompressed `application/cbor` flush requests
 - default background flushing with retry backoff and jitter
 - persisted firmware version change detection
 - `$set_property` event API parity with the ESP-IDF SDK
@@ -33,12 +32,6 @@ Implemented:
 - minimal POSIX example
 - connected camera usage example
 - POSIX GPIO edge-tracking adapter example
-
-Temporary development behavior:
-
-- the current transport implementation is a development harness, not the final CBOR ingest contract
-
-Do not optimize around the current JSON ingest API as the long-term contract. The package is expected to move to CBOR when the shared ingest API/spec update lands.
 
 ## Layout
 
@@ -58,7 +51,6 @@ Requirements:
 - CMake 3.20+
 - C11 compiler
 - libcurl
-- zlib
 
 From this directory:
 
@@ -306,6 +298,7 @@ The SDK stores state and queued events under `queue_directory`.
 Queue behavior:
 
 - events are written atomically
+- events are stored as `.cbor` files
 - startup removes temporary write files
 - queue length is bounded by `max_queued_events`
 - flush requests are sent in batches capped at 50 events
@@ -321,9 +314,9 @@ Current C tests cover:
 
 - init validation
 - event persistence
-- ISO-8601 timestamp encoding
-- tokenized batch envelope encoding
-- gzip-compressed transport requests with identity fallback when compression is unavailable
+- epoch milliseconds timestamp encoding
+- tokenized CBOR batch envelope encoding
+- raw `application/cbor` transport requests
 - strict JSON validation for public property input
 - generated `device_id` persistence
 - configured and generated device ID access
