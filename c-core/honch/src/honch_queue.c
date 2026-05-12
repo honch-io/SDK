@@ -7,7 +7,7 @@
 
 static honch_status_t honch_list_queue_files(honch_client_t *client, honch_file_list_t *files)
 {
-    return honch_list_files_with_suffix(client->pending_directory, ".json", files);
+    return honch_list_files_with_suffix(client->pending_directory, ".cbor", files);
 }
 
 static honch_status_t honch_move_to_dead(honch_client_t *client, const honch_file_entry_t *entry)
@@ -27,9 +27,9 @@ static honch_status_t honch_move_to_dead(honch_client_t *client, const honch_fil
     return HONCH_OK;
 }
 
-honch_status_t honch_queue_enqueue(honch_client_t *client, const char *event_json)
+honch_status_t honch_queue_enqueue(honch_client_t *client, const unsigned char *event, size_t event_size)
 {
-    if (strlen(event_json) > client->max_event_bytes) {
+    if (event == NULL || event_size == 0u || event_size > client->max_event_bytes) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
@@ -67,12 +67,12 @@ honch_status_t honch_queue_enqueue(honch_client_t *client, const char *event_jso
     snprintf(
         filename,
         sizeof(filename),
-        "%020llu-%06llu-%s.json",
+        "%020llu-%06llu-%s.cbor",
         (unsigned long long)honch_now_millis(),
         (unsigned long long)client->sequence++,
         event_id);
 
-    return honch_write_file_atomic(client->pending_directory, filename, event_json);
+    return honch_write_file_atomic_bytes(client->pending_directory, filename, event, event_size);
 }
 
 honch_status_t honch_queue_count_pending(honch_client_t *client, size_t *count)
@@ -101,7 +101,7 @@ static honch_status_t honch_delete_files(const honch_file_list_t *files, size_t 
 static honch_status_t honch_delete_queue_directory(const char *directory)
 {
     honch_file_list_t files = {0};
-    honch_status_t status = honch_list_files_with_suffix(directory, ".json", &files);
+    honch_status_t status = honch_list_files_with_suffix(directory, ".cbor", &files);
     if (status == HONCH_OK) {
         status = honch_delete_files(&files, files.count);
     }
@@ -143,9 +143,9 @@ honch_status_t honch_queue_flush_locked(honch_client_t *client)
         }
 
         size_t count = files.count < client->batch_size ? files.count : client->batch_size;
-        char *payload = NULL;
+        honch_payload_t payload = {0};
         size_t invalid_index = count;
-        status = honch_encoder_build_batch_json(client, &files, count, &payload, &invalid_index);
+        status = honch_encoder_build_batch_cbor(client, &files, count, &payload, &invalid_index);
         if (status == HONCH_ERROR_INVALID_ARGUMENT && invalid_index < count) {
             honch_status_t dead_status = honch_move_to_dead(client, &files.items[invalid_index]);
             honch_file_list_free(&files);
@@ -161,8 +161,8 @@ honch_status_t honch_queue_flush_locked(honch_client_t *client)
         }
 
         honch_http_result_t result = HONCH_HTTP_RETRY;
-        status = honch_transport_post_batch(client, payload, &result);
-        free(payload);
+        status = honch_transport_post_batch(client, payload.data, payload.length, &result);
+        free(payload.data);
 
         if (result == HONCH_HTTP_OK) {
             status = honch_delete_files(&files, count);

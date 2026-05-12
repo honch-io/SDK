@@ -9,7 +9,6 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-#include <time.h>
 #include <unistd.h>
 
 honch_status_t honch_size_add(size_t left, size_t right, size_t *out)
@@ -218,32 +217,6 @@ uint64_t honch_now_millis(void)
     return ((uint64_t)tv.tv_sec * 1000u) + ((uint64_t)tv.tv_usec / 1000u);
 }
 
-honch_status_t honch_now_iso8601(char out[25])
-{
-    struct timeval tv;
-    if (gettimeofday(&tv, NULL) != 0) {
-        return HONCH_ERROR_IO;
-    }
-
-    struct tm utc;
-    if (gmtime_r(&tv.tv_sec, &utc) == NULL) {
-        return HONCH_ERROR_IO;
-    }
-
-    int written = snprintf(
-        out,
-        25u,
-        "%04d-%02d-%02dT%02d:%02d:%02d.%03ldZ",
-        utc.tm_year + 1900,
-        utc.tm_mon + 1,
-        utc.tm_mday,
-        utc.tm_hour,
-        utc.tm_min,
-        utc.tm_sec,
-        tv.tv_usec / 1000L);
-    return written == 24 ? HONCH_OK : HONCH_ERROR_IO;
-}
-
 honch_status_t honch_random_hex(char out[33])
 {
     unsigned char bytes[16];
@@ -325,7 +298,12 @@ honch_status_t honch_mkdir_p(const char *path)
     return HONCH_OK;
 }
 
-static honch_status_t honch_read_file_impl(const char *path, size_t max_bytes, bool enforce_limit, char **out)
+static honch_status_t honch_read_file_impl(
+    const char *path,
+    size_t max_bytes,
+    bool enforce_limit,
+    unsigned char **out,
+    size_t *out_size)
 {
     FILE *file = fopen(path, "rb");
     if (file == NULL) {
@@ -358,7 +336,7 @@ static honch_status_t honch_read_file_impl(const char *path, size_t max_bytes, b
         return HONCH_ERROR_IO;
     }
 
-    char *data = (char *)malloc(alloc_size);
+    unsigned char *data = (unsigned char *)malloc(alloc_size);
     if (data == NULL) {
         fclose(file);
         return HONCH_ERROR_OUT_OF_MEMORY;
@@ -373,17 +351,27 @@ static honch_status_t honch_read_file_impl(const char *path, size_t max_bytes, b
 
     data[data_size] = '\0';
     *out = data;
+    if (out_size != NULL) {
+        *out_size = data_size;
+    }
     return HONCH_OK;
 }
 
 honch_status_t honch_read_file(const char *path, char **out)
 {
-    return honch_read_file_impl(path, 0u, false, out);
+    return honch_read_file_impl(path, 0u, false, (unsigned char **)out, NULL);
 }
 
 honch_status_t honch_read_file_limited(const char *path, size_t max_bytes, char **out)
 {
-    return honch_read_file_impl(path, max_bytes, true, out);
+    return honch_read_file_impl(path, max_bytes, true, (unsigned char **)out, NULL);
+}
+
+honch_status_t honch_read_file_limited_bytes(const char *path, size_t max_bytes, honch_payload_t *out)
+{
+    out->data = NULL;
+    out->length = 0u;
+    return honch_read_file_impl(path, max_bytes, true, &out->data, &out->length);
 }
 
 static honch_status_t honch_fsync_directory(const char *directory)
@@ -400,7 +388,11 @@ static honch_status_t honch_fsync_directory(const char *directory)
     return status;
 }
 
-honch_status_t honch_write_file_atomic(const char *directory, const char *filename, const char *content)
+honch_status_t honch_write_file_atomic_bytes(
+    const char *directory,
+    const char *filename,
+    const unsigned char *content,
+    size_t content_size)
 {
     char *tmp_name = NULL;
     char *tmp_path = NULL;
@@ -429,8 +421,7 @@ honch_status_t honch_write_file_atomic(const char *directory, const char *filena
         if (file == NULL) {
             status = HONCH_ERROR_IO;
         } else {
-            size_t length = strlen(content);
-            if (fwrite(content, 1u, length, file) != length) {
+            if (fwrite(content, 1u, content_size, file) != content_size) {
                 status = HONCH_ERROR_IO;
             }
             if (fflush(file) != 0) {
@@ -461,6 +452,15 @@ honch_status_t honch_write_file_atomic(const char *directory, const char *filena
     free(tmp_path);
     free(final_path);
     return status;
+}
+
+honch_status_t honch_write_file_atomic(const char *directory, const char *filename, const char *content)
+{
+    return honch_write_file_atomic_bytes(
+        directory,
+        filename,
+        (const unsigned char *)content,
+        strlen(content));
 }
 
 static int honch_compare_entries(const void *left, const void *right)

@@ -28,6 +28,11 @@ typedef struct honch_buffer {
     size_t capacity;
 } honch_buffer_t;
 
+typedef struct honch_payload {
+    unsigned char *data;
+    size_t length;
+} honch_payload_t;
+
 typedef struct honch_file_entry {
     char *name;
     char *path;
@@ -105,21 +110,37 @@ bool honch_json_is_value(const char *json);
 bool honch_json_object_has_members(const char *json);
 honch_status_t honch_json_append_object_members(honch_buffer_t *buffer, const char *json, bool *has_members);
 
-honch_status_t honch_encoder_build_batch_json(
+honch_status_t honch_cbor_append_text(honch_buffer_t *buffer, const char *value);
+honch_status_t honch_cbor_append_int(honch_buffer_t *buffer, int64_t value);
+honch_status_t honch_cbor_append_map(honch_buffer_t *buffer, size_t count);
+honch_status_t honch_cbor_append_array(honch_buffer_t *buffer, size_t count);
+honch_status_t honch_cbor_append_json_value(honch_buffer_t *buffer, const char *json);
+honch_status_t honch_cbor_append_json_object_members(
+    honch_buffer_t *buffer,
+    const char *json,
+    size_t *member_count);
+bool honch_cbor_validate_event(const unsigned char *data, size_t length);
+
+honch_status_t honch_encoder_build_batch_cbor(
     honch_client_t *client,
     const honch_file_list_t *files,
     size_t count,
-    char **out,
+    honch_payload_t *out,
     size_t *invalid_index);
 
 uint64_t honch_now_millis(void);
-honch_status_t honch_now_iso8601(char out[25]);
 honch_status_t honch_random_hex(char out[33]);
 honch_status_t honch_join_path(char **out, const char *left, const char *right);
 honch_status_t honch_mkdir_p(const char *path);
 honch_status_t honch_read_file(const char *path, char **out);
 honch_status_t honch_read_file_limited(const char *path, size_t max_bytes, char **out);
+honch_status_t honch_read_file_limited_bytes(const char *path, size_t max_bytes, honch_payload_t *out);
 honch_status_t honch_write_file_atomic(const char *directory, const char *filename, const char *content);
+honch_status_t honch_write_file_atomic_bytes(
+    const char *directory,
+    const char *filename,
+    const unsigned char *content,
+    size_t content_size);
 honch_status_t honch_list_files_with_suffix(const char *directory, const char *suffix, honch_file_list_t *list);
 void honch_file_list_free(honch_file_list_t *list);
 honch_status_t honch_unlink_if_exists(const char *path);
@@ -130,14 +151,15 @@ honch_status_t honch_state_save_distinct_id_value(honch_client_t *client, const 
 honch_status_t honch_state_check_firmware_version(honch_client_t *client, bool *changed, char **previous_version);
 honch_status_t honch_state_reset(honch_client_t *client);
 
-honch_status_t honch_queue_enqueue(honch_client_t *client, const char *event_json);
+honch_status_t honch_queue_enqueue(honch_client_t *client, const unsigned char *event, size_t event_size);
 honch_status_t honch_queue_clear(honch_client_t *client);
 honch_status_t honch_queue_count_pending(honch_client_t *client, size_t *count);
 honch_status_t honch_queue_flush_locked(honch_client_t *client);
 
 honch_status_t honch_transport_post_batch(
     honch_client_t *client,
-    const char *payload,
+    const unsigned char *payload,
+    size_t payload_size,
     honch_http_result_t *result);
 
 #endif
