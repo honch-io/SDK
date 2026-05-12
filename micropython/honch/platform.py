@@ -1,9 +1,4 @@
 try:
-    import ujson as json
-except ImportError:
-    import json
-
-try:
     import utime as time
 except ImportError:
     import time
@@ -59,18 +54,6 @@ class DefaultPlatform:
         return False
 
 
-def dumps_compact(value):
-    try:
-        return json.dumps(value, separators=(",", ":"))
-    except TypeError:
-        return json.dumps(value)
-
-
-def load_json_file(path):
-    with open(path, "r") as fh:
-        return json.loads(fh.read())
-
-
 def ensure_dir(path):
     parts = []
     current = path
@@ -122,6 +105,24 @@ def read_text(path):
 
 def write_text(directory, filename, content):
     write_text_atomic(directory, filename, content)
+
+
+def write_bytes_atomic(directory, filename, content):
+    ensure_dir(directory)
+    tmp = join_path(directory, filename + ".tmp")
+    final = join_path(directory, filename)
+    with open(tmp, "wb") as fh:
+        fh.write(content)
+    try:
+        os.rename(tmp, final)
+    except OSError:
+        remove_if_exists(final)
+        os.rename(tmp, final)
+
+
+def read_bytes(path):
+    with open(path, "rb") as fh:
+        return fh.read()
 
 
 def join_path(left, right):

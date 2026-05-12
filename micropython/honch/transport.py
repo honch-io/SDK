@@ -41,27 +41,30 @@ def batch_url(endpoint_url):
 
 
 def post_batch(config, platform, transport, payload):
-    raw = payload.encode("utf-8")
+    raw = payload
     compressed = None
-    try:
-        compressed = platform.gzip_compress(raw)
-    except Exception:
-        compressed = None
+    if not config.disable_gzip and len(raw) >= config.gzip_min_bytes:
+        try:
+            candidate = platform.gzip_compress(raw)
+            if candidate is not None and len(candidate) < len(raw):
+                compressed = candidate
+        except Exception:
+            compressed = None
 
     if compressed is None:
         body = raw
-        content_encoding = "identity"
+        headers = {"Content-Type": "application/cbor"}
     else:
         body = compressed
-        content_encoding = "gzip"
+        headers = {
+            "Content-Type": "application/cbor",
+            "Content-Encoding": "gzip",
+        }
 
     status = transport.post(
         batch_url(config.endpoint_url),
         body,
-        {
-            "Content-Type": "application/json",
-            "Content-Encoding": content_encoding,
-        },
+        headers,
         config.transport_timeout_ms,
     )
     if 200 <= status < 300:
