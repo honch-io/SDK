@@ -17,6 +17,7 @@ endif()
 
 find_package(CURL REQUIRED)
 find_package(Threads REQUIRED)
+find_package(ZLIB QUIET)
 
 add_library(honch_c_core
     honch/src/honch.c
@@ -39,6 +40,11 @@ target_link_libraries(honch_c_core
         CURL::libcurl
         Threads::Threads
 )
+
+if(ZLIB_FOUND)
+    target_link_libraries(honch_c_core PRIVATE ZLIB::ZLIB)
+    target_compile_definitions(honch_c_core PRIVATE HONCH_HAVE_ZLIB)
+endif()
 
 target_compile_definitions(honch_c_core PRIVATE
     _POSIX_C_SOURCE=200809L

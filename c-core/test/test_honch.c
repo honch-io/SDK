@@ -322,6 +322,8 @@ typedef struct fake_transport_context {
     volatile int calls;
     char last_url[256];
     char last_api_key[128];
+    unsigned char last_body[16384];
+    size_t last_body_size;
     char last_payload[16384];
     char last_content_encoding[32];
 } fake_transport_context_t;
@@ -344,6 +346,8 @@ static honch_status_t fake_transport(
     snprintf(context->last_url, sizeof(context->last_url), "%s", url);
     snprintf(context->last_api_key, sizeof(context->last_api_key), "%s", api_key);
     snprintf(context->last_content_encoding, sizeof(context->last_content_encoding), "%s", content_encoding);
+    context->last_body_size = body_size < sizeof(context->last_body) ? body_size : sizeof(context->last_body);
+    memcpy(context->last_body, body, context->last_body_size);
     if (!cbor_to_json(body, body_size, context->last_payload, sizeof(context->last_payload))) {
         context->last_payload[0] = '\0';
     }
@@ -453,6 +457,7 @@ static honch_config_t test_config(const char *queue_dir)
         .max_queued_events = 10u,
         .max_event_bytes = 8192u,
         .transport_timeout_ms = 1000u,
+        .disable_gzip = 1,
         .disable_background_flush = 1
     };
     return config;
@@ -1393,6 +1398,64 @@ static void test_flush_sends_raw_cbor_payload(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_flush_gzips_large_cbor_payload_when_enabled(void)
+{
+    char queue_dir[128];
+    char properties[2600];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+    config.disable_gzip = 0;
+    config.gzip_min_bytes = 1024u;
+
+    memset(properties, 'a', sizeof(properties));
+    memcpy(properties, "{\"blob\":\"", 9u);
+    properties[sizeof(properties) - 3u] = '"';
+    properties[sizeof(properties) - 2u] = '}';
+    properties[sizeof(properties) - 1u] = '\0';
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "large_compressible", properties), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+
+    EXPECT_EQ_INT(transport.calls, 1);
+    EXPECT_TRUE(strcmp(transport.last_content_encoding, "gzip") == 0);
+    EXPECT_TRUE(transport.last_body_size >= 18u);
+    EXPECT_EQ_INT(transport.last_body[0], 0x1f);
+    EXPECT_EQ_INT(transport.last_body[1], 0x8b);
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
+static void test_flush_keeps_small_cbor_payload_raw_when_gzip_enabled(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+    config.disable_gzip = 0;
+    config.gzip_min_bytes = 1024u;
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+
+    EXPECT_EQ_INT(transport.calls, 1);
+    EXPECT_TRUE(strcmp(transport.last_content_encoding, "identity") == 0);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$device_boot\"");
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
 static void test_flush_rejected_moves_events_to_dead_letter(void)
 {
     char queue_dir[128];
@@ -1550,6 +1613,8 @@ int main(void)
     test_flush_drains_multiple_batches();
     test_batch_size_is_capped_to_esp_limit();
     test_flush_sends_raw_cbor_payload();
+    test_flush_gzips_large_cbor_payload_when_enabled();
+    test_flush_keeps_small_cbor_payload_raw_when_gzip_enabled();
     test_flush_rejected_moves_events_to_dead_letter();
     test_reset_clears_queued_events();
     test_reset_does_not_queue_event_when_state_reset_fails();

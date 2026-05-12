@@ -696,6 +696,10 @@ honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
     if (next->flush_retry_max_ms < next->flush_retry_initial_ms) {
         next->flush_retry_max_ms = next->flush_retry_initial_ms;
     }
+    next->gzip_enabled = config->disable_gzip == 0;
+    next->gzip_min_bytes = config->gzip_min_bytes == 0u ?
+        HONCH_DEFAULT_GZIP_MIN_BYTES :
+        config->gzip_min_bytes;
     next->scheduler_enabled = config->disable_background_flush == 0 &&
         (next->flush_interval_seconds > 0u || next->flush_event_threshold > 0u);
     next->battery_callback = config->battery_callback;
