@@ -54,7 +54,7 @@ static void do_flush(void)
         return;
     }
 
-    char *events[MAX_BATCH_SIZE];
+    honch_payload_t events[MAX_BATCH_SIZE] = {0};
     int count = honch_queue_pop(events, MAX_BATCH_SIZE);
     if (count == 0) {
         return;
@@ -62,21 +62,22 @@ static void do_flush(void)
 
     ESP_LOGI(TAG, "Flushing %d events", count);
 
-    char *batch_json = honch_encode_batch(g_honch_api_key, events, count);
-    if (!batch_json) {
+    honch_payload_t batch = {0};
+    honch_err_t encode_err = honch_encode_batch(g_honch_api_key, events, count, &batch);
+    if (encode_err != HONCH_OK) {
         ESP_LOGE(TAG, "Failed to encode batch");
         honch_queue_requeue(events, count);
         return;
     }
 
-    honch_transport_result_t result = honch_transport_send(batch_json, strlen(batch_json));
-    free(batch_json);
+    honch_transport_result_t result = honch_transport_send(batch.data, batch.len);
+    honch_payload_free(&batch);
 
     switch (result) {
         case HONCH_TRANSPORT_OK:
             honch_queue_confirm(count);
             for (int i = 0; i < count; i++) {
-                free(events[i]);
+                honch_payload_free(&events[i]);
             }
             s_backoff_ms = INITIAL_BACKOFF_MS;
             break;
@@ -85,7 +86,7 @@ static void do_flush(void)
             ESP_LOGE(TAG, "API key rejected, dropping %d events", count);
             honch_queue_confirm(count);
             for (int i = 0; i < count; i++) {
-                free(events[i]);
+                honch_payload_free(&events[i]);
             }
             break;
 
