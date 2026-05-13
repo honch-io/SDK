@@ -2,6 +2,8 @@
 
 Product analytics for connected hardware. Drop this component into your ESP-IDF project and get device lifecycle events, custom tracking, and GPIO-triggered events flowing to Honch in minutes.
 
+Events are queued as CBOR blobs and sent to Capture as uncompressed `application/cbor` batches.
+
 ## Requirements
 
 - ESP-IDF >= 5.0
@@ -104,7 +106,7 @@ idf.py flash monitor
 | `device_model`           | Yes      | —              | Hardware model identifier                  |
 | `firmware_version`       | Yes      | —              | Current firmware version string            |
 | `environment`            | No       | `"production"` | Environment tag                            |
-| `event_buffer`           | Yes      | —              | Caller-owned buffer for queue staging      |
+| `event_buffer`           | Yes      | —              | Caller-owned buffer for CBOR queue staging |
 | `event_buffer_size`      | Yes      | —              | Size of the buffer (recommend >= 8192)     |
 | `flush_interval_seconds` | No       | 60             | How often to flush events                  |
 | `flush_event_threshold`  | No       | 30             | Flush when this many events are queued     |
@@ -114,6 +116,8 @@ idf.py flash monitor
 **Kconfig options** (set via `idf.py menuconfig`):
 - `CONFIG_HONCH_LOG_VERBOSE` — enable extra debug logging
 - `CONFIG_HONCH_MAX_QUEUE_DEPTH` — max events in NVS queue (default 256)
+- `CONFIG_HONCH_ENABLE_GZIP` — gzip large HTTP CBOR batches when beneficial (default enabled)
+- `CONFIG_HONCH_GZIP_MIN_BYTES` — minimum CBOR payload size before gzip is attempted (default 1024)
 
 ## Troubleshooting
 
@@ -127,6 +131,7 @@ idf.py flash monitor
 **Events queuing but never sending?**
 - Verify Wi-Fi is connected (look for "Got IP" in logs)
 - The SDK waits for an IP address before attempting any flushes
+- Capture must support the CBOR ingest contract for `POST /batch`
 
 **NVS errors at init?**
 - Make sure you call `nvs_flash_init()` before `honch_init()`

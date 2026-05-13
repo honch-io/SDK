@@ -4,6 +4,8 @@
 #pragma once
 
 #include "honch.h"
+#include <stddef.h>
+#include <stdint.h>
 
 typedef enum {
     HONCH_TRANSPORT_OK = 0,
@@ -15,5 +17,5 @@ typedef enum {
 honch_err_t honch_transport_init(const char *host);
 void honch_transport_deinit(void);
 
-// Send a gzipped batch payload. body is raw JSON, will be gzipped internally.
-honch_transport_result_t honch_transport_send(const char *body, size_t body_len);
+// Send a CBOR batch payload. Large batches may be gzipped; gzip failure falls back to raw CBOR.
+honch_transport_result_t honch_transport_send(const uint8_t *body, size_t body_len);

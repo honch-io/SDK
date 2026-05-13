@@ -16,4 +16,21 @@ menu "Honch SDK"
             Maximum number of events that can be stored in the
             NVS-backed queue before the oldest events are dropped.
 
+    config HONCH_ENABLE_GZIP
+        bool "Enable gzip compression for large CBOR batches"
+        default y
+        help
+            Compress HTTP CBOR batches when they are large enough to benefit.
+            If compression fails or does not reduce the payload, the SDK sends
+            the original raw CBOR body.
+
+    config HONCH_GZIP_MIN_BYTES
+        int "Minimum CBOR payload size for gzip"
+        default 1024
+        range 0 65536
+        depends on HONCH_ENABLE_GZIP
+        help
+            Minimum encoded CBOR batch size before the SDK attempts gzip.
+            Smaller batches are sent as raw application/cbor.
+
 endmenu

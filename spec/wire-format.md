@@ -1,27 +1,32 @@
 # Wire Format
 
-All Honch SDKs send events to the capture endpoint using this format.
+All Honch SDKs send events to the capture endpoint using the CBOR ingest contract.
 
 ## Endpoint
 
 ```
 POST <host>/batch
-Content-Type: application/json
+Content-Type: application/cbor
+```
+
+The canonical payload is a CBOR map. HTTP transports may gzip the CBOR body for larger batches:
+
+```text
 Content-Encoding: gzip
 ```
 
-The body is always gzip-compressed JSON.
+SDKs should use raw CBOR for small batches and fall back to raw CBOR when gzip is disabled, unavailable, fails, or does not reduce payload size. Gzip is a transport optimization over CBOR; it is not a JSON compatibility mode.
 
 ## Batch Envelope
 
-```json
+```text
 {
   "token": "<api_key>",
   "batch": [
     {
       "event": "<event_name>",
       "distinct_id": "<distinct_id>",
-      "timestamp": "<ISO-8601 UTC with ms>",
+      "timestamp": 1770000000000,
       "properties": { ... }
     }
   ]
@@ -33,7 +38,7 @@ The body is always gzip-compressed JSON.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `token` | string | Yes | Project API key |
-| `batch` | array | Yes | Array of event objects (1–50 per request) |
+| `batch` | array | Yes | Array of event objects (1-50 per request) |
 
 ### Event Object
 
@@ -41,20 +46,23 @@ The body is always gzip-compressed JSON.
 |-------|------|----------|-------------|
 | `event` | string | Yes | Event name (e.g. `"button_pressed"`, `"$device_boot"`) |
 | `distinct_id` | string | Yes | User or device identifier |
-| `timestamp` | string | Yes | ISO-8601 UTC, millisecond precision (e.g. `"2026-05-01T10:15:32.000Z"`) |
-| `properties` | object | Yes | All event properties (auto-stamped + user-supplied) |
+| `timestamp` | integer | Yes | Epoch milliseconds, set when `track()` is called |
+| `properties` | map | Yes | All event properties (auto-stamped + user-supplied) |
 
-## Timestamps
+## CBOR Profile
 
-- Set at event creation time (`track()` call), not at flush time.
-- Format: `YYYY-MM-DDTHH:MM:SS.mmmZ`
-- Always UTC.
+- Use definite-length maps and arrays.
+- Use text keys, not compact integer keys.
+- Encode timestamps as signed epoch milliseconds.
+- Encode properties using JSON-compatible values: text, integer, float, boolean, null, arrays, and maps.
+- Do not use CBOR tags or byte-string property values for v1.
 
-## Compression
+## Compression Policy
 
-- Bodies are always gzip-encoded.
-- The `Content-Encoding: gzip` header must be set.
-- SDKs should use platform-native gzip (e.g. `miniz` on ESP-IDF, `zlib` on POSIX, `NSData` compression on iOS).
+- Default HTTP behavior: gzip CBOR batches at or above 1024 bytes when gzip support is available.
+- Send raw CBOR below the threshold.
+- Send raw CBOR if compression fails or the compressed body is not smaller.
+- Capture accepts both raw CBOR and gzipped CBOR.
 
 ## Response Codes
 
