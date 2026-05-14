@@ -1232,6 +1232,47 @@ static void test_cbor_encoding_handles_escaped_and_long_object_keys(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_cbor_encoding_handles_large_property_maps(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+
+    char properties[1024];
+    size_t used = 0u;
+    properties[used++] = '{';
+    for (int i = 0; i < 30; i++) {
+        int written = snprintf(
+            properties + used,
+            sizeof(properties) - used,
+            "%s\"k%d\":%d",
+            i == 0 ? "" : ",",
+            i,
+            i);
+        EXPECT_TRUE(written > 0);
+        used += (size_t)written;
+    }
+    properties[used++] = '}';
+    properties[used] = '\0';
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "large_property_map", properties), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"large_property_map\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"k0\":0");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"k29\":29");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$device_id\":\"device-1\"");
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
 static void test_background_flush_threshold_drains_queue(void)
 {
     char queue_dir[128];
@@ -1645,6 +1686,7 @@ int main(void)
     test_flush_dead_letters_semantically_invalid_cbor_event();
     test_cbor_encoding_preserves_json_string_escapes();
     test_cbor_encoding_handles_escaped_and_long_object_keys();
+    test_cbor_encoding_handles_large_property_maps();
     test_background_flush_threshold_drains_queue();
     test_background_flush_retries_with_backoff();
     test_background_flush_uses_esp_idf_default_threshold();
