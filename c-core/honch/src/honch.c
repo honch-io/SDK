@@ -722,7 +722,9 @@ honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
 {
     if (client == NULL || config == NULL || honch_is_blank(config->api_key) ||
         honch_is_blank(config->endpoint_url) || honch_is_blank(config->device_model) ||
-        honch_is_blank(config->firmware_version) || honch_is_blank(config->queue_directory)) {
+        honch_is_blank(config->firmware_version) || honch_is_blank(config->queue_directory) ||
+        (config->durability_mode != HONCH_DURABILITY_SYNC_ALWAYS &&
+            config->durability_mode != HONCH_DURABILITY_OS_BUFFERED)) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
@@ -764,6 +766,7 @@ honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
     next->gzip_min_bytes = config->gzip_min_bytes == 0u ?
         HONCH_DEFAULT_GZIP_MIN_BYTES :
         config->gzip_min_bytes;
+    next->durability_mode = config->durability_mode;
     next->scheduler_enabled = config->disable_background_flush == 0 &&
         (next->flush_interval_seconds > 0u || next->flush_event_threshold > 0u);
     next->battery_callback = config->battery_callback;

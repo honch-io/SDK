@@ -77,6 +77,7 @@ struct honch_client {
     unsigned int flush_retry_max_ms;
     bool gzip_enabled;
     size_t gzip_min_bytes;
+    honch_durability_mode_t durability_mode;
     uint64_t next_interval_flush_ms;
     uint64_t next_retry_flush_ms;
     unsigned int current_retry_delay_ms;
@@ -146,6 +147,12 @@ honch_status_t honch_write_file_atomic_bytes(
     const char *filename,
     const unsigned char *content,
     size_t content_size);
+honch_status_t honch_write_file_atomic_bytes_with_durability(
+    const char *directory,
+    const char *filename,
+    const unsigned char *content,
+    size_t content_size,
+    honch_durability_mode_t durability_mode);
 honch_status_t honch_list_files_with_suffix(const char *directory, const char *suffix, honch_file_list_t *list);
 void honch_file_list_free(honch_file_list_t *list);
 honch_status_t honch_unlink_if_exists(const char *path);

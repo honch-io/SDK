@@ -171,6 +171,9 @@ Optional config:
 - `battery_low_threshold`: defaults to `15`
 - `auto_properties_callback`: optional platform adapter hook for automatic event properties
 - `auto_properties_userdata`: caller-owned context passed to `auto_properties_callback`
+- `durability_mode`: defaults to `HONCH_DURABILITY_SYNC_ALWAYS`; set
+  `HONCH_DURABILITY_OS_BUFFERED` to skip per-event fsyncs for lower enqueue
+  latency when power-loss durability is not required
 
 `honch_get_device_id` returns a borrowed pointer for single-threaded callers.
 The returned pointer is owned by the SDK and remains valid until `honch_reset`
@@ -263,7 +266,8 @@ int main(void)
         .flush_event_threshold = 30,
         .disable_background_flush = 0,
         .battery_callback = NULL,
-        .battery_low_threshold = 15
+        .battery_low_threshold = 15,
+        .durability_mode = HONCH_DURABILITY_SYNC_ALWAYS
     };
 
     honch_client_t *client = NULL;
@@ -299,7 +303,13 @@ The SDK stores state and queued events under `queue_directory`.
 
 Queue behavior:
 
-- events are written atomically
+- a queue directory is intended to be owned by one active SDK client/process at a time
+- events are written atomically through temp-file rename
+- by default, each queued event fsyncs the file and queue directory before
+  returning from `honch_track`
+- `HONCH_DURABILITY_OS_BUFFERED` keeps atomic rename behavior but skips
+  per-event fsyncs; this lowers enqueue latency but queued events may be lost
+  after OS crash or power loss before storage is flushed
 - events are stored as `.cbor` files
 - startup removes temporary write files
 - queue length is bounded by `max_queued_events`
@@ -309,6 +319,10 @@ Queue behavior:
 - permanent rejections move attempted files to `dead/`
 - `honch_reset` rotates identity state and clears pending/dead queues as a
   factory-reset boundary
+
+Sharing the same `queue_directory` across concurrent clients can delay flush
+visibility and may temporarily exceed `max_queued_events`, because each client
+maintains an in-memory queue count cache between disk reconciliations.
 
 ## Test Coverage
 

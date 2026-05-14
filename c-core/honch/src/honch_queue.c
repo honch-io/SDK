@@ -68,7 +68,12 @@ honch_status_t honch_queue_enqueue(honch_client_t *client, const unsigned char *
         (unsigned long long)client->sequence++,
         event_id);
 
-    status = honch_write_file_atomic_bytes(client->pending_directory, filename, event, event_size);
+    status = honch_write_file_atomic_bytes_with_durability(
+        client->pending_directory,
+        filename,
+        event,
+        event_size,
+        client->durability_mode);
     if (status == HONCH_OK) {
         client->queued_event_count++;
     }
