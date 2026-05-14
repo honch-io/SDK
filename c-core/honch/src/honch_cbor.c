@@ -7,6 +7,7 @@
 #include <string.h>
 
 #define HONCH_CBOR_MAX_DEPTH 64u
+#define HONCH_CBOR_STACK_KEY_CAPACITY 128u
 
 typedef struct honch_json_to_cbor_parser {
     const char *cursor;
@@ -17,6 +18,16 @@ typedef struct honch_cbor_reader {
     size_t length;
     size_t offset;
 } honch_cbor_reader_t;
+
+typedef struct honch_cbor_key {
+    char stack[HONCH_CBOR_STACK_KEY_CAPACITY];
+    honch_buffer_t heap;
+    const char *data;
+    size_t length;
+    bool uses_heap;
+} honch_cbor_key_t;
+
+typedef honch_status_t (*honch_json_string_append_fn)(void *ctx, const char *value, size_t length);
 
 static honch_status_t honch_cbor_append_u8(honch_buffer_t *buffer, unsigned char value)
 {
@@ -144,7 +155,83 @@ static int honch_json_hex_digit_value(char ch)
     return -1;
 }
 
-static honch_status_t honch_json_decode_string(honch_json_to_cbor_parser_t *parser, honch_buffer_t *decoded)
+static void honch_cbor_key_init(honch_cbor_key_t *key)
+{
+    key->stack[0] = '\0';
+    key->heap.data = NULL;
+    key->heap.length = 0u;
+    key->heap.capacity = 0u;
+    key->data = key->stack;
+    key->length = 0u;
+    key->uses_heap = false;
+}
+
+static void honch_cbor_key_free(honch_cbor_key_t *key)
+{
+    if (key->uses_heap) {
+        honch_buffer_free(&key->heap);
+    }
+}
+
+static honch_status_t honch_cbor_key_append(honch_cbor_key_t *key, const char *value, size_t length)
+{
+    if (key->uses_heap) {
+        honch_status_t status = honch_buffer_append_n(&key->heap, value, length);
+        if (status == HONCH_OK) {
+            key->data = key->heap.data;
+            key->length = key->heap.length;
+        }
+        return status;
+    }
+
+    size_t needed = 0u;
+    honch_status_t status = honch_size_add3(key->length, length, 1u, &needed);
+    if (status != HONCH_OK) {
+        return status;
+    }
+    if (needed <= sizeof(key->stack)) {
+        memcpy(key->stack + key->length, value, length);
+        key->length += length;
+        key->stack[key->length] = '\0';
+        key->data = key->stack;
+        return HONCH_OK;
+    }
+
+    status = honch_buffer_init(&key->heap, needed);
+    if (status != HONCH_OK) {
+        return status;
+    }
+    key->uses_heap = true;
+    status = honch_buffer_append_n(&key->heap, key->stack, key->length);
+    if (status == HONCH_OK) {
+        status = honch_buffer_append_n(&key->heap, value, length);
+    }
+    if (status != HONCH_OK) {
+        honch_buffer_free(&key->heap);
+        key->uses_heap = false;
+        key->data = key->stack;
+        return status;
+    }
+
+    key->data = key->heap.data;
+    key->length = key->heap.length;
+    return HONCH_OK;
+}
+
+static honch_status_t honch_json_buffer_append(void *ctx, const char *value, size_t length)
+{
+    return honch_buffer_append_n((honch_buffer_t *)ctx, value, length);
+}
+
+static honch_status_t honch_json_key_append(void *ctx, const char *value, size_t length)
+{
+    return honch_cbor_key_append((honch_cbor_key_t *)ctx, value, length);
+}
+
+static honch_status_t honch_json_decode_string_to(
+    honch_json_to_cbor_parser_t *parser,
+    honch_json_string_append_fn append,
+    void *append_ctx)
 {
     if (*parser->cursor != '"') {
         return HONCH_ERROR_INVALID_ARGUMENT;
@@ -161,11 +248,16 @@ static honch_status_t honch_json_decode_string(honch_json_to_cbor_parser_t *pars
             return HONCH_ERROR_INVALID_ARGUMENT;
         }
         if (ch != '\\') {
-            honch_status_t status = honch_buffer_append_n(decoded, parser->cursor, 1u);
+            const char *start = parser->cursor;
+            do {
+                parser->cursor++;
+                ch = (unsigned char)*parser->cursor;
+            } while (ch != '\0' && ch != '"' && ch != '\\' && ch >= 0x20u);
+
+            honch_status_t status = append(append_ctx, start, (size_t)(parser->cursor - start));
             if (status != HONCH_OK) {
                 return status;
             }
-            parser->cursor++;
             continue;
         }
 
@@ -175,37 +267,40 @@ static honch_status_t honch_json_decode_string(honch_json_to_cbor_parser_t *pars
             case '"':
             case '\\':
             case '/':
-                if (honch_buffer_append_n(decoded, &escaped, 1u) != HONCH_OK) {
-                    return HONCH_ERROR_OUT_OF_MEMORY;
+                {
+                    honch_status_t status = append(append_ctx, &escaped, 1u);
+                    if (status != HONCH_OK) {
+                        return status;
+                    }
                 }
                 parser->cursor++;
                 break;
             case 'b':
-                if (honch_buffer_append(decoded, "\b") != HONCH_OK) {
+                if (append(append_ctx, "\b", 1u) != HONCH_OK) {
                     return HONCH_ERROR_OUT_OF_MEMORY;
                 }
                 parser->cursor++;
                 break;
             case 'f':
-                if (honch_buffer_append(decoded, "\f") != HONCH_OK) {
+                if (append(append_ctx, "\f", 1u) != HONCH_OK) {
                     return HONCH_ERROR_OUT_OF_MEMORY;
                 }
                 parser->cursor++;
                 break;
             case 'n':
-                if (honch_buffer_append(decoded, "\n") != HONCH_OK) {
+                if (append(append_ctx, "\n", 1u) != HONCH_OK) {
                     return HONCH_ERROR_OUT_OF_MEMORY;
                 }
                 parser->cursor++;
                 break;
             case 'r':
-                if (honch_buffer_append(decoded, "\r") != HONCH_OK) {
+                if (append(append_ctx, "\r", 1u) != HONCH_OK) {
                     return HONCH_ERROR_OUT_OF_MEMORY;
                 }
                 parser->cursor++;
                 break;
             case 't':
-                if (honch_buffer_append(decoded, "\t") != HONCH_OK) {
+                if (append(append_ctx, "\t", 1u) != HONCH_OK) {
                     return HONCH_ERROR_OUT_OF_MEMORY;
                 }
                 parser->cursor++;
@@ -267,7 +362,7 @@ static honch_status_t honch_json_decode_string(honch_json_to_cbor_parser_t *pars
                 } else {
                     return HONCH_ERROR_INVALID_ARGUMENT;
                 }
-                if (honch_buffer_append_n(decoded, encoded, encoded_length) != HONCH_OK) {
+                if (append(append_ctx, encoded, encoded_length) != HONCH_OK) {
                     return HONCH_ERROR_OUT_OF_MEMORY;
                 }
                 break;
@@ -278,6 +373,16 @@ static honch_status_t honch_json_decode_string(honch_json_to_cbor_parser_t *pars
     }
 
     return HONCH_ERROR_INVALID_ARGUMENT;
+}
+
+static honch_status_t honch_json_decode_key(honch_json_to_cbor_parser_t *parser, honch_cbor_key_t *decoded)
+{
+    return honch_json_decode_string_to(parser, honch_json_key_append, decoded);
+}
+
+static honch_status_t honch_json_decode_string(honch_json_to_cbor_parser_t *parser, honch_buffer_t *decoded)
+{
+    return honch_json_decode_string_to(parser, honch_json_buffer_append, decoded);
 }
 
 static honch_status_t honch_json_to_cbor_value(
@@ -467,15 +572,12 @@ static honch_status_t honch_json_to_cbor_object(
     const char *members_start = parser->cursor;
     if (*parser->cursor != '}') {
         for (;;) {
-            honch_buffer_t key;
-            honch_status_t status = honch_buffer_init(&key, 32u);
-            if (status != HONCH_OK) {
-                return status;
-            }
-            status = honch_json_decode_string(parser, &key);
+            honch_cbor_key_t key;
+            honch_cbor_key_init(&key);
+            honch_status_t status = honch_json_decode_key(parser, &key);
             bool include = status == HONCH_OK && memchr(key.data, '\0', key.length) == NULL &&
                 (!filter_reserved || !honch_property_key_is_reserved(key.data));
-            honch_buffer_free(&key);
+            honch_cbor_key_free(&key);
             if (status != HONCH_OK) {
                 return status;
             }
@@ -518,18 +620,15 @@ static honch_status_t honch_json_to_cbor_object(
             break;
         }
 
-        honch_buffer_t key;
-        status = honch_buffer_init(&key, 32u);
-        if (status != HONCH_OK) {
-            return status;
-        }
-        status = honch_json_decode_string(parser, &key);
+        honch_cbor_key_t key;
+        honch_cbor_key_init(&key);
+        status = honch_json_decode_key(parser, &key);
         bool include = status == HONCH_OK && memchr(key.data, '\0', key.length) == NULL &&
             (!filter_reserved || !honch_property_key_is_reserved(key.data));
         if (status == HONCH_OK && include && buffer != NULL) {
             status = honch_cbor_append_text_n(buffer, key.data, key.length);
         }
-        honch_buffer_free(&key);
+        honch_cbor_key_free(&key);
         if (status != HONCH_OK) {
             return status;
         }
