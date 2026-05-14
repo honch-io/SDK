@@ -1,0 +1,43 @@
+# OS/editor files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build outputs
+build/
+build-*/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+compile_commands.json
+
+# Compiled artifacts
+*.o
+*.obj
+*.a
+*.dylib
+*.so
+*.dll
+*.exe
+*.elf
+*.bin
+*.map
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Logs/temp files
+*.log
+*.tmp
+
+# Local Honch SDK queues/state created by examples and smoke tests
+.honch-*/
+
+# Local agent instructions
+c-core/AGENTS.md

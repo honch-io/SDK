@@ -1,0 +1,106 @@
+#include "honch/honch.h"
+
+#include <stdlib.h>
+#include <stdio.h>
+
+static const char *env_or_default(const char *name, const char *fallback)
+{
+    const char *value = getenv(name);
+    if (value != NULL && value[0] != '\0') {
+        return value;
+    }
+    return fallback;
+}
+
+static const char *required_env(const char *name)
+{
+    const char *value = getenv(name);
+    if (value == NULL || value[0] == '\0') {
+        return NULL;
+    }
+    return value;
+}
+
+static int send_event(honch_client_t *client, const char *name, const char *properties_json)
+{
+    printf("camera: %s\n", name);
+    honch_status_t status = honch_track(client, name, properties_json);
+    if (status != HONCH_OK) {
+        fprintf(stderr, "honch_track(%s) failed: %s\n", name, honch_status_string(status));
+        return 1;
+    }
+    return 0;
+}
+
+int main(void)
+{
+    const char *api_key = required_env("HONCH_API_KEY");
+    const char *endpoint_url = env_or_default("HONCH_CAPTURE_ENDPOINT", "http://127.0.0.1:8001");
+
+    if (api_key == NULL) {
+        fprintf(stderr, "HONCH_API_KEY is required.\n");
+        return 1;
+    }
+
+    honch_config_t config = {
+        .api_key = api_key,
+        .endpoint_url = endpoint_url,
+        .device_id = NULL,
+        .device_model = "ActionCam X1",
+        .firmware_version = "1.2.3-dev",
+        .environment = "dev",
+        .queue_directory = ".honch-connected-camera-queue",
+        .batch_size = 10u,
+        .max_queued_events = 100u,
+        .max_event_bytes = 8192u,
+        .transport_timeout_ms = 10000u
+    };
+
+    honch_client_t *client = NULL;
+    honch_status_t status = honch_init(&client, &config);
+    if (status != HONCH_OK) {
+        fprintf(stderr, "honch_init failed: %s\n", honch_status_string(status));
+        return 1;
+    }
+
+    printf("camera: boot\n");
+
+    status = honch_identify(client, "user-camera-demo-001", "{\"plan\":\"field_trial\"}");
+    if (status == HONCH_OK) {
+        status = honch_session_start(client, "recording");
+    }
+    if (status == HONCH_OK) {
+        status = honch_set_property(client, "$firmware_channel", "\"beta\"");
+    }
+    if (status != HONCH_OK) {
+        fprintf(stderr, "camera setup failed: %s\n", honch_status_string(status));
+        honch_shutdown(client);
+        return 1;
+    }
+
+    if (send_event(client, "device_powered_on", "{\"battery_level\":87}") != 0 ||
+        send_event(client, "recording_started", "{\"mode\":\"hdr\",\"resolution\":\"4k\",\"fps\":60}") != 0 ||
+        send_event(client, "recording_stopped", "{\"duration_seconds\":42,\"storage_used_mb\":512}") != 0 ||
+        send_event(client, "battery_warning", "{\"battery_level\":12}") != 0) {
+        honch_shutdown(client);
+        return 1;
+    }
+
+    status = honch_session_end(client);
+    if (status != HONCH_OK) {
+        fprintf(stderr, "honch_session_end failed: %s\n", honch_status_string(status));
+        honch_shutdown(client);
+        return 1;
+    }
+
+    status = honch_flush(client);
+    if (status != HONCH_OK) {
+        fprintf(stderr, "honch_flush failed: %s\n", honch_status_string(status));
+        honch_shutdown(client);
+        return 1;
+    }
+
+    printf("camera: sent demo events successfully\n");
+    honch_shutdown(client);
+    return 0;
+}
