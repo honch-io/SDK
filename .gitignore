@@ -45,6 +45,11 @@ __pycache__/
 *.log
 *.tmp
 
+# Benchmark outputs
+c-core/bench/*.csv
+c-core/bench/massif.out
+c-core/bench/massif.txt
+
 # Local Honch SDK queues/state created by examples and smoke tests
 .honch-*/
 
