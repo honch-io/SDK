@@ -1194,6 +1194,44 @@ static void test_cbor_encoding_preserves_json_string_escapes(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_cbor_encoding_handles_escaped_and_long_object_keys(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+
+    char long_key[150];
+    memset(long_key, 'k', sizeof(long_key));
+    long_key[sizeof(long_key) - 1u] = '\0';
+
+    char properties[420];
+    snprintf(
+        properties,
+        sizeof(properties),
+        "{\"\\u0024device_id\":\"spoofed-device\",\"bad\\u0000key\":\"hidden\",\"%s\":\"long-value\"}",
+        long_key);
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "key_regression_event", properties), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+
+    char expected_long_property[180];
+    snprintf(expected_long_property, sizeof(expected_long_property), "\"%s\":\"long-value\"", long_key);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"key_regression_event\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$device_id\":\"device-1\"");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "spoofed-device");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "hidden");
+    EXPECT_STR_CONTAINS(transport.last_payload, expected_long_property);
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
 static void test_background_flush_threshold_drains_queue(void)
 {
     char queue_dir[128];
@@ -1606,6 +1644,7 @@ int main(void)
     test_flush_dead_letters_invalid_persisted_queue_files();
     test_flush_dead_letters_semantically_invalid_cbor_event();
     test_cbor_encoding_preserves_json_string_escapes();
+    test_cbor_encoding_handles_escaped_and_long_object_keys();
     test_background_flush_threshold_drains_queue();
     test_background_flush_retries_with_backoff();
     test_background_flush_uses_esp_idf_default_threshold();
