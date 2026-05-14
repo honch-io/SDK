@@ -33,32 +33,28 @@ honch_status_t honch_queue_enqueue(honch_client_t *client, const unsigned char *
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    honch_file_list_t files = {0};
-    honch_status_t status = honch_list_queue_files(client, &files);
-    if (status != HONCH_OK) {
-        honch_file_list_free(&files);
-        return status;
-    }
-
-    while (files.count >= client->max_queued_events && files.count > 0u) {
-        status = honch_unlink_if_exists(files.items[0].path);
+    if (client->queued_event_count >= client->max_queued_events) {
+        honch_file_list_t files = {0};
+        honch_status_t status = honch_list_queue_files(client, &files);
         if (status != HONCH_OK) {
             honch_file_list_free(&files);
             return status;
         }
 
-        honch_file_list_free(&files);
-        files = (honch_file_list_t){0};
-        status = honch_list_queue_files(client, &files);
-        if (status != HONCH_OK) {
-            honch_file_list_free(&files);
-            return status;
+        client->queued_event_count = files.count;
+        for (size_t i = 0u; client->queued_event_count >= client->max_queued_events && i < files.count; i++) {
+            status = honch_unlink_if_exists(files.items[i].path);
+            if (status != HONCH_OK) {
+                honch_file_list_free(&files);
+                return status;
+            }
+            client->queued_event_count--;
         }
+        honch_file_list_free(&files);
     }
-    honch_file_list_free(&files);
 
     char event_id[33];
-    status = honch_random_hex(event_id);
+    honch_status_t status = honch_random_hex(event_id);
     if (status != HONCH_OK) {
         return status;
     }
@@ -72,7 +68,11 @@ honch_status_t honch_queue_enqueue(honch_client_t *client, const unsigned char *
         (unsigned long long)client->sequence++,
         event_id);
 
-    return honch_write_file_atomic_bytes(client->pending_directory, filename, event, event_size);
+    status = honch_write_file_atomic_bytes(client->pending_directory, filename, event, event_size);
+    if (status == HONCH_OK) {
+        client->queued_event_count++;
+    }
+    return status;
 }
 
 honch_status_t honch_queue_count_pending(honch_client_t *client, size_t *count)
@@ -115,6 +115,9 @@ honch_status_t honch_queue_clear(honch_client_t *client)
     if (status == HONCH_OK) {
         status = honch_delete_queue_directory(client->dead_directory);
     }
+    if (status == HONCH_OK) {
+        client->queued_event_count = 0u;
+    }
     return status;
 }
 
@@ -137,6 +140,9 @@ honch_status_t honch_queue_flush_locked(honch_client_t *client)
     for (;;) {
         honch_file_list_t files = {0};
         honch_status_t status = honch_list_queue_files(client, &files);
+        if (status == HONCH_OK) {
+            client->queued_event_count = files.count;
+        }
         if (status != HONCH_OK || files.count == 0u) {
             honch_file_list_free(&files);
             return status == HONCH_OK ? final_status : status;
@@ -148,6 +154,9 @@ honch_status_t honch_queue_flush_locked(honch_client_t *client)
         status = honch_encoder_build_batch_cbor(client, &files, count, &payload, &invalid_index);
         if (status == HONCH_ERROR_INVALID_ARGUMENT && invalid_index < count) {
             honch_status_t dead_status = honch_move_to_dead(client, &files.items[invalid_index]);
+            if (dead_status == HONCH_OK) {
+                client->queued_event_count = files.count > 0u ? files.count - 1u : 0u;
+            }
             honch_file_list_free(&files);
             if (dead_status != HONCH_OK) {
                 return dead_status;
@@ -166,6 +175,9 @@ honch_status_t honch_queue_flush_locked(honch_client_t *client)
 
         if (result == HONCH_HTTP_OK) {
             status = honch_delete_files(&files, count);
+            if (status == HONCH_OK) {
+                client->queued_event_count = files.count > count ? files.count - count : 0u;
+            }
             honch_file_list_free(&files);
             if (status != HONCH_OK) {
                 return status;
@@ -175,6 +187,9 @@ honch_status_t honch_queue_flush_locked(honch_client_t *client)
 
         if (result == HONCH_HTTP_REJECTED) {
             honch_status_t dead_status = honch_dead_letter_files(client, &files, count);
+            if (dead_status == HONCH_OK) {
+                client->queued_event_count = files.count > count ? files.count - count : 0u;
+            }
             honch_file_list_free(&files);
             return dead_status == HONCH_OK ? status : dead_status;
         }

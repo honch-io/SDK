@@ -440,9 +440,7 @@ static void honch_scheduler_notify_after_enqueue_locked(honch_client_t *client)
         return;
     }
 
-    size_t pending_count = 0u;
-    if (honch_queue_count_pending(client, &pending_count) == HONCH_OK &&
-        pending_count >= client->flush_event_threshold) {
+    if (client->queued_event_count >= client->flush_event_threshold) {
         client->scheduler_flush_requested = true;
         if (client->scheduler_started) {
             pthread_cond_signal(&client->scheduler_cond);
@@ -717,6 +715,9 @@ honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
     }
     if (status == HONCH_OK) {
         status = honch_state_prepare(next, config);
+    }
+    if (status == HONCH_OK) {
+        status = honch_queue_count_pending(next, &next->queued_event_count);
     }
     if (status == HONCH_OK && pthread_mutex_init(&next->mutex, NULL) != 0) {
         status = HONCH_ERROR_IO;
