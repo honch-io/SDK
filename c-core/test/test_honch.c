@@ -483,6 +483,11 @@ static void test_init_validation(void)
     config.firmware_version = "";
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_ERROR_INVALID_ARGUMENT);
     EXPECT_TRUE(client == NULL);
+
+    config = test_config(queue_dir);
+    config.durability_mode = (honch_durability_mode_t)99;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_TRUE(client == NULL);
 }
 
 static void test_esp_idf_status_aliases(void)
@@ -535,6 +540,31 @@ static void test_track_persists_event(void)
     EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 2);
 
     honch_shutdown(client);
+}
+
+static void test_os_buffered_durability_tracks_and_flushes_event(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.durability_mode = HONCH_DURABILITY_OS_BUFFERED;
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "fast_event", "{\"button\":\"power\"}"), HONCH_OK);
+
+    char pending_dir[160];
+    snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 2);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 0);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"fast_event\"");
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
 }
 
 static void test_strict_json_validation(void)
@@ -1663,6 +1693,7 @@ int main(void)
     test_esp_idf_status_aliases();
     test_shutdown_reports_status();
     test_track_persists_event();
+    test_os_buffered_durability_tracks_and_flushes_event();
     test_strict_json_validation();
     test_generated_device_id_persists();
     test_existing_invalid_state_path_fails_init();

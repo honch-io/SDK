@@ -36,6 +36,16 @@ class CCoreCborMigrationTest(unittest.TestCase):
         self.assertIn("size_t event_size", internal)
         self.assertNotIn("event_json", internal)
 
+    def test_queue_supports_configurable_durability_mode(self) -> None:
+        public = read("honch/include/honch/honch.h")
+        queue = read("honch/src/honch_queue.c")
+
+        self.assertIn("honch_durability_mode_t", public)
+        self.assertIn("durability_mode", public)
+        self.assertIn("HONCH_DURABILITY_SYNC_ALWAYS", public)
+        self.assertIn("HONCH_DURABILITY_OS_BUFFERED", public)
+        self.assertIn("client->durability_mode", queue)
+
     def test_encoder_builds_cbor_epoch_millis_payloads(self) -> None:
         encoder = read("honch/src/honch_encoder.c")
         honch = read("honch/src/honch.c")
