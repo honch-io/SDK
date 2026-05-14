@@ -1,13 +1,15 @@
 # Honch SDKs
 
-Product analytics for connected hardware. Pick your platform.
+Product analytics for connected hardware. This repository contains the shared
+SDK contract plus platform SDKs for embedded and connected-device targets.
 
 ## Available SDKs
 
 | Platform | Status | Path |
 |----------|--------|------|
 | **ESP-IDF** | v0.1.0 | [`esp-idf/`](esp-idf/) |
-| **C/POSIX** | in development | [`c-core/`](c-core/) |
+| **C/POSIX** | v0.1.0 | [`c-core/`](c-core/) |
+| **MicroPython** | v0.1.0 | [`micropython/`](micropython/) |
 
 ## Spec
 
@@ -17,8 +19,6 @@ The [`spec/`](spec/) directory defines the cross-platform contract that all SDKs
 - [Auto Properties](spec/auto-properties.md) — required properties, lifecycle events
 - [Relay Envelope](spec/relay-envelope.md) — (future) gateway forwarding format
 - [Conformance Fixtures](spec/conformance/) — shared test data for cross-SDK validation
-
-The ESP-IDF and C/POSIX SDKs send CBOR ingest payloads to Capture.
 
 ## Adding a new SDK
 
