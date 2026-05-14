@@ -90,6 +90,7 @@ struct honch_client {
     void *auto_properties_userdata;
     bool battery_low_emitted;
     uint64_t sequence;
+    size_t queued_event_count;
 };
 
 bool honch_is_blank(const char *value);
