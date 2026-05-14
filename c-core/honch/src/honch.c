@@ -223,6 +223,75 @@ static honch_status_t honch_build_property_pairs(
     return status;
 }
 
+static size_t honch_cbor_map_header_encode(size_t count, char out[9])
+{
+    uint64_t value = (uint64_t)count;
+    if (value < 24u) {
+        out[0] = (char)(0xa0u | value);
+        return 1u;
+    }
+    if (value <= UINT8_MAX) {
+        out[0] = (char)(0xa0u | 24u);
+        out[1] = (char)value;
+        return 2u;
+    }
+    if (value <= UINT16_MAX) {
+        out[0] = (char)(0xa0u | 25u);
+        out[1] = (char)(value >> 8);
+        out[2] = (char)value;
+        return 3u;
+    }
+    if (value <= UINT32_MAX) {
+        out[0] = (char)(0xa0u | 26u);
+        out[1] = (char)(value >> 24);
+        out[2] = (char)(value >> 16);
+        out[3] = (char)(value >> 8);
+        out[4] = (char)value;
+        return 5u;
+    }
+
+    out[0] = (char)(0xa0u | 27u);
+    out[1] = (char)(value >> 56);
+    out[2] = (char)(value >> 48);
+    out[3] = (char)(value >> 40);
+    out[4] = (char)(value >> 32);
+    out[5] = (char)(value >> 24);
+    out[6] = (char)(value >> 16);
+    out[7] = (char)(value >> 8);
+    out[8] = (char)value;
+    return 9u;
+}
+
+static honch_status_t honch_cbor_patch_map_header(honch_buffer_t *buffer, size_t offset, size_t body_offset, size_t count)
+{
+    char header[9];
+    size_t header_length = honch_cbor_map_header_encode(count, header);
+    size_t reserved_length = body_offset - offset;
+    if (header_length > reserved_length) {
+        size_t extra = header_length - reserved_length;
+        size_t needed = 0u;
+        honch_status_t status = honch_size_add3(buffer->length, extra, 1u, &needed);
+        if (status != HONCH_OK) {
+            return status;
+        }
+        status = honch_buffer_reserve(buffer, needed);
+        if (status != HONCH_OK) {
+            return status;
+        }
+        size_t body_length = buffer->length - body_offset;
+        memmove(buffer->data + body_offset + extra, buffer->data + body_offset, body_length);
+        buffer->length += extra;
+        buffer->data[buffer->length] = '\0';
+    } else if (header_length < reserved_length) {
+        size_t body_length = buffer->length - body_offset;
+        memmove(buffer->data + offset + header_length, buffer->data + body_offset, body_length);
+        buffer->length -= reserved_length - header_length;
+        buffer->data[buffer->length] = '\0';
+    }
+    memcpy(buffer->data + offset, header, header_length);
+    return HONCH_OK;
+}
+
 static honch_status_t honch_build_event(
     honch_client_t *client,
     const char *event_name,
@@ -239,15 +308,6 @@ static honch_status_t honch_build_event(
         return status;
     }
 
-    honch_buffer_t properties;
-    status = honch_buffer_init(&properties, 512u);
-    if (status != HONCH_OK) {
-        honch_buffer_free(&buffer);
-        return status;
-    }
-
-    size_t property_count = 0u;
-    status = honch_build_property_pairs(client, &properties, &property_count, properties_json, battery_level);
     if (status == HONCH_OK) {
         status = honch_cbor_append_map(&buffer, 4u);
     }
@@ -272,11 +332,19 @@ static honch_status_t honch_build_event(
     if (status == HONCH_OK) {
         status = honch_cbor_append_text(&buffer, "properties");
     }
+
+    size_t property_map_offset = buffer.length;
+    char property_map_placeholder = 0;
     if (status == HONCH_OK) {
-        status = honch_cbor_append_map(&buffer, property_count);
+        status = honch_buffer_append_n(&buffer, &property_map_placeholder, 1u);
+    }
+    size_t property_body_offset = buffer.length;
+    size_t property_count = 0u;
+    if (status == HONCH_OK) {
+        status = honch_build_property_pairs(client, &buffer, &property_count, properties_json, battery_level);
     }
     if (status == HONCH_OK) {
-        status = honch_buffer_append_n(&buffer, properties.data, properties.length);
+        status = honch_cbor_patch_map_header(&buffer, property_map_offset, property_body_offset, property_count);
     }
 
     if (status == HONCH_OK && buffer.length > client->max_event_bytes) {
@@ -284,14 +352,12 @@ static honch_status_t honch_build_event(
     }
 
     if (status != HONCH_OK) {
-        honch_buffer_free(&properties);
         honch_buffer_free(&buffer);
         return status;
     }
 
     out->data = (unsigned char *)buffer.data;
     out->length = buffer.length;
-    honch_buffer_free(&properties);
     return HONCH_OK;
 }
 
