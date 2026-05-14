@@ -5,6 +5,7 @@ project(honch_c_core C)
 option(HONCH_BUILD_TESTS "Build Honch C/POSIX SDK tests" ON)
 option(HONCH_BUILD_EXAMPLES "Build Honch C/POSIX SDK examples" ON)
 option(HONCH_BUILD_E2E "Build Honch C/POSIX SDK real ingest E2E test" OFF)
+option(HONCH_BUILD_BENCHMARKS "Build Honch C/POSIX SDK benchmarks" OFF)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -54,9 +55,18 @@ target_compile_options(honch_c_core PRIVATE
     $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
 )
 
-if(HONCH_BUILD_TESTS)
+if(HONCH_BUILD_TESTS OR HONCH_BUILD_BENCHMARKS)
     target_compile_definitions(honch_c_core PRIVATE HONCH_TESTING)
+endif()
 
+if(HONCH_BUILD_BENCHMARKS)
+    target_compile_options(honch_c_core PRIVATE
+        -include
+        ${CMAKE_CURRENT_SOURCE_DIR}/bench/honch_bench_alloc.h
+    )
+endif()
+
+if(HONCH_BUILD_TESTS)
     add_executable(honch_c_core_tests
         test/test_honch.c
     )
@@ -102,4 +112,8 @@ if(HONCH_BUILD_EXAMPLES)
     add_subdirectory(example/posix_device)
     add_subdirectory(example/connected_camera)
     add_subdirectory(example/posix_gpio)
+endif()
+
+if(HONCH_BUILD_BENCHMARKS)
+    add_subdirectory(bench)
 endif()
