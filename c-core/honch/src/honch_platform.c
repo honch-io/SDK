@@ -388,11 +388,12 @@ static honch_status_t honch_fsync_directory(const char *directory)
     return status;
 }
 
-honch_status_t honch_write_file_atomic_bytes(
+honch_status_t honch_write_file_atomic_bytes_with_durability(
     const char *directory,
     const char *filename,
     const unsigned char *content,
-    size_t content_size)
+    size_t content_size,
+    honch_durability_mode_t durability_mode)
 {
     char *tmp_name = NULL;
     char *tmp_path = NULL;
@@ -428,7 +429,7 @@ honch_status_t honch_write_file_atomic_bytes(
                 status = HONCH_ERROR_IO;
             }
             int fd = fileno(file);
-            if (fd >= 0 && fsync(fd) != 0) {
+            if (durability_mode == HONCH_DURABILITY_SYNC_ALWAYS && fd >= 0 && fsync(fd) != 0) {
                 status = HONCH_ERROR_IO;
             }
             if (fclose(file) != 0) {
@@ -440,7 +441,7 @@ honch_status_t honch_write_file_atomic_bytes(
     if (status == HONCH_OK && rename(tmp_path, final_path) != 0) {
         status = HONCH_ERROR_IO;
     }
-    if (status == HONCH_OK) {
+    if (status == HONCH_OK && durability_mode == HONCH_DURABILITY_SYNC_ALWAYS) {
         status = honch_fsync_directory(directory);
     }
 
@@ -452,6 +453,20 @@ honch_status_t honch_write_file_atomic_bytes(
     free(tmp_path);
     free(final_path);
     return status;
+}
+
+honch_status_t honch_write_file_atomic_bytes(
+    const char *directory,
+    const char *filename,
+    const unsigned char *content,
+    size_t content_size)
+{
+    return honch_write_file_atomic_bytes_with_durability(
+        directory,
+        filename,
+        content,
+        content_size,
+        HONCH_DURABILITY_SYNC_ALWAYS);
 }
 
 honch_status_t honch_write_file_atomic(const char *directory, const char *filename, const char *content)
