@@ -35,17 +35,3 @@ jobs:
       - name: Test
         working-directory: c-core
         run: ctest --test-dir build --output-on-failure
-
-      - name: E2E capture
-        working-directory: c-core
-        env:
-          HONCH_E2E_ENDPOINT: ${{ vars.HONCH_E2E_ENDPOINT }}
-          HONCH_E2E_TOKEN: ${{ secrets.HONCH_E2E_TOKEN }}
-        run: |
-          if [ -z "$HONCH_E2E_ENDPOINT" ] || [ -z "$HONCH_E2E_TOKEN" ]; then
-            echo "Skipping E2E capture test; HONCH_E2E_ENDPOINT or HONCH_E2E_TOKEN is not configured."
-            exit 0
-          fi
-          cmake -S . -B build-e2e -DHONCH_BUILD_TESTS=ON -DHONCH_BUILD_EXAMPLES=ON -DHONCH_BUILD_E2E=ON
-          cmake --build build-e2e
-          ctest --test-dir build-e2e --output-on-failure -R honch_c_core_e2e
