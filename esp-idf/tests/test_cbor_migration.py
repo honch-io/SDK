@@ -72,6 +72,29 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertLess(example.index("sync_time();"), example.index("honch_init(&config)"))
         self.assertIn('honch_track("heartbeat"', example)
 
+    def test_benchtest_app_exercises_sdk_performance_paths(self) -> None:
+        cmake = read("esp-idf/benchtest/CMakeLists.txt")
+        kconfig = read("esp-idf/benchtest/main/Kconfig.projbuild")
+        bench = read("esp-idf/benchtest/main/app_main.c")
+
+        self.assertIn('project(honch_benchtest)', cmake)
+        self.assertIn('config BENCH_EVENT_COUNT', kconfig)
+        self.assertIn('config BENCH_FLUSH_EVERY', kconfig)
+        for marker in (
+            'BENCH_RUN_START',
+            'BENCH_TRACK_SUMMARY',
+            'BENCH_FLUSH_SUMMARY',
+            'BENCH_RESOURCE_SUMMARY',
+            'BENCH_RUN_END',
+        ):
+            self.assertIn(marker, bench)
+        self.assertIn("#include \"esp_sntp.h\"", bench)
+        self.assertIn("esp_wifi_sta_get_ap_info", bench)
+        self.assertIn("uxTaskGetStackHighWaterMark", bench)
+        self.assertIn('honch_track("bench_event"', bench)
+        self.assertIn("honch_flush()", bench)
+        self.assertIn("queued_estimate", bench)
+
     def test_encoder_builds_cbor_epoch_millis_payloads(self) -> None:
         encoder = read("esp-idf/honch/src/encoder.c")
         encoder_header = read("esp-idf/honch/src/encoder.h")
