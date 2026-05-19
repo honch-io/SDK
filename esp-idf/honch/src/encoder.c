@@ -13,6 +13,7 @@
 #include "cJSON.h"
 #include "cbor.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "esp_wifi.h"
 
 static const char *TAG = "honch";
@@ -35,8 +36,17 @@ typedef struct {
     const char *event_name;
     const char *distinct_id;
     int64_t timestamp;
-    const cJSON *properties;
+    const cJSON *user_properties;
+    const honch_event_runtime_t *runtime;
 } honch_event_encode_ctx_t;
+
+typedef struct {
+    bool valid;
+    int rssi;
+    int64_t updated_us;
+} honch_wifi_rssi_cache_t;
+
+static honch_wifi_rssi_cache_t s_wifi_rssi_cache = {0};
 
 static int64_t timestamp_millis(void)
 {
@@ -53,6 +63,42 @@ void honch_payload_free(honch_payload_t *payload)
     free(payload->data);
     payload->data = NULL;
     payload->len = 0;
+}
+
+void honch_event_runtime_collect(honch_event_runtime_t *runtime)
+{
+    if (!runtime) {
+        return;
+    }
+
+    memset(runtime, 0, sizeof(*runtime));
+
+    if (g_honch_battery_callback) {
+        int level = g_honch_battery_callback();
+        if (level >= 0) {
+            runtime->battery_known = true;
+            runtime->battery_level = level;
+        }
+    }
+
+    int64_t now_us = esp_timer_get_time();
+    int64_t cache_ms = CONFIG_HONCH_WIFI_RSSI_CACHE_MS;
+    if (cache_ms > 0 && s_wifi_rssi_cache.valid &&
+        (now_us - s_wifi_rssi_cache.updated_us) <= (cache_ms * 1000)) {
+        runtime->wifi_rssi_known = true;
+        runtime->wifi_rssi = s_wifi_rssi_cache.rssi;
+        runtime->wifi_rssi_cache_hit = true;
+        return;
+    }
+
+    wifi_ap_record_t ap_info;
+    if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
+        s_wifi_rssi_cache.valid = true;
+        s_wifi_rssi_cache.rssi = ap_info.rssi;
+        s_wifi_rssi_cache.updated_us = now_us;
+        runtime->wifi_rssi_known = true;
+        runtime->wifi_rssi = ap_info.rssi;
+    }
 }
 
 static honch_err_t buffer_init(honch_buffer_t *buffer, size_t capacity)
@@ -271,101 +317,166 @@ static CborError encode_cjson_value(CborEncoder *encoder, const cJSON *value)
     return cbor_encode_null(encoder);
 }
 
-static cJSON *build_properties(const char *properties_json)
+#define HONCH_RESERVED_PROPERTY_COUNT 9
+
+static const char *s_reserved_properties[HONCH_RESERVED_PROPERTY_COUNT] = {
+    "$device_id",
+    "$device_model",
+    "$firmware_version",
+    "$sdk_platform",
+    "$sdk_version",
+    "$environment",
+    "$session_id",
+    "$battery_level",
+    "$wifi_rssi",
+};
+
+static bool is_reserved_property(const char *key)
 {
-    int64_t total_start_us = HONCH_PERF_NOW_US();
-    int64_t user_parse_us = 0;
-    int64_t user_merge_us = 0;
-    uint32_t heap_before = HONCH_PERF_HEAP_FREE();
-
-    cJSON *props = cJSON_CreateObject();
-    if (!props) {
-        return NULL;
+    if (!key) {
+        return false;
     }
 
-    if (properties_json && strlen(properties_json) > 0) {
-        int64_t user_parse_start_us = HONCH_PERF_NOW_US();
-        cJSON *user_props = cJSON_Parse(properties_json);
-        user_parse_us = HONCH_PERF_ELAPSED_US(user_parse_start_us);
-        if (user_props && cJSON_IsObject(user_props)) {
-            int64_t user_merge_start_us = HONCH_PERF_NOW_US();
-            for (cJSON *item = user_props->child; item; item = item->next) {
-                if (!item->string) {
-                    continue;
-                }
-                cJSON *copy = cJSON_Duplicate(item, true);
-                if (!copy) {
-                    cJSON_Delete(user_props);
-                    cJSON_Delete(props);
-                    return NULL;
-                }
-                cJSON_DeleteItemFromObject(props, item->string);
-                cJSON_AddItemToObject(props, item->string, copy);
-            }
-            user_merge_us = HONCH_PERF_ELAPSED_US(user_merge_start_us);
-        } else if (user_props) {
-            ESP_LOGW(TAG, "properties_json must be an object, ignoring user properties");
-        } else {
-            ESP_LOGW(TAG, "Failed to parse properties_json, ignoring user properties");
+    for (size_t i = 0; i < HONCH_RESERVED_PROPERTY_COUNT; i++) {
+        if (strcmp(key, s_reserved_properties[i]) == 0) {
+            return true;
         }
-        cJSON_Delete(user_props);
+    }
+    return false;
+}
+
+static size_t count_user_properties_without_reserved_keys(const cJSON *user_properties)
+{
+    size_t count = 0;
+    if (!user_properties || !cJSON_IsObject(user_properties)) {
+        return 0;
     }
 
-    int64_t sdk_enrich_start_us = HONCH_PERF_NOW_US();
+    for (const cJSON *item = user_properties->child; item; item = item->next) {
+        if (item->string && !is_reserved_property(item->string)) {
+            count++;
+        }
+    }
+    return count;
+}
 
+static size_t sdk_property_count(const honch_event_runtime_t *runtime)
+{
+    size_t count = 6;
+    if (honch_identity_get_session_id()) {
+        count++;
+    }
+    if (runtime && runtime->battery_known) {
+        count++;
+    }
+    if (runtime && runtime->wifi_rssi_known) {
+        count++;
+    }
+    return count;
+}
+
+static CborError encode_text_property(CborEncoder *encoder, const char *key, const char *value)
+{
+    CborError err = cbor_encode_text_stringz(encoder, key);
+    if (err != CborNoError) {
+        return err;
+    }
+    return cbor_encode_text_stringz(encoder, value ? value : "");
+}
+
+static CborError encode_int_property(CborEncoder *encoder, const char *key, int value)
+{
+    CborError err = cbor_encode_text_stringz(encoder, key);
+    if (err != CborNoError) {
+        return err;
+    }
+    return cbor_encode_int(encoder, value);
+}
+
+static CborError encode_user_properties_without_reserved_keys(CborEncoder *encoder,
+                                                              const cJSON *user_properties)
+{
+    if (!user_properties || !cJSON_IsObject(user_properties)) {
+        return CborNoError;
+    }
+
+    for (const cJSON *item = user_properties->child; item; item = item->next) {
+        if (!item->string || is_reserved_property(item->string)) {
+            continue;
+        }
+
+        CborError err = cbor_encode_text_stringz(encoder, item->string);
+        if (err != CborNoError) {
+            return err;
+        }
+        err = encode_cjson_value(encoder, item);
+        if (err != CborNoError) {
+            return err;
+        }
+    }
+    return CborNoError;
+}
+
+static CborError encode_sdk_properties(CborEncoder *encoder,
+                                       const honch_event_runtime_t *runtime)
+{
     const char *device_id = honch_identity_get_device_id();
-    cJSON_DeleteItemFromObject(props, "$device_id");
-    cJSON_AddStringToObject(props, "$device_id", device_id ? device_id : "");
-
-    cJSON_DeleteItemFromObject(props, "$device_model");
-    cJSON_AddStringToObject(props, "$device_model", g_honch_device_model ? g_honch_device_model : "");
-
-    cJSON_DeleteItemFromObject(props, "$firmware_version");
-    cJSON_AddStringToObject(props, "$firmware_version",
-                            g_honch_firmware_version ? g_honch_firmware_version : "");
-
-    cJSON_DeleteItemFromObject(props, "$sdk_platform");
-    cJSON_AddStringToObject(props, "$sdk_platform", "esp-idf");
-
-    cJSON_DeleteItemFromObject(props, "$sdk_version");
-    cJSON_AddStringToObject(props, "$sdk_version", "0.1.0");
-
-    cJSON_DeleteItemFromObject(props, "$environment");
-    cJSON_AddStringToObject(props, "$environment", g_honch_environment ? g_honch_environment : "production");
+    CborError err = encode_text_property(encoder, "$device_id", device_id ? device_id : "");
+    if (err == CborNoError) {
+        err = encode_text_property(encoder, "$device_model",
+                                   g_honch_device_model ? g_honch_device_model : "");
+    }
+    if (err == CborNoError) {
+        err = encode_text_property(encoder, "$firmware_version",
+                                   g_honch_firmware_version ? g_honch_firmware_version : "");
+    }
+    if (err == CborNoError) {
+        err = encode_text_property(encoder, "$sdk_platform", "esp-idf");
+    }
+    if (err == CborNoError) {
+        err = encode_text_property(encoder, "$sdk_version", "0.1.0");
+    }
+    if (err == CborNoError) {
+        err = encode_text_property(encoder, "$environment",
+                                   g_honch_environment ? g_honch_environment : "production");
+    }
 
     const char *session_id = honch_identity_get_session_id();
-    if (session_id) {
-        cJSON_DeleteItemFromObject(props, "$session_id");
-        cJSON_AddStringToObject(props, "$session_id", session_id);
+    if (err == CborNoError && session_id) {
+        err = encode_text_property(encoder, "$session_id", session_id);
+    }
+    if (err == CborNoError && runtime && runtime->battery_known) {
+        err = encode_int_property(encoder, "$battery_level", runtime->battery_level);
+    }
+    if (err == CborNoError && runtime && runtime->wifi_rssi_known) {
+        err = encode_int_property(encoder, "$wifi_rssi", runtime->wifi_rssi);
     }
 
-    if (g_honch_battery_callback) {
-        int level = g_honch_battery_callback();
-        if (level >= 0) {
-            cJSON_DeleteItemFromObject(props, "$battery_level");
-            cJSON_AddNumberToObject(props, "$battery_level", level);
-        }
+    return err;
+}
+
+static CborError encode_properties_map(CborEncoder *encoder,
+                                       const cJSON *user_properties,
+                                       const honch_event_runtime_t *runtime)
+{
+    size_t user_count = count_user_properties_without_reserved_keys(user_properties);
+    size_t sdk_count = sdk_property_count(runtime);
+
+    CborEncoder map_encoder;
+    CborError err = cbor_encoder_create_map(encoder, &map_encoder, user_count + sdk_count);
+    if (err != CborNoError) {
+        return err;
     }
 
-    wifi_ap_record_t ap_info;
-    if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
-        cJSON_DeleteItemFromObject(props, "$wifi_rssi");
-        cJSON_AddNumberToObject(props, "$wifi_rssi", ap_info.rssi);
+    err = encode_user_properties_without_reserved_keys(&map_encoder, user_properties);
+    if (err == CborNoError) {
+        err = encode_sdk_properties(&map_encoder, runtime);
+    }
+    if (err != CborNoError) {
+        return err;
     }
 
-    HONCH_PERF_LOG("HONCH_PERF_PROPERTIES",
-                   "total_us=%" PRId64 " user_parse_us=%" PRId64
-                   " user_merge_us=%" PRId64 " sdk_enrich_us=%" PRId64
-                   " prop_count=%u heap_before=%" PRIu32 " heap_after=%" PRIu32,
-                   HONCH_PERF_ELAPSED_US(total_start_us),
-                   user_parse_us,
-                   user_merge_us,
-                   HONCH_PERF_ELAPSED_US(sdk_enrich_start_us),
-                   (unsigned)cjson_child_count(props),
-                   heap_before,
-                   HONCH_PERF_HEAP_FREE());
-
-    return props;
+    return cbor_encoder_close_container(encoder, &map_encoder);
 }
 
 static CborError encode_event_to_cbor(CborEncoder *encoder, void *userdata)
@@ -398,7 +509,7 @@ static CborError encode_event_to_cbor(CborEncoder *encoder, void *userdata)
         err = cbor_encode_text_stringz(&map_encoder, "properties");
     }
     if (err == CborNoError) {
-        err = encode_cjson_object(&map_encoder, ctx->properties);
+        err = encode_properties_map(&map_encoder, ctx->user_properties, ctx->runtime);
     }
     if (err != CborNoError) {
         return err;
@@ -452,6 +563,7 @@ static honch_err_t encode_with_retry(CborError (*encode_fn)(CborEncoder *, void 
 honch_err_t honch_encode_event(const char *event_name,
                                const char *distinct_id,
                                const char *properties_json,
+                               const honch_event_runtime_t *runtime,
                                honch_payload_t *out)
 {
     int64_t total_start_us = HONCH_PERF_NOW_US();
@@ -465,23 +577,52 @@ honch_err_t honch_encode_event(const char *event_name,
     out->len = 0;
 
     int64_t properties_start_us = HONCH_PERF_NOW_US();
-    cJSON *properties = build_properties(properties_json);
-    int64_t properties_us = HONCH_PERF_ELAPSED_US(properties_start_us);
-    if (!properties) {
-        return HONCH_ERR_NO_MEM;
+    int64_t user_parse_us = 0;
+    cJSON *user_properties = NULL;
+    size_t user_prop_count = 0;
+
+    if (properties_json && strlen(properties_json) > 0) {
+        int64_t user_parse_start_us = HONCH_PERF_NOW_US();
+        user_properties = cJSON_Parse(properties_json);
+        user_parse_us = HONCH_PERF_ELAPSED_US(user_parse_start_us);
+        if (user_properties && cJSON_IsObject(user_properties)) {
+            user_prop_count = count_user_properties_without_reserved_keys(user_properties);
+        } else if (user_properties) {
+            ESP_LOGW(TAG, "properties_json must be an object, ignoring user properties");
+            cJSON_Delete(user_properties);
+            user_properties = NULL;
+        } else {
+            ESP_LOGW(TAG, "Failed to parse properties_json, ignoring user properties");
+        }
     }
+
+    int64_t properties_us = HONCH_PERF_ELAPSED_US(properties_start_us);
+    size_t sdk_prop_count = sdk_property_count(runtime);
+
+    HONCH_PERF_LOG("HONCH_PERF_PROPERTIES",
+                   "total_us=%" PRId64 " user_parse_us=%" PRId64
+                   " user_prop_count=%u sdk_prop_count=%u rssi_cache_hit=%d"
+                   " heap_before=%" PRIu32 " heap_after=%" PRIu32,
+                   properties_us,
+                   user_parse_us,
+                   (unsigned)user_prop_count,
+                   (unsigned)sdk_prop_count,
+                   runtime && runtime->wifi_rssi_cache_hit ? 1 : 0,
+                   heap_before,
+                   HONCH_PERF_HEAP_FREE());
 
     honch_event_encode_ctx_t ctx = {
         .event_name = event_name,
         .distinct_id = distinct_id,
         .timestamp = timestamp_millis(),
-        .properties = properties,
+        .user_properties = user_properties,
+        .runtime = runtime,
     };
 
     int64_t cbor_start_us = HONCH_PERF_NOW_US();
     honch_err_t err = encode_with_retry(encode_event_to_cbor, &ctx, out);
     int64_t cbor_us = HONCH_PERF_ELAPSED_US(cbor_start_us);
-    cJSON_Delete(properties);
+    cJSON_Delete(user_properties);
 
 #ifdef CONFIG_HONCH_LOG_VERBOSE
     if (err == HONCH_OK) {
