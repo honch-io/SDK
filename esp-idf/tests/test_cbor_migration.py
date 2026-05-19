@@ -97,6 +97,20 @@ class EspIdfCborMigrationTest(unittest.TestCase):
             queue.index('err = nvs_append_payload(payload->data, payload->len, "ram_full");'),
         )
 
+    def test_encoder_directly_encodes_properties_without_cjson_merge(self) -> None:
+        encoder = read("esp-idf/honch/src/encoder.c")
+        kconfig = read("esp-idf/honch/Kconfig")
+
+        self.assertIn("HONCH_WIFI_RSSI_CACHE_MS", kconfig)
+        self.assertIn("honch_event_runtime_t", encoder)
+        self.assertIn("encode_properties_map", encoder)
+        self.assertIn("encode_user_properties_without_reserved_keys", encoder)
+        self.assertIn("HONCH_RESERVED_PROPERTY_COUNT", encoder)
+        self.assertNotIn("cJSON_Duplicate", encoder)
+        self.assertNotIn("cJSON_AddStringToObject", encoder)
+        self.assertNotIn("cJSON_AddNumberToObject", encoder)
+        self.assertNotIn("cJSON_DeleteItemFromObject", encoder)
+
     def test_transport_treats_bad_requests_as_non_retryable(self) -> None:
         transport = read("esp-idf/honch/src/transport.c")
 

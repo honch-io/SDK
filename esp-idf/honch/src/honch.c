@@ -211,9 +211,11 @@ honch_err_t honch_track(const char *event, const char *properties_json)
     xSemaphoreTake(s_api_mutex, portMAX_DELAY);
 
     const char *distinct_id = honch_identity_get_distinct_id();
+    honch_event_runtime_t runtime = {0};
+    honch_event_runtime_collect(&runtime);
     honch_payload_t encoded = {0};
     int64_t encode_start_us = HONCH_PERF_NOW_US();
-    honch_err_t encode_err = honch_encode_event(event, distinct_id, properties_json, &encoded);
+    honch_err_t encode_err = honch_encode_event(event, distinct_id, properties_json, &runtime, &encoded);
     int64_t encode_us = HONCH_PERF_ELAPSED_US(encode_start_us);
     size_t encoded_len = encoded.len;
 
@@ -239,9 +241,8 @@ honch_err_t honch_track(const char *event, const char *properties_json)
 
     if (err == HONCH_OK) {
         // Check battery while we're at it
-        if (g_honch_battery_callback) {
-            int level = g_honch_battery_callback();
-            honch_lifecycle_check_battery(level);
+        if (runtime.battery_known) {
+            honch_lifecycle_check_battery(runtime.battery_level);
         }
 
         // Notify worker if threshold crossed
