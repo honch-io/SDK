@@ -5,15 +5,11 @@ on:
     paths:
       - 'micropython/**'
       - 'spec/**'
-      - 'sdks/micropython/**'
-      - 'sdks/spec/**'
       - '.github/workflows/micropython.yml'
   pull_request:
     paths:
       - 'micropython/**'
       - 'spec/**'
-      - 'sdks/micropython/**'
-      - 'sdks/spec/**'
       - '.github/workflows/micropython.yml'
 
 jobs:

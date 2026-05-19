@@ -9,7 +9,9 @@
 #include "scheduler.h"
 #include "gpio.h"
 #include "lifecycle.h"
+#include "perf.h"
 
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include "esp_log.h"
@@ -196,6 +198,9 @@ honch_err_t honch_shutdown(void)
 
 honch_err_t honch_track(const char *event, const char *properties_json)
 {
+    int64_t total_start_us = HONCH_PERF_NOW_US();
+    uint32_t heap_before = HONCH_PERF_HEAP_FREE();
+
     if (!s_initialized) {
         return HONCH_ERR_NOT_INITIALIZED;
     }
@@ -206,23 +211,38 @@ honch_err_t honch_track(const char *event, const char *properties_json)
     xSemaphoreTake(s_api_mutex, portMAX_DELAY);
 
     const char *distinct_id = honch_identity_get_distinct_id();
+    honch_event_runtime_t runtime = {0};
+    honch_event_runtime_collect(&runtime);
     honch_payload_t encoded = {0};
-    honch_err_t encode_err = honch_encode_event(event, distinct_id, properties_json, &encoded);
+    int64_t encode_start_us = HONCH_PERF_NOW_US();
+    honch_err_t encode_err = honch_encode_event(event, distinct_id, properties_json, &runtime, &encoded);
+    int64_t encode_us = HONCH_PERF_ELAPSED_US(encode_start_us);
+    size_t encoded_len = encoded.len;
 
     xSemaphoreGive(s_api_mutex);
 
     if (encode_err != HONCH_OK) {
+        HONCH_PERF_LOG("HONCH_PERF_TRACK",
+                       "event=%s result=encode_error code=%d total_us=%" PRId64
+                       " encode_us=%" PRId64 " heap_before=%" PRIu32 " heap_after=%" PRIu32,
+                       event,
+                       encode_err,
+                       HONCH_PERF_ELAPSED_US(total_start_us),
+                       encode_us,
+                       heap_before,
+                       HONCH_PERF_HEAP_FREE());
         return encode_err;
     }
 
+    int64_t queue_start_us = HONCH_PERF_NOW_US();
     honch_err_t err = honch_queue_push(&encoded);
+    int64_t queue_us = HONCH_PERF_ELAPSED_US(queue_start_us);
     // queue_push takes ownership and frees encoded.
 
     if (err == HONCH_OK) {
         // Check battery while we're at it
-        if (g_honch_battery_callback) {
-            int level = g_honch_battery_callback();
-            honch_lifecycle_check_battery(level);
+        if (runtime.battery_known) {
+            honch_lifecycle_check_battery(runtime.battery_level);
         }
 
         // Notify worker if threshold crossed
@@ -230,6 +250,20 @@ honch_err_t honch_track(const char *event, const char *properties_json)
             honch_scheduler_notify();
         }
     }
+
+    HONCH_PERF_LOG("HONCH_PERF_TRACK",
+                   "event=%s result=%d total_us=%" PRId64 " encode_us=%" PRId64
+                   " queue_us=%" PRId64 " encoded_bytes=%u heap_before=%" PRIu32
+                   " heap_after=%" PRIu32 " heap_min=%" PRIu32,
+                   event,
+                   err,
+                   HONCH_PERF_ELAPSED_US(total_start_us),
+                   encode_us,
+                   queue_us,
+                   (unsigned)encoded_len,
+                   heap_before,
+                   HONCH_PERF_HEAP_FREE(),
+                   HONCH_PERF_HEAP_MIN());
 
     return err;
 }

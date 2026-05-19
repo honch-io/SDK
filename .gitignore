@@ -16,6 +16,15 @@ CTestTestfile.cmake
 Testing/
 compile_commands.json
 
+# ESP-IDF local/generated project state
+esp-idf/**/build/
+esp-idf/**/build-*/
+esp-idf/**/managed_components/
+esp-idf/**/dependencies.lock
+esp-idf/**/sdkconfig
+esp-idf/**/sdkconfig.old
+esp-idf/footprint/build-footprint-report.json
+
 # Compiled artifacts
 *.o
 *.obj

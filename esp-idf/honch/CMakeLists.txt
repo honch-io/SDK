@@ -18,7 +18,8 @@ idf_component_register(
         esp-tls
         esp_timer
         cbor
-        json
+        espressif__cjson
+        esp_driver_gpio
         driver
         efuse
 )

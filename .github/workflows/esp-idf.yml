@@ -3,12 +3,12 @@ name: ESP-IDF Build
 on:
   push:
     paths:
-      - 'sdks/esp-idf/**'
-      - 'sdks/spec/**'
+      - 'esp-idf/**'
+      - 'spec/**'
   pull_request:
     paths:
-      - 'sdks/esp-idf/**'
-      - 'sdks/spec/**'
+      - 'esp-idf/**'
+      - 'spec/**'
 
 jobs:
   build:
@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build example for ${{ matrix.target }}
-        working-directory: sdks/esp-idf/example
+        working-directory: esp-idf/example
         shell: bash
         run: |
           . $IDF_PATH/export.sh
