@@ -69,6 +69,12 @@ honch_err_t honch_lifecycle_init(void)
 {
     s_battery_low_emitted = false;
 
+    wifi_ap_record_t ap_info;
+    if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
+        g_honch_connected = true;
+        ESP_LOGI(TAG, "Initial Wi-Fi connection detected");
+    }
+
     // Register Wi-Fi disconnect event
     esp_err_t err = esp_event_handler_instance_register(
         WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED,
