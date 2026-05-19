@@ -2,7 +2,9 @@
 // Copyright 2026 Honch Dev
 
 #include "transport.h"
+#include "perf.h"
 
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -95,6 +97,9 @@ void honch_transport_deinit(void)
 
 honch_transport_result_t honch_transport_send(const uint8_t *body, size_t body_len)
 {
+    int64_t total_start_us = HONCH_PERF_NOW_US();
+    uint32_t heap_before = HONCH_PERF_HEAP_FREE();
+
     if (!body || body_len == 0) {
         return HONCH_TRANSPORT_NETWORK_ERROR;
     }
@@ -107,8 +112,10 @@ honch_transport_result_t honch_transport_send(const uint8_t *body, size_t body_l
     size_t post_body_len = body_len;
     uint8_t *compressed = NULL;
     bool use_gzip = false;
+    int64_t gzip_us = 0;
 
 #ifdef CONFIG_HONCH_ENABLE_GZIP
+    int64_t gzip_start_us = HONCH_PERF_NOW_US();
     if (body_len >= CONFIG_HONCH_GZIP_MIN_BYTES &&
         honch_gzip_payload(body, body_len, &compressed, &post_body_len)) {
         post_body = compressed;
@@ -118,6 +125,7 @@ honch_transport_result_t honch_transport_send(const uint8_t *body, size_t body_l
                  (unsigned)body_len, (unsigned)post_body_len);
 #endif
     }
+    gzip_us = HONCH_PERF_ELAPSED_US(gzip_start_us);
 #endif
 
     esp_http_client_config_t http_config = {
@@ -127,27 +135,45 @@ honch_transport_result_t honch_transport_send(const uint8_t *body, size_t body_l
         .crt_bundle_attach = esp_crt_bundle_attach,
     };
 
+    int64_t init_start_us = HONCH_PERF_NOW_US();
     esp_http_client_handle_t client = esp_http_client_init(&http_config);
+    int64_t init_us = HONCH_PERF_ELAPSED_US(init_start_us);
     if (!client) {
         ESP_LOGE(TAG, "Failed to init HTTP client");
         free(compressed);
+        HONCH_PERF_LOG("HONCH_PERF_TRANSPORT",
+                       "result=init_error total_us=%" PRId64 " init_us=%" PRId64
+                       " body_bytes=%u post_bytes=%u gzip=%d heap_before=%" PRIu32
+                       " heap_after=%" PRIu32,
+                       HONCH_PERF_ELAPSED_US(total_start_us),
+                       init_us,
+                       (unsigned)body_len,
+                       (unsigned)post_body_len,
+                       use_gzip ? 1 : 0,
+                       heap_before,
+                       HONCH_PERF_HEAP_FREE());
         return HONCH_TRANSPORT_NETWORK_ERROR;
     }
 
+    int64_t setup_start_us = HONCH_PERF_NOW_US();
     esp_http_client_set_header(client, "Content-Type", "application/cbor");
     if (use_gzip) {
         esp_http_client_set_header(client, "Content-Encoding", "gzip");
     }
     esp_http_client_set_post_field(client, (const char *)post_body, post_body_len);
+    int64_t setup_us = HONCH_PERF_ELAPSED_US(setup_start_us);
 
+    int64_t perform_start_us = HONCH_PERF_NOW_US();
     esp_err_t err = esp_http_client_perform(client);
+    int64_t perform_us = HONCH_PERF_ELAPSED_US(perform_start_us);
     honch_transport_result_t result;
+    int status = 0;
 
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
         result = HONCH_TRANSPORT_NETWORK_ERROR;
     } else {
-        int status = esp_http_client_get_status_code(client);
+        status = esp_http_client_get_status_code(client);
         if (status >= 200 && status < 300) {
             ESP_LOGI(TAG, "Batch sent successfully (HTTP %d)", status);
             result = HONCH_TRANSPORT_OK;
@@ -166,7 +192,31 @@ honch_transport_result_t honch_transport_send(const uint8_t *body, size_t body_l
         }
     }
 
+    int64_t cleanup_start_us = HONCH_PERF_NOW_US();
     esp_http_client_cleanup(client);
+    int64_t cleanup_us = HONCH_PERF_ELAPSED_US(cleanup_start_us);
     free(compressed);
+
+    HONCH_PERF_LOG("HONCH_PERF_TRANSPORT",
+                   "result=%d esp_err=%d status=%d total_us=%" PRId64
+                   " gzip_us=%" PRId64 " init_us=%" PRId64 " setup_us=%" PRId64
+                   " perform_us=%" PRId64 " cleanup_us=%" PRId64
+                   " body_bytes=%u post_bytes=%u gzip=%d heap_before=%" PRIu32
+                   " heap_after=%" PRIu32 " heap_min=%" PRIu32,
+                   result,
+                   err,
+                   status,
+                   HONCH_PERF_ELAPSED_US(total_start_us),
+                   gzip_us,
+                   init_us,
+                   setup_us,
+                   perform_us,
+                   cleanup_us,
+                   (unsigned)body_len,
+                   (unsigned)post_body_len,
+                   use_gzip ? 1 : 0,
+                   heap_before,
+                   HONCH_PERF_HEAP_FREE(),
+                   HONCH_PERF_HEAP_MIN());
     return result;
 }
