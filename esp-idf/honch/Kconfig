@@ -8,21 +8,57 @@ menu "Honch SDK"
             Adds detailed logs for queue operations, encoding,
             and transport activity.
 
+    config HONCH_PERF_LOGGING
+        bool "Enable SDK performance logging"
+        default n
+        help
+            Emit HONCH_PERF_* timing and memory log lines for hot SDK paths.
+            This is intended for real-board benchmarking and should usually be
+            disabled in production firmware.
+
     config HONCH_MAX_QUEUE_DEPTH
         int "Maximum event queue depth"
         default 256
         range 16 1024
         help
-            Maximum number of events that can be stored in the
-            NVS-backed queue before the oldest events are dropped.
+            Maximum total number of queued events across RAM and NVS before
+            the oldest events are dropped.
+
+    config HONCH_RAM_QUEUE_DEPTH
+        int "RAM event queue depth"
+        default 64
+        range 8 512
+        help
+            Number of events to keep in RAM before spilling to NVS. Increasing
+            this improves the hot path for bursty online workloads at the cost
+            of heap usage.
+
+    config HONCH_DURABLE_IMMEDIATE_NVS
+        bool "Persist every tracked event to NVS immediately"
+        default n
+        help
+            Restore the previous durable-first behavior where honch_track()
+            writes every event to NVS. This gives stronger power-loss durability
+            but makes the track hot path block on flash writes.
+
+    config HONCH_WIFI_RSSI_CACHE_MS
+        int "Wi-Fi RSSI cache duration (ms)"
+        default 5000
+        range 0 60000
+        help
+            Cache Wi-Fi RSSI metadata for this many milliseconds while encoding
+            event properties. Set to 0 to query RSSI for every event.
 
     config HONCH_ENABLE_GZIP
         bool "Enable gzip compression for large CBOR batches"
+        depends on !IDF_TARGET_ESP32 && !IDF_TARGET_ESP32S2
         default y
         help
             Compress HTTP CBOR batches when they are large enough to benefit.
             If compression fails or does not reduce the payload, the SDK sends
             the original raw CBOR body.
+            ESP32 and ESP32-S2 do not expose the required miniz compressor
+            symbol, so they always send raw application/cbor.
 
     config HONCH_GZIP_MIN_BYTES
         int "Minimum CBOR payload size for gzip"

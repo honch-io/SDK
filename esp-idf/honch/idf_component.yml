@@ -7,3 +7,5 @@ dependencies:
     version: ">=5.0"
   espressif/cbor:
     version: "^0.6.1~4"
+  espressif/cjson:
+    version: "^1.7.19"

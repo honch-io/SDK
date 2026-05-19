@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -10,6 +11,7 @@
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
+#include "esp_sntp.h"
 #include "nvs_flash.h"
 #include "honch.h"
 
@@ -18,6 +20,7 @@ static const char *TAG = "honch_example";
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
 #define WIFI_MAX_RETRY     5
+#define HEARTBEAT_INTERVAL_SECONDS 5
 
 static EventGroupHandle_t s_wifi_event_group;
 static int s_retry_num = 0;
@@ -86,6 +89,29 @@ static void wifi_init_sta(void)
     }
 }
 
+static void sync_time(void)
+{
+    ESP_LOGI(TAG, "Synchronizing time with SNTP...");
+
+    esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    esp_sntp_setservername(0, "pool.ntp.org");
+    esp_sntp_init();
+
+    time_t now = 0;
+    struct tm timeinfo = {0};
+    for (int retry = 0; retry < 15; retry++) {
+        time(&now);
+        localtime_r(&now, &timeinfo);
+        if (timeinfo.tm_year >= (2020 - 1900)) {
+            ESP_LOGI(TAG, "Time synchronized");
+            return;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+
+    ESP_LOGW(TAG, "Time sync timed out; events may use boot-relative timestamps");
+}
+
 static uint8_t s_event_buffer[16384];
 
 void app_main(void)
@@ -100,6 +126,7 @@ void app_main(void)
 
     // Connect to Wi-Fi
     wifi_init_sta();
+    sync_time();
 
     // Initialize Honch
     honch_config_t config = {
@@ -136,7 +163,9 @@ void app_main(void)
 
     // Idle loop
     while (1) {
+        honch_track("heartbeat", "{\"source\":\"esp-idf-example\"}");
+        honch_flush();
         ESP_LOGI(TAG, "Free heap: %u bytes", (unsigned)esp_get_free_heap_size());
-        vTaskDelay(pdMS_TO_TICKS(10000));
+        vTaskDelay(pdMS_TO_TICKS(HEARTBEAT_INTERVAL_SECONDS * 1000));
     }
 }
