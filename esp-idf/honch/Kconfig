@@ -8,6 +8,14 @@ menu "Honch SDK"
             Adds detailed logs for queue operations, encoding,
             and transport activity.
 
+    config HONCH_PERF_LOGGING
+        bool "Enable SDK performance logging"
+        default n
+        help
+            Emit HONCH_PERF_* timing and memory log lines for hot SDK paths.
+            This is intended for real-board benchmarking and should usually be
+            disabled in production firmware.
+
     config HONCH_MAX_QUEUE_DEPTH
         int "Maximum event queue depth"
         default 256

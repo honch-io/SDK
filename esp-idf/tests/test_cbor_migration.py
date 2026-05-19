@@ -42,6 +42,35 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn("depends on !IDF_TARGET_ESP32 && !IDF_TARGET_ESP32S2", kconfig)
         self.assertIn("HONCH_GZIP_MIN_BYTES", kconfig)
 
+    def test_perf_logging_instruments_sdk_hot_paths(self) -> None:
+        kconfig = read("esp-idf/honch/Kconfig")
+        perf = read("esp-idf/honch/src/perf.h")
+        honch = read("esp-idf/honch/src/honch.c")
+        encoder = read("esp-idf/honch/src/encoder.c")
+        queue = read("esp-idf/honch/src/queue.c")
+        scheduler = read("esp-idf/honch/src/scheduler.c")
+        transport = read("esp-idf/honch/src/transport.c")
+        bench_defaults = read("esp-idf/benchtest/sdkconfig.defaults")
+
+        self.assertIn("HONCH_PERF_LOGGING", kconfig)
+        self.assertIn("HONCH_PERF_LOG", perf)
+        self.assertIn("CONFIG_HONCH_PERF_LOGGING", perf)
+        for marker in (
+            "HONCH_PERF_TRACK",
+            "HONCH_PERF_ENCODE_EVENT",
+            "HONCH_PERF_QUEUE_PUSH",
+            "HONCH_PERF_QUEUE_POP",
+            "HONCH_PERF_QUEUE_CONFIRM",
+            "HONCH_PERF_ENCODE_BATCH",
+            "HONCH_PERF_TRANSPORT",
+            "HONCH_PERF_FLUSH",
+        ):
+            self.assertTrue(
+                any(marker in text for text in (honch, encoder, queue, scheduler, transport)),
+                f"{marker} missing from SDK instrumentation",
+            )
+        self.assertIn("CONFIG_HONCH_PERF_LOGGING=y", bench_defaults)
+
     def test_queue_persists_cbor_blobs_not_json_strings(self) -> None:
         queue = read("esp-idf/honch/src/queue.c")
         queue_header = read("esp-idf/honch/src/queue.h")
