@@ -58,6 +58,12 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn("status == 429", transport)
         self.assertRegex(transport, r"status >= 400 && status < 500")
 
+    def test_lifecycle_detects_existing_wifi_connection(self) -> None:
+        lifecycle = read("esp-idf/honch/src/lifecycle.c")
+
+        self.assertIn("esp_wifi_sta_get_ap_info", lifecycle)
+        self.assertIn("Initial Wi-Fi connection detected", lifecycle)
+
     def test_encoder_builds_cbor_epoch_millis_payloads(self) -> None:
         encoder = read("esp-idf/honch/src/encoder.c")
         encoder_header = read("esp-idf/honch/src/encoder.h")
