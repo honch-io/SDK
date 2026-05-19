@@ -18,11 +18,14 @@ menu "Honch SDK"
 
     config HONCH_ENABLE_GZIP
         bool "Enable gzip compression for large CBOR batches"
+        depends on !IDF_TARGET_ESP32 && !IDF_TARGET_ESP32S2
         default y
         help
             Compress HTTP CBOR batches when they are large enough to benefit.
             If compression fails or does not reduce the payload, the SDK sends
             the original raw CBOR body.
+            ESP32 and ESP32-S2 do not expose the required miniz compressor
+            symbol, so they always send raw application/cbor.
 
     config HONCH_GZIP_MIN_BYTES
         int "Minimum CBOR payload size for gzip"

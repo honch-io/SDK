@@ -18,7 +18,9 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         cmake = read("esp-idf/honch/CMakeLists.txt")
 
         self.assertIn("espressif/cbor", manifest)
+        self.assertIn("espressif/cjson", manifest)
         self.assertRegex(cmake, r"\bcbor\b")
+        self.assertRegex(cmake, r"\bespressif__cjson\b")
         self.assertRegex(cmake, r"\besp_timer\b")
 
     def test_transport_sends_application_cbor_with_optional_gzip(self) -> None:
@@ -32,10 +34,12 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn("CONFIG_HONCH_ENABLE_GZIP", transport)
         self.assertIn("CONFIG_HONCH_GZIP_MIN_BYTES", transport)
         self.assertIn("miniz.h", transport)
-        self.assertRegex(transport, r"\bmz_deflate")
+        self.assertIn("tdefl_compress_mem_to_heap", transport)
+        self.assertNotIn("mz_deflate", transport)
         self.assertIn("compressed_size < body_len", transport)
         self.assertIn("falls back to raw CBOR", transport_header)
         self.assertIn("HONCH_ENABLE_GZIP", kconfig)
+        self.assertIn("depends on !IDF_TARGET_ESP32 && !IDF_TARGET_ESP32S2", kconfig)
         self.assertIn("HONCH_GZIP_MIN_BYTES", kconfig)
 
     def test_queue_persists_cbor_blobs_not_json_strings(self) -> None:
