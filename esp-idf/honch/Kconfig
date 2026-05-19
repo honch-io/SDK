@@ -21,8 +21,25 @@ menu "Honch SDK"
         default 256
         range 16 1024
         help
-            Maximum number of events that can be stored in the
-            NVS-backed queue before the oldest events are dropped.
+            Maximum total number of queued events across RAM and NVS before
+            the oldest events are dropped.
+
+    config HONCH_RAM_QUEUE_DEPTH
+        int "RAM event queue depth"
+        default 64
+        range 8 512
+        help
+            Number of events to keep in RAM before spilling to NVS. Increasing
+            this improves the hot path for bursty online workloads at the cost
+            of heap usage.
+
+    config HONCH_DURABLE_IMMEDIATE_NVS
+        bool "Persist every tracked event to NVS immediately"
+        default n
+        help
+            Restore the previous durable-first behavior where honch_track()
+            writes every event to NVS. This gives stronger power-loss durability
+            but makes the track hot path block on flash writes.
 
     config HONCH_ENABLE_GZIP
         bool "Enable gzip compression for large CBOR batches"

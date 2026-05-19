@@ -11,13 +11,14 @@ honch_err_t honch_queue_init(void);
 void honch_queue_deinit(void);
 
 // Push a serialized CBOR event blob onto the queue. Takes ownership of payload.
+// The queue is RAM-first by default and uses NVS for durable spill/backlog.
 honch_err_t honch_queue_push(honch_payload_t *payload);
 
 // Pop up to max_events from the queue into the provided array.
 // Returns number of events popped. Caller must free each payload.
 int honch_queue_pop(honch_payload_t *events_out, int max_events);
 
-// Confirm removal of the last popped batch (deletes from NVS).
+// Confirm removal of the last popped batch.
 honch_err_t honch_queue_confirm(int count);
 
 // Return events to the front of the queue on flush failure.
