@@ -64,6 +64,14 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn("esp_wifi_sta_get_ap_info", lifecycle)
         self.assertIn("Initial Wi-Fi connection detected", lifecycle)
 
+    def test_example_syncs_time_and_emits_heartbeat(self) -> None:
+        example = read("esp-idf/example/main/app_main.c")
+
+        self.assertIn("#include \"esp_sntp.h\"", example)
+        self.assertIn("sync_time", example)
+        self.assertLess(example.index("sync_time();"), example.index("honch_init(&config)"))
+        self.assertIn('honch_track("heartbeat"', example)
+
     def test_encoder_builds_cbor_epoch_millis_payloads(self) -> None:
         encoder = read("esp-idf/honch/src/encoder.c")
         encoder_header = read("esp-idf/honch/src/encoder.h")
