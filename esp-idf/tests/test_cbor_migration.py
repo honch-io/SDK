@@ -81,6 +81,22 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertNotIn("nvs_set_str", queue)
         self.assertNotIn("event_json", queue_header)
 
+    def test_queue_uses_ram_first_with_nvs_spill(self) -> None:
+        queue = read("esp-idf/honch/src/queue.c")
+        kconfig = read("esp-idf/honch/Kconfig")
+
+        self.assertIn("HONCH_RAM_QUEUE_DEPTH", kconfig)
+        self.assertIn("HONCH_DURABLE_IMMEDIATE_NVS", kconfig)
+        self.assertIn("s_ram_events", queue)
+        self.assertIn("ram_enqueue", queue)
+        self.assertIn("nvs_append_payload", queue)
+        self.assertIn("HONCH_PERF_RAM_QUEUE_PUSH", queue)
+        self.assertIn("HONCH_PERF_NVS_SPILL", queue)
+        self.assertLess(
+            queue.index("err = ram_enqueue(payload);"),
+            queue.index('err = nvs_append_payload(payload->data, payload->len, "ram_full");'),
+        )
+
     def test_transport_treats_bad_requests_as_non_retryable(self) -> None:
         transport = read("esp-idf/honch/src/transport.c")
 
