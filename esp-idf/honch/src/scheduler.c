@@ -5,7 +5,9 @@
 #include "queue.h"
 #include "encoder.h"
 #include "transport.h"
+#include "perf.h"
 
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include "esp_log.h"
@@ -42,8 +44,14 @@ static uint32_t jittered_backoff(uint32_t base_ms)
 
 static void do_flush(void)
 {
+    int64_t total_start_us = HONCH_PERF_NOW_US();
+    uint32_t heap_before = HONCH_PERF_HEAP_FREE();
+
     size_t depth = honch_queue_depth();
     if (depth == 0) {
+        HONCH_PERF_LOG("HONCH_PERF_FLUSH",
+                       "result=empty total_us=%" PRId64 " depth=0",
+                       HONCH_PERF_ELAPSED_US(total_start_us));
         return;
     }
 
@@ -51,28 +59,57 @@ static void do_flush(void)
 #ifdef CONFIG_HONCH_LOG_VERBOSE
         ESP_LOGI(TAG, "Not connected, skipping flush");
 #endif
+        HONCH_PERF_LOG("HONCH_PERF_FLUSH",
+                       "result=not_connected total_us=%" PRId64 " depth=%u",
+                       HONCH_PERF_ELAPSED_US(total_start_us),
+                       (unsigned)depth);
         return;
     }
 
     honch_payload_t events[MAX_BATCH_SIZE] = {0};
+    int64_t pop_start_us = HONCH_PERF_NOW_US();
     int count = honch_queue_pop(events, MAX_BATCH_SIZE);
+    int64_t pop_us = HONCH_PERF_ELAPSED_US(pop_start_us);
     if (count == 0) {
+        HONCH_PERF_LOG("HONCH_PERF_FLUSH",
+                       "result=pop_empty total_us=%" PRId64 " pop_us=%" PRId64
+                       " depth_before=%u",
+                       HONCH_PERF_ELAPSED_US(total_start_us),
+                       pop_us,
+                       (unsigned)depth);
         return;
     }
 
     ESP_LOGI(TAG, "Flushing %d events", count);
 
     honch_payload_t batch = {0};
+    int64_t encode_start_us = HONCH_PERF_NOW_US();
     honch_err_t encode_err = honch_encode_batch(g_honch_api_key, events, count, &batch);
+    int64_t encode_us = HONCH_PERF_ELAPSED_US(encode_start_us);
     if (encode_err != HONCH_OK) {
         ESP_LOGE(TAG, "Failed to encode batch");
         honch_queue_requeue(events, count);
+        HONCH_PERF_LOG("HONCH_PERF_FLUSH",
+                       "result=encode_error code=%d total_us=%" PRId64
+                       " pop_us=%" PRId64 " encode_us=%" PRId64
+                       " count=%d depth_before=%u",
+                       encode_err,
+                       HONCH_PERF_ELAPSED_US(total_start_us),
+                       pop_us,
+                       encode_us,
+                       count,
+                       (unsigned)depth);
         return;
     }
 
+    int64_t send_start_us = HONCH_PERF_NOW_US();
     honch_transport_result_t result = honch_transport_send(batch.data, batch.len);
+    int64_t send_us = HONCH_PERF_ELAPSED_US(send_start_us);
+    size_t batch_len = batch.len;
     honch_payload_free(&batch);
 
+    int64_t finalize_start_us = HONCH_PERF_NOW_US();
+    const char *result_label = "unknown";
     switch (result) {
         case HONCH_TRANSPORT_OK:
             honch_queue_confirm(count);
@@ -80,6 +117,7 @@ static void do_flush(void)
                 honch_payload_free(&events[i]);
             }
             s_backoff_ms = INITIAL_BACKOFF_MS;
+            result_label = "ok";
             break;
 
         case HONCH_TRANSPORT_AUTH_ERROR:
@@ -88,6 +126,7 @@ static void do_flush(void)
             for (int i = 0; i < count; i++) {
                 honch_payload_free(&events[i]);
             }
+            result_label = "auth_error_drop";
             break;
 
         case HONCH_TRANSPORT_SERVER_ERROR:
@@ -98,8 +137,31 @@ static void do_flush(void)
             if (s_backoff_ms > MAX_BACKOFF_MS) {
                 s_backoff_ms = MAX_BACKOFF_MS;
             }
+            result_label = "retry";
             break;
     }
+    int64_t finalize_us = HONCH_PERF_ELAPSED_US(finalize_start_us);
+
+    HONCH_PERF_LOG("HONCH_PERF_FLUSH",
+                   "result=%s transport=%d total_us=%" PRId64 " pop_us=%" PRId64
+                   " encode_us=%" PRId64 " send_us=%" PRId64
+                   " finalize_us=%" PRId64 " count=%d batch_bytes=%u"
+                   " depth_before=%u depth_after=%u heap_before=%" PRIu32
+                   " heap_after=%" PRIu32 " heap_min=%" PRIu32,
+                   result_label,
+                   result,
+                   HONCH_PERF_ELAPSED_US(total_start_us),
+                   pop_us,
+                   encode_us,
+                   send_us,
+                   finalize_us,
+                   count,
+                   (unsigned)batch_len,
+                   (unsigned)depth,
+                   (unsigned)honch_queue_depth(),
+                   heap_before,
+                   HONCH_PERF_HEAP_FREE(),
+                   HONCH_PERF_HEAP_MIN());
 }
 
 static void worker_task(void *arg)
