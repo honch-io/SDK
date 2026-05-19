@@ -8,6 +8,8 @@
 # Build outputs
 build/
 build-*/
+esp-idf/**/build/
+esp-idf/**/build-*/
 cmake-build-*/
 CMakeFiles/
 CMakeCache.txt
@@ -15,6 +17,11 @@ cmake_install.cmake
 CTestTestfile.cmake
 Testing/
 compile_commands.json
+esp-idf/**/managed_components/
+esp-idf/**/dependencies.lock
+esp-idf/**/sdkconfig
+esp-idf/**/sdkconfig.old
+esp-idf/footprint/build-footprint-report.json
 
 # Compiled artifacts
 *.o

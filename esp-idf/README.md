@@ -76,6 +76,29 @@ idf.py set-target esp32s3   # or esp32, esp32c3, etc.
 idf.py flash monitor
 ```
 
+## Measure SDK footprint
+
+Use the footprint tool when you need defensible flash, RAM, and CPU numbers for
+docs or landing pages.
+
+Current ESP32 measurement, from `footprint/` on ESP-IDF v6.0.1:
+
+- `<20 KB flash` for linked Honch SDK code/data (`11,306` bytes measured)
+- `<2 KB static RAM` (`1,748` bytes measured)
+- `<15 KB runtime heap after init` (`14,304` bytes measured)
+- `<0.09% CPU at 1 event/sec` for `honch_track()` RAM-queue hot path
+- `<0.002% CPU at 1 event/min` for the same measured hot path amortized
+
+```bash
+cd SDK
+source /Users/morgana/.espressif/tools/activate_idf_v6.0.1.sh
+./tools/measure_esp_idf_footprint.py --target esp32
+```
+
+For runtime heap and CPU/event measurements, flash the Honch-enabled footprint
+app and feed the monitor log back into the same tool. See
+[`footprint/README.md`](footprint/README.md).
+
 ## What gets sent automatically
 
 **Auto-stamped properties** (on every event):
