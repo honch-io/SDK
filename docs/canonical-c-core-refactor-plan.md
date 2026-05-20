@@ -1776,7 +1776,7 @@ rising/falling/both edge modes
 properties include {"pin": <number>}
 ```
 
-- [ ] **Step 6: Build ESP-IDF example**
+- [x] **Step 6: Build ESP-IDF example**
 
 Run from an ESP-IDF shell:
 

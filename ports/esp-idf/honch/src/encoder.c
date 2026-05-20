@@ -566,8 +566,8 @@ honch_err_t honch_encode_event(const char *event_name,
                                const honch_event_runtime_t *runtime,
                                honch_payload_t *out)
 {
-    int64_t total_start_us = HONCH_PERF_NOW_US();
-    uint32_t heap_before = HONCH_PERF_HEAP_FREE();
+    HONCH_PERF_VAR(int64_t, total_start_us, HONCH_PERF_NOW_US());
+    HONCH_PERF_VAR(uint32_t, heap_before, HONCH_PERF_HEAP_FREE());
 
     if (!event_name || !distinct_id || !out) {
         return HONCH_ERR_INVALID_ARG;
@@ -576,13 +576,13 @@ honch_err_t honch_encode_event(const char *event_name,
     out->data = NULL;
     out->len = 0;
 
-    int64_t properties_start_us = HONCH_PERF_NOW_US();
-    int64_t user_parse_us = 0;
+    HONCH_PERF_VAR(int64_t, properties_start_us, HONCH_PERF_NOW_US());
+    HONCH_PERF_VAR(int64_t, user_parse_us, 0);
     cJSON *user_properties = NULL;
-    size_t user_prop_count = 0;
+    HONCH_PERF_VAR(size_t, user_prop_count, 0);
 
     if (properties_json && strlen(properties_json) > 0) {
-        int64_t user_parse_start_us = HONCH_PERF_NOW_US();
+        HONCH_PERF_VAR(int64_t, user_parse_start_us, HONCH_PERF_NOW_US());
         user_properties = cJSON_Parse(properties_json);
         user_parse_us = HONCH_PERF_ELAPSED_US(user_parse_start_us);
         if (user_properties && cJSON_IsObject(user_properties)) {
@@ -596,8 +596,8 @@ honch_err_t honch_encode_event(const char *event_name,
         }
     }
 
-    int64_t properties_us = HONCH_PERF_ELAPSED_US(properties_start_us);
-    size_t sdk_prop_count = sdk_property_count(runtime);
+    HONCH_PERF_VAR(int64_t, properties_us, HONCH_PERF_ELAPSED_US(properties_start_us));
+    HONCH_PERF_VAR(size_t, sdk_prop_count, sdk_property_count(runtime));
 
     HONCH_PERF_LOG("HONCH_PERF_PROPERTIES",
                    "total_us=%" PRId64 " user_parse_us=%" PRId64
@@ -619,9 +619,9 @@ honch_err_t honch_encode_event(const char *event_name,
         .runtime = runtime,
     };
 
-    int64_t cbor_start_us = HONCH_PERF_NOW_US();
+    HONCH_PERF_VAR(int64_t, cbor_start_us, HONCH_PERF_NOW_US());
     honch_err_t err = encode_with_retry(encode_event_to_cbor, &ctx, out);
-    int64_t cbor_us = HONCH_PERF_ELAPSED_US(cbor_start_us);
+    HONCH_PERF_VAR(int64_t, cbor_us, HONCH_PERF_ELAPSED_US(cbor_start_us));
     cJSON_Delete(user_properties);
 
 #ifdef CONFIG_HONCH_LOG_VERBOSE
@@ -653,8 +653,8 @@ honch_err_t honch_encode_batch(const char *api_key,
                                int count,
                                honch_payload_t *out)
 {
-    int64_t total_start_us = HONCH_PERF_NOW_US();
-    uint32_t heap_before = HONCH_PERF_HEAP_FREE();
+    HONCH_PERF_VAR(int64_t, total_start_us, HONCH_PERF_NOW_US());
+    HONCH_PERF_VAR(uint32_t, heap_before, HONCH_PERF_HEAP_FREE());
 
     if (!api_key || !events || !out || count <= 0 || count > HONCH_MAX_BATCH_SIZE) {
         return HONCH_ERR_INVALID_ARG;
@@ -677,14 +677,14 @@ honch_err_t honch_encode_batch(const char *api_key,
     }
 
     honch_buffer_t buffer;
-    int64_t alloc_start_us = HONCH_PERF_NOW_US();
+    HONCH_PERF_VAR(int64_t, alloc_start_us, HONCH_PERF_NOW_US());
     honch_err_t err = buffer_init(&buffer, capacity);
-    int64_t alloc_us = HONCH_PERF_ELAPSED_US(alloc_start_us);
+    HONCH_PERF_VAR(int64_t, alloc_us, HONCH_PERF_ELAPSED_US(alloc_start_us));
     if (err != HONCH_OK) {
         return err;
     }
 
-    int64_t append_start_us = HONCH_PERF_NOW_US();
+    HONCH_PERF_VAR(int64_t, append_start_us, HONCH_PERF_NOW_US());
     err = append_cbor_type(&buffer, 0xA0, 2);
     if (err == HONCH_OK) {
         err = append_cbor_text(&buffer, "token");
@@ -702,7 +702,7 @@ honch_err_t honch_encode_batch(const char *api_key,
     for (int i = 0; err == HONCH_OK && i < count; i++) {
         err = buffer_append(&buffer, events[i].data, events[i].len);
     }
-    int64_t append_us = HONCH_PERF_ELAPSED_US(append_start_us);
+    HONCH_PERF_VAR(int64_t, append_us, HONCH_PERF_ELAPSED_US(append_start_us));
 
     if (err != HONCH_OK) {
         buffer_free(&buffer);

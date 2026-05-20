@@ -44,8 +44,8 @@ static uint32_t jittered_backoff(uint32_t base_ms)
 
 static void do_flush(void)
 {
-    int64_t total_start_us = HONCH_PERF_NOW_US();
-    uint32_t heap_before = HONCH_PERF_HEAP_FREE();
+    HONCH_PERF_VAR(int64_t, total_start_us, HONCH_PERF_NOW_US());
+    HONCH_PERF_VAR(uint32_t, heap_before, HONCH_PERF_HEAP_FREE());
 
     size_t depth = honch_queue_depth();
     if (depth == 0) {
@@ -67,9 +67,9 @@ static void do_flush(void)
     }
 
     honch_payload_t events[MAX_BATCH_SIZE] = {0};
-    int64_t pop_start_us = HONCH_PERF_NOW_US();
+    HONCH_PERF_VAR(int64_t, pop_start_us, HONCH_PERF_NOW_US());
     int count = honch_queue_pop(events, MAX_BATCH_SIZE);
-    int64_t pop_us = HONCH_PERF_ELAPSED_US(pop_start_us);
+    HONCH_PERF_VAR(int64_t, pop_us, HONCH_PERF_ELAPSED_US(pop_start_us));
     if (count == 0) {
         HONCH_PERF_LOG("HONCH_PERF_FLUSH",
                        "result=pop_empty total_us=%" PRId64 " pop_us=%" PRId64
@@ -83,9 +83,9 @@ static void do_flush(void)
     ESP_LOGI(TAG, "Flushing %d events", count);
 
     honch_payload_t batch = {0};
-    int64_t encode_start_us = HONCH_PERF_NOW_US();
+    HONCH_PERF_VAR(int64_t, encode_start_us, HONCH_PERF_NOW_US());
     honch_err_t encode_err = honch_encode_batch(g_honch_api_key, events, count, &batch);
-    int64_t encode_us = HONCH_PERF_ELAPSED_US(encode_start_us);
+    HONCH_PERF_VAR(int64_t, encode_us, HONCH_PERF_ELAPSED_US(encode_start_us));
     if (encode_err != HONCH_OK) {
         ESP_LOGE(TAG, "Failed to encode batch");
         honch_queue_requeue(events, count);
@@ -102,14 +102,14 @@ static void do_flush(void)
         return;
     }
 
-    int64_t send_start_us = HONCH_PERF_NOW_US();
+    HONCH_PERF_VAR(int64_t, send_start_us, HONCH_PERF_NOW_US());
     honch_transport_result_t result = honch_transport_send(batch.data, batch.len);
-    int64_t send_us = HONCH_PERF_ELAPSED_US(send_start_us);
-    size_t batch_len = batch.len;
+    HONCH_PERF_VAR(int64_t, send_us, HONCH_PERF_ELAPSED_US(send_start_us));
+    HONCH_PERF_VAR(size_t, batch_len, batch.len);
     honch_payload_free(&batch);
 
-    int64_t finalize_start_us = HONCH_PERF_NOW_US();
-    const char *result_label = "unknown";
+    HONCH_PERF_VAR(int64_t, finalize_start_us, HONCH_PERF_NOW_US());
+    HONCH_PERF_VAR(const char *, result_label, "unknown");
     switch (result) {
         case HONCH_TRANSPORT_OK:
             honch_queue_confirm(count);
@@ -140,7 +140,7 @@ static void do_flush(void)
             result_label = "retry";
             break;
     }
-    int64_t finalize_us = HONCH_PERF_ELAPSED_US(finalize_start_us);
+    HONCH_PERF_VAR(int64_t, finalize_us, HONCH_PERF_ELAPSED_US(finalize_start_us));
 
     HONCH_PERF_LOG("HONCH_PERF_FLUSH",
                    "result=%s transport=%d total_us=%" PRId64 " pop_us=%" PRId64

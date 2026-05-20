@@ -154,8 +154,8 @@ static bool ram_pop(honch_payload_t *payload)
 
 static honch_err_t nvs_append_payload(const uint8_t *data, size_t len, const char *reason)
 {
-    int64_t total_start_us = HONCH_PERF_NOW_US();
-    uint32_t heap_before = HONCH_PERF_HEAP_FREE();
+    HONCH_PERF_VAR(int64_t, total_start_us, HONCH_PERF_NOW_US());
+    HONCH_PERF_VAR(uint32_t, heap_before, HONCH_PERF_HEAP_FREE());
 
     if (!data || len == 0) {
         return HONCH_ERR_INVALID_ARG;
@@ -171,9 +171,9 @@ static honch_err_t nvs_append_payload(const uint8_t *data, size_t len, const cha
     make_key(s_nvs_head, key, sizeof(key));
 
     nvs_handle_t handle;
-    int64_t open_start_us = HONCH_PERF_NOW_US();
+    HONCH_PERF_VAR(int64_t, open_start_us, HONCH_PERF_NOW_US());
     esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle);
-    int64_t open_us = HONCH_PERF_ELAPSED_US(open_start_us);
+    HONCH_PERF_VAR(int64_t, open_us, HONCH_PERF_ELAPSED_US(open_start_us));
     if (err != ESP_OK) {
         HONCH_PERF_LOG("HONCH_PERF_NVS_SPILL",
                        "result=nvs_open_error reason=%s code=%d total_us=%" PRId64
@@ -185,9 +185,9 @@ static honch_err_t nvs_append_payload(const uint8_t *data, size_t len, const cha
         return HONCH_ERR_NVS;
     }
 
-    int64_t set_blob_start_us = HONCH_PERF_NOW_US();
+    HONCH_PERF_VAR(int64_t, set_blob_start_us, HONCH_PERF_NOW_US());
     err = nvs_set_blob(handle, key, data, len);
-    int64_t set_blob_us = HONCH_PERF_ELAPSED_US(set_blob_start_us);
+    HONCH_PERF_VAR(int64_t, set_blob_us, HONCH_PERF_ELAPSED_US(set_blob_start_us));
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to write event to NVS: %s", esp_err_to_name(err));
         nvs_close(handle);
@@ -203,13 +203,13 @@ static honch_err_t nvs_append_payload(const uint8_t *data, size_t len, const cha
     }
 
     s_nvs_head++;
-    int64_t counters_start_us = HONCH_PERF_NOW_US();
+    HONCH_PERF_VAR(int64_t, counters_start_us, HONCH_PERF_NOW_US());
     nvs_set_u32(handle, "head", s_nvs_head);
     nvs_set_u32(handle, "tail", s_nvs_tail);
-    int64_t counters_us = HONCH_PERF_ELAPSED_US(counters_start_us);
-    int64_t commit_start_us = HONCH_PERF_NOW_US();
+    HONCH_PERF_VAR(int64_t, counters_us, HONCH_PERF_ELAPSED_US(counters_start_us));
+    HONCH_PERF_VAR(int64_t, commit_start_us, HONCH_PERF_NOW_US());
     nvs_commit(handle);
-    int64_t commit_us = HONCH_PERF_ELAPSED_US(commit_start_us);
+    HONCH_PERF_VAR(int64_t, commit_us, HONCH_PERF_ELAPSED_US(commit_start_us));
     nvs_close(handle);
 
     HONCH_PERF_LOG("HONCH_PERF_NVS_SPILL",
@@ -289,8 +289,8 @@ void honch_queue_deinit(void)
 
 honch_err_t honch_queue_push(honch_payload_t *payload)
 {
-    int64_t total_start_us = HONCH_PERF_NOW_US();
-    uint32_t heap_before = HONCH_PERF_HEAP_FREE();
+    HONCH_PERF_VAR(int64_t, total_start_us, HONCH_PERF_NOW_US());
+    HONCH_PERF_VAR(uint32_t, heap_before, HONCH_PERF_HEAP_FREE());
 
     if (!payload || !payload->data || payload->len == 0) {
         return HONCH_ERR_INVALID_ARG;
@@ -308,7 +308,7 @@ honch_err_t honch_queue_push(honch_payload_t *payload)
 
 #ifdef CONFIG_HONCH_DURABLE_IMMEDIATE_NVS
     honch_err_t err = nvs_append_payload(payload->data, payload->len, "immediate");
-    size_t payload_len = payload->len;
+    HONCH_PERF_VAR(size_t, payload_len, payload->len);
     honch_payload_free(payload);
     xSemaphoreGive(s_mutex);
 
@@ -341,7 +341,7 @@ honch_err_t honch_queue_push(honch_payload_t *payload)
         return HONCH_OK;
     }
 
-    size_t payload_len = payload->len;
+    HONCH_PERF_VAR(size_t, payload_len, payload->len);
     err = nvs_append_payload(payload->data, payload->len, "ram_full");
     honch_payload_free(payload);
     xSemaphoreGive(s_mutex);
@@ -362,8 +362,8 @@ honch_err_t honch_queue_push(honch_payload_t *payload)
 
 int honch_queue_pop(honch_payload_t *events_out, int max_events)
 {
-    int64_t total_start_us = HONCH_PERF_NOW_US();
-    uint32_t heap_before = HONCH_PERF_HEAP_FREE();
+    HONCH_PERF_VAR(int64_t, total_start_us, HONCH_PERF_NOW_US());
+    HONCH_PERF_VAR(uint32_t, heap_before, HONCH_PERF_HEAP_FREE());
 
     if (!s_mutex || !events_out || max_events <= 0) {
         return 0;
@@ -371,7 +371,7 @@ int honch_queue_pop(honch_payload_t *events_out, int max_events)
 
     xSemaphoreTake(s_mutex, portMAX_DELAY);
 
-    size_t depth_before = total_depth();
+    HONCH_PERF_VAR(size_t, depth_before, total_depth());
     reset_last_pop();
 
     int count = 0;
@@ -448,7 +448,7 @@ int honch_queue_pop(honch_payload_t *events_out, int max_events)
     s_last_pop_nvs_count = nvs_count;
     s_last_pop_ram_count = ram_count;
 
-    size_t depth_after = total_depth();
+    HONCH_PERF_VAR(size_t, depth_after, total_depth());
     xSemaphoreGive(s_mutex);
 
     HONCH_PERF_LOG("HONCH_PERF_QUEUE_POP",
@@ -470,7 +470,7 @@ int honch_queue_pop(honch_payload_t *events_out, int max_events)
 
 honch_err_t honch_queue_confirm(int count)
 {
-    int64_t total_start_us = HONCH_PERF_NOW_US();
+    HONCH_PERF_VAR(int64_t, total_start_us, HONCH_PERF_NOW_US());
 
     if (!s_mutex) {
         return HONCH_ERR_NOT_INITIALIZED;
@@ -478,7 +478,7 @@ honch_err_t honch_queue_confirm(int count)
 
     xSemaphoreTake(s_mutex, portMAX_DELAY);
 
-    int requested = count;
+    HONCH_PERF_VAR(int, requested, count);
     if (!s_last_pop_valid || count <= 0) {
         reset_last_pop();
         xSemaphoreGive(s_mutex);
@@ -502,13 +502,13 @@ honch_err_t honch_queue_confirm(int count)
         ram_confirmed = s_last_pop_ram_count;
     }
 
-    int64_t open_us = 0;
+    HONCH_PERF_VAR(int64_t, open_us, 0);
     int erased = 0;
-    int64_t erase_us = 0;
-    int64_t commit_us = 0;
+    HONCH_PERF_VAR(int64_t, erase_us, 0);
+    HONCH_PERF_VAR(int64_t, commit_us, 0);
     if (nvs_to_erase > 0) {
         nvs_handle_t handle;
-        int64_t open_start_us = HONCH_PERF_NOW_US();
+        HONCH_PERF_VAR(int64_t, open_start_us, HONCH_PERF_NOW_US());
         esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle);
         open_us = HONCH_PERF_ELAPSED_US(open_start_us);
         if (err != ESP_OK) {
@@ -522,7 +522,7 @@ honch_err_t honch_queue_confirm(int count)
             return HONCH_ERR_NVS;
         }
 
-        int64_t erase_start_us = HONCH_PERF_NOW_US();
+        HONCH_PERF_VAR(int64_t, erase_start_us, HONCH_PERF_NOW_US());
         for (int i = 0; i < nvs_to_erase; i++) {
             uint32_t idx = s_last_pop_nvs_start + (uint32_t)i;
             char key[16];
@@ -535,7 +535,7 @@ honch_err_t honch_queue_confirm(int count)
         }
         erase_us = HONCH_PERF_ELAPSED_US(erase_start_us);
 
-        int64_t commit_start_us = HONCH_PERF_NOW_US();
+        HONCH_PERF_VAR(int64_t, commit_start_us, HONCH_PERF_NOW_US());
         nvs_set_u32(handle, "head", s_nvs_head);
         nvs_set_u32(handle, "tail", s_nvs_tail);
         nvs_commit(handle);
@@ -544,7 +544,7 @@ honch_err_t honch_queue_confirm(int count)
     }
 
     reset_last_pop();
-    size_t depth = total_depth();
+    HONCH_PERF_VAR(size_t, depth, total_depth());
     xSemaphoreGive(s_mutex);
 
     HONCH_PERF_LOG("HONCH_PERF_QUEUE_CONFIRM",
@@ -564,7 +564,7 @@ honch_err_t honch_queue_confirm(int count)
 
 honch_err_t honch_queue_requeue(honch_payload_t *events, int count)
 {
-    int64_t total_start_us = HONCH_PERF_NOW_US();
+    HONCH_PERF_VAR(int64_t, total_start_us, HONCH_PERF_NOW_US());
 
     if (!events || count <= 0) {
         return HONCH_OK;
@@ -602,7 +602,7 @@ honch_err_t honch_queue_requeue(honch_payload_t *events, int count)
     }
 
     reset_last_pop();
-    size_t depth = total_depth();
+    HONCH_PERF_VAR(size_t, depth, total_depth());
     xSemaphoreGive(s_mutex);
 
     for (int i = 0; i < count; i++) {
