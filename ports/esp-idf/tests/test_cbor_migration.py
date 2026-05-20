@@ -13,6 +13,23 @@ def read(relative_path: str) -> str:
 
 
 class EspIdfCborMigrationTest(unittest.TestCase):
+    def test_esp_platform_ops_wrap_idf_primitives_for_core(self) -> None:
+        platform = read("ports/esp-idf/honch/src/esp_platform.c")
+        adapter = read("ports/esp-idf/honch/src/esp_core_adapter.h")
+        cmake = read("ports/esp-idf/honch/CMakeLists.txt")
+
+        self.assertIn('"src/esp_platform.c"', cmake)
+        self.assertIn('"../../../core/include"', cmake)
+        self.assertIn("#include \"honch/core/platform.h\"", adapter)
+        self.assertIn("esp_timer_get_time() / 1000", platform)
+        self.assertIn("esp_fill_random(buffer, buffer_size)", platform)
+        self.assertIn("xSemaphoreCreateMutex", platform)
+        self.assertIn("xSemaphoreTake", platform)
+        self.assertIn("xSemaphoreGive", platform)
+        self.assertIn(".lock = honch_esp_lock", platform)
+        self.assertIn(".unlock = honch_esp_unlock", platform)
+        self.assertIn(".log = honch_esp_log", platform)
+
     def test_component_declares_cbor_dependency(self) -> None:
         manifest = read("ports/esp-idf/honch/idf_component.yml")
         cmake = read("ports/esp-idf/honch/CMakeLists.txt")
