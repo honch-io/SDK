@@ -18,6 +18,15 @@ def read_sdk(relative_path: str) -> str:
 
 
 class CCoreCborMigrationTest(unittest.TestCase):
+    def test_core_status_header_exposes_guarded_short_aliases(self) -> None:
+        status = read_sdk("core/include/honch/core/status.h")
+
+        self.assertIn("HONCH_STATUS_OK = 0", status)
+        self.assertIn("HONCH_STATUS_ERROR_INVALID_ARGUMENT = 1", status)
+        self.assertIn("#ifndef HONCH_CORE_NO_SHORT_STATUS_NAMES", status)
+        self.assertIn("#define HONCH_OK HONCH_STATUS_OK", status)
+        self.assertIn("#define HONCH_ERROR_INVALID_ARGUMENT HONCH_STATUS_ERROR_INVALID_ARGUMENT", status)
+
     def test_transport_sends_application_cbor_with_optional_gzip(self) -> None:
         transport = read_sdk("ports/posix/src/posix_transport_curl.c")
         cmake = read("CMakeLists.txt") + read_sdk("ports/posix/CMakeLists.txt")
