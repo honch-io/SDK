@@ -1,4 +1,5 @@
 #include "honch/honch.h"
+#include "honch/posix/honch.h"
 
 static void honch_posix_config_to_core(const honch_config_t *config, honch_core_config_t *core_config)
 {
@@ -35,8 +36,29 @@ honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
         return honch_core_init(client, NULL);
     }
 
+    honch_platform_ops_t platform_ops;
+    honch_storage_ops_t storage_ops;
+    honch_transport_ops_t transport_ops;
+    honch_posix_platform_t platform_ctx;
+    honch_posix_storage_t storage_ctx;
+    honch_posix_transport_t transport_ctx;
+
+    honch_status_t status = honch_posix_platform_ops_init(&platform_ops, &platform_ctx);
+    if (status == HONCH_OK) {
+        status = honch_posix_storage_ops_init(&storage_ops, &storage_ctx, config->queue_directory);
+    }
+    if (status == HONCH_OK) {
+        status = honch_posix_transport_ops_init(&transport_ops, &transport_ctx);
+    }
+    if (status != HONCH_OK) {
+        return status;
+    }
+
     honch_core_config_t core_config;
     honch_posix_config_to_core(config, &core_config);
+    core_config.platform = &platform_ops;
+    core_config.storage = &storage_ops;
+    core_config.transport = &transport_ops;
     return honch_core_init(client, &core_config);
 }
 

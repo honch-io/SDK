@@ -82,6 +82,36 @@ class CCoreCborMigrationTest(unittest.TestCase):
         self.assertIn("honch_core_init", compat)
         self.assertNotIn("(const honch_core_config_t *)config", compat)
 
+    def test_core_client_owns_ops_and_posix_compat_initializes_them(self) -> None:
+        internal = read_sdk("core/src/honch_internal.h")
+        core = read_sdk("core/src/honch_core.c")
+        compat = read_sdk("ports/posix/src/posix_compat.c")
+        posix_header = read_sdk("ports/posix/include/honch/posix/honch.h")
+        platform = read_sdk("ports/posix/src/posix_platform.c")
+        storage = read_sdk("ports/posix/src/posix_storage.c")
+        transport = read_sdk("ports/posix/src/posix_transport_curl.c")
+
+        self.assertIn("honch_platform_ops_t platform_ops", internal)
+        self.assertIn("const honch_platform_ops_t *platform", internal)
+        self.assertIn("honch_storage_ops_t storage_ops", internal)
+        self.assertIn("const honch_storage_ops_t *storage", internal)
+        self.assertIn("honch_transport_ops_t transport_ops", internal)
+        self.assertIn("const honch_transport_ops_t *transport", internal)
+
+        self.assertIn("next->platform_ops = *config->platform", core)
+        self.assertIn("next->storage_ops = *config->storage", core)
+        self.assertIn("next->transport_ops = *config->transport", core)
+
+        self.assertIn("honch_posix_platform_t", posix_header)
+        self.assertIn("honch_posix_storage_t", posix_header)
+        self.assertIn("honch_posix_transport_t", posix_header)
+        self.assertIn("honch_posix_platform_ops_init", platform)
+        self.assertIn("honch_posix_storage_ops_init", storage)
+        self.assertIn("honch_posix_transport_ops_init", transport)
+        self.assertIn("honch_posix_platform_ops_init(&platform_ops", compat)
+        self.assertIn("honch_posix_storage_ops_init(&storage_ops", compat)
+        self.assertIn("honch_posix_transport_ops_init(&transport_ops", compat)
+
     def test_docs_reference_cbor_contract(self) -> None:
         readme = read("README.md")
         spec = (SDK_ROOT / "spec/wire-format.md").read_text()

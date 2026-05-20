@@ -1,4 +1,5 @@
 #include "honch_internal.h"
+#include "honch/posix/honch.h"
 
 #include <curl/curl.h>
 #include <limits.h>
@@ -71,6 +72,56 @@ static honch_status_t honch_map_response(long response_code, honch_http_result_t
 
     *result = HONCH_HTTP_REJECTED;
     return HONCH_ERROR_REJECTED;
+}
+
+static honch_status_t honch_posix_transport_post_batch(
+    void *ctx,
+    const char *endpoint_url,
+    const char *api_key,
+    const uint8_t *body,
+    size_t body_size,
+    const char *content_encoding,
+    honch_transport_result_t *result)
+{
+    (void)endpoint_url;
+    (void)api_key;
+    (void)content_encoding;
+    honch_posix_transport_t *transport = (honch_posix_transport_t *)ctx;
+    if (transport == NULL || transport->client == NULL || result == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    honch_http_result_t http_result = HONCH_HTTP_RETRY;
+    honch_status_t status = honch_transport_post_batch(transport->client, body, body_size, &http_result);
+    switch (http_result) {
+        case HONCH_HTTP_OK:
+            *result = HONCH_TRANSPORT_ACCEPTED;
+            break;
+        case HONCH_HTTP_REJECTED:
+            *result = HONCH_TRANSPORT_REJECTED;
+            break;
+        case HONCH_HTTP_RETRY:
+        default:
+            *result = HONCH_TRANSPORT_RETRY;
+            break;
+    }
+    return status;
+}
+
+honch_status_t honch_posix_transport_ops_init(honch_transport_ops_t *ops, honch_posix_transport_t *ctx)
+{
+    if (ops == NULL || ctx == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    *ctx = (honch_posix_transport_t) {
+        .client = NULL
+    };
+    *ops = (honch_transport_ops_t) {
+        .post_batch = honch_posix_transport_post_batch,
+        .ctx = NULL
+    };
+    return HONCH_OK;
 }
 
 #ifdef HONCH_HAVE_ZLIB

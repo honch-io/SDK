@@ -1,4 +1,5 @@
 #include "honch_internal.h"
+#include "honch/posix/honch.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -215,6 +216,80 @@ uint64_t honch_now_millis(void)
     }
 
     return ((uint64_t)tv.tv_sec * 1000u) + ((uint64_t)tv.tv_usec / 1000u);
+}
+
+static uint64_t honch_posix_now_ms(void *ctx)
+{
+    (void)ctx;
+    return honch_now_millis();
+}
+
+static uint64_t honch_posix_uptime_ms(void *ctx)
+{
+    return honch_posix_now_ms(ctx);
+}
+
+static honch_status_t honch_posix_random_bytes(void *ctx, uint8_t *buffer, size_t buffer_size)
+{
+    (void)ctx;
+    if (buffer == NULL && buffer_size > 0u) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    int fd = open("/dev/urandom", O_RDONLY);
+    if (fd < 0) {
+        return HONCH_ERROR_IO;
+    }
+
+    size_t offset = 0u;
+    while (offset < buffer_size) {
+        ssize_t read_count = read(fd, buffer + offset, buffer_size - offset);
+        if (read_count <= 0) {
+            close(fd);
+            return HONCH_ERROR_IO;
+        }
+        offset += (size_t)read_count;
+    }
+
+    close(fd);
+    return HONCH_OK;
+}
+
+static honch_status_t honch_posix_lock_noop(void *ctx)
+{
+    (void)ctx;
+    return HONCH_OK;
+}
+
+static honch_status_t honch_posix_unlock_noop(void *ctx)
+{
+    (void)ctx;
+    return HONCH_OK;
+}
+
+static void honch_posix_log_noop(void *ctx, honch_log_level_t level, const char *message)
+{
+    (void)ctx;
+    (void)level;
+    (void)message;
+}
+
+honch_status_t honch_posix_platform_ops_init(honch_platform_ops_t *ops, honch_posix_platform_t *ctx)
+{
+    if (ops == NULL || ctx == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    *ops = (honch_platform_ops_t) {
+        .now_ms = honch_posix_now_ms,
+        .uptime_ms = honch_posix_uptime_ms,
+        .random_bytes = honch_posix_random_bytes,
+        .lock = honch_posix_lock_noop,
+        .unlock = honch_posix_unlock_noop,
+        .log = honch_posix_log_noop,
+        .ctx = ctx
+    };
+    return HONCH_OK;
 }
 
 honch_status_t honch_random_hex(char out[33])

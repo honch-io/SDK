@@ -1,9 +1,65 @@
 #include "honch_internal.h"
+#include "honch/posix/honch.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+static honch_status_t honch_posix_storage_missing_client(void)
+{
+    return HONCH_ERROR_NOT_INITIALIZED;
+}
+
+static honch_status_t honch_posix_queue_push(void *ctx, const uint8_t *event, size_t event_size, uint64_t sequence)
+{
+    (void)sequence;
+    honch_posix_storage_t *storage = (honch_posix_storage_t *)ctx;
+    if (storage == NULL || storage->client == NULL) {
+        return honch_posix_storage_missing_client();
+    }
+    return honch_queue_enqueue(storage->client, event, event_size);
+}
+
+static honch_status_t honch_posix_queue_clear(void *ctx)
+{
+    honch_posix_storage_t *storage = (honch_posix_storage_t *)ctx;
+    if (storage == NULL || storage->client == NULL) {
+        return honch_posix_storage_missing_client();
+    }
+    return honch_queue_clear(storage->client);
+}
+
+static honch_status_t honch_posix_queue_depth(void *ctx, size_t *depth)
+{
+    honch_posix_storage_t *storage = (honch_posix_storage_t *)ctx;
+    if (storage == NULL || storage->client == NULL || depth == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    return honch_queue_count_pending(storage->client, depth);
+}
+
+honch_status_t honch_posix_storage_ops_init(
+    honch_storage_ops_t *ops,
+    honch_posix_storage_t *ctx,
+    const char *queue_directory)
+{
+    if (ops == NULL || ctx == NULL || honch_is_blank(queue_directory)) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    *ctx = (honch_posix_storage_t) {
+        .client = NULL,
+        .queue_directory = queue_directory
+    };
+    *ops = (honch_storage_ops_t) {
+        .queue_push = honch_posix_queue_push,
+        .queue_clear = honch_posix_queue_clear,
+        .queue_depth = honch_posix_queue_depth,
+        .ctx = NULL
+    };
+    return HONCH_OK;
+}
 
 static honch_status_t honch_list_queue_files(honch_client_t *client, honch_file_list_t *files)
 {

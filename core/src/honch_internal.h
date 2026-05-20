@@ -55,6 +55,12 @@ struct honch_client {
     pthread_mutex_t mutex;
     pthread_cond_t scheduler_cond;
     pthread_t scheduler_thread;
+    honch_platform_ops_t platform_ops;
+    const honch_platform_ops_t *platform;
+    honch_storage_ops_t storage_ops;
+    const honch_storage_ops_t *storage;
+    honch_transport_ops_t transport_ops;
+    const honch_transport_ops_t *transport;
     char *api_key;
     char *endpoint_url;
     char *device_id;
