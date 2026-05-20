@@ -3,6 +3,7 @@ add_library(honch_core
     src/honch_cbor.c
     src/honch_encoder.c
     src/honch_json.c
+    src/honch_packetizer.c
 )
 
 target_include_directories(honch_core
@@ -37,4 +38,19 @@ if(HONCH_BUILD_TESTS)
     )
 
     add_test(NAME honch_core_storage_contract_tests COMMAND honch_core_storage_contract_tests)
+
+    add_executable(honch_core_packetizer_tests
+        test/test_packetizer.c
+    )
+
+    target_link_libraries(honch_core_packetizer_tests PRIVATE honch_core)
+    target_include_directories(honch_core_packetizer_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../c-core/honch/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_compile_options(honch_core_packetizer_tests PRIVATE
+        $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
+    )
+
+    add_test(NAME honch_core_packetizer_tests COMMAND honch_core_packetizer_tests)
 endif()
