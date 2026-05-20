@@ -112,6 +112,16 @@ class CCoreCborMigrationTest(unittest.TestCase):
         self.assertIn("honch_posix_storage_ops_init(&storage_ops", compat)
         self.assertIn("honch_posix_transport_ops_init(&transport_ops", compat)
 
+    def test_core_uses_platform_ops_for_time_and_random_when_available(self) -> None:
+        core = read_sdk("core/src/honch_core.c")
+
+        self.assertIn("honch_client_now_millis", core)
+        self.assertIn("honch_client_random_hex", core)
+        self.assertIn("client->platform->now_ms", core)
+        self.assertIn("client->platform->random_bytes", core)
+        self.assertIn("honch_client_now_millis(client)", core)
+        self.assertIn("honch_client_random_hex(client, random)", core)
+
     def test_docs_reference_cbor_contract(self) -> None:
         readme = read("README.md")
         spec = (SDK_ROOT / "spec/wire-format.md").read_text()

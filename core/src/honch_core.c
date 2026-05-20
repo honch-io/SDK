@@ -292,6 +292,9 @@ static honch_status_t honch_cbor_patch_map_header(honch_buffer_t *buffer, size_t
     return HONCH_OK;
 }
 
+static uint64_t honch_client_now_millis(honch_client_t *client);
+static honch_status_t honch_client_random_hex(honch_client_t *client, char out[33]);
+
 static honch_status_t honch_build_event(
     honch_client_t *client,
     const char *event_name,
@@ -327,7 +330,7 @@ static honch_status_t honch_build_event(
         status = honch_cbor_append_text(&buffer, "timestamp");
     }
     if (status == HONCH_OK) {
-        status = honch_cbor_append_int(&buffer, (int64_t)honch_now_millis());
+        status = honch_cbor_append_int(&buffer, (int64_t)honch_client_now_millis(client));
     }
     if (status == HONCH_OK) {
         status = honch_cbor_append_text(&buffer, "properties");
@@ -368,6 +371,40 @@ static int honch_read_battery_level(honch_client_t *client)
     }
 
     return client->battery_callback();
+}
+
+static uint64_t honch_client_now_millis(honch_client_t *client)
+{
+    if (client != NULL && client->platform != NULL && client->platform->now_ms != NULL) {
+        return client->platform->now_ms(client->platform->ctx);
+    }
+
+    return honch_now_millis();
+}
+
+static honch_status_t honch_client_random_hex(honch_client_t *client, char out[33])
+{
+    if (client == NULL || out == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (client->platform == NULL || client->platform->random_bytes == NULL) {
+        return honch_random_hex(out);
+    }
+
+    unsigned char bytes[16];
+    honch_status_t status = client->platform->random_bytes(client->platform->ctx, bytes, sizeof(bytes));
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    static const char hex[] = "0123456789abcdef";
+    for (size_t i = 0u; i < sizeof(bytes); i++) {
+        out[i * 2u] = hex[(bytes[i] >> 4u) & 0x0fu];
+        out[(i * 2u) + 1u] = hex[bytes[i] & 0x0fu];
+    }
+    out[32] = '\0';
+    return HONCH_OK;
 }
 
 static honch_status_t honch_track_locked_internal(
@@ -445,7 +482,7 @@ static unsigned int honch_next_retry_delay_ms(honch_client_t *client)
         return delay;
     }
 
-    uint64_t now = honch_now_millis();
+    uint64_t now = honch_client_now_millis(client);
     unsigned int jitter = (unsigned int)(now % ((uint64_t)(quarter * 2u) + 1u));
     return (delay - quarter) + jitter;
 }
@@ -520,7 +557,7 @@ static void *honch_scheduler_main(void *userdata)
     pthread_mutex_lock(&client->mutex);
 
     while (!client->scheduler_stop) {
-        uint64_t now = honch_now_millis();
+        uint64_t now = honch_client_now_millis(client);
         bool retry_blocked = client->next_retry_flush_ms > now;
         bool interval_due = client->flush_interval_seconds > 0u && now >= client->next_interval_flush_ms;
         bool should_flush = (client->scheduler_flush_requested || interval_due) && !retry_blocked;
@@ -528,7 +565,7 @@ static void *honch_scheduler_main(void *userdata)
         if (should_flush) {
             client->scheduler_flush_requested = false;
             honch_status_t status = honch_queue_flush_locked(client);
-            now = honch_now_millis();
+            now = honch_client_now_millis(client);
 
             if (status == HONCH_OK) {
                 client->current_retry_delay_ms = client->flush_retry_initial_ms;
@@ -566,7 +603,7 @@ static honch_status_t honch_scheduler_start(honch_client_t *client)
         return HONCH_OK;
     }
 
-    uint64_t now = honch_now_millis();
+    uint64_t now = honch_client_now_millis(client);
     client->current_retry_delay_ms = client->flush_retry_initial_ms;
     if (client->flush_interval_seconds > 0u) {
         client->next_interval_flush_ms = now + honch_scheduler_interval_ms(client);
@@ -603,10 +640,10 @@ static void honch_scheduler_stop(honch_client_t *client)
     client->scheduler_started = false;
 }
 
-static honch_status_t honch_new_session_id(char **out)
+static honch_status_t honch_new_session_id(honch_client_t *client, char **out)
 {
     char random[33];
-    honch_status_t status = honch_random_hex(random);
+    honch_status_t status = honch_client_random_hex(client, random);
     if (status != HONCH_OK) {
         return status;
     }
@@ -946,7 +983,7 @@ honch_status_t honch_core_session_start(honch_client_t *client, const char *sess
     }
 
     char *session_id = NULL;
-    honch_status_t status = honch_new_session_id(&session_id);
+    honch_status_t status = honch_new_session_id(client, &session_id);
     if (status != HONCH_OK) {
         return status;
     }
