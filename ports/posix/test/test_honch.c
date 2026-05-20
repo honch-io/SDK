@@ -1,4 +1,5 @@
 #include "honch/honch.h"
+#include "honch/core/packetizer.h"
 
 #include <dirent.h>
 #include <stdio.h>
@@ -540,6 +541,39 @@ static void test_track_persists_event(void)
     EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 2);
 
     honch_shutdown(client);
+}
+
+static void test_packetizer_reads_posix_storage_event(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_TRUE(honch_core_data_available(client, HONCH_DATA_SOURCE_EVENTS));
+
+    honch_packetizer_t packetizer = {0};
+    unsigned char frame[256] = {0};
+    size_t frame_size = 0u;
+    bool message_complete = false;
+
+    EXPECT_EQ_INT(honch_packetizer_begin(client, &packetizer, HONCH_DATA_SOURCE_EVENTS), HONCH_OK);
+    EXPECT_EQ_INT(honch_packetizer_next(
+        &packetizer,
+        frame,
+        sizeof(frame),
+        &frame_size,
+        &message_complete), HONCH_OK);
+    EXPECT_TRUE(frame_size > 20u);
+    EXPECT_TRUE(message_complete);
+    EXPECT_EQ_INT(honch_packetizer_confirm(&packetizer), HONCH_OK);
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
 }
 
 static void test_os_buffered_durability_tracks_and_flushes_event(void)
@@ -1693,6 +1727,7 @@ int main(void)
     test_esp_idf_status_aliases();
     test_shutdown_reports_status();
     test_track_persists_event();
+    test_packetizer_reads_posix_storage_event();
     test_os_buffered_durability_tracks_and_flushes_event();
     test_strict_json_validation();
     test_generated_device_id_persists();
