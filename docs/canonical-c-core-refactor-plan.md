@@ -1575,7 +1575,7 @@ git commit -m "feat(core): add relay packetizer"
 - Modify: `ports/esp-idf/honch/src/esp_storage_nvs.c` after ESP port exists
 - Test: `core/test/test_retry.c`
 
-- [ ] **Step 1: Add retry tests**
+- [x] **Step 1: Add retry tests**
 
 Create `core/test/test_retry.c` with cases:
 
@@ -1588,7 +1588,7 @@ static void test_500_preserves_events(void);
 static void test_network_error_preserves_events(void);
 ```
 
-- [ ] **Step 2: Run tests to expose current pop/requeue assumptions**
+- [x] **Step 2: Run tests to expose current pop/requeue assumptions**
 
 Run:
 
@@ -1599,7 +1599,7 @@ ctest --test-dir c-core/build --output-on-failure -R retry
 
 Expected: tests fail until core flush uses non-destructive peek.
 
-- [ ] **Step 3: Change core flush algorithm**
+- [x] **Step 3: Change core flush algorithm**
 
 Implement:
 
@@ -1618,7 +1618,7 @@ if retry/network/server:
   leave sequences pending
 ```
 
-- [ ] **Step 4: Run retry tests**
+- [x] **Step 4: Run retry tests**
 
 Run:
 
@@ -1629,7 +1629,7 @@ ctest --test-dir c-core/build --output-on-failure -R retry
 
 Expected: retry tests pass.
 
-- [ ] **Step 5: Run all C tests**
+- [x] **Step 5: Run all C tests**
 
 Run:
 
@@ -1639,7 +1639,7 @@ ctest --test-dir c-core/build --output-on-failure
 
 Expected: all C/POSIX tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```sh
 git add core ports/posix

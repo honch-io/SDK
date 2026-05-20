@@ -87,6 +87,7 @@ struct honch_client {
     uint64_t next_interval_flush_ms;
     uint64_t next_retry_flush_ms;
     unsigned int current_retry_delay_ms;
+    uint64_t active_storage_reader_sequence;
     bool scheduler_enabled;
     bool scheduler_started;
     bool scheduler_stop;

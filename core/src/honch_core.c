@@ -61,32 +61,6 @@ static honch_status_t honch_validate_json_value_input(
     return HONCH_OK;
 }
 
-bool honch_property_key_is_reserved(const char *key)
-{
-    static const char *reserved[] = {
-        "$battery_level",
-        "$device_id",
-        "$device_model",
-        "$environment",
-        "$firmware_version",
-        "$sdk_platform",
-        "$sdk_version",
-        "$session_id",
-        "$wifi_rssi"
-    };
-
-    if (key == NULL) {
-        return false;
-    }
-
-    for (size_t i = 0u; i < sizeof(reserved) / sizeof(reserved[0]); i++) {
-        if (strcmp(key, reserved[i]) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
 static honch_status_t honch_append_property_pair(
     honch_buffer_t *buffer,
     size_t *member_count,
