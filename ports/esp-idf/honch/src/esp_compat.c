@@ -77,6 +77,19 @@ static void honch_esp_clear_legacy_globals(void)
     g_honch_connected = false;
 }
 
+static honch_err_t honch_esp_copy_static_config_string(char *dest, size_t dest_size, const char *value)
+{
+    if (dest == NULL || dest_size == 0u || value == NULL) {
+        return HONCH_ERR_INVALID_ARG;
+    }
+
+    int written = snprintf(dest, dest_size, "%s", value);
+    if (written < 0 || written >= (int)dest_size) {
+        return HONCH_ERR_INVALID_ARG;
+    }
+    return HONCH_OK;
+}
+
 static honch_err_t honch_esp_copy_config(const honch_config_t *config)
 {
     if (snprintf(s_endpoint_url, sizeof(s_endpoint_url), "%s/batch", config->host) >=
@@ -84,15 +97,25 @@ static honch_err_t honch_esp_copy_config(const honch_config_t *config)
         return HONCH_ERR_INVALID_ARG;
     }
 
-    snprintf(s_api_key, sizeof(s_api_key), "%s", config->api_key);
-    snprintf(s_device_model, sizeof(s_device_model), "%s", config->device_model);
-    snprintf(s_firmware_version, sizeof(s_firmware_version), "%s", config->firmware_version);
-    snprintf(s_environment,
-             sizeof(s_environment),
-             "%s",
-             config->environment != NULL && config->environment[0] != '\0'
-                 ? config->environment
-                 : "production");
+    const char *environment = config->environment != NULL && config->environment[0] != '\0'
+        ? config->environment
+        : "production";
+    honch_err_t err = honch_esp_copy_static_config_string(s_api_key, sizeof(s_api_key), config->api_key);
+    if (err == HONCH_OK) {
+        err = honch_esp_copy_static_config_string(s_device_model, sizeof(s_device_model), config->device_model);
+    }
+    if (err == HONCH_OK) {
+        err = honch_esp_copy_static_config_string(
+            s_firmware_version,
+            sizeof(s_firmware_version),
+            config->firmware_version);
+    }
+    if (err == HONCH_OK) {
+        err = honch_esp_copy_static_config_string(s_environment, sizeof(s_environment), environment);
+    }
+    if (err != HONCH_OK) {
+        return err;
+    }
 
     g_honch_api_key = s_api_key;
     g_honch_device_model = s_device_model;
