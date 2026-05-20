@@ -86,13 +86,13 @@ static honch_status_t honch_posix_transport_post_batch(
     (void)endpoint_url;
     (void)api_key;
     (void)content_encoding;
-    honch_posix_transport_t *transport = (honch_posix_transport_t *)ctx;
-    if (transport == NULL || transport->client == NULL || result == NULL) {
+    honch_client_t *client = (honch_client_t *)ctx;
+    if (client == NULL || result == NULL) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
     honch_http_result_t http_result = HONCH_HTTP_RETRY;
-    honch_status_t status = honch_transport_post_batch(transport->client, body, body_size, &http_result);
+    honch_status_t status = honch_transport_post_batch(client, body, body_size, &http_result);
     switch (http_result) {
         case HONCH_HTTP_OK:
             *result = HONCH_TRANSPORT_ACCEPTED;

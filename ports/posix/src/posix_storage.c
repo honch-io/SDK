@@ -88,6 +88,41 @@ static honch_status_t honch_move_to_dead(honch_client_t *client, const honch_fil
     return HONCH_OK;
 }
 
+static honch_status_t honch_client_post_batch(
+    honch_client_t *client,
+    const unsigned char *body,
+    size_t body_size,
+    honch_http_result_t *result)
+{
+    if (client != NULL && client->transport != NULL && client->transport->post_batch != NULL) {
+        honch_transport_result_t transport_result = HONCH_TRANSPORT_RETRY;
+        honch_status_t status = client->transport->post_batch(
+            client->transport->ctx,
+            client->endpoint_url,
+            client->api_key,
+            body,
+            body_size,
+            NULL,
+            &transport_result);
+        switch (transport_result) {
+            case HONCH_TRANSPORT_ACCEPTED:
+                *result = HONCH_HTTP_OK;
+                break;
+            case HONCH_TRANSPORT_REJECTED:
+            case HONCH_TRANSPORT_AUTH_ERROR:
+                *result = HONCH_HTTP_REJECTED;
+                break;
+            case HONCH_TRANSPORT_RETRY:
+            default:
+                *result = HONCH_HTTP_RETRY;
+                break;
+        }
+        return status;
+    }
+
+    return honch_transport_post_batch(client, body, body_size, result);
+}
+
 static honch_status_t honch_queue_enqueue_with_sequence(
     honch_client_t *client,
     const unsigned char *event,
@@ -271,7 +306,7 @@ honch_status_t honch_queue_flush_locked(honch_client_t *client)
         }
 
         honch_http_result_t result = HONCH_HTTP_RETRY;
-        status = honch_transport_post_batch(client, payload.data, payload.length, &result);
+        status = honch_client_post_batch(client, payload.data, payload.length, &result);
         free(payload.data);
 
         if (result == HONCH_HTTP_OK) {

@@ -814,6 +814,9 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     }
     if (config->transport != NULL) {
         next->transport_ops = *config->transport;
+        if (next->transport_ops.ctx == NULL) {
+            next->transport_ops.ctx = next;
+        }
         next->transport = &next->transport_ops;
     }
 
