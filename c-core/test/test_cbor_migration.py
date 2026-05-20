@@ -13,6 +13,10 @@ def read(relative_path: str) -> str:
     return (ROOT / relative_path).read_text()
 
 
+def read_sdk(relative_path: str) -> str:
+    return (SDK_ROOT / relative_path).read_text()
+
+
 class CCoreCborMigrationTest(unittest.TestCase):
     def test_transport_sends_application_cbor_with_optional_gzip(self) -> None:
         transport = read("honch/src/honch_transport_curl.c")
@@ -47,7 +51,7 @@ class CCoreCborMigrationTest(unittest.TestCase):
         self.assertIn("client->durability_mode", queue)
 
     def test_encoder_builds_cbor_epoch_millis_payloads(self) -> None:
-        encoder = read("honch/src/honch_encoder.c")
+        encoder = read_sdk("core/src/honch_encoder.c")
         honch = read("honch/src/honch.c")
         internal = read("honch/src/honch_internal.h")
 

@@ -20,11 +20,10 @@ find_package(CURL REQUIRED)
 find_package(Threads REQUIRED)
 find_package(ZLIB QUIET)
 
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../core ${CMAKE_CURRENT_BINARY_DIR}/core)
+
 add_library(honch_c_core
     honch/src/honch.c
-    honch/src/honch_cbor.c
-    honch/src/honch_encoder.c
-    honch/src/honch_json.c
     honch/src/honch_platform.c
     honch/src/honch_queue.c
     honch/src/honch_state.c
@@ -38,6 +37,7 @@ target_include_directories(honch_c_core
 
 target_link_libraries(honch_c_core
     PRIVATE
+        honch_core
         CURL::libcurl
         Threads::Threads
 )
