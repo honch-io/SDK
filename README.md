@@ -7,7 +7,7 @@ SDK contract plus platform SDKs for embedded and connected-device targets.
 
 | Platform | Status | Path |
 |----------|--------|------|
-| **ESP-IDF** | v0.1.0 | [`esp-idf/`](esp-idf/) |
+| **ESP-IDF** | v0.1.0 | [`ports/esp-idf/`](ports/esp-idf/) |
 | **C/POSIX** | v0.1.0 | [`c-core/`](c-core/) |
 | **MicroPython** | v0.1.0 | [`micropython/`](micropython/) |
 

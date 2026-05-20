@@ -9,7 +9,7 @@ markers.
 ## Configure
 
 ```bash
-cd SDK/esp-idf/benchtest
+cd SDK/ports/esp-idf/benchtest
 idf.py menuconfig
 ```
 

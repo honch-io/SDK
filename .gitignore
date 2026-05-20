@@ -17,13 +17,13 @@ Testing/
 compile_commands.json
 
 # ESP-IDF local/generated project state
-esp-idf/**/build/
-esp-idf/**/build-*/
-esp-idf/**/managed_components/
-esp-idf/**/dependencies.lock
-esp-idf/**/sdkconfig
-esp-idf/**/sdkconfig.old
-esp-idf/footprint/build-footprint-report.json
+ports/esp-idf/**/build/
+ports/esp-idf/**/build-*/
+ports/esp-idf/**/managed_components/
+ports/esp-idf/**/dependencies.lock
+ports/esp-idf/**/sdkconfig
+ports/esp-idf/**/sdkconfig.old
+ports/esp-idf/footprint/build-footprint-report.json
 
 # Compiled artifacts
 *.o

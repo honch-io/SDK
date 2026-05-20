@@ -5,7 +5,7 @@ from pathlib import Path
 import unittest
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def read(relative_path: str) -> str:
@@ -14,8 +14,8 @@ def read(relative_path: str) -> str:
 
 class EspIdfCborMigrationTest(unittest.TestCase):
     def test_component_declares_cbor_dependency(self) -> None:
-        manifest = read("esp-idf/honch/idf_component.yml")
-        cmake = read("esp-idf/honch/CMakeLists.txt")
+        manifest = read("ports/esp-idf/honch/idf_component.yml")
+        cmake = read("ports/esp-idf/honch/CMakeLists.txt")
 
         self.assertIn("espressif/cbor", manifest)
         self.assertIn("espressif/cjson", manifest)
@@ -24,9 +24,9 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertRegex(cmake, r"\besp_timer\b")
 
     def test_transport_sends_application_cbor_with_optional_gzip(self) -> None:
-        transport = read("esp-idf/honch/src/transport.c")
-        transport_header = read("esp-idf/honch/src/transport.h")
-        kconfig = read("esp-idf/honch/Kconfig")
+        transport = read("ports/esp-idf/honch/src/transport.c")
+        transport_header = read("ports/esp-idf/honch/src/transport.h")
+        kconfig = read("ports/esp-idf/honch/Kconfig")
 
         self.assertIn('"Content-Type", "application/cbor"', transport)
         self.assertNotIn('"Content-Type", "application/json"', transport)
@@ -43,14 +43,14 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn("HONCH_GZIP_MIN_BYTES", kconfig)
 
     def test_perf_logging_instruments_sdk_hot_paths(self) -> None:
-        kconfig = read("esp-idf/honch/Kconfig")
-        perf = read("esp-idf/honch/src/perf.h")
-        honch = read("esp-idf/honch/src/honch.c")
-        encoder = read("esp-idf/honch/src/encoder.c")
-        queue = read("esp-idf/honch/src/queue.c")
-        scheduler = read("esp-idf/honch/src/scheduler.c")
-        transport = read("esp-idf/honch/src/transport.c")
-        bench_defaults = read("esp-idf/benchtest/sdkconfig.defaults")
+        kconfig = read("ports/esp-idf/honch/Kconfig")
+        perf = read("ports/esp-idf/honch/src/perf.h")
+        honch = read("ports/esp-idf/honch/src/honch.c")
+        encoder = read("ports/esp-idf/honch/src/encoder.c")
+        queue = read("ports/esp-idf/honch/src/queue.c")
+        scheduler = read("ports/esp-idf/honch/src/scheduler.c")
+        transport = read("ports/esp-idf/honch/src/transport.c")
+        bench_defaults = read("ports/esp-idf/benchtest/sdkconfig.defaults")
 
         self.assertIn("HONCH_PERF_LOGGING", kconfig)
         self.assertIn("HONCH_PERF_LOG", perf)
@@ -72,8 +72,8 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn("CONFIG_HONCH_PERF_LOGGING=y", bench_defaults)
 
     def test_queue_persists_cbor_blobs_not_json_strings(self) -> None:
-        queue = read("esp-idf/honch/src/queue.c")
-        queue_header = read("esp-idf/honch/src/queue.h")
+        queue = read("ports/esp-idf/honch/src/queue.c")
+        queue_header = read("ports/esp-idf/honch/src/queue.h")
 
         self.assertIn("honch_payload_t", queue_header)
         self.assertIn("nvs_set_blob", queue)
@@ -82,8 +82,8 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertNotIn("event_json", queue_header)
 
     def test_queue_uses_ram_first_with_nvs_spill(self) -> None:
-        queue = read("esp-idf/honch/src/queue.c")
-        kconfig = read("esp-idf/honch/Kconfig")
+        queue = read("ports/esp-idf/honch/src/queue.c")
+        kconfig = read("ports/esp-idf/honch/Kconfig")
 
         self.assertIn("HONCH_RAM_QUEUE_DEPTH", kconfig)
         self.assertIn("HONCH_DURABLE_IMMEDIATE_NVS", kconfig)
@@ -98,8 +98,8 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         )
 
     def test_encoder_directly_encodes_properties_without_cjson_merge(self) -> None:
-        encoder = read("esp-idf/honch/src/encoder.c")
-        kconfig = read("esp-idf/honch/Kconfig")
+        encoder = read("ports/esp-idf/honch/src/encoder.c")
+        kconfig = read("ports/esp-idf/honch/Kconfig")
 
         self.assertIn("HONCH_WIFI_RSSI_CACHE_MS", kconfig)
         self.assertIn("honch_event_runtime_t", encoder)
@@ -112,19 +112,19 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertNotIn("cJSON_DeleteItemFromObject", encoder)
 
     def test_transport_treats_bad_requests_as_non_retryable(self) -> None:
-        transport = read("esp-idf/honch/src/transport.c")
+        transport = read("ports/esp-idf/honch/src/transport.c")
 
         self.assertIn("status == 429", transport)
         self.assertRegex(transport, r"status >= 400 && status < 500")
 
     def test_lifecycle_detects_existing_wifi_connection(self) -> None:
-        lifecycle = read("esp-idf/honch/src/lifecycle.c")
+        lifecycle = read("ports/esp-idf/honch/src/lifecycle.c")
 
         self.assertIn("esp_wifi_sta_get_ap_info", lifecycle)
         self.assertIn("Initial Wi-Fi connection detected", lifecycle)
 
     def test_example_syncs_time_and_emits_heartbeat(self) -> None:
-        example = read("esp-idf/example/main/app_main.c")
+        example = read("ports/esp-idf/example/main/app_main.c")
 
         self.assertIn("#include \"esp_sntp.h\"", example)
         self.assertIn("sync_time", example)
@@ -132,9 +132,9 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn('honch_track("heartbeat"', example)
 
     def test_benchtest_app_exercises_sdk_performance_paths(self) -> None:
-        cmake = read("esp-idf/benchtest/CMakeLists.txt")
-        kconfig = read("esp-idf/benchtest/main/Kconfig.projbuild")
-        bench = read("esp-idf/benchtest/main/app_main.c")
+        cmake = read("ports/esp-idf/benchtest/CMakeLists.txt")
+        kconfig = read("ports/esp-idf/benchtest/main/Kconfig.projbuild")
+        bench = read("ports/esp-idf/benchtest/main/app_main.c")
 
         self.assertIn('project(honch_benchtest)', cmake)
         self.assertIn('config BENCH_EVENT_COUNT', kconfig)
@@ -155,8 +155,8 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn("queued_estimate", bench)
 
     def test_encoder_builds_cbor_epoch_millis_payloads(self) -> None:
-        encoder = read("esp-idf/honch/src/encoder.c")
-        encoder_header = read("esp-idf/honch/src/encoder.h")
+        encoder = read("ports/esp-idf/honch/src/encoder.c")
+        encoder_header = read("ports/esp-idf/honch/src/encoder.h")
 
         self.assertIn("#include \"cbor.h\"", encoder)
         self.assertIn("honch_encode_event", encoder_header)
@@ -168,7 +168,7 @@ class EspIdfCborMigrationTest(unittest.TestCase):
 
     def test_wire_format_docs_describe_cbor_contract(self) -> None:
         spec = read("spec/wire-format.md")
-        readme = read("esp-idf/README.md")
+        readme = read("ports/esp-idf/README.md")
 
         self.assertIn("Content-Type: application/cbor", spec)
         self.assertIn("epoch milliseconds", spec)
