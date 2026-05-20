@@ -274,3 +274,12 @@ honch_status_t honch_queue_count_pending(honch_client_t *client, size_t *count)
 
     return client->storage->queue_depth(client->storage->ctx, count);
 }
+
+honch_status_t honch_queue_clear(honch_client_t *client)
+{
+    if (client == NULL || client->storage == NULL || client->storage->queue_clear == NULL) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+
+    return client->storage->queue_clear(client->storage->ctx);
+}
