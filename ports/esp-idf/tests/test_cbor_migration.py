@@ -21,6 +21,9 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn('"src/esp_platform.c"', cmake)
         self.assertIn('"../../../core/include"', cmake)
         self.assertIn("#include \"honch/core/platform.h\"", adapter)
+        self.assertIn("gettimeofday(&now", platform)
+        self.assertIn("HONCH_MIN_UNIX_TIME_SECONDS = 1577836800", platform)
+        self.assertIn("now.tv_sec >= HONCH_MIN_UNIX_TIME_SECONDS", platform)
         self.assertIn("esp_timer_get_time() / 1000", platform)
         self.assertIn("esp_fill_random(buffer, buffer_size)", platform)
         self.assertIn("xSemaphoreCreateMutex", platform)
@@ -115,6 +118,7 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn("esp_fill_random(bytes, sizeof(bytes))", shims)
         self.assertIn("client->storage->state_get", shims)
         self.assertIn("client->storage->queue_push", shims)
+        self.assertIn("client->storage->queue_clear", shims)
 
     def test_esp_gpio_adapter_preserves_gpio_tracking_worker(self) -> None:
         compat = read("ports/esp-idf/honch/src/esp_compat.c")

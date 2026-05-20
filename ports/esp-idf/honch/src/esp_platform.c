@@ -4,16 +4,23 @@
 #include "esp_core_adapter.h"
 
 #include <stddef.h>
+#include <sys/time.h>
 
 #include "esp_log.h"
 #include "esp_random.h"
 #include "esp_timer.h"
 
 static const char *TAG = "honch";
+static const int64_t HONCH_MIN_UNIX_TIME_SECONDS = 1577836800;
 
 static uint64_t honch_esp_now_ms(void *ctx)
 {
     (void)ctx;
+    struct timeval now;
+    if (gettimeofday(&now, NULL) == 0 && now.tv_sec >= HONCH_MIN_UNIX_TIME_SECONDS) {
+        return ((uint64_t)now.tv_sec * 1000u) + ((uint64_t)now.tv_usec / 1000u);
+    }
+
     return (uint64_t)(esp_timer_get_time() / 1000);
 }
 
