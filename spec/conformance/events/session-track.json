@@ -1,0 +1,39 @@
+{
+  "name": "session track",
+  "config": {
+    "api_key": "test-key",
+    "device_id": "dev_fixture",
+    "device_model": "FixtureBoard",
+    "firmware_version": "1.2.3",
+    "environment": "test"
+  },
+  "operations": [
+    {
+      "op": "session_start",
+      "session_name": "recording"
+    },
+    {
+      "op": "track",
+      "event": "recording_started",
+      "properties": {
+        "mode": "hdr"
+      }
+    },
+    {
+      "op": "session_end"
+    }
+  ],
+  "expect": {
+    "events": [
+      "$session_start",
+      "recording_started",
+      "$session_end"
+    ],
+    "session_id_prefix": "sess_",
+    "session_id_present_on": [
+      "$session_start",
+      "recording_started",
+      "$session_end"
+    ]
+  }
+}

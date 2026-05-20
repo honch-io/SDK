@@ -1,0 +1,34 @@
+{
+  "name": "basic track",
+  "config": {
+    "api_key": "test-key",
+    "device_id": "dev_fixture",
+    "device_model": "FixtureBoard",
+    "firmware_version": "1.2.3",
+    "environment": "test"
+  },
+  "operations": [
+    {
+      "op": "track",
+      "event": "button_pressed",
+      "properties": {
+        "pin": 0,
+        "$device_id": "spoofed"
+      }
+    }
+  ],
+  "expect": {
+    "event": "button_pressed",
+    "distinct_id": "dev_fixture",
+    "properties": {
+      "pin": 0,
+      "$device_id": "dev_fixture",
+      "$device_model": "FixtureBoard",
+      "$firmware_version": "1.2.3",
+      "$environment": "test"
+    },
+    "properties_absent": [
+      "spoofed"
+    ]
+  }
+}
