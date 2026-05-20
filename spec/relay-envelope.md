@@ -29,15 +29,14 @@ The relay envelope wraps a batch of events from one or more devices, allowing a 
 
 The `relay` object identifies the gateway. Events in the batch may come from different `distinct_id` values (different devices).
 
-## SDK Surface (future)
+## SDK Surface
 
 ```c
-// Drain queued events into a buffer for relay transport
-honch_err_t honch_drain_to_buffer(uint8_t *buf, size_t buf_size, size_t *out_len);
+bool honch_core_data_available(honch_client_t *client, uint32_t source_mask);
+honch_status_t honch_packetizer_begin(honch_client_t *client, honch_packetizer_t *packetizer, uint32_t source_mask);
+honch_status_t honch_packetizer_next(honch_packetizer_t *packetizer, uint8_t *buffer, size_t buffer_size, size_t *out_size, bool *message_complete);
+honch_status_t honch_packetizer_confirm(honch_packetizer_t *packetizer);
+honch_status_t honch_packetizer_abort(honch_packetizer_t *packetizer);
 ```
 
-## Open Questions
-
-- CBOR encoding for constrained transports?
-- Maximum relay batch size?
-- Authentication: does the relay use its own API key or the device's?
+The relay or companion app forwards the reassembled CBOR batch to capture and stamps relay metadata.
