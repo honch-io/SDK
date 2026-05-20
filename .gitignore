@@ -23,7 +23,7 @@ ports/esp-idf/**/managed_components/
 ports/esp-idf/**/dependencies.lock
 ports/esp-idf/**/sdkconfig
 ports/esp-idf/**/sdkconfig.old
-ports/esp-idf/footprint/build-footprint-report.json
+ports/esp-idf/footprint/
 
 # Compiled artifacts
 *.o
@@ -49,6 +49,7 @@ __pycache__/
 c-core/bench/*.csv
 c-core/bench/massif.out
 c-core/bench/massif.txt
+!ports/esp-idf/benchtest/results/*.json
 
 # Local Honch SDK queues/state created by examples and smoke tests
 .honch-*/

@@ -3,12 +3,17 @@
 
 #pragma once
 
+#define HONCH_CORE_NO_SHORT_STATUS_NAMES
+
+#include "honch/core/honch.h"
 #include "honch/core/platform.h"
 #include "honch/core/storage.h"
 #include "honch/core/transport.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+
+typedef honch_client_t honch_esp_core_client_t;
 
 typedef struct honch_esp_platform {
     SemaphoreHandle_t mutex;

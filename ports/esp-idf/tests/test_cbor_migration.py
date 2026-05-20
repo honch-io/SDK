@@ -74,9 +74,38 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn("HONCH_TRANSPORT_AUTH_ERROR", transport)
         self.assertIn("HONCH_TRANSPORT_REJECTED", transport)
         self.assertIn("HONCH_TRANSPORT_RETRY", transport)
-        self.assertIn("HONCH_ERROR_RATE_LIMITED", transport)
-        self.assertIn("HONCH_ERROR_SERVER", transport)
+        self.assertIn("HONCH_STATUS_ERROR_RATE_LIMITED", transport)
+        self.assertIn("HONCH_STATUS_ERROR_SERVER", transport)
         self.assertIn(".post_batch = honch_esp_post_batch", transport)
+
+    def test_esp_compat_layer_delegates_public_api_to_core(self) -> None:
+        compat = read("ports/esp-idf/honch/src/esp_compat.c")
+        adapter = read("ports/esp-idf/honch/src/esp_core_adapter.h")
+        cmake = read("ports/esp-idf/honch/CMakeLists.txt")
+
+        self.assertIn('"src/esp_compat.c"', cmake)
+        self.assertNotIn('"src/honch.c"', cmake)
+        self.assertIn("#define HONCH_CORE_NO_SHORT_STATUS_NAMES", compat)
+        self.assertIn("#include \"honch/core/honch.h\"", compat)
+        self.assertIn("static honch_client_t *s_client", compat)
+        self.assertIn("honch_esp_status_to_err", compat)
+        self.assertIn("honch_esp_platform_ops_init(&platform_ops", compat)
+        self.assertIn("honch_esp_storage_ops_init(&storage_ops", compat)
+        self.assertIn("honch_esp_transport_ops_init(&transport_ops", compat)
+        self.assertIn("core_config.disable_background_flush = 1", compat)
+        self.assertIn("honch_core_init(&next", compat)
+        self.assertIn("honch_core_track(s_client", compat)
+        self.assertIn("honch_core_identify(s_client", compat)
+        self.assertIn("honch_core_set_property(s_client", compat)
+        self.assertIn("honch_core_session_start(s_client", compat)
+        self.assertIn("honch_core_session_end(s_client", compat)
+        self.assertIn("honch_core_flush(s_client)", compat)
+        self.assertIn("honch_core_reset(s_client)", compat)
+        self.assertIn("honch_core_shutdown(s_client)", compat)
+        self.assertIn("honch_core_get_device_id(s_client)", compat)
+        self.assertIn("honch_track_gpio", compat)
+        self.assertIn("honch_esp_platform_ops_deinit", compat)
+        self.assertIn("honch_client_t", adapter)
 
     def test_component_declares_cbor_dependency(self) -> None:
         manifest = read("ports/esp-idf/honch/idf_component.yml")
@@ -218,6 +247,16 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn('honch_track("bench_event"', bench)
         self.assertIn("honch_flush()", bench)
         self.assertIn("queued_estimate", bench)
+
+    def test_esp_footprint_report_lives_with_benchmark_results(self) -> None:
+        report = read("ports/esp-idf/benchtest/results/esp32-build-footprint-report.json")
+        gitignore = read(".gitignore")
+
+        self.assertIn('"target": "esp32"', report)
+        self.assertIn('"direct_honch_archive"', report)
+        self.assertIn('"runtime"', report)
+        self.assertIn('"landing_claims"', report)
+        self.assertIn("ports/esp-idf/footprint/", gitignore)
 
     def test_encoder_builds_cbor_epoch_millis_payloads(self) -> None:
         encoder = read("ports/esp-idf/honch/src/encoder.c")

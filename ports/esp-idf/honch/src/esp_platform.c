@@ -27,34 +27,34 @@ static honch_status_t honch_esp_random_bytes(void *ctx, uint8_t *buffer, size_t 
 {
     (void)ctx;
     if (buffer_size == 0u) {
-        return HONCH_OK;
+        return HONCH_STATUS_OK;
     }
     if (buffer == NULL && buffer_size > 0u) {
-        return HONCH_ERROR_INVALID_ARGUMENT;
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
 
     esp_fill_random(buffer, buffer_size);
-    return HONCH_OK;
+    return HONCH_STATUS_OK;
 }
 
 static honch_status_t honch_esp_lock(void *ctx)
 {
     honch_esp_platform_t *platform = (honch_esp_platform_t *)ctx;
     if (platform == NULL || platform->mutex == NULL) {
-        return HONCH_ERROR_INVALID_ARGUMENT;
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
 
-    return xSemaphoreTake(platform->mutex, portMAX_DELAY) == pdTRUE ? HONCH_OK : HONCH_ERROR_IO;
+    return xSemaphoreTake(platform->mutex, portMAX_DELAY) == pdTRUE ? HONCH_STATUS_OK : HONCH_STATUS_ERROR_IO;
 }
 
 static honch_status_t honch_esp_unlock(void *ctx)
 {
     honch_esp_platform_t *platform = (honch_esp_platform_t *)ctx;
     if (platform == NULL || platform->mutex == NULL) {
-        return HONCH_ERROR_INVALID_ARGUMENT;
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
 
-    return xSemaphoreGive(platform->mutex) == pdTRUE ? HONCH_OK : HONCH_ERROR_IO;
+    return xSemaphoreGive(platform->mutex) == pdTRUE ? HONCH_STATUS_OK : HONCH_STATUS_ERROR_IO;
 }
 
 static void honch_esp_log(void *ctx, honch_log_level_t level, const char *message)
@@ -81,13 +81,13 @@ static void honch_esp_log(void *ctx, honch_log_level_t level, const char *messag
 honch_status_t honch_esp_platform_ops_init(honch_platform_ops_t *ops, honch_esp_platform_t *ctx)
 {
     if (ops == NULL || ctx == NULL) {
-        return HONCH_ERROR_INVALID_ARGUMENT;
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
 
     ctx->mutex = NULL;
     ctx->mutex = xSemaphoreCreateMutex();
     if (ctx->mutex == NULL) {
-        return HONCH_ERROR_OUT_OF_MEMORY;
+        return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
     }
 
     *ops = (honch_platform_ops_t) {
@@ -99,7 +99,7 @@ honch_status_t honch_esp_platform_ops_init(honch_platform_ops_t *ops, honch_esp_
         .log = honch_esp_log,
         .ctx = ctx
     };
-    return HONCH_OK;
+    return HONCH_STATUS_OK;
 }
 
 void honch_esp_platform_ops_deinit(honch_esp_platform_t *ctx)

@@ -1,9 +1,15 @@
 idf_component_register(
     SRCS
-        "src/honch.c"
+        "src/esp_compat.c"
         "src/esp_platform.c"
         "src/esp_storage_nvs.c"
         "src/esp_transport_http.c"
+        "../../../core/src/honch_core.c"
+        "../../../core/src/honch_cbor.c"
+        "../../../core/src/honch_encoder.c"
+        "../../../core/src/honch_json.c"
+        "../../../core/src/honch_queue_policy.c"
+        "../../../core/src/honch_support.c"
         "src/identity.c"
         "src/queue.c"
         "src/encoder.c"
