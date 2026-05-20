@@ -5,6 +5,7 @@
 
 #include "honch/core/platform.h"
 #include "honch/core/storage.h"
+#include "honch/core/transport.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -18,6 +19,11 @@ typedef struct honch_esp_storage {
     uint64_t read_sequence;
 } honch_esp_storage_t;
 
+typedef struct honch_esp_transport {
+    void *reserved;
+} honch_esp_transport_t;
+
 honch_status_t honch_esp_platform_ops_init(honch_platform_ops_t *ops, honch_esp_platform_t *ctx);
 void honch_esp_platform_ops_deinit(honch_esp_platform_t *ctx);
 honch_status_t honch_esp_storage_ops_init(honch_storage_ops_t *ops, honch_esp_storage_t *ctx);
+honch_status_t honch_esp_transport_ops_init(honch_transport_ops_t *ops, honch_esp_transport_t *ctx);

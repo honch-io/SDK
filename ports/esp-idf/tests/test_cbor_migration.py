@@ -54,6 +54,30 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn(".queue_consume = honch_esp_queue_consume", storage)
         self.assertIn(".queue_dead_letter = honch_esp_queue_dead_letter", storage)
 
+    def test_esp_transport_ops_wrap_http_client_for_core(self) -> None:
+        transport = read("ports/esp-idf/honch/src/esp_transport_http.c")
+        adapter = read("ports/esp-idf/honch/src/esp_core_adapter.h")
+        cmake = read("ports/esp-idf/honch/CMakeLists.txt")
+
+        self.assertIn('"src/esp_transport_http.c"', cmake)
+        self.assertIn("#include \"honch/core/transport.h\"", adapter)
+        self.assertNotIn("#include \"transport.h\"", transport)
+        self.assertIn("esp_http_client_init", transport)
+        self.assertIn('"Content-Type", "application/cbor"', transport)
+        self.assertIn('"Content-Encoding", "gzip"', transport)
+        self.assertIn("tdefl_compress_mem_to_heap", transport)
+        self.assertIn("status >= 200 && status < 300", transport)
+        self.assertIn("status == 401", transport)
+        self.assertIn("status == 429", transport)
+        self.assertIn("status >= 400 && status < 500", transport)
+        self.assertIn("HONCH_TRANSPORT_ACCEPTED", transport)
+        self.assertIn("HONCH_TRANSPORT_AUTH_ERROR", transport)
+        self.assertIn("HONCH_TRANSPORT_REJECTED", transport)
+        self.assertIn("HONCH_TRANSPORT_RETRY", transport)
+        self.assertIn("HONCH_ERROR_RATE_LIMITED", transport)
+        self.assertIn("HONCH_ERROR_SERVER", transport)
+        self.assertIn(".post_batch = honch_esp_post_batch", transport)
+
     def test_component_declares_cbor_dependency(self) -> None:
         manifest = read("ports/esp-idf/honch/idf_component.yml")
         cmake = read("ports/esp-idf/honch/CMakeLists.txt")

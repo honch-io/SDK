@@ -1742,7 +1742,7 @@ dead_letter erases or writes into honch_dead namespace when enabled
 drop_oldest erases tail
 ```
 
-- [ ] **Step 3: Add ESP-IDF transport ops**
+- [x] **Step 3: Add ESP-IDF transport ops**
 
 `esp_transport_http.c` wraps existing `esp_http_client` behavior and returns `honch_transport_result_t`.
 
