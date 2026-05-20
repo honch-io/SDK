@@ -94,7 +94,7 @@ static honch_status_t honch_remove_tmp_files(const char *directory)
     return status;
 }
 
-honch_status_t honch_state_prepare(honch_client_t *client, const honch_config_t *config)
+honch_status_t honch_state_prepare(honch_client_t *client, const honch_core_config_t *config)
 {
     honch_status_t status = honch_join_path(&client->pending_directory, client->queue_directory, "pending");
     if (status == HONCH_OK) {

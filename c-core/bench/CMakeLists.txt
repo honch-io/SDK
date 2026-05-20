@@ -1,9 +1,11 @@
 add_executable(honch_c_core_bench
-    honch_bench_alloc.c
     honch_c_core_bench.c
 )
 
-target_link_libraries(honch_c_core_bench PRIVATE honch_c_core)
+target_link_libraries(honch_c_core_bench PRIVATE
+    honch_c_core
+    honch_bench_alloc_support
+)
 target_compile_definitions(honch_c_core_bench PRIVATE
     HONCH_TESTING
     _POSIX_C_SOURCE=200809L

@@ -718,7 +718,7 @@ static honch_status_t honch_emit_firmware_update_locked(honch_client_t *client)
     return status;
 }
 
-honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
+honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_t *config)
 {
     if (client == NULL || config == NULL || honch_is_blank(config->api_key) ||
         honch_is_blank(config->endpoint_url) || honch_is_blank(config->device_model) ||
@@ -825,7 +825,7 @@ honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
     return HONCH_OK;
 }
 
-honch_status_t honch_track(honch_client_t *client, const char *event_name, const char *properties_json)
+honch_status_t honch_core_track(honch_client_t *client, const char *event_name, const char *properties_json)
 {
     if (client == NULL || honch_validate_event_name(event_name) != HONCH_OK ||
         honch_validate_json_object_input(client, properties_json) != HONCH_OK) {
@@ -839,7 +839,7 @@ honch_status_t honch_track(honch_client_t *client, const char *event_name, const
     return status;
 }
 
-honch_status_t honch_identify(honch_client_t *client, const char *distinct_id, const char *traits_json)
+honch_status_t honch_core_identify(honch_client_t *client, const char *distinct_id, const char *traits_json)
 {
     if (client == NULL || honch_validate_distinct_id(distinct_id) != HONCH_OK ||
         honch_validate_json_object_input(client, traits_json) != HONCH_OK) {
@@ -888,7 +888,7 @@ honch_status_t honch_identify(honch_client_t *client, const char *distinct_id, c
     return status;
 }
 
-honch_status_t honch_set_property(honch_client_t *client, const char *key, const char *value_json)
+honch_status_t honch_core_set_property(honch_client_t *client, const char *key, const char *value_json)
 {
     if (client == NULL || key == NULL ||
         honch_validate_json_value_input(client, value_json) != HONCH_OK) {
@@ -920,14 +920,14 @@ honch_status_t honch_set_property(honch_client_t *client, const char *key, const
         status = honch_buffer_append(&properties, "}");
     }
     if (status == HONCH_OK) {
-        status = honch_track(client, "$set_property", properties.data);
+        status = honch_core_track(client, "$set_property", properties.data);
     }
 
     honch_buffer_free(&properties);
     return status;
 }
 
-honch_status_t honch_session_start(honch_client_t *client, const char *session_name)
+honch_status_t honch_core_session_start(honch_client_t *client, const char *session_name)
 {
     if (client == NULL) {
         return HONCH_ERROR_INVALID_ARGUMENT;
@@ -971,7 +971,7 @@ honch_status_t honch_session_start(honch_client_t *client, const char *session_n
     return status;
 }
 
-honch_status_t honch_session_end(honch_client_t *client)
+honch_status_t honch_core_session_end(honch_client_t *client)
 {
     if (client == NULL) {
         return HONCH_ERROR_INVALID_ARGUMENT;
@@ -992,7 +992,7 @@ honch_status_t honch_session_end(honch_client_t *client)
     return status;
 }
 
-honch_status_t honch_flush(honch_client_t *client)
+honch_status_t honch_core_flush(honch_client_t *client)
 {
     if (client == NULL) {
         return HONCH_ERROR_INVALID_ARGUMENT;
@@ -1004,7 +1004,7 @@ honch_status_t honch_flush(honch_client_t *client)
     return status;
 }
 
-honch_status_t honch_reset(honch_client_t *client)
+honch_status_t honch_core_reset(honch_client_t *client)
 {
     if (client == NULL) {
         return HONCH_ERROR_INVALID_ARGUMENT;
@@ -1024,7 +1024,7 @@ honch_status_t honch_reset(honch_client_t *client)
     return status;
 }
 
-honch_status_t honch_shutdown(honch_client_t *client)
+honch_status_t honch_core_shutdown(honch_client_t *client)
 {
     if (client == NULL) {
         return HONCH_ERROR_NOT_INITIALIZED;
@@ -1047,7 +1047,7 @@ honch_status_t honch_shutdown(honch_client_t *client)
     return status;
 }
 
-const char *honch_get_device_id(honch_client_t *client)
+const char *honch_core_get_device_id(honch_client_t *client)
 {
     if (client == NULL) {
         return NULL;
@@ -1056,7 +1056,7 @@ const char *honch_get_device_id(honch_client_t *client)
     return client->device_id;
 }
 
-honch_status_t honch_copy_device_id(honch_client_t *client, char *buffer, size_t buffer_size)
+honch_status_t honch_core_copy_device_id(honch_client_t *client, char *buffer, size_t buffer_size)
 {
     if (client == NULL || buffer == NULL || buffer_size == 0u) {
         return HONCH_ERROR_INVALID_ARGUMENT;

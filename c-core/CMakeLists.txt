@@ -23,38 +23,35 @@ find_package(ZLIB QUIET)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../core ${CMAKE_CURRENT_BINARY_DIR}/core)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../ports/posix ${CMAKE_CURRENT_BINARY_DIR}/ports/posix)
 
-add_library(honch_c_core
-    honch/src/honch.c
-)
+if(HONCH_BUILD_BENCHMARKS)
+    add_library(honch_bench_alloc_support
+        bench/honch_bench_alloc.c
+    )
+    target_include_directories(honch_bench_alloc_support
+        PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/bench
+    )
+    target_compile_options(honch_bench_alloc_support PRIVATE
+        $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
+    )
+endif()
+
+add_library(honch_c_core INTERFACE)
 
 target_include_directories(honch_c_core
-    PUBLIC
+    INTERFACE
         ${CMAKE_CURRENT_SOURCE_DIR}/honch/include
 )
 
 target_link_libraries(honch_c_core
-    PUBLIC
-        honch_core
-    PRIVATE
+    INTERFACE
         honch_posix
 )
 
-target_compile_definitions(honch_c_core PRIVATE
-    _POSIX_C_SOURCE=200809L
-)
-
-target_compile_options(honch_c_core PRIVATE
-    $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
-)
-
-if(HONCH_BUILD_TESTS OR HONCH_BUILD_BENCHMARKS)
-    target_compile_definitions(honch_c_core PRIVATE HONCH_TESTING)
-endif()
-
 if(HONCH_BUILD_BENCHMARKS)
-    target_compile_options(honch_c_core PRIVATE
-        -include
-        ${CMAKE_CURRENT_SOURCE_DIR}/bench/honch_bench_alloc.h
+    target_link_libraries(honch_c_core
+        INTERFACE
+            honch_bench_alloc_support
     )
 endif()
 

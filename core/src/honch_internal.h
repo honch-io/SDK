@@ -157,7 +157,7 @@ honch_status_t honch_list_files_with_suffix(const char *directory, const char *s
 void honch_file_list_free(honch_file_list_t *list);
 honch_status_t honch_unlink_if_exists(const char *path);
 
-honch_status_t honch_state_prepare(honch_client_t *client, const honch_config_t *config);
+honch_status_t honch_state_prepare(honch_client_t *client, const honch_core_config_t *config);
 honch_status_t honch_state_save_distinct_id(honch_client_t *client);
 honch_status_t honch_state_save_distinct_id_value(honch_client_t *client, const char *distinct_id);
 honch_status_t honch_state_check_firmware_version(honch_client_t *client, bool *changed, char **previous_version);
