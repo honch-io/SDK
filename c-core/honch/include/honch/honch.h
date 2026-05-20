@@ -21,21 +21,6 @@ typedef honch_status_t honch_err_t;
 #define HONCH_ERR_TIMEOUT HONCH_ERROR_TIMEOUT
 #define HONCH_ERR_INTERNAL HONCH_ERROR_INTERNAL
 
-typedef honch_status_t (*honch_property_sink_fn)(
-    void *ctx,
-    const char *key,
-    const char *json_value);
-
-typedef honch_status_t (*honch_auto_properties_fn)(
-    void *userdata,
-    honch_property_sink_fn sink,
-    void *sink_ctx);
-
-typedef enum honch_durability_mode {
-    HONCH_DURABILITY_SYNC_ALWAYS = 0,
-    HONCH_DURABILITY_OS_BUFFERED = 1
-} honch_durability_mode_t;
-
 typedef struct honch_config {
     const char *api_key;
     const char *endpoint_url;

@@ -1,4 +1,5 @@
 add_library(honch_posix
+    src/posix_compat.c
     src/posix_platform.c
     src/posix_storage.c
     src/posix_state.c
@@ -10,7 +11,7 @@ target_include_directories(honch_posix
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/../../c-core/honch/include
     PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../c-core/honch/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../core/src
 )
 
 target_link_libraries(honch_posix
