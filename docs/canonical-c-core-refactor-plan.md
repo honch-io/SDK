@@ -1,5 +1,15 @@
 # Canonical C Core SDK Refactor Implementation Plan
 
+> **Status:** Historical implementation plan. The canonical core restructure has
+> been implemented on `refactor/c-core-canonical`.
+>
+> Current source layout is `core/`, `ports/posix/`, `ports/esp-idf/`,
+> `ports/micropython/`, and `ports/react-native-relay/`. Current build and test
+> commands live in the root `README.md`.
+>
+> Older paths in this document, including `c-core/`, `esp-idf/`, and
+> `micropython/`, describe the pre-refactor repository shape.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Refactor the SDK repository so one portable C core owns Honch SDK behavior, while ESP-IDF, POSIX, MicroPython, and the planned React Native relay path become ports, adapters, or conformance-compatible wrappers.
