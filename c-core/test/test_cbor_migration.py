@@ -159,13 +159,19 @@ class CCoreCborMigrationTest(unittest.TestCase):
 
     def test_flush_routes_batch_posts_through_transport_ops_when_available(self) -> None:
         core = read_sdk("core/src/honch_core.c")
+        queue_policy = read_sdk("core/src/honch_queue_policy.c")
         storage = read_sdk("ports/posix/src/posix_storage.c")
         transport = read_sdk("ports/posix/src/posix_transport_curl.c")
 
         self.assertIn("next->transport_ops.ctx = next", core)
-        self.assertIn("honch_client_post_batch", storage)
-        self.assertIn("client->transport->post_batch", storage)
-        self.assertIn("honch_client_post_batch(client, payload.data, payload.length, &result)", storage)
+        self.assertIn("honch_core_post_batch", queue_policy)
+        self.assertIn("client->transport->post_batch", queue_policy)
+        self.assertIn("honch_core_queue_peek", queue_policy)
+        self.assertIn("honch_core_queue_consume", queue_policy)
+        self.assertIn("honch_core_queue_dead_letter", queue_policy)
+        self.assertIn(".queue_peek = honch_posix_queue_peek", storage)
+        self.assertIn(".queue_consume = honch_posix_queue_consume", storage)
+        self.assertIn(".queue_dead_letter = honch_posix_queue_dead_letter", storage)
         self.assertIn("honch_client_t *client = (honch_client_t *)ctx", transport)
 
     def test_posix_state_helpers_route_through_storage_ops_when_available(self) -> None:
