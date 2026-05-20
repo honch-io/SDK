@@ -734,6 +734,18 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     if (next == NULL) {
         return HONCH_ERROR_OUT_OF_MEMORY;
     }
+    if (config->platform != NULL) {
+        next->platform_ops = *config->platform;
+        next->platform = &next->platform_ops;
+    }
+    if (config->storage != NULL) {
+        next->storage_ops = *config->storage;
+        next->storage = &next->storage_ops;
+    }
+    if (config->transport != NULL) {
+        next->transport_ops = *config->transport;
+        next->transport = &next->transport_ops;
+    }
 
     next->api_key = honch_strdup(config->api_key);
     next->endpoint_url = honch_strdup(config->endpoint_url);
