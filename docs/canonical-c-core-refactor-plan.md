@@ -424,7 +424,7 @@ test -f README.md
 
 Expected: both commands exit 0.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```sh
 git add README.md docs/adr/0001-canonical-c-core.md
@@ -1819,7 +1819,7 @@ Outcome: BLE-only products have a first-class path.
 - Create: `ports/react-native-relay/src/uploader.ts`
 - Create: `ports/react-native-relay/test/frame.test.ts`
 
-- [ ] **Step 1: Add package metadata**
+- [x] **Step 1: Add package metadata**
 
 Add `ports/react-native-relay/package.json`:
 
@@ -1842,7 +1842,7 @@ Add `ports/react-native-relay/package.json`:
 }
 ```
 
-- [ ] **Step 2: Add frame decoder**
+- [x] **Step 2: Add frame decoder**
 
 Add `ports/react-native-relay/src/frame.ts`:
 
@@ -1889,7 +1889,7 @@ export function decodeRelayFrame(bytes: Uint8Array): RelayFrame {
 }
 ```
 
-- [ ] **Step 3: Add frame tests**
+- [x] **Step 3: Add frame tests**
 
 Add `ports/react-native-relay/test/frame.test.ts`:
 

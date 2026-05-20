@@ -41,6 +41,11 @@ ports/esp-idf/footprint/
 __pycache__/
 *.py[cod]
 
+# JavaScript dependencies
+node_modules/
+!ports/react-native-relay/package.json
+!ports/react-native-relay/tsconfig.json
+
 # Logs/temp files
 *.log
 *.tmp
