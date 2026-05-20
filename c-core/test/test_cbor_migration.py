@@ -151,6 +151,18 @@ class CCoreCborMigrationTest(unittest.TestCase):
         self.assertIn("honch_client_post_batch(client, payload.data, payload.length, &result)", storage)
         self.assertIn("honch_client_t *client = (honch_client_t *)ctx", transport)
 
+    def test_posix_state_helpers_route_through_storage_ops_when_available(self) -> None:
+        state = read_sdk("ports/posix/src/posix_state.c")
+        storage = read_sdk("ports/posix/src/posix_storage.c")
+
+        self.assertIn("client->storage->state_get", state)
+        self.assertIn("client->storage->state_set", state)
+
+        self.assertIn(".state_get = honch_posix_state_get", storage)
+        self.assertIn(".state_set = honch_posix_state_set", storage)
+        self.assertIn(".state_delete = honch_posix_state_delete", storage)
+        self.assertIn("honch_client_t *client = (honch_client_t *)ctx", storage)
+
     def test_docs_reference_cbor_contract(self) -> None:
         readme = read("README.md")
         spec = (SDK_ROOT / "spec/wire-format.md").read_text()
