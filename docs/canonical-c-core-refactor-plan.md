@@ -1746,7 +1746,7 @@ drop_oldest erases tail
 
 `esp_transport_http.c` wraps existing `esp_http_client` behavior and returns `honch_transport_result_t`.
 
-- [ ] **Step 4: Add ESP-IDF compatibility layer**
+- [x] **Step 4: Add ESP-IDF compatibility layer**
 
 `esp_compat.c` keeps the current ESP-IDF public API:
 

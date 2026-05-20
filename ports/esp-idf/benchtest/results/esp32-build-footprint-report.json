@@ -1,0 +1,65 @@
+{
+  "connected_baseline": {
+    "app_image_bytes": 830424,
+    "dram_bytes": 36427,
+    "flash_code_bytes": 610958,
+    "flash_data_bytes": 114224,
+    "iram_bytes": 87519,
+    "rtc_slow_bytes": 64,
+    "static_ram_bytes": 124010
+  },
+  "connected_delta_valid_for_claims": false,
+  "delta": {
+    "app_image_bytes": -252709,
+    "dram_bytes": -5317,
+    "flash_code_bytes": -260692,
+    "flash_data_bytes": 49704,
+    "iram_bytes": -36412,
+    "rtc_slow_bytes": 0,
+    "static_ram_bytes": -41729
+  },
+  "direct_honch_archive": {
+    "archive": "esp-idf/honch/libhonch.a",
+    "dram_bytes": 1720,
+    "flash_code_bytes": 9558,
+    "flash_data_bytes": 0,
+    "iram_bytes": 28,
+    "rtc_slow_bytes": 0,
+    "static_ram_bytes": 1748,
+    "total_bytes": 11306
+  },
+  "landing_claims": {
+    "sdk_flash": "<20 KB",
+    "sdk_static_ram": "<2 KB"
+  },
+  "method": "ESP-IDF map analysis: direct libhonch.a archive contribution for landing SDK flash/static-RAM claims; Honch app minus minimal baseline for worst-case dependency pull-in; connected baseline delta is diagnostic only when it is non-negative.",
+  "minimal_baseline": {
+    "app_image_bytes": 152337,
+    "dram_bytes": 13484,
+    "flash_code_bytes": 60294,
+    "flash_data_bytes": 34976,
+    "iram_bytes": 46039,
+    "rtc_slow_bytes": 64,
+    "static_ram_bytes": 59587
+  },
+  "minimal_delta": {
+    "app_image_bytes": 425378,
+    "dram_bytes": 17626,
+    "flash_code_bytes": 289972,
+    "flash_data_bytes": 128952,
+    "iram_bytes": 5068,
+    "rtc_slow_bytes": 0,
+    "static_ram_bytes": 22694
+  },
+  "runtime": {},
+  "target": "esp32",
+  "with_honch": {
+    "app_image_bytes": 577715,
+    "dram_bytes": 31110,
+    "flash_code_bytes": 350266,
+    "flash_data_bytes": 163928,
+    "iram_bytes": 51107,
+    "rtc_slow_bytes": 64,
+    "static_ram_bytes": 82281
+  }
+}

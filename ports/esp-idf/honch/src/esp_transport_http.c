@@ -87,7 +87,7 @@ static honch_status_t honch_esp_post_batch(
     (void)ctx;
     (void)api_key;
     if (endpoint_url == NULL || body == NULL || body_size == 0u || result == NULL) {
-        return HONCH_ERROR_INVALID_ARGUMENT;
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
 
     *result = HONCH_TRANSPORT_RETRY;
@@ -114,7 +114,7 @@ static honch_status_t honch_esp_post_batch(
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (client == NULL) {
         free(compressed);
-        return HONCH_ERROR_TRANSPORT;
+        return HONCH_STATUS_ERROR_TRANSPORT;
     }
 
     esp_http_client_set_header(client, "Content-Type", "application/cbor");
@@ -131,34 +131,34 @@ static honch_status_t honch_esp_post_batch(
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
         *result = HONCH_TRANSPORT_RETRY;
-        return HONCH_ERROR_TRANSPORT;
+        return HONCH_STATUS_ERROR_TRANSPORT;
     }
 
     if (status >= 200 && status < 300) {
         *result = HONCH_TRANSPORT_ACCEPTED;
-        return HONCH_OK;
+        return HONCH_STATUS_OK;
     }
     if (status == 401) {
         *result = HONCH_TRANSPORT_AUTH_ERROR;
-        return HONCH_OK;
+        return HONCH_STATUS_OK;
     }
     if (status == 429) {
         *result = HONCH_TRANSPORT_RETRY;
-        return HONCH_ERROR_RATE_LIMITED;
+        return HONCH_STATUS_ERROR_RATE_LIMITED;
     }
     if (status >= 400 && status < 500) {
         *result = HONCH_TRANSPORT_REJECTED;
-        return HONCH_OK;
+        return HONCH_STATUS_OK;
     }
 
     *result = HONCH_TRANSPORT_RETRY;
-    return HONCH_ERROR_SERVER;
+    return HONCH_STATUS_ERROR_SERVER;
 }
 
 honch_status_t honch_esp_transport_ops_init(honch_transport_ops_t *ops, honch_esp_transport_t *ctx)
 {
     if (ops == NULL || ctx == NULL) {
-        return HONCH_ERROR_INVALID_ARGUMENT;
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
 
     *ctx = (honch_esp_transport_t) {0};
@@ -166,5 +166,5 @@ honch_status_t honch_esp_transport_ops_init(honch_transport_ops_t *ops, honch_es
         .post_batch = honch_esp_post_batch,
         .ctx = ctx
     };
-    return HONCH_OK;
+    return HONCH_STATUS_OK;
 }
