@@ -25,3 +25,16 @@ if(HONCH_BUILD_BENCHMARKS)
         ${CMAKE_CURRENT_SOURCE_DIR}/../c-core/bench/honch_bench_alloc.h
     )
 endif()
+
+if(HONCH_BUILD_TESTS)
+    add_executable(honch_core_storage_contract_tests
+        test/test_storage_contract.c
+    )
+
+    target_link_libraries(honch_core_storage_contract_tests PRIVATE honch_core)
+    target_compile_options(honch_core_storage_contract_tests PRIVATE
+        $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
+    )
+
+    add_test(NAME honch_core_storage_contract_tests COMMAND honch_core_storage_contract_tests)
+endif()
