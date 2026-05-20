@@ -19,6 +19,7 @@ The [`spec/`](spec/) directory defines the cross-platform contract that all SDKs
 - [Auto Properties](spec/auto-properties.md) — required properties, lifecycle events
 - [Relay Envelope](spec/relay-envelope.md) — (future) gateway forwarding format
 - [Conformance Fixtures](spec/conformance/) — shared test data for cross-SDK validation
+- [Canonical C Core ADR](docs/adr/0001-canonical-c-core.md) — SDK architecture direction
 
 ## Adding a new SDK
 
