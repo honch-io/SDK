@@ -120,6 +120,18 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn("client->storage->queue_push", shims)
         self.assertIn("client->storage->queue_clear", shims)
 
+    def test_esp_compat_rejects_truncated_static_config_copies(self) -> None:
+        compat = read("ports/esp-idf/honch/src/esp_compat.c")
+
+        self.assertIn("honch_esp_copy_static_config_string", compat)
+        self.assertIn("return HONCH_ERR_INVALID_ARG", compat)
+        self.assertIn('honch_esp_copy_static_config_string(s_api_key, sizeof(s_api_key), config->api_key)', compat)
+        self.assertIn('honch_esp_copy_static_config_string(s_device_model, sizeof(s_device_model), config->device_model)', compat)
+        self.assertIn("s_firmware_version", compat)
+        self.assertIn("sizeof(s_firmware_version)", compat)
+        self.assertIn("config->firmware_version", compat)
+        self.assertIn('honch_esp_copy_static_config_string(s_environment, sizeof(s_environment), environment)', compat)
+
     def test_esp_gpio_adapter_preserves_gpio_tracking_worker(self) -> None:
         compat = read("ports/esp-idf/honch/src/esp_compat.c")
         gpio = read("ports/esp-idf/honch/src/esp_gpio_adapter.c")
