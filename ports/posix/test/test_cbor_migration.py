@@ -6,7 +6,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SDK_ROOT = ROOT.parent
+SDK_ROOT = ROOT.parents[1]
 
 
 def read(relative_path: str) -> str:
@@ -17,7 +17,7 @@ def read_sdk(relative_path: str) -> str:
     return (SDK_ROOT / relative_path).read_text()
 
 
-class CCoreCborMigrationTest(unittest.TestCase):
+class PosixCborMigrationTest(unittest.TestCase):
     def test_core_status_header_exposes_guarded_short_aliases(self) -> None:
         status = read_sdk("core/include/honch/core/status.h")
 
@@ -50,7 +50,7 @@ class CCoreCborMigrationTest(unittest.TestCase):
         self.assertNotIn("event_json", internal)
 
     def test_queue_supports_configurable_durability_mode(self) -> None:
-        public = read("honch/include/honch/honch.h") + read_sdk("core/include/honch/core/config.h")
+        public = read("include/honch/honch.h") + read_sdk("core/include/honch/core/config.h")
         queue = read_sdk("ports/posix/src/posix_storage.c")
 
         self.assertIn("honch_durability_mode_t", public)
@@ -76,12 +76,11 @@ class CCoreCborMigrationTest(unittest.TestCase):
 
         core = read_sdk("core/src/honch_core.c")
         compat = read_sdk("ports/posix/src/posix_compat.c")
-        c_core_cmake = read("CMakeLists.txt")
+        posix_cmake = read("CMakeLists.txt")
         core_cmake = read_sdk("core/CMakeLists.txt")
-        posix_cmake = read_sdk("ports/posix/CMakeLists.txt")
 
         self.assertIn("src/honch_core.c", core_cmake)
-        self.assertNotIn("honch/src/honch.c", c_core_cmake)
+        self.assertNotIn("honch/src/honch.c", posix_cmake)
         self.assertIn("src/posix_compat.c", posix_cmake)
 
         self.assertIn("honch_core_init", core)

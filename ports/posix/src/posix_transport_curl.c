@@ -1,4 +1,5 @@
 #include "honch_internal.h"
+#include "honch/honch.h"
 #include "honch/posix/honch.h"
 
 #include <curl/curl.h>

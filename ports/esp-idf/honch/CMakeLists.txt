@@ -11,15 +11,9 @@ idf_component_register(
         "../../../core/src/honch_json.c"
         "../../../core/src/honch_queue_policy.c"
         "../../../core/src/honch_support.c"
-        "src/identity.c"
-        "src/queue.c"
-        "src/encoder.c"
-        "src/transport.c"
-        "src/scheduler.c"
         "src/esp_gpio_adapter.c"
-        "src/lifecycle.c"
     INCLUDE_DIRS "include"
-    PRIV_INCLUDE_DIRS "src" "../../../core/include" "../../../c-core/honch/include"
+    PRIV_INCLUDE_DIRS "src" "../../../core/include" "../../../core/src"
     REQUIRES
         nvs_flash
         esp_http_client

@@ -1,14 +1,16 @@
-name: C/POSIX SDK
+name: POSIX SDK
 
 on:
   push:
     paths:
-      - "c-core/**"
-      - ".github/workflows/c-core.yml"
+      - "core/**"
+      - "ports/posix/**"
+      - ".github/workflows/posix.yml"
   pull_request:
     paths:
-      - "c-core/**"
-      - ".github/workflows/c-core.yml"
+      - "core/**"
+      - "ports/posix/**"
+      - ".github/workflows/posix.yml"
 
 jobs:
   test:
@@ -25,13 +27,13 @@ jobs:
           sudo apt-get install -y cmake libcurl4-openssl-dev zlib1g-dev
 
       - name: Configure
-        working-directory: c-core
+        working-directory: ports/posix
         run: cmake -S . -B build -DHONCH_BUILD_TESTS=ON -DHONCH_BUILD_EXAMPLES=ON
 
       - name: Build
-        working-directory: c-core
+        working-directory: ports/posix
         run: cmake --build build
 
       - name: Test
-        working-directory: c-core
+        working-directory: ports/posix
         run: ctest --test-dir build --output-on-failure

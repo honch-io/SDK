@@ -9,7 +9,7 @@
 #include "esp_random.h"
 #include "esp_timer.h"
 
-#include "../../../core/src/honch_internal.h"
+#include "honch_internal.h"
 
 static honch_status_t honch_esp_state_get_string(
     honch_client_t *client,

@@ -37,7 +37,7 @@ Initial goal:
 - Keep encoder, queue, identity, clock, randomness, storage, compression, and
   transport behavior isolated enough to handle board-specific differences.
 - Prefer a pure MicroPython implementation for the first milestone.
-- Keep a future C extension or c-core binding possible, but do not start there
+- Keep a future C extension or canonical core binding possible, but do not start there
   unless explicitly requested.
 - Include deterministic tests for public API behavior, queueing, validation,
   batching, retry, reset, persistence, lifecycle events, and constrained-device
@@ -263,7 +263,7 @@ Do not add these unless explicitly requested:
 - Feature flags or experimentation runtime.
 - Production credential handling beyond SDK config.
 - New third-party dependencies.
-- A MicroPython C extension or c-core binding.
+- A MicroPython C extension or canonical core binding.
 - Board-specific production firmware.
 
 When the shared specs describe future architecture, use them for direction, but

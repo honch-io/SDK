@@ -13,25 +13,25 @@ produce repeatable baseline numbers for SDK overhead before optimizing:
 ## Build
 
 ```sh
-cd c-core
+cd ports/posix
 cmake -S . -B build-bench \
   -DCMAKE_BUILD_TYPE=Release \
   -DHONCH_BUILD_TESTS=OFF \
   -DHONCH_BUILD_EXAMPLES=OFF \
   -DHONCH_BUILD_BENCHMARKS=ON
-cmake --build build-bench --target honch_c_core_bench
+cmake --build build-bench --target honch_posix_bench
 ```
 
 ## Run
 
 ```sh
-./build-bench/bench/honch_c_core_bench
+./build-bench/bench/honch_posix_bench
 ```
 
 To save a baseline:
 
 ```sh
-./build-bench/bench/honch_c_core_bench | tee bench/baseline.csv
+./build-bench/bench/honch_posix_bench | tee bench/baseline.csv
 ```
 
 The benchmark prints CSV rows:
@@ -99,25 +99,25 @@ target product, then compare Release builds across commits.
 Run these before and after optimization work:
 
 ```sh
-./build-bench/bench/honch_c_core_bench | tee bench/baseline.csv
-size build-bench/libhonch_c_core.a
+./build-bench/bench/honch_posix_bench | tee bench/baseline.csv
+size build-bench/libhonch_posix.a
 ```
 
 For a more complete local snapshot:
 
 ```sh
-otool -L build-bench/bench/honch_c_core_bench
-/usr/bin/time -l ./build-bench/bench/honch_c_core_bench > bench/time-baseline.csv
+otool -L build-bench/bench/honch_posix_bench
+/usr/bin/time -l ./build-bench/bench/honch_posix_bench > bench/time-baseline.csv
 ```
 
 On Linux, add per-symbol size and heap profiling:
 
 ```sh
-nm -S --size-sort build-bench/libhonch_c_core.a | tail -40
-valgrind --tool=massif --massif-out-file=bench/massif.out ./build-bench/bench/honch_c_core_bench
+nm -S --size-sort build-bench/libhonch_posix.a | tail -40
+valgrind --tool=massif --massif-out-file=bench/massif.out ./build-bench/bench/honch_posix_bench
 ms_print bench/massif.out > bench/massif.txt
 ```
 
 On macOS, `nm -S` reports zero sizes for Mach-O archive members. Use `size` for
 object-level footprint and Instruments Allocations or Leaks against
-`./build-bench/bench/honch_c_core_bench` for runtime profiling.
+`./build-bench/bench/honch_posix_bench` for runtime profiling.

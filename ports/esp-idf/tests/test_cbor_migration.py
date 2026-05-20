@@ -108,7 +108,7 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn("honch_track_gpio", compat)
         self.assertIn("honch_esp_platform_ops_deinit", compat)
         self.assertIn("honch_client_t", adapter)
-        self.assertIn("../../../c-core/honch/include", cmake)
+        self.assertNotIn("../../../c-core/honch/include", cmake)
         self.assertIn("honch_state_prepare", shims)
         self.assertIn("honch_state_check_firmware_version", shims)
         self.assertIn("honch_random_hex", shims)
@@ -145,8 +145,7 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertRegex(cmake, r"\besp_timer\b")
 
     def test_transport_sends_application_cbor_with_optional_gzip(self) -> None:
-        transport = read("ports/esp-idf/honch/src/transport.c")
-        transport_header = read("ports/esp-idf/honch/src/transport.h")
+        transport = read("ports/esp-idf/honch/src/esp_transport_http.c")
         kconfig = read("ports/esp-idf/honch/Kconfig")
 
         self.assertIn('"Content-Type", "application/cbor"', transport)
@@ -157,92 +156,76 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn("miniz.h", transport)
         self.assertIn("tdefl_compress_mem_to_heap", transport)
         self.assertNotIn("mz_deflate", transport)
-        self.assertIn("compressed_size < body_len", transport)
-        self.assertIn("falls back to raw CBOR", transport_header)
+        self.assertIn("compressed_size >= body_size", transport)
         self.assertIn("HONCH_ENABLE_GZIP", kconfig)
         self.assertIn("depends on !IDF_TARGET_ESP32 && !IDF_TARGET_ESP32S2", kconfig)
         self.assertIn("HONCH_GZIP_MIN_BYTES", kconfig)
 
-    def test_perf_logging_instruments_sdk_hot_paths(self) -> None:
+    def test_dead_pre_core_modules_are_not_part_of_esp_component(self) -> None:
+        cmake = read("ports/esp-idf/honch/CMakeLists.txt")
         kconfig = read("ports/esp-idf/honch/Kconfig")
-        perf = read("ports/esp-idf/honch/src/perf.h")
-        honch = read("ports/esp-idf/honch/src/honch.c")
-        encoder = read("ports/esp-idf/honch/src/encoder.c")
-        queue = read("ports/esp-idf/honch/src/queue.c")
-        scheduler = read("ports/esp-idf/honch/src/scheduler.c")
-        transport = read("ports/esp-idf/honch/src/transport.c")
         bench_defaults = read("ports/esp-idf/benchtest/sdkconfig.defaults")
 
-        self.assertIn("HONCH_PERF_LOGGING", kconfig)
-        self.assertIn("HONCH_PERF_LOG", perf)
-        self.assertIn("CONFIG_HONCH_PERF_LOGGING", perf)
-        for marker in (
-            "HONCH_PERF_TRACK",
-            "HONCH_PERF_ENCODE_EVENT",
-            "HONCH_PERF_QUEUE_PUSH",
-            "HONCH_PERF_QUEUE_POP",
-            "HONCH_PERF_QUEUE_CONFIRM",
-            "HONCH_PERF_ENCODE_BATCH",
-            "HONCH_PERF_TRANSPORT",
-            "HONCH_PERF_FLUSH",
+        for path in (
+            "src/honch.c",
+            "src/identity.c",
+            "src/queue.c",
+            "src/encoder.c",
+            "src/transport.c",
+            "src/scheduler.c",
+            "src/lifecycle.c",
         ):
-            self.assertTrue(
-                any(marker in text for text in (honch, encoder, queue, scheduler, transport)),
-                f"{marker} missing from SDK instrumentation",
-            )
-        self.assertIn("CONFIG_HONCH_PERF_LOGGING=y", bench_defaults)
+            self.assertFalse((ROOT / "ports/esp-idf/honch" / path).exists())
+            self.assertNotIn(f'"{path}"', cmake)
+
+        self.assertNotIn("HONCH_PERF_LOGGING", kconfig)
+        self.assertNotIn("HONCH_RAM_QUEUE_DEPTH", kconfig)
+        self.assertNotIn("HONCH_DURABLE_IMMEDIATE_NVS", kconfig)
+        self.assertNotIn("CONFIG_HONCH_PERF_LOGGING", bench_defaults)
 
     def test_queue_persists_cbor_blobs_not_json_strings(self) -> None:
-        queue = read("ports/esp-idf/honch/src/queue.c")
-        queue_header = read("ports/esp-idf/honch/src/queue.h")
+        queue = read("ports/esp-idf/honch/src/esp_storage_nvs.c")
+        internal = read("core/src/honch_internal.h")
 
-        self.assertIn("honch_payload_t", queue_header)
+        self.assertIn("const unsigned char *event", internal)
+        self.assertIn("size_t event_size", internal)
         self.assertIn("nvs_set_blob", queue)
         self.assertIn("nvs_get_blob", queue)
         self.assertNotIn("nvs_set_str", queue)
-        self.assertNotIn("event_json", queue_header)
+        self.assertNotIn("event_json", internal)
 
-    def test_queue_uses_ram_first_with_nvs_spill(self) -> None:
-        queue = read("ports/esp-idf/honch/src/queue.c")
-        kconfig = read("ports/esp-idf/honch/Kconfig")
+    def test_esp_storage_caps_queue_depth_and_dead_letters_rejected_events(self) -> None:
+        queue = read("ports/esp-idf/honch/src/esp_storage_nvs.c")
 
-        self.assertIn("HONCH_RAM_QUEUE_DEPTH", kconfig)
-        self.assertIn("HONCH_DURABLE_IMMEDIATE_NVS", kconfig)
-        self.assertIn("s_ram_events", queue)
-        self.assertIn("ram_enqueue", queue)
-        self.assertIn("nvs_append_payload", queue)
-        self.assertIn("HONCH_PERF_RAM_QUEUE_PUSH", queue)
-        self.assertIn("HONCH_PERF_NVS_SPILL", queue)
-        self.assertLess(
-            queue.index("err = ram_enqueue(payload);"),
-            queue.index('err = nvs_append_payload(payload->data, payload->len, "ram_full");'),
-        )
+        self.assertIn("HONCH_ESP_DEFAULT_MAX_QUEUE_DEPTH", queue)
+        self.assertIn("honch_esp_queue_drop_oldest(ctx)", queue)
+        self.assertIn("honch_esp_queue_dead_letter", queue)
+        self.assertIn("nvs_open(HONCH_ESP_DEAD_NAMESPACE", queue)
+        self.assertIn(".queue_drop_oldest = honch_esp_queue_drop_oldest", queue)
 
     def test_encoder_directly_encodes_properties_without_cjson_merge(self) -> None:
-        encoder = read("ports/esp-idf/honch/src/encoder.c")
-        kconfig = read("ports/esp-idf/honch/Kconfig")
+        encoder = read("core/src/honch_encoder.c")
+        core = read("core/src/honch_core.c")
 
-        self.assertIn("HONCH_WIFI_RSSI_CACHE_MS", kconfig)
-        self.assertIn("honch_event_runtime_t", encoder)
-        self.assertIn("encode_properties_map", encoder)
-        self.assertIn("encode_user_properties_without_reserved_keys", encoder)
-        self.assertIn("HONCH_RESERVED_PROPERTY_COUNT", encoder)
+        self.assertIn("honch_build_event", core)
+        self.assertIn("honch_cbor_append_json_object_members", core)
+        self.assertIn("honch_property_key_is_reserved", core)
         self.assertNotIn("cJSON_Duplicate", encoder)
         self.assertNotIn("cJSON_AddStringToObject", encoder)
         self.assertNotIn("cJSON_AddNumberToObject", encoder)
         self.assertNotIn("cJSON_DeleteItemFromObject", encoder)
 
     def test_transport_treats_bad_requests_as_non_retryable(self) -> None:
-        transport = read("ports/esp-idf/honch/src/transport.c")
+        transport = read("ports/esp-idf/honch/src/esp_transport_http.c")
 
         self.assertIn("status == 429", transport)
         self.assertRegex(transport, r"status >= 400 && status < 500")
 
-    def test_lifecycle_detects_existing_wifi_connection(self) -> None:
-        lifecycle = read("ports/esp-idf/honch/src/lifecycle.c")
+    def test_benchmark_app_detects_existing_wifi_connection(self) -> None:
+        lifecycle = read("ports/esp-idf/benchtest/main/app_main.c")
 
         self.assertIn("esp_wifi_sta_get_ap_info", lifecycle)
-        self.assertIn("Initial Wi-Fi connection detected", lifecycle)
+        self.assertIn("Connected to Wi-Fi SSID", lifecycle)
 
     def test_example_syncs_time_and_emits_heartbeat(self) -> None:
         example = read("ports/esp-idf/example/main/app_main.c")
@@ -286,14 +269,15 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn("ports/esp-idf/footprint/", gitignore)
 
     def test_encoder_builds_cbor_epoch_millis_payloads(self) -> None:
-        encoder = read("ports/esp-idf/honch/src/encoder.c")
-        encoder_header = read("ports/esp-idf/honch/src/encoder.h")
+        encoder = read("core/src/honch_encoder.c")
+        internal = read("core/src/honch_internal.h")
+        core = read("core/src/honch_core.c")
 
-        self.assertIn("#include \"cbor.h\"", encoder)
-        self.assertIn("honch_encode_event", encoder_header)
-        self.assertIn("honch_payload_t", encoder_header)
-        self.assertIn("timestamp", encoder)
-        self.assertIn("timestamp_millis", encoder)
+        self.assertIn("honch_cbor_append_text", encoder)
+        self.assertIn("honch_build_event", core)
+        self.assertIn("honch_payload_t", internal)
+        self.assertIn("timestamp", core)
+        self.assertIn("honch_now_millis", core)
         self.assertNotIn("get_iso8601_timestamp", encoder)
         self.assertNotIn("cJSON_AddStringToObject(root, \"timestamp\"", encoder)
 

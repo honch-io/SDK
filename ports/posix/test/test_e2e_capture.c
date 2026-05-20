@@ -308,7 +308,7 @@ int main(void)
     struct timeval tv;
     gettimeofday(&tv, NULL);
     char prefix[96];
-    snprintf(prefix, sizeof(prefix), "c_core_e2e_%ld_%ld", (long)getpid(), (long)tv.tv_usec);
+    snprintf(prefix, sizeof(prefix), "posix_e2e_%ld_%ld", (long)getpid(), (long)tv.tv_usec);
 
     char event_edge[128];
     char event_session[128];
@@ -363,7 +363,7 @@ int main(void)
         honch_track(
             client,
             event_edge,
-            "{\"source\":\"c-core-e2e\",\"nested\":{\"mode\":\"hdr\",\"frames\":[1,2,3]},"
+            "{\"source\":\"posix-e2e\",\"nested\":{\"mode\":\"hdr\",\"frames\":[1,2,3]},"
             "\"quote\":\"say \\\"hi\\\"\",\"$device_id\":\"spoofed-device\",\"\\u0024sdk_platform\":\"spoofed-platform\"}"),
         HONCH_OK);
 
@@ -376,7 +376,7 @@ int main(void)
 
     e2e_row_t row;
     if (verify_event(clickhouse_url, database, project_id, event_edge, &row)) {
-        EXPECT_STR_CONTAINS(row.properties, "\"source\":\"c-core-e2e\"");
+        EXPECT_STR_CONTAINS(row.properties, "\"source\":\"posix-e2e\"");
         EXPECT_STR_CONTAINS(row.properties, "\"adapter_property\":\"e2e-adapter\"");
         EXPECT_STR_CONTAINS(row.properties, "\"$wifi_rssi\":-64");
         EXPECT_STR_CONTAINS(row.properties, "\"$battery_level\":12");

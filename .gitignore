@@ -51,13 +51,14 @@ node_modules/
 *.tmp
 
 # Benchmark outputs
-c-core/bench/*.csv
-c-core/bench/massif.out
-c-core/bench/massif.txt
+ports/posix/bench/*.csv
+ports/posix/bench/massif.out
+ports/posix/bench/massif.txt
+ports/posix/bench/results/
 !ports/esp-idf/benchtest/results/*.json
 
 # Local Honch SDK queues/state created by examples and smoke tests
 .honch-*/
 
 # Local agent instructions
-c-core/AGENTS.md
+ports/posix/AGENTS.md

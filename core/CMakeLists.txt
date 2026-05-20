@@ -12,7 +12,6 @@ target_include_directories(honch_core
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/../c-core/honch/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
@@ -25,7 +24,7 @@ target_compile_options(honch_core PRIVATE
 if(HONCH_BUILD_BENCHMARKS)
     target_compile_options(honch_core PRIVATE
         -include
-        ${CMAKE_CURRENT_SOURCE_DIR}/../c-core/bench/honch_bench_alloc.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/../ports/posix/bench/honch_bench_alloc.h
     )
 endif()
 
@@ -47,7 +46,6 @@ if(HONCH_BUILD_TESTS)
 
     target_link_libraries(honch_core_packetizer_tests PRIVATE honch_core)
     target_include_directories(honch_core_packetizer_tests PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/../c-core/honch/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
     target_compile_options(honch_core_packetizer_tests PRIVATE
@@ -66,7 +64,6 @@ if(HONCH_BUILD_TESTS)
 
     target_include_directories(honch_core_retry_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/../c-core/honch/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
     target_compile_options(honch_core_retry_tests PRIVATE
