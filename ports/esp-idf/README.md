@@ -2,7 +2,8 @@
 
 Product analytics for connected hardware. Drop this component into your ESP-IDF project and get device lifecycle events, custom tracking, and GPIO-triggered events flowing to Honch in minutes.
 
-Events are queued as CBOR blobs and sent to Capture as uncompressed `application/cbor` batches.
+Events are queued as CBOR blobs and sent to Capture as `application/cbor`
+batches. Large batches may be gzip-compressed when enabled and beneficial.
 
 ## Requirements
 
@@ -24,7 +25,7 @@ idf.py add-dependency "honch-io/honch^0.1.0"
 git submodule add https://github.com/honch-io/honch.git components/honch
 ```
 
-Or simply copy the `honch/` directory into your project's `components/` folder.
+Or copy `ports/esp-idf/honch` into your project's `components/honch` folder.
 
 ## Minimal init code
 
@@ -64,7 +65,7 @@ void app_main(void)
 ## Run the example app
 
 ```bash
-cd example
+cd ports/esp-idf/example
 idf.py menuconfig
 # Navigate to "Honch Example Configuration" and set:
 #   - Wi-Fi SSID
@@ -114,8 +115,6 @@ idf.py flash monitor
 | `battery_low_threshold`  | No       | 15             | Battery level that triggers `$battery_low` |
 
 **Kconfig options** (set via `idf.py menuconfig`):
-- `CONFIG_HONCH_LOG_VERBOSE` — enable extra debug logging
-- `CONFIG_HONCH_MAX_QUEUE_DEPTH` — max events in NVS queue (default 256)
 - `CONFIG_HONCH_ENABLE_GZIP` — gzip large HTTP CBOR batches when beneficial (default enabled)
 - `CONFIG_HONCH_GZIP_MIN_BYTES` — minimum CBOR payload size before gzip is attempted (default 1024)
 
