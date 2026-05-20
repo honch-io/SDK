@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Honch Dev
 
-#include "gpio.h"
+#include "esp_gpio_adapter.h"
 
 #include <string.h>
 #include <stdio.h>

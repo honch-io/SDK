@@ -1765,7 +1765,7 @@ const char *honch_get_device_id(void);
 
 Each function delegates to the global `honch_client_t *` core client.
 
-- [ ] **Step 5: Keep GPIO as adapter**
+- [x] **Step 5: Keep GPIO as adapter**
 
 Rename `gpio.c` to `esp_gpio_adapter.c`. It should call `honch_track` from a worker task, not from ISR context. Its behavior remains:
 
