@@ -10,6 +10,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 
+#define HONCH_PERF_VAR(type, name, value) type name = (value)
 #define HONCH_PERF_NOW_US() esp_timer_get_time()
 #define HONCH_PERF_ELAPSED_US(start_us) (esp_timer_get_time() - (start_us))
 #define HONCH_PERF_HEAP_FREE() ((uint32_t)esp_get_free_heap_size())
@@ -18,6 +19,7 @@
 #define HONCH_PERF_LOG(marker, format, ...) \
     ESP_LOGI("honch_perf", marker " " format, ##__VA_ARGS__)
 #else
+#define HONCH_PERF_VAR(type, name, value) type name __attribute__((unused)) = (value)
 #define HONCH_PERF_NOW_US() 0
 #define HONCH_PERF_ELAPSED_US(start_us) 0
 #define HONCH_PERF_HEAP_FREE() 0

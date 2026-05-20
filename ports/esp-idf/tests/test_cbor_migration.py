@@ -82,8 +82,10 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         compat = read("ports/esp-idf/honch/src/esp_compat.c")
         adapter = read("ports/esp-idf/honch/src/esp_core_adapter.h")
         cmake = read("ports/esp-idf/honch/CMakeLists.txt")
+        shims = read("ports/esp-idf/honch/src/esp_core_shims.c")
 
         self.assertIn('"src/esp_compat.c"', cmake)
+        self.assertIn('"src/esp_core_shims.c"', cmake)
         self.assertNotIn('"src/honch.c"', cmake)
         self.assertIn("#define HONCH_CORE_NO_SHORT_STATUS_NAMES", compat)
         self.assertIn("#include \"honch/core/honch.h\"", compat)
@@ -106,6 +108,13 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn("honch_track_gpio", compat)
         self.assertIn("honch_esp_platform_ops_deinit", compat)
         self.assertIn("honch_client_t", adapter)
+        self.assertIn("../../../c-core/honch/include", cmake)
+        self.assertIn("honch_state_prepare", shims)
+        self.assertIn("honch_state_check_firmware_version", shims)
+        self.assertIn("honch_random_hex", shims)
+        self.assertIn("esp_fill_random(bytes, sizeof(bytes))", shims)
+        self.assertIn("client->storage->state_get", shims)
+        self.assertIn("client->storage->queue_push", shims)
 
     def test_esp_gpio_adapter_preserves_gpio_tracking_worker(self) -> None:
         compat = read("ports/esp-idf/honch/src/esp_compat.c")

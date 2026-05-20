@@ -97,8 +97,8 @@ void honch_transport_deinit(void)
 
 honch_transport_result_t honch_transport_send(const uint8_t *body, size_t body_len)
 {
-    int64_t total_start_us = HONCH_PERF_NOW_US();
-    uint32_t heap_before = HONCH_PERF_HEAP_FREE();
+    HONCH_PERF_VAR(int64_t, total_start_us, HONCH_PERF_NOW_US());
+    HONCH_PERF_VAR(uint32_t, heap_before, HONCH_PERF_HEAP_FREE());
 
     if (!body || body_len == 0) {
         return HONCH_TRANSPORT_NETWORK_ERROR;
@@ -112,7 +112,7 @@ honch_transport_result_t honch_transport_send(const uint8_t *body, size_t body_l
     size_t post_body_len = body_len;
     uint8_t *compressed = NULL;
     bool use_gzip = false;
-    int64_t gzip_us = 0;
+    HONCH_PERF_VAR(int64_t, gzip_us, 0);
 
 #ifdef CONFIG_HONCH_ENABLE_GZIP
     int64_t gzip_start_us = HONCH_PERF_NOW_US();
@@ -135,9 +135,9 @@ honch_transport_result_t honch_transport_send(const uint8_t *body, size_t body_l
         .crt_bundle_attach = esp_crt_bundle_attach,
     };
 
-    int64_t init_start_us = HONCH_PERF_NOW_US();
+    HONCH_PERF_VAR(int64_t, init_start_us, HONCH_PERF_NOW_US());
     esp_http_client_handle_t client = esp_http_client_init(&http_config);
-    int64_t init_us = HONCH_PERF_ELAPSED_US(init_start_us);
+    HONCH_PERF_VAR(int64_t, init_us, HONCH_PERF_ELAPSED_US(init_start_us));
     if (!client) {
         ESP_LOGE(TAG, "Failed to init HTTP client");
         free(compressed);
@@ -155,17 +155,17 @@ honch_transport_result_t honch_transport_send(const uint8_t *body, size_t body_l
         return HONCH_TRANSPORT_NETWORK_ERROR;
     }
 
-    int64_t setup_start_us = HONCH_PERF_NOW_US();
+    HONCH_PERF_VAR(int64_t, setup_start_us, HONCH_PERF_NOW_US());
     esp_http_client_set_header(client, "Content-Type", "application/cbor");
     if (use_gzip) {
         esp_http_client_set_header(client, "Content-Encoding", "gzip");
     }
     esp_http_client_set_post_field(client, (const char *)post_body, post_body_len);
-    int64_t setup_us = HONCH_PERF_ELAPSED_US(setup_start_us);
+    HONCH_PERF_VAR(int64_t, setup_us, HONCH_PERF_ELAPSED_US(setup_start_us));
 
-    int64_t perform_start_us = HONCH_PERF_NOW_US();
+    HONCH_PERF_VAR(int64_t, perform_start_us, HONCH_PERF_NOW_US());
     esp_err_t err = esp_http_client_perform(client);
-    int64_t perform_us = HONCH_PERF_ELAPSED_US(perform_start_us);
+    HONCH_PERF_VAR(int64_t, perform_us, HONCH_PERF_ELAPSED_US(perform_start_us));
     honch_transport_result_t result;
     int status = 0;
 
@@ -192,9 +192,9 @@ honch_transport_result_t honch_transport_send(const uint8_t *body, size_t body_l
         }
     }
 
-    int64_t cleanup_start_us = HONCH_PERF_NOW_US();
+    HONCH_PERF_VAR(int64_t, cleanup_start_us, HONCH_PERF_NOW_US());
     esp_http_client_cleanup(client);
-    int64_t cleanup_us = HONCH_PERF_ELAPSED_US(cleanup_start_us);
+    HONCH_PERF_VAR(int64_t, cleanup_us, HONCH_PERF_ELAPSED_US(cleanup_start_us));
     free(compressed);
 
     HONCH_PERF_LOG("HONCH_PERF_TRANSPORT",

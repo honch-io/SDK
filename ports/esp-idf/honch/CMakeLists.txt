@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS
         "src/esp_compat.c"
+        "src/esp_core_shims.c"
         "src/esp_platform.c"
         "src/esp_storage_nvs.c"
         "src/esp_transport_http.c"
@@ -18,7 +19,7 @@ idf_component_register(
         "src/esp_gpio_adapter.c"
         "src/lifecycle.c"
     INCLUDE_DIRS "include"
-    PRIV_INCLUDE_DIRS "src" "../../../core/include"
+    PRIV_INCLUDE_DIRS "src" "../../../core/include" "../../../c-core/honch/include"
     REQUIRES
         nvs_flash
         esp_http_client
