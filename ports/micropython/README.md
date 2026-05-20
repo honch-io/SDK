@@ -2,7 +2,7 @@
 
 MicroPython SDK for Honch analytics on connected hardware.
 
-This package implements the shared Honch SDK contract from `../spec/`:
+This package implements the shared Honch SDK contract from `../../spec/`:
 
 - CBOR `POST <endpoint>/batch` with optional gzip transport compression
 - persistent local queue before delivery
@@ -27,8 +27,8 @@ For a customer-like install on a Pico W, copy the package onto the device and
 drop in a `main.py` that uses the same E2E-style config and event sequence:
 
 ```sh
-mpremote connect auto mip install micropython/package.json
-mpremote connect auto fs cp micropython/examples/pico_w_main.py :main.py
+mpremote connect auto mip install ports/micropython/package.json
+mpremote connect auto fs cp ports/micropython/examples/pico_w_main.py :main.py
 mpremote connect auto reset
 ```
 
@@ -39,7 +39,7 @@ board can reach on your network.
 For firmware builds, include the package through `manifest.py`:
 
 ```sh
-make BOARD=MYBOARD FROZEN_MANIFEST=/path/to/micropython/manifest.py
+make BOARD=MYBOARD FROZEN_MANIFEST=/path/to/ports/micropython/manifest.py
 ```
 
 For `mip`/`mpremote mip` workflows, use `package.json` from this directory when

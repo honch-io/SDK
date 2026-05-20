@@ -3,12 +3,12 @@ name: MicroPython SDK Tests
 on:
   push:
     paths:
-      - 'micropython/**'
+      - 'ports/micropython/**'
       - 'spec/**'
       - '.github/workflows/micropython.yml'
   pull_request:
     paths:
-      - 'micropython/**'
+      - 'ports/micropython/**'
       - 'spec/**'
       - '.github/workflows/micropython.yml'
 
@@ -30,7 +30,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Run host tests
-        working-directory: micropython
+        working-directory: ports/micropython
         run: |
           python -m compileall honch tests examples
           python -m unittest discover -v
