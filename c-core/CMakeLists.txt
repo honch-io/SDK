@@ -21,13 +21,10 @@ find_package(Threads REQUIRED)
 find_package(ZLIB QUIET)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../core ${CMAKE_CURRENT_BINARY_DIR}/core)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../ports/posix ${CMAKE_CURRENT_BINARY_DIR}/ports/posix)
 
 add_library(honch_c_core
     honch/src/honch.c
-    honch/src/honch_platform.c
-    honch/src/honch_queue.c
-    honch/src/honch_state.c
-    honch/src/honch_transport_curl.c
 )
 
 target_include_directories(honch_c_core
@@ -36,16 +33,11 @@ target_include_directories(honch_c_core
 )
 
 target_link_libraries(honch_c_core
-    PRIVATE
+    PUBLIC
         honch_core
-        CURL::libcurl
-        Threads::Threads
+    PRIVATE
+        honch_posix
 )
-
-if(ZLIB_FOUND)
-    target_link_libraries(honch_c_core PRIVATE ZLIB::ZLIB)
-    target_compile_definitions(honch_c_core PRIVATE HONCH_HAVE_ZLIB)
-endif()
 
 target_compile_definitions(honch_c_core PRIVATE
     _POSIX_C_SOURCE=200809L

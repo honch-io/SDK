@@ -19,8 +19,8 @@ def read_sdk(relative_path: str) -> str:
 
 class CCoreCborMigrationTest(unittest.TestCase):
     def test_transport_sends_application_cbor_with_optional_gzip(self) -> None:
-        transport = read("honch/src/honch_transport_curl.c")
-        cmake = read("CMakeLists.txt")
+        transport = read_sdk("ports/posix/src/posix_transport_curl.c")
+        cmake = read("CMakeLists.txt") + read_sdk("ports/posix/CMakeLists.txt")
 
         self.assertIn("Content-Type: application/cbor", transport)
         self.assertNotIn("Content-Type: application/json", transport)
@@ -31,7 +31,7 @@ class CCoreCborMigrationTest(unittest.TestCase):
         self.assertIn("ZLIB::ZLIB", cmake)
 
     def test_queue_persists_cbor_blobs_not_json_strings(self) -> None:
-        queue = read("honch/src/honch_queue.c")
+        queue = read_sdk("ports/posix/src/posix_storage.c")
         internal = read("honch/src/honch_internal.h")
 
         self.assertIn('".cbor"', queue)
@@ -42,7 +42,7 @@ class CCoreCborMigrationTest(unittest.TestCase):
 
     def test_queue_supports_configurable_durability_mode(self) -> None:
         public = read("honch/include/honch/honch.h")
-        queue = read("honch/src/honch_queue.c")
+        queue = read_sdk("ports/posix/src/posix_storage.c")
 
         self.assertIn("honch_durability_mode_t", public)
         self.assertIn("durability_mode", public)
