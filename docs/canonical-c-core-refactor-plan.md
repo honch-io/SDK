@@ -381,7 +381,7 @@ Outcome: current behavior is locked before files move.
 - Create: `docs/adr/0001-canonical-c-core.md`
 - Modify: `README.md`
 
-- [ ] **Step 1: Create the ADR**
+- [x] **Step 1: Create the ADR**
 
 Add `docs/adr/0001-canonical-c-core.md`:
 
@@ -405,7 +405,7 @@ Honch SDK behavior will be owned by a canonical portable C core. Platform SDKs w
 ESP-IDF and POSIX remain public SDKs, but their internals move behind port adapters. MicroPython remains a Python implementation initially, validated by conformance fixtures. React Native relay consumes the packetizer/relay contract.
 ```
 
-- [ ] **Step 2: Link the ADR from the repo README**
+- [x] **Step 2: Link the ADR from the repo README**
 
 Modify `README.md` under the spec section:
 
@@ -413,7 +413,7 @@ Modify `README.md` under the spec section:
 - [Canonical C Core ADR](docs/adr/0001-canonical-c-core.md) — SDK architecture direction
 ```
 
-- [ ] **Step 3: Verify markdown paths**
+- [x] **Step 3: Verify markdown paths**
 
 Run:
 
@@ -440,7 +440,7 @@ git commit -m "docs: record canonical c core architecture"
 - Create: `spec/conformance/events/identity-reset.json`
 - Create: `spec/conformance/http/response-policy.json`
 
-- [ ] **Step 1: Create the conformance README**
+- [x] **Step 1: Create the conformance README**
 
 Add `spec/conformance/README.md`:
 
@@ -464,7 +464,7 @@ These fixtures define behavior every Honch SDK must implement. They are not tied
 - Permanent rejection dead-letters or drops according to platform capability.
 ```
 
-- [ ] **Step 2: Add basic track fixture**
+- [x] **Step 2: Add basic track fixture**
 
 Add `spec/conformance/events/basic-track.json`:
 
@@ -505,7 +505,7 @@ Add `spec/conformance/events/basic-track.json`:
 }
 ```
 
-- [ ] **Step 3: Add session fixture**
+- [x] **Step 3: Add session fixture**
 
 Add `spec/conformance/events/session-track.json`:
 
@@ -551,7 +551,7 @@ Add `spec/conformance/events/session-track.json`:
 }
 ```
 
-- [ ] **Step 4: Add reset fixture**
+- [x] **Step 4: Add reset fixture**
 
 Add `spec/conformance/events/identity-reset.json`:
 
@@ -591,7 +591,7 @@ Add `spec/conformance/events/identity-reset.json`:
 }
 ```
 
-- [ ] **Step 5: Add HTTP response policy fixture**
+- [x] **Step 5: Add HTTP response policy fixture**
 
 Add `spec/conformance/http/response-policy.json`:
 
@@ -612,7 +612,7 @@ Add `spec/conformance/http/response-policy.json`:
 }
 ```
 
-- [ ] **Step 6: Validate JSON fixtures**
+- [x] **Step 6: Validate JSON fixtures**
 
 Run:
 
@@ -625,7 +625,7 @@ python3 -m json.tool spec/conformance/http/response-policy.json
 
 Expected: each command prints formatted JSON and exits 0.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```sh
 git add spec/conformance
@@ -638,7 +638,7 @@ git commit -m "test: add sdk conformance fixtures"
 - Create: `spec/relay-chunks.md`
 - Modify: `spec/relay-envelope.md`
 
-- [ ] **Step 1: Create relay chunk spec**
+- [x] **Step 1: Create relay chunk spec**
 
 Add `spec/relay-chunks.md`:
 
@@ -683,7 +683,7 @@ Relay chunks let a device without internet connectivity stream queued Honch data
 Additional source types require a spec update and conformance fixture.
 ```
 
-- [ ] **Step 2: Replace the reserved relay SDK surface**
+- [x] **Step 2: Replace the reserved relay SDK surface**
 
 Modify `spec/relay-envelope.md` so the future SDK surface references chunks:
 
@@ -703,7 +703,7 @@ honch_status_t honch_packetizer_abort(honch_packetizer_t *packetizer);
 The relay or companion app forwards the reassembled CBOR batch to capture and stamps relay metadata.
 ````
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```sh
 git add spec/relay-chunks.md spec/relay-envelope.md
@@ -726,7 +726,7 @@ Outcome: POSIX still works, but reusable behavior starts living under `core/`.
 - Create: `core/include/honch/core/honch.h`
 - Modify: `c-core/CMakeLists.txt`
 
-- [ ] **Step 1: Move reusable sources with Git**
+- [x] **Step 1: Move reusable sources with Git**
 
 Run:
 
@@ -739,7 +739,7 @@ git mv c-core/honch/src/honch_json.c core/src/honch_json.c
 
 Expected: `git status --short` shows three renamed files.
 
-- [ ] **Step 2: Add core status header**
+- [x] **Step 2: Add core status header**
 
 Add `core/include/honch/core/status.h`:
 
@@ -774,7 +774,7 @@ typedef enum honch_status {
 #endif
 ```
 
-- [ ] **Step 3: Add core config header skeleton**
+- [x] **Step 3: Add core config header skeleton**
 
 Add `core/include/honch/core/config.h`:
 
@@ -826,7 +826,7 @@ typedef struct honch_core_config {
 #endif
 ```
 
-- [ ] **Step 4: Add core public header skeleton**
+- [x] **Step 4: Add core public header skeleton**
 
 Add `core/include/honch/core/honch.h`:
 
@@ -863,7 +863,7 @@ const char *honch_status_string(honch_status_t status);
 #endif
 ```
 
-- [ ] **Step 5: Add core CMake target**
+- [x] **Step 5: Add core CMake target**
 
 Add `core/CMakeLists.txt`:
 
@@ -886,7 +886,7 @@ target_compile_options(honch_core PRIVATE
 )
 ```
 
-- [ ] **Step 6: Update C/POSIX build to include core**
+- [x] **Step 6: Update C/POSIX build to include core**
 
 Modify `c-core/CMakeLists.txt`:
 
@@ -905,7 +905,7 @@ target_link_libraries(honch_c_core
 )
 ```
 
-- [ ] **Step 7: Build and test C/POSIX**
+- [x] **Step 7: Build and test C/POSIX**
 
 Run:
 
@@ -917,7 +917,7 @@ ctest --test-dir c-core/build --output-on-failure
 
 Expected: build succeeds and `ctest` passes.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```sh
 git add core c-core/CMakeLists.txt
@@ -932,7 +932,7 @@ git commit -m "refactor(core): introduce shared c core target"
 - Create: `core/include/honch/core/transport.h`
 - Modify: `core/include/honch/core/config.h`
 
-- [ ] **Step 1: Add platform interface**
+- [x] **Step 1: Add platform interface**
 
 Add `core/include/honch/core/platform.h`:
 
@@ -973,7 +973,7 @@ typedef struct honch_platform_ops {
 #endif
 ```
 
-- [ ] **Step 2: Add storage interface**
+- [x] **Step 2: Add storage interface**
 
 Add `core/include/honch/core/storage.h`:
 
@@ -1018,7 +1018,7 @@ typedef struct honch_storage_ops {
 #endif
 ```
 
-- [ ] **Step 3: Add transport interface**
+- [x] **Step 3: Add transport interface**
 
 Add `core/include/honch/core/transport.h`:
 
@@ -1061,7 +1061,7 @@ typedef struct honch_transport_ops {
 #endif
 ```
 
-- [ ] **Step 4: Include interfaces from config**
+- [x] **Step 4: Include interfaces from config**
 
 Modify `core/include/honch/core/config.h` to include:
 
@@ -1073,7 +1073,7 @@ Modify `core/include/honch/core/config.h` to include:
 
 Remove the forward declarations for `honch_platform_ops_t`, `honch_storage_ops_t`, and `honch_transport_ops_t`.
 
-- [ ] **Step 5: Compile headers**
+- [x] **Step 5: Compile headers**
 
 Run:
 
@@ -1083,7 +1083,7 @@ cmake --build c-core/build
 
 Expected: build succeeds.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```sh
 git add core/include/honch/core
@@ -1102,7 +1102,7 @@ git commit -m "feat(core): define platform storage and transport interfaces"
 - Modify: `c-core/CMakeLists.txt`
 - Modify: `c-core/honch/include/honch/honch.h`
 
-- [ ] **Step 1: Move POSIX files**
+- [x] **Step 1: Move POSIX files**
 
 Run:
 
@@ -1116,7 +1116,7 @@ git mv c-core/honch/src/honch_transport_curl.c ports/posix/src/posix_transport_c
 
 Expected: `git status --short` shows four renames.
 
-- [ ] **Step 2: Add POSIX public wrapper header**
+- [x] **Step 2: Add POSIX public wrapper header**
 
 Add `ports/posix/include/honch/posix/honch.h`:
 
@@ -1129,7 +1129,7 @@ Add `ports/posix/include/honch/posix/honch.h`:
 #endif
 ```
 
-- [ ] **Step 3: Keep current C/POSIX include path compatible**
+- [x] **Step 3: Keep current C/POSIX include path compatible**
 
 Modify `c-core/honch/include/honch/honch.h` so it includes the core public API and preserves aliases:
 
@@ -1154,7 +1154,7 @@ typedef honch_status_t honch_err_t;
 #endif
 ```
 
-- [ ] **Step 4: Add POSIX CMake target**
+- [x] **Step 4: Add POSIX CMake target**
 
 Add `ports/posix/CMakeLists.txt`:
 
@@ -1184,7 +1184,7 @@ target_compile_options(honch_posix PRIVATE
 )
 ```
 
-- [ ] **Step 5: Update C/POSIX build**
+- [x] **Step 5: Update C/POSIX build**
 
 Modify `c-core/CMakeLists.txt`:
 
@@ -1202,7 +1202,7 @@ target_link_libraries(honch_c_core
 )
 ```
 
-- [ ] **Step 6: Build and test**
+- [x] **Step 6: Build and test**
 
 Run:
 
@@ -1213,7 +1213,7 @@ ctest --test-dir c-core/build --output-on-failure
 
 Expected: all existing tests pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```sh
 git add c-core ports/posix
@@ -1233,7 +1233,7 @@ Outcome: C/POSIX is a wrapper over `honch_core_*`.
 - Create: `ports/posix/src/posix_compat.c`
 - Modify: `c-core/CMakeLists.txt`
 
-- [ ] **Step 1: Move client implementation**
+- [x] **Step 1: Move client implementation**
 
 Run:
 
@@ -1243,7 +1243,7 @@ git mv c-core/honch/src/honch.c core/src/honch_core.c
 
 Expected: one rename appears in `git status --short`.
 
-- [ ] **Step 2: Rename public functions in core**
+- [x] **Step 2: Rename public functions in core**
 
 In `core/src/honch_core.c`, rename exported symbols:
 
@@ -1261,7 +1261,7 @@ honch_get_device_id -> honch_core_get_device_id
 honch_copy_device_id -> honch_core_copy_device_id
 ```
 
-- [ ] **Step 3: Add POSIX compatibility wrappers**
+- [x] **Step 3: Add POSIX compatibility wrappers**
 
 Add `ports/posix/src/posix_compat.c`:
 
@@ -1314,7 +1314,7 @@ honch_status_t honch_copy_device_id(honch_client_t *client, char *buffer, size_t
 }
 ```
 
-- [ ] **Step 4: Add moved implementation to core target**
+- [x] **Step 4: Add moved implementation to core target**
 
 Modify `core/CMakeLists.txt`:
 
@@ -1327,7 +1327,7 @@ add_library(honch_core
 )
 ```
 
-- [ ] **Step 5: Add compatibility source to POSIX target**
+- [x] **Step 5: Add compatibility source to POSIX target**
 
 Modify `ports/posix/CMakeLists.txt`:
 
@@ -1341,7 +1341,7 @@ add_library(honch_posix
 )
 ```
 
-- [ ] **Step 6: Build and test**
+- [x] **Step 6: Build and test**
 
 Run:
 
@@ -1352,7 +1352,7 @@ ctest --test-dir c-core/build --output-on-failure
 
 Expected: all tests pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```sh
 git add core ports/posix c-core
@@ -1369,7 +1369,7 @@ git commit -m "refactor(core): move client state machine into core"
 - Modify: `ports/posix/src/posix_transport_curl.c`
 - Test: `core/test/test_storage_contract.c`
 
-- [ ] **Step 1: Add failing storage contract test**
+- [x] **Step 1: Add failing storage contract test**
 
 Add `core/test/test_storage_contract.c`:
 
@@ -1390,7 +1390,7 @@ int main(void) {
 
 Add it to `core/CMakeLists.txt` behind `HONCH_BUILD_TESTS`.
 
-- [ ] **Step 2: Run test build**
+- [x] **Step 2: Run test build**
 
 Run:
 
@@ -1402,7 +1402,7 @@ ctest --test-dir c-core/build --output-on-failure
 
 Expected: build succeeds after the test is wired.
 
-- [ ] **Step 3: Move platform fields into core client**
+- [x] **Step 3: Move platform fields into core client**
 
 In `core/src/honch_internal.h`, ensure `struct honch_client` stores:
 
@@ -1412,7 +1412,7 @@ const honch_storage_ops_t *storage;
 const honch_transport_ops_t *transport;
 ```
 
-- [ ] **Step 4: Replace direct POSIX operations**
+- [x] **Step 4: Replace direct POSIX operations**
 
 In `core/src/honch_core.c`, replace direct calls to POSIX file, pthread, and curl helpers with:
 
@@ -1425,7 +1425,7 @@ client->storage->queue_push(client->storage->ctx, event, event_size, sequence);
 client->transport->post_batch(client->transport->ctx, client->endpoint_url, client->api_key, body, body_size, encoding, &result);
 ```
 
-- [ ] **Step 5: Implement POSIX ops**
+- [x] **Step 5: Implement POSIX ops**
 
 In POSIX port files, expose:
 
@@ -1437,11 +1437,11 @@ honch_status_t honch_posix_transport_ops_init(honch_transport_ops_t *ops, honch_
 
 Each init function fills the vtable and context pointer.
 
-- [ ] **Step 6: Preserve POSIX public config**
+- [x] **Step 6: Preserve POSIX public config**
 
 In `ports/posix/src/posix_compat.c`, convert existing `honch_config_t` into `honch_core_config_t`, initialize POSIX ops, then call `honch_core_init`.
 
-- [ ] **Step 7: Build and test**
+- [x] **Step 7: Build and test**
 
 Run:
 
@@ -1452,7 +1452,7 @@ ctest --test-dir c-core/build --output-on-failure
 
 Expected: all tests pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```sh
 git add core ports/posix c-core
@@ -1471,7 +1471,7 @@ Outcome: core can export queued data without HTTP.
 - Create: `core/test/test_packetizer.c`
 - Modify: `core/CMakeLists.txt`
 
-- [ ] **Step 1: Add packetizer public header**
+- [x] **Step 1: Add packetizer public header**
 
 Add `core/include/honch/core/packetizer.h`:
 
@@ -1519,7 +1519,7 @@ honch_status_t honch_packetizer_abort(honch_packetizer_t *packetizer);
 #endif
 ```
 
-- [ ] **Step 2: Add failing packetizer tests**
+- [x] **Step 2: Add failing packetizer tests**
 
 Add `core/test/test_packetizer.c` with tests for:
 
@@ -1533,7 +1533,7 @@ static void test_confirm_consumes_storage(void);
 
 Each test should use an in-memory fake storage implementation of `honch_storage_ops_t`.
 
-- [ ] **Step 3: Run packetizer test before implementation**
+- [x] **Step 3: Run packetizer test before implementation**
 
 Run:
 
@@ -1544,11 +1544,11 @@ ctest --test-dir c-core/build --output-on-failure -R packetizer
 
 Expected: test build or tests fail because packetizer functions are not implemented.
 
-- [ ] **Step 4: Implement packetizer**
+- [x] **Step 4: Implement packetizer**
 
 Add frame encoding in `core/src/honch_packetizer.c` using the `spec/relay-chunks.md` layout.
 
-- [ ] **Step 5: Run packetizer tests**
+- [x] **Step 5: Run packetizer tests**
 
 Run:
 
@@ -1559,7 +1559,7 @@ ctest --test-dir c-core/build --output-on-failure -R packetizer
 
 Expected: packetizer tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```sh
 git add core spec/relay-chunks.md
@@ -1787,7 +1787,7 @@ idf.py build
 
 Expected: build succeeds.
 
-- [ ] **Step 7: Run ESP-IDF static tests**
+- [x] **Step 7: Run ESP-IDF static tests**
 
 Run:
 
@@ -1797,7 +1797,7 @@ python3 ports/esp-idf/tests/test_cbor_migration.py
 
 Expected: tests pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```sh
 git add ports/esp-idf core
@@ -1922,7 +1922,7 @@ describe("decodeRelayFrame", () => {
 });
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```sh
 git add ports/react-native-relay
