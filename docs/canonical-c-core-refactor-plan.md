@@ -1660,7 +1660,7 @@ Outcome: ESP-IDF public API remains stable, internals use canonical core.
 - Modify: root `README.md`
 - Modify: `.github/workflows/esp-idf.yml`
 
-- [ ] **Step 1: Move ESP-IDF tree**
+- [x] **Step 1: Move ESP-IDF tree**
 
 Run:
 
@@ -1675,7 +1675,7 @@ git mv esp-idf/README.md ports/esp-idf/README.md
 
 Expected: `git status --short` shows renames.
 
-- [ ] **Step 2: Update paths in README and CI**
+- [x] **Step 2: Update paths in README and CI**
 
 Replace `esp-idf/` references with `ports/esp-idf/` in:
 
@@ -1686,7 +1686,7 @@ ports/esp-idf/README.md
 ports/esp-idf/tests/test_cbor_migration.py
 ```
 
-- [ ] **Step 3: Run ESP-IDF static tests**
+- [x] **Step 3: Run ESP-IDF static tests**
 
 Run:
 
@@ -1696,7 +1696,7 @@ python3 ports/esp-idf/tests/test_cbor_migration.py
 
 Expected: tests pass after path updates.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```sh
 git add README.md .github/workflows/esp-idf.yml ports/esp-idf
