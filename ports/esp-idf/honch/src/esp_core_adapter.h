@@ -4,6 +4,7 @@
 #pragma once
 
 #include "honch/core/platform.h"
+#include "honch/core/storage.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -12,5 +13,11 @@ typedef struct honch_esp_platform {
     SemaphoreHandle_t mutex;
 } honch_esp_platform_t;
 
+typedef struct honch_esp_storage {
+    uint64_t peek_sequence;
+    uint64_t read_sequence;
+} honch_esp_storage_t;
+
 honch_status_t honch_esp_platform_ops_init(honch_platform_ops_t *ops, honch_esp_platform_t *ctx);
 void honch_esp_platform_ops_deinit(honch_esp_platform_t *ctx);
+honch_status_t honch_esp_storage_ops_init(honch_storage_ops_t *ops, honch_esp_storage_t *ctx);

@@ -2,6 +2,7 @@ idf_component_register(
     SRCS
         "src/honch.c"
         "src/esp_platform.c"
+        "src/esp_storage_nvs.c"
         "src/identity.c"
         "src/queue.c"
         "src/encoder.c"
