@@ -3,6 +3,7 @@ idf_component_register(
         "src/honch.c"
         "src/esp_platform.c"
         "src/esp_storage_nvs.c"
+        "src/esp_transport_http.c"
         "src/identity.c"
         "src/queue.c"
         "src/encoder.c"
