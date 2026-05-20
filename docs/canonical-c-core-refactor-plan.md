@@ -1727,7 +1727,7 @@ lock/unlock = FreeRTOS mutex wrappers;
 log = ESP_LOGx wrappers;
 ```
 
-- [ ] **Step 2: Add ESP-IDF storage ops**
+- [x] **Step 2: Add ESP-IDF storage ops**
 
 `esp_storage_nvs.c` implements `honch_storage_ops_t` using:
 

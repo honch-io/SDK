@@ -30,6 +30,30 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn(".unlock = honch_esp_unlock", platform)
         self.assertIn(".log = honch_esp_log", platform)
 
+    def test_esp_storage_ops_use_nvs_peek_confirm_contract(self) -> None:
+        storage = read("ports/esp-idf/honch/src/esp_storage_nvs.c")
+        adapter = read("ports/esp-idf/honch/src/esp_core_adapter.h")
+        cmake = read("ports/esp-idf/honch/CMakeLists.txt")
+
+        self.assertIn('"src/esp_storage_nvs.c"', cmake)
+        self.assertIn("#include \"honch/core/storage.h\"", adapter)
+        self.assertIn('HONCH_ESP_STATE_NAMESPACE "honch_state"', storage)
+        self.assertIn('HONCH_ESP_QUEUE_NAMESPACE "honch_q"', storage)
+        self.assertIn('HONCH_ESP_DEAD_NAMESPACE "honch_dead"', storage)
+        self.assertIn("HONCH_ESP_NVS_KEY_SIZE 16", storage)
+        self.assertIn('strcmp(key, "firmware_version") == 0', storage)
+        self.assertIn('return "fw_ver"', storage)
+        self.assertIn("honch_esp_sequence_key", storage)
+        self.assertIn("nvs_set_blob(handle, key, event, event_size)", storage)
+        self.assertIn("nvs_get_blob(handle, key, NULL, &value_size)", storage)
+        self.assertIn("honch_esp_queue_peek", storage)
+        self.assertIn("honch_esp_queue_consume", storage)
+        self.assertIn("honch_esp_queue_dead_letter", storage)
+        self.assertIn("honch_esp_queue_drop_oldest", storage)
+        self.assertIn(".queue_peek = honch_esp_queue_peek", storage)
+        self.assertIn(".queue_consume = honch_esp_queue_consume", storage)
+        self.assertIn(".queue_dead_letter = honch_esp_queue_dead_letter", storage)
+
     def test_component_declares_cbor_dependency(self) -> None:
         manifest = read("ports/esp-idf/honch/idf_component.yml")
         cmake = read("ports/esp-idf/honch/CMakeLists.txt")
