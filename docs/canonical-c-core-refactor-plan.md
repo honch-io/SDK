@@ -2044,7 +2044,7 @@ Outcome: MicroPython remains usable while core becomes canonical.
 - Modify: `.github/workflows/micropython.yml`
 - Modify: `README.md`
 
-- [ ] **Step 1: Move MicroPython**
+- [x] **Step 1: Move MicroPython**
 
 Run:
 
@@ -2054,7 +2054,7 @@ git mv micropython ports/micropython
 
 Expected: `git status --short` shows the directory rename.
 
-- [ ] **Step 2: Add conformance runner**
+- [x] **Step 2: Add conformance runner**
 
 Add `ports/micropython/tests/test_conformance.py`:
 
@@ -2081,22 +2081,22 @@ def test_http_response_policy_fixture_loads():
     assert any(case["status"] == 429 and case["queue"] == "preserve" for case in fixture["cases"])
 ```
 
-- [ ] **Step 3: Update workflow paths**
+- [x] **Step 3: Update workflow paths**
 
 Replace `micropython/` with `ports/micropython/` in `.github/workflows/micropython.yml`.
 
-- [ ] **Step 4: Run MicroPython tests**
+- [x] **Step 4: Run MicroPython tests**
 
 Run:
 
 ```sh
 cd ports/micropython
-python3 -m unittest discover tests
+python3 -m unittest discover -v
 ```
 
 Expected: tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```sh
 git add README.md .github/workflows/micropython.yml ports/micropython

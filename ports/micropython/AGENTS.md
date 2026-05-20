@@ -19,7 +19,7 @@ The monorepo is for SDKs, not the full SaaS product. Do not expand work into
 the dashboard, cloud ingest service, BLE protocols, firmware integrations,
 billing, auth, or analytics UI unless explicitly requested.
 
-The cross-SDK source of truth lives in `../spec/`. Treat local MicroPython docs
+The cross-SDK source of truth lives in `../../spec/`. Treat local MicroPython docs
 as package guidance, not as a replacement for the shared spec.
 
 ## Current Focus
@@ -31,8 +31,8 @@ Initial goal:
 
 - Provide a small, idiomatic MicroPython package that product firmware can
   import as `honch`.
-- Implement the shared Honch event contract from `../spec/wire-format.md` and
-  `../spec/auto-properties.md`.
+- Implement the shared Honch event contract from `../../spec/wire-format.md` and
+  `../../spec/auto-properties.md`.
 - Persist SDK state and queued events locally before delivery.
 - Keep encoder, queue, identity, clock, randomness, storage, compression, and
   transport behavior isolated enough to handle board-specific differences.
@@ -66,7 +66,7 @@ Expected package shape once implementation begins:
 - `tests/`: Host-runnable tests and MicroPython-focused conformance checks.
 - `manifest.py`: Optional frozen-module manifest for production firmware builds.
 - `package.json`: Optional `mip` package metadata when publishing is in scope.
-- `../spec`: Shared cross-SDK contract and conformance fixtures. Read these
+- `../../spec`: Shared cross-SDK contract and conformance fixtures. Read these
   before large SDK changes.
 
 Do not mix C/POSIX or ESP-IDF implementation files into this package. Shared
@@ -105,8 +105,8 @@ Before changing files:
 - Identify whether existing changes are yours or user-owned. Preserve all
   user-owned changes.
 - Read the relevant docs and code before editing.
-- For contract-sensitive changes, read `../spec/wire-format.md`,
-  `../spec/auto-properties.md`, and any relevant conformance fixtures.
+- For contract-sensitive changes, read `../../spec/wire-format.md`,
+  `../../spec/auto-properties.md`, and any relevant conformance fixtures.
 - For package-shape or distribution work, read current MicroPython packaging
   guidance for `mip`, `mpremote`, `.mpy`, and frozen modules.
 - For non-trivial work, state the plan briefly before edits.
