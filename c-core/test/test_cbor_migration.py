@@ -122,6 +122,24 @@ class CCoreCborMigrationTest(unittest.TestCase):
         self.assertIn("honch_client_now_millis(client)", core)
         self.assertIn("honch_client_random_hex(client, random)", core)
 
+    def test_core_routes_queue_mutations_through_storage_ops_when_available(self) -> None:
+        core = read_sdk("core/src/honch_core.c")
+        storage = read_sdk("ports/posix/src/posix_storage.c")
+
+        self.assertIn("honch_client_queue_push", core)
+        self.assertIn("client->storage->queue_push", core)
+        self.assertIn("honch_client_queue_depth", core)
+        self.assertIn("client->storage->queue_depth", core)
+        self.assertIn("honch_client_queue_clear", core)
+        self.assertIn("client->storage->queue_clear", core)
+
+        self.assertIn("honch_client_queue_push(client, event.data, event.length)", core)
+        self.assertIn("honch_client_queue_depth(next, &next->queued_event_count)", core)
+        self.assertIn("honch_client_queue_clear(client)", core)
+        self.assertIn("client->sequence++", core)
+        self.assertIn("honch_client_t *client = (honch_client_t *)ctx", storage)
+        self.assertIn("honch_queue_enqueue_with_sequence(client, event, event_size, sequence)", storage)
+
     def test_docs_reference_cbor_contract(self) -> None:
         readme = read("README.md")
         spec = (SDK_ROOT / "spec/wire-format.md").read_text()
