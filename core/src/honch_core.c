@@ -294,6 +294,9 @@ static honch_status_t honch_cbor_patch_map_header(honch_buffer_t *buffer, size_t
 
 static uint64_t honch_client_now_millis(honch_client_t *client);
 static honch_status_t honch_client_random_hex(honch_client_t *client, char out[33]);
+static honch_status_t honch_client_queue_push(honch_client_t *client, const unsigned char *event, size_t event_size);
+static honch_status_t honch_client_queue_depth(honch_client_t *client, size_t *depth);
+static honch_status_t honch_client_queue_clear(honch_client_t *client);
 
 static honch_status_t honch_build_event(
     honch_client_t *client,
@@ -407,6 +410,33 @@ static honch_status_t honch_client_random_hex(honch_client_t *client, char out[3
     return HONCH_OK;
 }
 
+static honch_status_t honch_client_queue_push(honch_client_t *client, const unsigned char *event, size_t event_size)
+{
+    if (client != NULL && client->storage != NULL && client->storage->queue_push != NULL) {
+        return client->storage->queue_push(client->storage->ctx, event, event_size, client->sequence++);
+    }
+
+    return honch_queue_enqueue(client, event, event_size);
+}
+
+static honch_status_t honch_client_queue_depth(honch_client_t *client, size_t *depth)
+{
+    if (client != NULL && client->storage != NULL && client->storage->queue_depth != NULL) {
+        return client->storage->queue_depth(client->storage->ctx, depth);
+    }
+
+    return honch_queue_count_pending(client, depth);
+}
+
+static honch_status_t honch_client_queue_clear(honch_client_t *client)
+{
+    if (client != NULL && client->storage != NULL && client->storage->queue_clear != NULL) {
+        return client->storage->queue_clear(client->storage->ctx);
+    }
+
+    return honch_queue_clear(client);
+}
+
 static honch_status_t honch_track_locked_internal(
     honch_client_t *client,
     const char *event_name,
@@ -446,7 +476,7 @@ static honch_status_t honch_track_locked_internal(
     honch_payload_t event = {0};
     honch_status_t status = honch_build_event(client, event_name, properties_json, battery_level, &event);
     if (status == HONCH_OK) {
-        status = honch_queue_enqueue(client, event.data, event.length);
+        status = honch_client_queue_push(client, event.data, event.length);
     }
     if (status == HONCH_OK) {
         honch_scheduler_notify_after_enqueue_locked(client);
@@ -611,7 +641,7 @@ static honch_status_t honch_scheduler_start(honch_client_t *client)
 
     if (client->flush_event_threshold > 0u) {
         size_t pending_count = 0u;
-        honch_status_t status = honch_queue_count_pending(client, &pending_count);
+        honch_status_t status = honch_client_queue_depth(client, &pending_count);
         if (status != HONCH_OK) {
             return status;
         }
@@ -777,6 +807,9 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     }
     if (config->storage != NULL) {
         next->storage_ops = *config->storage;
+        if (next->storage_ops.ctx == NULL) {
+            next->storage_ops.ctx = next;
+        }
         next->storage = &next->storage_ops;
     }
     if (config->transport != NULL) {
@@ -835,7 +868,7 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
         status = honch_state_prepare(next, config);
     }
     if (status == HONCH_OK) {
-        status = honch_queue_count_pending(next, &next->queued_event_count);
+        status = honch_client_queue_depth(next, &next->queued_event_count);
     }
     if (status == HONCH_OK && pthread_mutex_init(&next->mutex, NULL) != 0) {
         status = HONCH_ERROR_IO;
@@ -1067,7 +1100,7 @@ honch_status_t honch_core_reset(honch_client_t *client)
         client->battery_low_emitted = false;
     }
     if (status == HONCH_OK) {
-        status = honch_queue_clear(client);
+        status = honch_client_queue_clear(client);
     }
     pthread_mutex_unlock(&client->mutex);
     return status;

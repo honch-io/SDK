@@ -11,32 +11,37 @@ static honch_status_t honch_posix_storage_missing_client(void)
     return HONCH_ERROR_NOT_INITIALIZED;
 }
 
+static honch_status_t honch_queue_enqueue_with_sequence(
+    honch_client_t *client,
+    const unsigned char *event,
+    size_t event_size,
+    uint64_t sequence);
+
 static honch_status_t honch_posix_queue_push(void *ctx, const uint8_t *event, size_t event_size, uint64_t sequence)
 {
-    (void)sequence;
-    honch_posix_storage_t *storage = (honch_posix_storage_t *)ctx;
-    if (storage == NULL || storage->client == NULL) {
+    honch_client_t *client = (honch_client_t *)ctx;
+    if (client == NULL) {
         return honch_posix_storage_missing_client();
     }
-    return honch_queue_enqueue(storage->client, event, event_size);
+    return honch_queue_enqueue_with_sequence(client, event, event_size, sequence);
 }
 
 static honch_status_t honch_posix_queue_clear(void *ctx)
 {
-    honch_posix_storage_t *storage = (honch_posix_storage_t *)ctx;
-    if (storage == NULL || storage->client == NULL) {
+    honch_client_t *client = (honch_client_t *)ctx;
+    if (client == NULL) {
         return honch_posix_storage_missing_client();
     }
-    return honch_queue_clear(storage->client);
+    return honch_queue_clear(client);
 }
 
 static honch_status_t honch_posix_queue_depth(void *ctx, size_t *depth)
 {
-    honch_posix_storage_t *storage = (honch_posix_storage_t *)ctx;
-    if (storage == NULL || storage->client == NULL || depth == NULL) {
+    honch_client_t *client = (honch_client_t *)ctx;
+    if (client == NULL || depth == NULL) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
-    return honch_queue_count_pending(storage->client, depth);
+    return honch_queue_count_pending(client, depth);
 }
 
 honch_status_t honch_posix_storage_ops_init(
@@ -83,7 +88,11 @@ static honch_status_t honch_move_to_dead(honch_client_t *client, const honch_fil
     return HONCH_OK;
 }
 
-honch_status_t honch_queue_enqueue(honch_client_t *client, const unsigned char *event, size_t event_size)
+static honch_status_t honch_queue_enqueue_with_sequence(
+    honch_client_t *client,
+    const unsigned char *event,
+    size_t event_size,
+    uint64_t sequence)
 {
     if (event == NULL || event_size == 0u || event_size > client->max_event_bytes) {
         return HONCH_ERROR_INVALID_ARGUMENT;
@@ -121,7 +130,7 @@ honch_status_t honch_queue_enqueue(honch_client_t *client, const unsigned char *
         sizeof(filename),
         "%020llu-%06llu-%s.cbor",
         (unsigned long long)honch_now_millis(),
-        (unsigned long long)client->sequence++,
+        (unsigned long long)sequence,
         event_id);
 
     status = honch_write_file_atomic_bytes_with_durability(
@@ -134,6 +143,11 @@ honch_status_t honch_queue_enqueue(honch_client_t *client, const unsigned char *
         client->queued_event_count++;
     }
     return status;
+}
+
+honch_status_t honch_queue_enqueue(honch_client_t *client, const unsigned char *event, size_t event_size)
+{
+    return honch_queue_enqueue_with_sequence(client, event, event_size, client->sequence++);
 }
 
 honch_status_t honch_queue_count_pending(honch_client_t *client, size_t *count)
