@@ -1715,7 +1715,7 @@ git commit -m "refactor(esp-idf): move sdk into ports tree"
 - Modify: `ports/esp-idf/honch/CMakeLists.txt`
 - Modify: `ports/esp-idf/honch/include/honch.h`
 
-- [ ] **Step 1: Add ESP-IDF platform ops**
+- [x] **Step 1: Add ESP-IDF platform ops**
 
 `esp_platform.c` implements:
 

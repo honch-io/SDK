@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS
         "src/honch.c"
+        "src/esp_platform.c"
         "src/identity.c"
         "src/queue.c"
         "src/encoder.c"
@@ -9,7 +10,7 @@ idf_component_register(
         "src/gpio.c"
         "src/lifecycle.c"
     INCLUDE_DIRS "include"
-    PRIV_INCLUDE_DIRS "src"
+    PRIV_INCLUDE_DIRS "src" "../../../core/include"
     REQUIRES
         nvs_flash
         esp_http_client
