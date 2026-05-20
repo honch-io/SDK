@@ -8,7 +8,7 @@ This package is intended for:
 - embedded Linux devices
 - future reusable C core work for Zephyr, Arduino, bare-metal C, and MicroPython bindings
 
-The shared cross-SDK contract lives in [`../spec/`](../spec/). C/POSIX sends the same CBOR ingest payloads as the ESP-IDF SDK.
+The shared cross-SDK contract lives in [`../../spec/`](../../spec/). C/POSIX sends the same CBOR ingest payloads as the ESP-IDF SDK.
 
 ## Current Status
 
@@ -36,12 +36,14 @@ Implemented:
 ## Layout
 
 ```text
-honch/include/          Public C headers
-honch/src/              SDK implementation and internal modules
+include/                Public POSIX SDK headers
+src/                    POSIX adapters and public compatibility layer
+../../core/             Canonical portable C core
 test/                   C test executables
 example/posix_device/   Minimal smoke example
 example/connected_camera/
 example/posix_gpio/     Platform-adapter pattern for GPIO edge events
+bench/                  POSIX benchmark harness
 ```
 
 ## Build
@@ -71,7 +73,7 @@ and every value can be overridden with environment variables.
 ```sh
 cmake -S . -B build-e2e -DHONCH_BUILD_TESTS=ON -DHONCH_BUILD_E2E=ON
 cmake --build build-e2e
-ctest --test-dir build-e2e --output-on-failure -R honch_c_core_e2e
+ctest --test-dir build-e2e --output-on-failure -R honch_posix_e2e
 ```
 
 Default local E2E settings:
@@ -118,7 +120,7 @@ real capture endpoint or an explicit local development service.
 Header:
 
 ```text
-honch/include/honch/honch.h
+include/honch/honch.h
 ```
 
 API:

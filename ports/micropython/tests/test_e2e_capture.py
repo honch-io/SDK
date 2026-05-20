@@ -193,7 +193,7 @@ class HonchCaptureE2ETests(unittest.TestCase):
         self.assert_common_row(row, event_name)
         return row
 
-    def test_real_capture_flow_matches_c_core_e2e(self):
+    def test_real_capture_flow_matches_posix_e2e(self):
         with tempfile.TemporaryDirectory(prefix="honch-micropython-e2e-") as queue_dir:
             prefix = "micropython_e2e_%d_%d" % (os.getpid(), int(time.time() * 1000000) % 1000000)
             event_edge = prefix + "_edge"

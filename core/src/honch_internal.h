@@ -1,7 +1,7 @@
 #ifndef HONCH_INTERNAL_H
 #define HONCH_INTERNAL_H
 
-#include "honch/honch.h"
+#include "honch/core/honch.h"
 
 #include <stdbool.h>
 #include <stddef.h>
