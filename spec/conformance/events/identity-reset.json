@@ -1,0 +1,33 @@
+{
+  "name": "identity reset",
+  "config": {
+    "api_key": "test-key",
+    "device_id": "dev_fixture",
+    "device_model": "FixtureBoard",
+    "firmware_version": "1.2.3",
+    "environment": "test"
+  },
+  "operations": [
+    {
+      "op": "identify",
+      "distinct_id": "user_123",
+      "traits": {
+        "plan": "beta"
+      }
+    },
+    {
+      "op": "reset"
+    },
+    {
+      "op": "track",
+      "event": "after_reset",
+      "properties": {}
+    }
+  ],
+  "expect": {
+    "final_distinct_id": "dev_fixture",
+    "queued_events_after_reset": [
+      "after_reset"
+    ]
+  }
+}
