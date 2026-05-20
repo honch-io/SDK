@@ -1,0 +1,97 @@
+import { describe, expect, it } from "vitest";
+
+import { createInMemoryRelayQueue } from "../src/relayQueue";
+
+function frame(options: {
+  sourceType?: number;
+  first?: boolean;
+  final?: boolean;
+  sequence?: bigint;
+  offset?: number;
+  payload?: number[];
+}): Uint8Array {
+  const payload = new Uint8Array(options.payload ?? []);
+  const bytes = new Uint8Array(20 + payload.length);
+  bytes[0] = 1;
+  bytes[1] = options.sourceType ?? 1;
+  bytes[2] = (options.first ? 1 : 0) | (options.final ? 2 : 0);
+  let sequence = options.sequence ?? 1n;
+  for (let i = 11; i >= 4; i -= 1) {
+    bytes[i] = Number(sequence & 0xffn);
+    sequence >>= 8n;
+  }
+  const offset = options.offset ?? 0;
+  bytes[12] = (offset >>> 24) & 0xff;
+  bytes[13] = (offset >>> 16) & 0xff;
+  bytes[14] = (offset >>> 8) & 0xff;
+  bytes[15] = offset & 0xff;
+  bytes[16] = (payload.length >>> 8) & 0xff;
+  bytes[17] = payload.length & 0xff;
+  bytes.set(payload, 20);
+  return bytes;
+}
+
+describe("createInMemoryRelayQueue", () => {
+  it("only completes and returns a message after the final chunk", async () => {
+    const queue = createInMemoryRelayQueue();
+
+    const first = await queue.putChunk("device-a", frame({ first: true, payload: [1, 2] }));
+    expect(first.complete).toBe(false);
+    expect(await queue.pending()).toEqual([]);
+
+    const final = await queue.putChunk(
+      "device-a",
+      frame({ final: true, offset: 2, payload: [3, 4] })
+    );
+
+    expect(final.complete).toBe(true);
+    expect(final.message).toMatchObject({
+      deviceId: "device-a",
+      sourceType: 1,
+      sequence: "1"
+    });
+    expect(Array.from(final.message?.body ?? [])).toEqual([1, 2, 3, 4]);
+  });
+
+  it("treats an exact duplicate chunk as idempotent", async () => {
+    const queue = createInMemoryRelayQueue();
+    const chunk = frame({ first: true, final: true, payload: [9] });
+
+    const first = await queue.putChunk("device-a", chunk);
+    const duplicate = await queue.putChunk("device-a", chunk);
+
+    expect(first.complete).toBe(true);
+    expect(duplicate.complete).toBe(true);
+    expect(Array.from(duplicate.message?.body ?? [])).toEqual([9]);
+    expect(await queue.pending()).toHaveLength(1);
+  });
+
+  it("rejects a duplicate chunk with different bytes", async () => {
+    const queue = createInMemoryRelayQueue();
+
+    await queue.putChunk("device-a", frame({ first: true, payload: [1, 2] }));
+
+    await expect(
+      queue.putChunk("device-a", frame({ first: true, payload: [8, 8] }))
+    ).rejects.toThrow("relay duplicate chunk mismatch");
+  });
+
+  it("returns complete unuploaded messages and removes uploaded messages", async () => {
+    const queue = createInMemoryRelayQueue();
+
+    await queue.putChunk("device-a", frame({ first: true, final: true, payload: [1] }));
+    await queue.putChunk(
+      "device-b",
+      frame({ first: true, final: true, sequence: 2n, payload: [2] })
+    );
+
+    expect((await queue.pending()).map((message) => message.deviceId)).toEqual([
+      "device-a",
+      "device-b"
+    ]);
+
+    await queue.markUploaded("device-a", "1");
+
+    expect((await queue.pending()).map((message) => message.deviceId)).toEqual(["device-b"]);
+  });
+});

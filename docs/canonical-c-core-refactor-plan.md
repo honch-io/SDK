@@ -1937,7 +1937,7 @@ git commit -m "feat(relay): add react native relay package skeleton"
 - Modify: `ports/react-native-relay/src/index.ts`
 - Test: `ports/react-native-relay/test/relayQueue.test.ts`
 
-- [ ] **Step 1: Add relay queue interface**
+- [x] **Step 1: Add relay queue interface**
 
 Add `ports/react-native-relay/src/relayQueue.ts`:
 
@@ -1956,7 +1956,7 @@ export interface RelayQueue {
 }
 ```
 
-- [ ] **Step 2: Add uploader interface**
+- [x] **Step 2: Add uploader interface**
 
 Add `ports/react-native-relay/src/uploader.ts`:
 
@@ -1989,7 +1989,7 @@ export async function uploadRelayMessage(config: RelayUploaderConfig, message: S
 }
 ```
 
-- [ ] **Step 3: Export relay APIs**
+- [x] **Step 3: Export relay APIs**
 
 Modify `ports/react-native-relay/src/index.ts`:
 
@@ -2001,7 +2001,7 @@ export { uploadRelayMessage } from "./uploader";
 export type { RelayUploaderConfig } from "./uploader";
 ```
 
-- [ ] **Step 4: Add queue behavior tests**
+- [x] **Step 4: Add queue behavior tests**
 
 Add `ports/react-native-relay/test/relayQueue.test.ts` with tests for:
 
@@ -2013,7 +2013,7 @@ pending returns complete unuploaded messages
 markUploaded removes uploaded message
 ```
 
-- [ ] **Step 5: Run relay tests**
+- [x] **Step 5: Run relay tests**
 
 Run:
 
@@ -2025,7 +2025,7 @@ npm test
 
 Expected: typecheck and tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```sh
 git add ports/react-native-relay
