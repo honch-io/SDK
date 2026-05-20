@@ -3,16 +3,14 @@
 
 #include <stddef.h>
 
+#include "honch/core/platform.h"
 #include "honch/core/status.h"
+#include "honch/core/storage.h"
+#include "honch/core/transport.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-typedef struct honch_platform_ops honch_platform_ops_t;
-typedef struct honch_storage_ops honch_storage_ops_t;
-typedef struct honch_transport_ops honch_transport_ops_t;
-
 typedef struct honch_core_config {
     const char *api_key;
     const char *endpoint_url;
