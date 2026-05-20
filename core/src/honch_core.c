@@ -297,6 +297,8 @@ static honch_status_t honch_client_random_hex(honch_client_t *client, char out[3
 static honch_status_t honch_client_queue_push(honch_client_t *client, const unsigned char *event, size_t event_size);
 static honch_status_t honch_client_queue_depth(honch_client_t *client, size_t *depth);
 static honch_status_t honch_client_queue_clear(honch_client_t *client);
+static honch_status_t honch_client_lock(honch_client_t *client);
+static void honch_client_unlock(honch_client_t *client);
 
 static honch_status_t honch_build_event(
     honch_client_t *client,
@@ -435,6 +437,25 @@ static honch_status_t honch_client_queue_clear(honch_client_t *client)
     }
 
     return honch_queue_clear(client);
+}
+
+static honch_status_t honch_client_lock(honch_client_t *client)
+{
+    if (client != NULL && client->platform != NULL && client->platform->lock != NULL) {
+        return client->platform->lock(client->platform->ctx);
+    }
+
+    return pthread_mutex_lock(&client->mutex) == 0 ? HONCH_OK : HONCH_ERROR_IO;
+}
+
+static void honch_client_unlock(honch_client_t *client)
+{
+    if (client != NULL && client->platform != NULL && client->platform->unlock != NULL) {
+        (void)client->platform->unlock(client->platform->ctx);
+        return;
+    }
+
+    (void)pthread_mutex_unlock(&client->mutex);
 }
 
 static honch_status_t honch_track_locked_internal(
@@ -803,6 +824,9 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     }
     if (config->platform != NULL) {
         next->platform_ops = *config->platform;
+        if (next->platform_ops.ctx == NULL) {
+            next->platform_ops.ctx = next;
+        }
         next->platform = &next->platform_ops;
     }
     if (config->storage != NULL) {
@@ -917,10 +941,13 @@ honch_status_t honch_core_track(honch_client_t *client, const char *event_name, 
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    pthread_mutex_lock(&client->mutex);
+    honch_status_t status = honch_client_lock(client);
+    if (status != HONCH_OK) {
+        return status;
+    }
 
-    honch_status_t status = honch_track_locked(client, event_name, properties_json);
-    pthread_mutex_unlock(&client->mutex);
+    status = honch_track_locked(client, event_name, properties_json);
+    honch_client_unlock(client);
     return status;
 }
 
@@ -931,22 +958,25 @@ honch_status_t honch_core_identify(honch_client_t *client, const char *distinct_
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    pthread_mutex_lock(&client->mutex);
+    honch_status_t status = honch_client_lock(client);
+    if (status != HONCH_OK) {
+        return status;
+    }
 
     char *previous_distinct_id = honch_strdup(client->distinct_id);
     char *next_distinct_id = honch_strdup(distinct_id);
     if (previous_distinct_id == NULL || next_distinct_id == NULL) {
         free(previous_distinct_id);
         free(next_distinct_id);
-        pthread_mutex_unlock(&client->mutex);
+        honch_client_unlock(client);
         return HONCH_ERROR_OUT_OF_MEMORY;
     }
 
-    honch_status_t status = honch_state_save_distinct_id_value(client, next_distinct_id);
+    status = honch_state_save_distinct_id_value(client, next_distinct_id);
     if (status != HONCH_OK) {
         free(previous_distinct_id);
         free(next_distinct_id);
-        pthread_mutex_unlock(&client->mutex);
+        honch_client_unlock(client);
         return status;
     }
 
@@ -969,7 +999,7 @@ honch_status_t honch_core_identify(honch_client_t *client, const char *distinct_
 
     free(previous_distinct_id);
     free(next_distinct_id);
-    pthread_mutex_unlock(&client->mutex);
+    honch_client_unlock(client);
     return status;
 }
 
@@ -1031,7 +1061,12 @@ honch_status_t honch_core_session_start(honch_client_t *client, const char *sess
         return status;
     }
 
-    pthread_mutex_lock(&client->mutex);
+    status = honch_client_lock(client);
+    if (status != HONCH_OK) {
+        free(properties_json);
+        free(session_id);
+        return status;
+    }
 
     if (client->session_id != NULL) {
         status = honch_track_locked(client, "$session_end", NULL);
@@ -1050,7 +1085,7 @@ honch_status_t honch_core_session_start(honch_client_t *client, const char *sess
         }
     }
 
-    pthread_mutex_unlock(&client->mutex);
+    honch_client_unlock(client);
     free(properties_json);
     free(session_id);
     return status;
@@ -1062,9 +1097,11 @@ honch_status_t honch_core_session_end(honch_client_t *client)
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    pthread_mutex_lock(&client->mutex);
+    honch_status_t status = honch_client_lock(client);
+    if (status != HONCH_OK) {
+        return status;
+    }
 
-    honch_status_t status = HONCH_OK;
     if (client->session_id != NULL) {
         status = honch_track_locked(client, "$session_end", NULL);
         if (status == HONCH_OK) {
@@ -1073,7 +1110,7 @@ honch_status_t honch_core_session_end(honch_client_t *client)
         }
     }
 
-    pthread_mutex_unlock(&client->mutex);
+    honch_client_unlock(client);
     return status;
 }
 
@@ -1083,9 +1120,13 @@ honch_status_t honch_core_flush(honch_client_t *client)
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    pthread_mutex_lock(&client->mutex);
-    honch_status_t status = honch_queue_flush_locked(client);
-    pthread_mutex_unlock(&client->mutex);
+    honch_status_t status = honch_client_lock(client);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    status = honch_queue_flush_locked(client);
+    honch_client_unlock(client);
     return status;
 }
 
@@ -1095,8 +1136,12 @@ honch_status_t honch_core_reset(honch_client_t *client)
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    pthread_mutex_lock(&client->mutex);
-    honch_status_t status = honch_state_reset(client);
+    honch_status_t status = honch_client_lock(client);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    status = honch_state_reset(client);
     if (status == HONCH_OK) {
         free(client->session_id);
         client->session_id = NULL;
@@ -1105,7 +1150,7 @@ honch_status_t honch_core_reset(honch_client_t *client)
     if (status == HONCH_OK) {
         status = honch_client_queue_clear(client);
     }
-    pthread_mutex_unlock(&client->mutex);
+    honch_client_unlock(client);
     return status;
 }
 
@@ -1117,13 +1162,21 @@ honch_status_t honch_core_shutdown(honch_client_t *client)
 
     honch_scheduler_stop(client);
 
-    pthread_mutex_lock(&client->mutex);
-    honch_status_t status = honch_track_locked(client, "$device_shutdown", NULL);
+    honch_status_t status = honch_client_lock(client);
+    if (status != HONCH_OK) {
+        pthread_cond_destroy(&client->scheduler_cond);
+        pthread_mutex_destroy(&client->mutex);
+        honch_free_client_fields(client);
+        free(client);
+        return status;
+    }
+
+    status = honch_track_locked(client, "$device_shutdown", NULL);
     honch_status_t flush_status = honch_queue_flush_locked(client);
     if (status == HONCH_OK) {
         status = flush_status;
     }
-    pthread_mutex_unlock(&client->mutex);
+    honch_client_unlock(client);
 
     pthread_cond_destroy(&client->scheduler_cond);
     pthread_mutex_destroy(&client->mutex);
@@ -1147,9 +1200,11 @@ honch_status_t honch_core_copy_device_id(honch_client_t *client, char *buffer, s
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    pthread_mutex_lock(&client->mutex);
+    honch_status_t status = honch_client_lock(client);
+    if (status != HONCH_OK) {
+        return status;
+    }
 
-    honch_status_t status = HONCH_OK;
     size_t length = strlen(client->device_id);
     size_t needed = 0u;
     status = honch_size_add(length, 1u, &needed);
@@ -1162,7 +1217,7 @@ honch_status_t honch_core_copy_device_id(honch_client_t *client, char *buffer, s
         buffer[0] = '\0';
     }
 
-    pthread_mutex_unlock(&client->mutex);
+    honch_client_unlock(client);
     return status;
 }
 

@@ -255,16 +255,24 @@ static honch_status_t honch_posix_random_bytes(void *ctx, uint8_t *buffer, size_
     return HONCH_OK;
 }
 
-static honch_status_t honch_posix_lock_noop(void *ctx)
+static honch_status_t honch_posix_lock(void *ctx)
 {
-    (void)ctx;
-    return HONCH_OK;
+    honch_client_t *client = (honch_client_t *)ctx;
+    if (client == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    return pthread_mutex_lock(&client->mutex) == 0 ? HONCH_OK : HONCH_ERROR_IO;
 }
 
-static honch_status_t honch_posix_unlock_noop(void *ctx)
+static honch_status_t honch_posix_unlock(void *ctx)
 {
-    (void)ctx;
-    return HONCH_OK;
+    honch_client_t *client = (honch_client_t *)ctx;
+    if (client == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    return pthread_mutex_unlock(&client->mutex) == 0 ? HONCH_OK : HONCH_ERROR_IO;
 }
 
 static void honch_posix_log_noop(void *ctx, honch_log_level_t level, const char *message)
@@ -284,10 +292,10 @@ honch_status_t honch_posix_platform_ops_init(honch_platform_ops_t *ops, honch_po
         .now_ms = honch_posix_now_ms,
         .uptime_ms = honch_posix_uptime_ms,
         .random_bytes = honch_posix_random_bytes,
-        .lock = honch_posix_lock_noop,
-        .unlock = honch_posix_unlock_noop,
+        .lock = honch_posix_lock,
+        .unlock = honch_posix_unlock,
         .log = honch_posix_log_noop,
-        .ctx = ctx
+        .ctx = NULL
     };
     return HONCH_OK;
 }
