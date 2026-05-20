@@ -140,6 +140,17 @@ class CCoreCborMigrationTest(unittest.TestCase):
         self.assertIn("honch_client_t *client = (honch_client_t *)ctx", storage)
         self.assertIn("honch_queue_enqueue_with_sequence(client, event, event_size, sequence)", storage)
 
+    def test_flush_routes_batch_posts_through_transport_ops_when_available(self) -> None:
+        core = read_sdk("core/src/honch_core.c")
+        storage = read_sdk("ports/posix/src/posix_storage.c")
+        transport = read_sdk("ports/posix/src/posix_transport_curl.c")
+
+        self.assertIn("next->transport_ops.ctx = next", core)
+        self.assertIn("honch_client_post_batch", storage)
+        self.assertIn("client->transport->post_batch", storage)
+        self.assertIn("honch_client_post_batch(client, payload.data, payload.length, &result)", storage)
+        self.assertIn("honch_client_t *client = (honch_client_t *)ctx", transport)
+
     def test_docs_reference_cbor_contract(self) -> None:
         readme = read("README.md")
         spec = (SDK_ROOT / "spec/wire-format.md").read_text()
