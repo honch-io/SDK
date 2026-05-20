@@ -1,14 +1,95 @@
 #include "honch_internal.h"
 #include "honch/posix/honch.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static honch_status_t honch_posix_storage_missing_client(void)
 {
     return HONCH_ERROR_NOT_INITIALIZED;
+}
+
+static honch_status_t honch_posix_state_path(honch_client_t *client, const char *key, char **out)
+{
+    return honch_join_path(out, client->state_directory, key);
+}
+
+static honch_status_t honch_posix_state_get(void *ctx, const char *key, uint8_t *buffer, size_t *buffer_size)
+{
+    honch_client_t *client = (honch_client_t *)ctx;
+    if (client == NULL || honch_is_blank(key) || buffer_size == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    char *path = NULL;
+    honch_status_t status = honch_posix_state_path(client, key, &path);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    struct stat info;
+    if (stat(path, &info) != 0) {
+        int saved_errno = errno;
+        free(path);
+        if (saved_errno == ENOENT) {
+            *buffer_size = 0u;
+            return HONCH_OK;
+        }
+        return HONCH_ERROR_IO;
+    }
+    if (!S_ISREG(info.st_mode)) {
+        free(path);
+        return HONCH_ERROR_IO;
+    }
+
+    char *content = NULL;
+    status = honch_read_file(path, &content);
+    free(path);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    size_t content_size = strlen(content);
+    if (buffer == NULL || *buffer_size < content_size) {
+        *buffer_size = content_size;
+        free(content);
+        return buffer == NULL ? HONCH_OK : HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    memcpy(buffer, content, content_size);
+    *buffer_size = content_size;
+    free(content);
+    return HONCH_OK;
+}
+
+static honch_status_t honch_posix_state_set(void *ctx, const char *key, const uint8_t *data, size_t data_size)
+{
+    honch_client_t *client = (honch_client_t *)ctx;
+    if (client == NULL || honch_is_blank(key) || (data == NULL && data_size > 0u)) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    return honch_write_file_atomic_bytes(client->state_directory, key, data, data_size);
+}
+
+static honch_status_t honch_posix_state_delete(void *ctx, const char *key)
+{
+    honch_client_t *client = (honch_client_t *)ctx;
+    if (client == NULL || honch_is_blank(key)) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    char *path = NULL;
+    honch_status_t status = honch_posix_state_path(client, key, &path);
+    if (status == HONCH_OK) {
+        status = honch_unlink_if_exists(path);
+    }
+    free(path);
+    return status;
 }
 
 static honch_status_t honch_queue_enqueue_with_sequence(
@@ -58,6 +139,9 @@ honch_status_t honch_posix_storage_ops_init(
         .queue_directory = queue_directory
     };
     *ops = (honch_storage_ops_t) {
+        .state_get = honch_posix_state_get,
+        .state_set = honch_posix_state_set,
+        .state_delete = honch_posix_state_delete,
         .queue_push = honch_posix_queue_push,
         .queue_clear = honch_posix_queue_clear,
         .queue_depth = honch_posix_queue_depth,

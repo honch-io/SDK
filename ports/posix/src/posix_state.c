@@ -28,6 +28,31 @@ static honch_status_t honch_read_optional_state_file(
     const char *name,
     char **out)
 {
+    *out = NULL;
+    if (client->storage != NULL && client->storage->state_get != NULL) {
+        size_t value_size = 0u;
+        honch_status_t status = client->storage->state_get(client->storage->ctx, name, NULL, &value_size);
+        if (status != HONCH_OK || value_size == 0u) {
+            return status;
+        }
+
+        char *value = (char *)malloc(value_size + 1u);
+        if (value == NULL) {
+            return HONCH_ERROR_OUT_OF_MEMORY;
+        }
+
+        size_t read_size = value_size;
+        status = client->storage->state_get(client->storage->ctx, name, (uint8_t *)value, &read_size);
+        if (status != HONCH_OK) {
+            free(value);
+            return status;
+        }
+        value[read_size] = '\0';
+        honch_trim_trailing_ws(value);
+        *out = value;
+        return HONCH_OK;
+    }
+
     char *path = NULL;
     honch_status_t status = honch_state_path(client, name, &path);
     if (status != HONCH_OK) {
@@ -59,6 +84,14 @@ static honch_status_t honch_read_optional_state_file(
 
 static honch_status_t honch_write_state_file(honch_client_t *client, const char *name, const char *content)
 {
+    if (client->storage != NULL && client->storage->state_set != NULL) {
+        return client->storage->state_set(
+            client->storage->ctx,
+            name,
+            (const uint8_t *)content,
+            strlen(content));
+    }
+
     return honch_write_file_atomic(client->state_directory, name, content);
 }
 
