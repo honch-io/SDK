@@ -158,6 +158,15 @@ honch_err_t honch_init(const honch_config_t *config)
         honch_esp_clear_legacy_globals();
         return honch_esp_status_to_err(status);
     }
+    status = honch_esp_storage_use_ram_queue(
+        &s_storage_ctx,
+        config->event_buffer,
+        config->event_buffer_size);
+    if (status != HONCH_STATUS_OK) {
+        honch_esp_platform_ops_deinit(&s_platform_ctx);
+        honch_esp_clear_legacy_globals();
+        return honch_esp_status_to_err(status);
+    }
     status = honch_esp_transport_ops_init(&transport_ops, &s_transport_ctx);
     if (status != HONCH_STATUS_OK) {
         honch_esp_platform_ops_deinit(&s_platform_ctx);

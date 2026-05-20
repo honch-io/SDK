@@ -57,6 +57,29 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn(".queue_consume = honch_esp_queue_consume", storage)
         self.assertIn(".queue_dead_letter = honch_esp_queue_dead_letter", storage)
 
+    def test_esp_storage_queue_is_ram_first_with_nvs_fallback(self) -> None:
+        compat = read("ports/esp-idf/honch/src/esp_compat.c")
+        adapter = read("ports/esp-idf/honch/src/esp_core_adapter.h")
+        storage = read("ports/esp-idf/honch/src/esp_storage_nvs.c")
+
+        self.assertIn("honch_esp_storage_use_ram_queue", adapter)
+        self.assertIn("honch_esp_storage_use_ram_queue", compat)
+        self.assertIn("&s_storage_ctx", compat)
+        self.assertIn("config->event_buffer", compat)
+        self.assertIn("config->event_buffer_size", compat)
+
+        self.assertIn("honch_esp_ram_queue_push", storage)
+        self.assertIn("honch_esp_ram_queue_peek", storage)
+        self.assertIn("honch_esp_ram_queue_consume", storage)
+        self.assertIn("honch_esp_nvs_queue_push", storage)
+        self.assertIn("honch_esp_nvs_queue_peek", storage)
+        self.assertIn("honch_esp_nvs_queue_consume", storage)
+
+        self.assertIn("honch_esp_ram_queue_push(storage, event, event_size, sequence)", storage)
+        self.assertIn("return honch_esp_nvs_queue_push(ctx, event, event_size, sequence)", storage)
+        self.assertIn("honch_esp_ram_queue_has_events(storage)", storage)
+        self.assertIn("return honch_esp_nvs_queue_peek(ctx, reader)", storage)
+
     def test_esp_transport_ops_wrap_http_client_for_core(self) -> None:
         transport = read("ports/esp-idf/honch/src/esp_transport_http.c")
         adapter = read("ports/esp-idf/honch/src/esp_core_adapter.h")
