@@ -7,7 +7,7 @@
 #include "honch/core/honch.h"
 
 #include "esp_core_adapter.h"
-#include "gpio.h"
+#include "esp_gpio_adapter.h"
 
 #include <stdbool.h>
 #include <stdio.h>

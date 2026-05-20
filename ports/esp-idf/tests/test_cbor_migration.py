@@ -107,6 +107,24 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn("honch_esp_platform_ops_deinit", compat)
         self.assertIn("honch_client_t", adapter)
 
+    def test_esp_gpio_adapter_preserves_gpio_tracking_worker(self) -> None:
+        compat = read("ports/esp-idf/honch/src/esp_compat.c")
+        gpio = read("ports/esp-idf/honch/src/esp_gpio_adapter.c")
+        cmake = read("ports/esp-idf/honch/CMakeLists.txt")
+
+        self.assertIn('"src/esp_gpio_adapter.c"', cmake)
+        self.assertNotIn('"src/gpio.c"', cmake)
+        self.assertIn('#include "esp_gpio_adapter.h"', compat)
+        self.assertIn("honch_gpio_init()", compat)
+        self.assertIn("honch_gpio_deinit()", compat)
+        self.assertIn("honch_gpio_register(pin, event_name, mode)", compat)
+        self.assertIn("MAX_GPIO_PINS 8", gpio)
+        self.assertIn("DEBOUNCE_MS 50", gpio)
+        self.assertIn("xQueueReceive", gpio)
+        self.assertIn("honch_track(s_mappings[i].event_name, props)", gpio)
+        isr = gpio[gpio.index("gpio_isr_handler"):gpio.index("gpio_worker_task")]
+        self.assertNotIn("honch_track(", isr)
+
     def test_component_declares_cbor_dependency(self) -> None:
         manifest = read("ports/esp-idf/honch/idf_component.yml")
         cmake = read("ports/esp-idf/honch/CMakeLists.txt")

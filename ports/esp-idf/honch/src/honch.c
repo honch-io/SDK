@@ -7,7 +7,7 @@
 #include "encoder.h"
 #include "transport.h"
 #include "scheduler.h"
-#include "gpio.h"
+#include "esp_gpio_adapter.h"
 #include "lifecycle.h"
 #include "perf.h"
 
