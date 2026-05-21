@@ -76,6 +76,10 @@ static honch_status_t honch_mp_post_batch(
     nlr_pop();
     free(url);
 
+    if (http_status == 0) {
+        *result = HONCH_TRANSPORT_RETRY;
+        return HONCH_STATUS_ERROR_TRANSPORT;
+    }
     if (http_status >= 200 && http_status < 300) {
         *result = HONCH_TRANSPORT_ACCEPTED;
         return HONCH_STATUS_OK;

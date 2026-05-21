@@ -7,12 +7,68 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
 
+CANONICAL_FIXTURES = (
+    "spec/conformance/envelopes/basic_batch.json",
+    "spec/conformance/events/basic-track.json",
+    "spec/conformance/events/auto_stamp_wins_conflict.json",
+    "spec/conformance/events/boot_event.json",
+    "spec/conformance/events/custom_event_with_session.json",
+    "spec/conformance/events/identity-reset.json",
+    "spec/conformance/events/session-track.json",
+    "spec/conformance/http/response-policy.json",
+)
+
 
 def read(relative_path: str) -> str:
     return (ROOT / relative_path).read_text()
 
 
 class EspIdfCborMigrationTest(unittest.TestCase):
+    def test_all_canonical_fixtures_are_exercised_by_esp_idf_conformance_guards(self) -> None:
+        for path in CANONICAL_FIXTURES:
+            with self.subTest(path=path):
+                self.assertTrue((ROOT / path).exists())
+
+    def test_esp_idf_directly_covers_event_conformance_fixture_apis(self) -> None:
+        compat = read("ports/esp-idf/honch/src/esp_compat.c")
+        shims = read("ports/esp-idf/honch/src/esp_core_shims.c")
+
+        for fixture in (
+            "basic-track.json",
+            "auto_stamp_wins_conflict.json",
+            "boot_event.json",
+            "custom_event_with_session.json",
+        ):
+            with self.subTest(fixture=fixture):
+                self.assertIn("honch_core_track(s_client", compat)
+                self.assertIn("honch_state_prepare", shims)
+
+        self.assertIn("honch_core_identify(s_client", compat)
+        self.assertIn("honch_core_reset(s_client)", compat)
+        self.assertIn("honch_core_session_start(s_client", compat)
+        self.assertIn("honch_core_session_end(s_client)", compat)
+        self.assertIn("client->configured_device_id = true", shims)
+        self.assertIn("if (client->configured_device_id)", shims)
+
+    def test_esp_idf_directly_covers_basic_batch_and_response_policy_fixtures(self) -> None:
+        cmake = read("ports/esp-idf/honch/CMakeLists.txt")
+        transport = read("ports/esp-idf/honch/src/esp_transport_http.c")
+
+        self.assertIn("../../../core/src/honch_encoder.c", cmake)
+        self.assertIn("../../../core/src/honch_cbor.c", cmake)
+        self.assertIn('"Content-Type", "application/cbor"', transport)
+
+        self.assertIn("status >= 200 && status < 300", transport)
+        self.assertIn("status == 401", transport)
+        self.assertIn("status == 429", transport)
+        self.assertIn("status == 408", transport)
+        self.assertIn("status >= 400 && status < 500", transport)
+        self.assertIn("status == 0", transport)
+        self.assertIn("HONCH_TRANSPORT_ACCEPTED", transport)
+        self.assertIn("HONCH_TRANSPORT_AUTH_ERROR", transport)
+        self.assertIn("HONCH_TRANSPORT_REJECTED", transport)
+        self.assertIn("HONCH_TRANSPORT_RETRY", transport)
+
     def test_esp_platform_ops_wrap_idf_primitives_for_core(self) -> None:
         platform = read("ports/esp-idf/honch/src/esp_platform.c")
         adapter = read("ports/esp-idf/honch/src/esp_core_adapter.h")

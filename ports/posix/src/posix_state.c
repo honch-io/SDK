@@ -157,6 +157,7 @@ honch_status_t honch_state_prepare(honch_client_t *client, const honch_core_conf
 
     char *stored_device_id = NULL;
     if (config->device_id != NULL && !honch_is_blank(config->device_id)) {
+        client->configured_device_id = true;
         client->device_id = honch_strdup(config->device_id);
         if (client->device_id == NULL) {
             return HONCH_ERROR_OUT_OF_MEMORY;
@@ -266,20 +267,32 @@ honch_status_t honch_state_check_firmware_version(honch_client_t *client, bool *
 
 honch_status_t honch_state_reset(honch_client_t *client)
 {
-    char next_device_id[33];
-    honch_status_t status = honch_random_hex(next_device_id);
-    if (status != HONCH_OK) {
-        return status;
-    }
-
-    char *device_id = honch_strdup(next_device_id);
-    if (device_id == NULL) {
-        return HONCH_ERROR_OUT_OF_MEMORY;
-    }
-    char *distinct_id = honch_strdup(next_device_id);
-    if (distinct_id == NULL) {
-        free(device_id);
-        return HONCH_ERROR_OUT_OF_MEMORY;
+    honch_status_t status = HONCH_OK;
+    char *device_id = NULL;
+    char *distinct_id = NULL;
+    if (client->configured_device_id) {
+        device_id = honch_strdup(client->device_id);
+        distinct_id = honch_strdup(client->device_id);
+        if (device_id == NULL || distinct_id == NULL) {
+            free(device_id);
+            free(distinct_id);
+            return HONCH_ERROR_OUT_OF_MEMORY;
+        }
+    } else {
+        char next_device_id[33];
+        status = honch_random_hex(next_device_id);
+        if (status != HONCH_OK) {
+            return status;
+        }
+        device_id = honch_strdup(next_device_id);
+        if (device_id == NULL) {
+            return HONCH_ERROR_OUT_OF_MEMORY;
+        }
+        distinct_id = honch_strdup(next_device_id);
+        if (distinct_id == NULL) {
+            free(device_id);
+            return HONCH_ERROR_OUT_OF_MEMORY;
+        }
     }
 
     status = honch_write_state_file(client, "device_id", device_id);
