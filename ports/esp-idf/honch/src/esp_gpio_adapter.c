@@ -119,6 +119,9 @@ honch_err_t honch_gpio_register(gpio_num_t pin, const char *event_name,
     if (!event_name) {
         return HONCH_ERR_INVALID_ARG;
     }
+    if (pin < 0 || pin >= GPIO_NUM_MAX || pin >= 64) {
+        return HONCH_ERR_INVALID_ARG;
+    }
 
     // Check if pin is already registered, replace if so
     int idx = -1;
