@@ -527,6 +527,7 @@ static bool honch_status_is_retryable(honch_status_t status)
 {
     return status == HONCH_ERROR_TRANSPORT ||
            status == HONCH_ERROR_RATE_LIMITED ||
+           status == HONCH_ERROR_TIMEOUT ||
            status == HONCH_ERROR_SERVER;
 }
 

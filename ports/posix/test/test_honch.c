@@ -1431,6 +1431,38 @@ static void test_background_flush_retries_with_backoff(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_background_flush_retries_http_timeout(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+    config.disable_background_flush = 0;
+    config.flush_event_threshold = 2u;
+    config.flush_retry_initial_ms = 10u;
+    config.flush_retry_max_ms = 20u;
+
+    fake_transport_context_t transport = {
+        .response_code = 408L,
+        .next_response_code = 202L,
+        .switch_after_calls = 1
+    };
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "timeout_retry_event", NULL), HONCH_OK);
+    EXPECT_TRUE(wait_for_transport_calls(&transport, 2) != 0);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"timeout_retry_event\"");
+
+    char pending_dir[160];
+    snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
+    EXPECT_TRUE(wait_for_file_count(pending_dir, ".cbor", 0u) != 0);
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
 static void test_background_flush_uses_esp_idf_default_threshold(void)
 {
     char queue_dir[128];
@@ -1789,6 +1821,7 @@ int main(void)
     test_cbor_encoding_handles_large_property_maps();
     test_background_flush_threshold_drains_queue();
     test_background_flush_retries_with_backoff();
+    test_background_flush_retries_http_timeout();
     test_background_flush_uses_esp_idf_default_threshold();
     test_background_flush_can_be_explicitly_disabled();
     test_flush_drains_multiple_batches();
