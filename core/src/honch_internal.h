@@ -119,8 +119,6 @@ honch_status_t honch_buffer_appendf(honch_buffer_t *buffer, const char *format, 
 honch_status_t honch_json_append_string(honch_buffer_t *buffer, const char *value);
 bool honch_json_is_object(const char *json);
 bool honch_json_is_value(const char *json);
-bool honch_json_object_has_members(const char *json);
-honch_status_t honch_json_append_object_members(honch_buffer_t *buffer, const char *json, bool *has_members);
 
 honch_status_t honch_cbor_append_text(honch_buffer_t *buffer, const char *value);
 honch_status_t honch_cbor_append_text_n(honch_buffer_t *buffer, const char *value, size_t length);

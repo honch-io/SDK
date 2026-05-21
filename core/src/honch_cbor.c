@@ -390,6 +390,12 @@ static honch_status_t honch_json_to_cbor_value(
     honch_buffer_t *buffer,
     size_t depth);
 
+static honch_status_t honch_json_to_cbor_object_members_single_pass(
+    honch_json_to_cbor_parser_t *parser,
+    honch_buffer_t *buffer,
+    size_t depth,
+    size_t *member_count);
+
 static honch_status_t honch_json_to_cbor_string(
     honch_json_to_cbor_parser_t *parser,
     honch_buffer_t *buffer)
@@ -558,9 +564,7 @@ static honch_status_t honch_json_to_cbor_array(
 static honch_status_t honch_json_to_cbor_object(
     honch_json_to_cbor_parser_t *parser,
     honch_buffer_t *buffer,
-    size_t depth,
-    bool filter_reserved,
-    size_t *member_count)
+    size_t depth)
 {
     if (depth > HONCH_CBOR_MAX_DEPTH || *parser->cursor != '{') {
         return HONCH_ERROR_INVALID_ARGUMENT;
@@ -575,8 +579,6 @@ static honch_status_t honch_json_to_cbor_object(
             honch_cbor_key_t key;
             honch_cbor_key_init(&key);
             honch_status_t status = honch_json_decode_key(parser, &key);
-            bool include = status == HONCH_OK && memchr(key.data, '\0', key.length) == NULL &&
-                (!filter_reserved || !honch_property_key_is_reserved(key.data));
             honch_cbor_key_free(&key);
             if (status != HONCH_OK) {
                 return status;
@@ -591,9 +593,7 @@ static honch_status_t honch_json_to_cbor_object(
             if (status != HONCH_OK) {
                 return status;
             }
-            if (include) {
-                count++;
-            }
+            count++;
             honch_json_skip_ws(parser);
             if (*parser->cursor == '}') {
                 break;
@@ -607,7 +607,7 @@ static honch_status_t honch_json_to_cbor_object(
     }
 
     honch_status_t status = HONCH_OK;
-    if (buffer != NULL && !filter_reserved) {
+    if (buffer != NULL) {
         status = honch_cbor_append_type(buffer, 0xa0u, count);
     }
     if (status != HONCH_OK) {
@@ -623,9 +623,7 @@ static honch_status_t honch_json_to_cbor_object(
         honch_cbor_key_t key;
         honch_cbor_key_init(&key);
         status = honch_json_decode_key(parser, &key);
-        bool include = status == HONCH_OK && memchr(key.data, '\0', key.length) == NULL &&
-            (!filter_reserved || !honch_property_key_is_reserved(key.data));
-        if (status == HONCH_OK && include && buffer != NULL) {
+        if (status == HONCH_OK && buffer != NULL) {
             status = honch_cbor_append_text_n(buffer, key.data, key.length);
         }
         honch_cbor_key_free(&key);
@@ -638,14 +636,12 @@ static honch_status_t honch_json_to_cbor_object(
         }
         parser->cursor++;
         honch_json_skip_ws(parser);
-        status = honch_json_to_cbor_value(parser, include ? buffer : NULL, depth + 1u);
+        status = honch_json_to_cbor_value(parser, buffer, depth + 1u);
         if (status != HONCH_OK) {
             return status;
         }
-        if (include) {
-            emitted++;
-            i = emitted;
-        }
+        emitted++;
+        i = emitted;
         honch_json_skip_ws(parser);
         if (*parser->cursor == '}') {
             break;
@@ -661,10 +657,70 @@ static honch_status_t honch_json_to_cbor_object(
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
     parser->cursor++;
-    if (member_count != NULL) {
-        *member_count = count;
-    }
     return HONCH_OK;
+}
+
+static honch_status_t honch_json_to_cbor_object_members_single_pass(
+    honch_json_to_cbor_parser_t *parser,
+    honch_buffer_t *buffer,
+    size_t depth,
+    size_t *member_count)
+{
+    *member_count = 0u;
+    if (parser->cursor == NULL) {
+        return HONCH_OK;
+    }
+    if (depth > HONCH_CBOR_MAX_DEPTH || *parser->cursor != '{') {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    parser->cursor++;
+    honch_json_skip_ws(parser);
+    if (*parser->cursor == '}') {
+        parser->cursor++;
+        return HONCH_OK;
+    }
+
+    for (;;) {
+        honch_cbor_key_t key;
+        honch_cbor_key_init(&key);
+        honch_status_t status = honch_json_decode_key(parser, &key);
+        bool include = status == HONCH_OK && memchr(key.data, '\0', key.length) == NULL &&
+            !honch_property_key_is_reserved(key.data);
+        if (status == HONCH_OK && include) {
+            status = honch_cbor_append_text_n(buffer, key.data, key.length);
+        }
+        honch_cbor_key_free(&key);
+        if (status != HONCH_OK) {
+            return status;
+        }
+
+        honch_json_skip_ws(parser);
+        if (*parser->cursor != ':') {
+            return HONCH_ERROR_INVALID_ARGUMENT;
+        }
+        parser->cursor++;
+        honch_json_skip_ws(parser);
+
+        status = honch_json_to_cbor_value(parser, include ? buffer : NULL, depth + 1u);
+        if (status != HONCH_OK) {
+            return status;
+        }
+        if (include) {
+            (*member_count)++;
+        }
+
+        honch_json_skip_ws(parser);
+        if (*parser->cursor == '}') {
+            parser->cursor++;
+            return HONCH_OK;
+        }
+        if (*parser->cursor != ',') {
+            return HONCH_ERROR_INVALID_ARGUMENT;
+        }
+        parser->cursor++;
+        honch_json_skip_ws(parser);
+    }
 }
 
 static honch_status_t honch_json_to_cbor_value(
@@ -675,7 +731,7 @@ static honch_status_t honch_json_to_cbor_value(
     honch_json_skip_ws(parser);
     switch (*parser->cursor) {
         case '{':
-            return honch_json_to_cbor_object(parser, buffer, depth + 1u, false, NULL);
+            return honch_json_to_cbor_object(parser, buffer, depth + 1u);
         case '[':
             return honch_json_to_cbor_array(parser, buffer, depth + 1u);
         case '"': {
@@ -729,13 +785,13 @@ honch_status_t honch_cbor_append_json_object_members(
     size_t *member_count)
 {
     *member_count = 0u;
-    if (!honch_json_object_has_members(json)) {
+    if (json == NULL) {
         return HONCH_OK;
     }
 
     honch_json_to_cbor_parser_t parser = {.cursor = json};
     honch_json_skip_ws(&parser);
-    honch_status_t status = honch_json_to_cbor_object(&parser, buffer, 1u, true, member_count);
+    honch_status_t status = honch_json_to_cbor_object_members_single_pass(&parser, buffer, 1u, member_count);
     if (status != HONCH_OK) {
         return status;
     }

@@ -254,6 +254,17 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertNotIn("cJSON_AddNumberToObject", encoder)
         self.assertNotIn("cJSON_DeleteItemFromObject", encoder)
 
+    def test_track_uses_cbor_conversion_as_properties_json_validation(self) -> None:
+        core = read("core/src/honch_core.c")
+        cbor = read("core/src/honch_cbor.c")
+
+        track_body = core[core.index("honch_status_t honch_core_track"):core.index("honch_status_t honch_core_identify")]
+        append_members_body = cbor[cbor.index("honch_status_t honch_cbor_append_json_object_members"):]
+
+        self.assertNotIn("honch_validate_json_object_input(client, properties_json)", track_body)
+        self.assertNotIn("honch_json_to_cbor_object(&parser, buffer, 1u, true, member_count)", append_members_body)
+        self.assertIn("honch_json_to_cbor_object_members_single_pass", cbor)
+
     def test_transport_treats_bad_requests_as_non_retryable(self) -> None:
         transport = read("ports/esp-idf/honch/src/esp_transport_http.c")
 
