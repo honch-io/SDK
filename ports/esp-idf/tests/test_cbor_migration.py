@@ -182,6 +182,7 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertRegex(cmake, r"\bcbor\b")
         self.assertRegex(cmake, r"\bespressif__cjson\b")
         self.assertRegex(cmake, r"\besp_timer\b")
+        self.assertIn("../../../core/src/honch_lifecycle.c", cmake)
 
     def test_transport_sends_application_cbor_with_optional_gzip(self) -> None:
         transport = read("ports/esp-idf/honch/src/esp_transport_http.c")
@@ -305,6 +306,24 @@ class EspIdfCborMigrationTest(unittest.TestCase):
             gpio.index("pin < 0 || pin >= GPIO_NUM_MAX || pin >= 64"),
             gpio.index("1ULL << pin"),
         )
+
+    def test_gpio_deinit_waits_for_worker_before_deleting_queue(self) -> None:
+        gpio = read("ports/esp-idf/honch/src/esp_gpio_adapter.c")
+        deinit = gpio[
+            gpio.index("void honch_gpio_deinit"):
+            gpio.index("honch_err_t honch_gpio_register")
+        ]
+        worker = gpio[gpio.index("static void gpio_worker_task"):gpio.index("honch_err_t honch_gpio_init")]
+        isr = gpio[gpio.index("gpio_isr_handler"):gpio.index("gpio_worker_task")]
+
+        self.assertIn("s_gpio_exit_sem", gpio)
+        self.assertIn("xSemaphoreGive(s_gpio_exit_sem)", worker)
+        self.assertNotIn("s_gpio_task = NULL", worker)
+        self.assertIn("xQueueSend(s_gpio_queue", deinit)
+        self.assertIn("xSemaphoreTake(s_gpio_exit_sem", deinit)
+        self.assertLess(deinit.index("xSemaphoreTake(s_gpio_exit_sem"), deinit.index("vQueueDelete(s_gpio_queue)"))
+        self.assertNotIn("vTaskDelay", deinit)
+        self.assertIn("if (queue != NULL)", isr)
 
     def test_queue_clear_erases_dead_letter_namespace(self) -> None:
         storage = read("ports/esp-idf/honch/src/esp_storage_nvs.c")
