@@ -284,6 +284,19 @@ class EspIdfCborMigrationTest(unittest.TestCase):
             transport.index("esp_http_client_set_post_field"),
         )
 
+    def test_transport_checks_esp_http_setup_failures(self) -> None:
+        transport = read("ports/esp-idf/honch/src/esp_transport_http.c")
+
+        self.assertIn("esp_err_t err = esp_http_client_set_header", transport)
+        setup_body = transport[
+            transport.index("esp_err_t err = esp_http_client_set_header"):
+            transport.index("err = esp_http_client_perform")
+        ]
+        self.assertIn('err = esp_http_client_set_header(client, "Content-Type", "application/cbor")', setup_body)
+        self.assertIn('err = esp_http_client_set_header(client, "Content-Encoding", "gzip")', setup_body)
+        self.assertIn("err = esp_http_client_set_post_field", setup_body)
+        self.assertGreaterEqual(setup_body.count("if (err != ESP_OK)"), 3)
+
     def test_benchmark_app_detects_existing_wifi_connection(self) -> None:
         lifecycle = read("ports/esp-idf/benchtest/main/app_main.c")
 
