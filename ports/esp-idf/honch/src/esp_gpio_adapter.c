@@ -9,6 +9,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "freertos/semphr.h"
 #include "driver/gpio.h"
 #include "esp_timer.h"
 
@@ -19,6 +20,7 @@ static const char *TAG = "honch";
 
 #define MAX_GPIO_PINS 8
 #define DEBOUNCE_MS 50
+#define HONCH_GPIO_SHUTDOWN_SENTINEL UINT32_MAX
 
 typedef struct {
     gpio_num_t pin;
@@ -30,13 +32,17 @@ static gpio_mapping_t s_mappings[MAX_GPIO_PINS];
 static int s_mapping_count = 0;
 static QueueHandle_t s_gpio_queue = NULL;
 static TaskHandle_t s_gpio_task = NULL;
+static SemaphoreHandle_t s_gpio_exit_sem = NULL;
 static volatile bool s_running = false;
 static bool s_isr_service_installed = false;
 
 static void IRAM_ATTR gpio_isr_handler(void *arg)
 {
-    uint32_t pin = (uint32_t)(uintptr_t)arg;
-    xQueueSendFromISR(s_gpio_queue, &pin, NULL);
+    QueueHandle_t queue = s_gpio_queue;
+    if (queue != NULL) {
+        uint32_t pin = (uint32_t)(uintptr_t)arg;
+        xQueueSendFromISR(queue, &pin, NULL);
+    }
 }
 
 static void gpio_worker_task(void *arg)
@@ -44,8 +50,12 @@ static void gpio_worker_task(void *arg)
     (void)arg;
     uint32_t pin;
 
-    while (s_running) {
+    while (true) {
         if (xQueueReceive(s_gpio_queue, &pin, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            if (!s_running || pin == HONCH_GPIO_SHUTDOWN_SENTINEL) {
+                break;
+            }
+
             // Find the mapping
             for (int i = 0; i < s_mapping_count; i++) {
                 if (s_mappings[i].pin == (gpio_num_t)pin) {
@@ -66,6 +76,9 @@ static void gpio_worker_task(void *arg)
         }
     }
 
+    if (s_gpio_exit_sem != NULL) {
+        xSemaphoreGive(s_gpio_exit_sem);
+    }
     vTaskDelete(NULL);
 }
 
@@ -79,10 +92,19 @@ honch_err_t honch_gpio_init(void)
         return HONCH_ERR_NO_MEM;
     }
 
+    s_gpio_exit_sem = xSemaphoreCreateBinary();
+    if (!s_gpio_exit_sem) {
+        vQueueDelete(s_gpio_queue);
+        s_gpio_queue = NULL;
+        return HONCH_ERR_NO_MEM;
+    }
+
     s_running = true;
 
     BaseType_t ret = xTaskCreate(gpio_worker_task, "honch_gpio", 4096, NULL, 4, &s_gpio_task);
     if (ret != pdPASS) {
+        vSemaphoreDelete(s_gpio_exit_sem);
+        s_gpio_exit_sem = NULL;
         vQueueDelete(s_gpio_queue);
         s_gpio_queue = NULL;
         return HONCH_ERR_NO_MEM;
@@ -100,14 +122,25 @@ void honch_gpio_deinit(void)
         gpio_isr_handler_remove(s_mappings[i].pin);
     }
 
-    if (s_gpio_task) {
-        vTaskDelay(pdMS_TO_TICKS(100));
+    TaskHandle_t gpio_task = s_gpio_task;
+    if (gpio_task && s_gpio_queue) {
+        uint32_t sentinel = HONCH_GPIO_SHUTDOWN_SENTINEL;
+        (void)xQueueSend(s_gpio_queue, &sentinel, 0);
+    }
+
+    if (gpio_task && s_gpio_exit_sem) {
+        (void)xSemaphoreTake(s_gpio_exit_sem, portMAX_DELAY);
         s_gpio_task = NULL;
     }
 
     if (s_gpio_queue) {
         vQueueDelete(s_gpio_queue);
         s_gpio_queue = NULL;
+    }
+
+    if (s_gpio_exit_sem) {
+        vSemaphoreDelete(s_gpio_exit_sem);
+        s_gpio_exit_sem = NULL;
     }
 
     s_mapping_count = 0;

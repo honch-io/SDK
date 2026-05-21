@@ -9,6 +9,7 @@ idf_component_register(
         "../../../core/src/honch_cbor.c"
         "../../../core/src/honch_encoder.c"
         "../../../core/src/honch_json.c"
+        "../../../core/src/honch_lifecycle.c"
         "../../../core/src/honch_queue_policy.c"
         "../../../core/src/honch_support.c"
         "src/esp_gpio_adapter.c"
