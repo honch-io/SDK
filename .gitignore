@@ -48,6 +48,7 @@ node_modules/
 # Logs/temp files
 *.log
 *.tmp
+local-docs/
 
 # Benchmark outputs
 ports/posix/bench/*.csv

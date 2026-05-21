@@ -4,13 +4,12 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
-#include <time.h>
 
 #include "esp_event.h"
 #include "esp_heap_caps.h"
+#include "esp_http_client.h"
 #include "esp_log.h"
 #include "esp_netif.h"
-#include "esp_sntp.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
@@ -25,6 +24,9 @@ static const char *TAG = "honch_benchtest";
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
 #define WIFI_MAX_RETRY     5
+#define BENCH_NETWORK_READY_RETRIES 12
+#define BENCH_NETWORK_READY_DELAY_MS 1000
+#define BENCH_NETWORK_READY_TIMEOUT_MS 10000
 #define PAD_SOURCE "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 typedef struct {
@@ -122,6 +124,7 @@ static bool wifi_init_sta(void)
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
 
     ESP_LOGI(TAG, "Connecting to Wi-Fi...");
 
@@ -138,27 +141,51 @@ static bool wifi_init_sta(void)
     return false;
 }
 
-static void sync_time(void)
+static void build_health_url(char *url, size_t url_size)
 {
-    ESP_LOGI(TAG, "Synchronizing time with SNTP...");
+    size_t host_len = strlen(CONFIG_HONCH_HOST);
+    const char *separator = host_len > 0 && CONFIG_HONCH_HOST[host_len - 1] == '/' ? "" : "/";
+    snprintf(url, url_size, "%s%shealth", CONFIG_HONCH_HOST, separator);
+}
 
-    esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
-    esp_sntp_setservername(0, "pool.ntp.org");
-    esp_sntp_init();
+static bool wait_for_network_ready(void)
+{
+    char health_url[320];
+    build_health_url(health_url, sizeof(health_url));
 
-    time_t now = 0;
-    struct tm timeinfo = {0};
-    for (int retry = 0; retry < 15; retry++) {
-        time(&now);
-        localtime_r(&now, &timeinfo);
-        if (timeinfo.tm_year >= (2020 - 1900)) {
-            ESP_LOGI(TAG, "Time synchronized");
-            return;
+    ESP_LOGI(TAG, "Waiting for HTTP readiness: %s", health_url);
+    for (int attempt = 1; attempt <= BENCH_NETWORK_READY_RETRIES; attempt++) {
+        esp_http_client_config_t client_config = {
+            .url = health_url,
+            .method = HTTP_METHOD_GET,
+            .timeout_ms = BENCH_NETWORK_READY_TIMEOUT_MS,
+        };
+        esp_http_client_handle_t client = esp_http_client_init(&client_config);
+        if (client == NULL) {
+            ESP_LOGW(TAG, "HTTP readiness attempt %d: client init failed", attempt);
+        } else {
+            esp_err_t err = esp_http_client_perform(client);
+            int status = err == ESP_OK ? esp_http_client_get_status_code(client) : 0;
+            esp_http_client_cleanup(client);
+
+            if (err == ESP_OK && status > 0) {
+                ESP_LOGI(TAG, "HTTP readiness confirmed status=%d attempt=%d", status, attempt);
+                vTaskDelay(pdMS_TO_TICKS(500));
+                return true;
+            }
+            ESP_LOGW(TAG,
+                     "HTTP readiness attempt %d/%d failed err=%s status=%d",
+                     attempt,
+                     BENCH_NETWORK_READY_RETRIES,
+                     esp_err_to_name(err),
+                     status);
         }
-        vTaskDelay(pdMS_TO_TICKS(1000));
+
+        vTaskDelay(pdMS_TO_TICKS(BENCH_NETWORK_READY_DELAY_MS));
     }
 
-    ESP_LOGW(TAG, "Time sync timed out; tail may not show events with boot-relative timestamps");
+    ESP_LOGE(TAG, "HTTP readiness failed; benchmark would measure network warm-up, not SDK overhead");
+    return false;
 }
 
 static void fill_pad(char *pad, size_t pad_size)
@@ -315,7 +342,9 @@ void app_main(void)
     if (!wifi_init_sta()) {
         return;
     }
-    sync_time();
+    if (!wait_for_network_ready()) {
+        return;
+    }
 
     honch_config_t config = {
         .api_key = CONFIG_HONCH_API_KEY,

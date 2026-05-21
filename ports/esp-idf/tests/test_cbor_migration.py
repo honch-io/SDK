@@ -301,7 +301,9 @@ class EspIdfCborMigrationTest(unittest.TestCase):
             'BENCH_RUN_END',
         ):
             self.assertIn(marker, bench)
-        self.assertIn("#include \"esp_sntp.h\"", bench)
+        self.assertIn("#include \"esp_http_client.h\"", bench)
+        self.assertIn("wait_for_network_ready", bench)
+        self.assertIn("esp_wifi_set_ps(WIFI_PS_NONE)", bench)
         self.assertIn("esp_wifi_sta_get_ap_info", bench)
         self.assertIn("uxTaskGetStackHighWaterMark", bench)
         self.assertIn('honch_track("bench_event"', bench)
