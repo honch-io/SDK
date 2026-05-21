@@ -4,9 +4,16 @@
   "private": true,
   "type": "module",
   "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "types": "src/index.ts",
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
+  },
+  "codegenConfig": {
+    "name": "HonchReactNativeRelaySpec",
+    "type": "modules",
+    "jsSrcsDir": "src"
   },
   "dependencies": {},
   "devDependencies": {
