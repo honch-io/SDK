@@ -2,6 +2,7 @@
 #include "honch_internal.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -17,6 +18,9 @@ typedef struct fake_storage {
     bool has_message;
     bool consumed;
     bool dead_lettered;
+    honch_client_t *client;
+    bool require_client_lock_on_peek;
+    bool peek_saw_client_lock;
 } fake_storage_t;
 
 static honch_status_t fake_reader_read(void *ctx, uint32_t offset, uint8_t *buffer, size_t buffer_size)
@@ -39,6 +43,11 @@ static honch_status_t fake_queue_peek(void *ctx, honch_storage_reader_t *reader)
     }
     if (!storage->has_message) {
         return HONCH_ERROR_NOT_INITIALIZED;
+    }
+    if (storage->require_client_lock_on_peek && storage->client != NULL) {
+        int lock_status = pthread_mutex_trylock(&storage->client->mutex);
+        assert(lock_status == EBUSY);
+        storage->peek_saw_client_lock = true;
     }
 
     *reader = (honch_storage_reader_t) {
@@ -85,7 +94,9 @@ static honch_client_t fake_client_with_storage(fake_storage_t *storage, honch_st
     honch_client_t client = {0};
     assert(pthread_mutex_init(&client.lifetime_mutex, NULL) == 0);
     assert(pthread_cond_init(&client.lifetime_cond, NULL) == 0);
+    assert(pthread_mutex_init(&client.mutex, NULL) == 0);
     client.storage = ops;
+    storage->client = &client;
     return client;
 }
 
@@ -93,6 +104,7 @@ static void fake_client_destroy(honch_client_t *client)
 {
     assert(pthread_cond_destroy(&client->lifetime_cond) == 0);
     assert(pthread_mutex_destroy(&client->lifetime_mutex) == 0);
+    assert(pthread_mutex_destroy(&client->mutex) == 0);
 }
 
 static uint64_t read_u64_be(const uint8_t *buffer)
@@ -258,6 +270,26 @@ static void test_confirm_consumes_storage(void)
     fake_client_destroy(&client);
 }
 
+static void test_packetizer_peek_runs_under_client_lock(void)
+{
+    const uint8_t message[] = {0xa0u};
+    fake_storage_t storage = {
+        .message = message,
+        .message_size = sizeof(message),
+        .sequence = HONCH_TEST_SEQUENCE,
+        .has_message = true,
+        .require_client_lock_on_peek = true
+    };
+    honch_storage_ops_t ops = {0};
+    honch_client_t client = fake_client_with_storage(&storage, &ops);
+    honch_packetizer_t packetizer = {0};
+
+    assert(honch_packetizer_begin(&client, &packetizer, HONCH_DATA_SOURCE_EVENTS) == HONCH_OK);
+    assert(storage.peek_saw_client_lock);
+    assert(honch_packetizer_abort(&packetizer) == HONCH_OK);
+    fake_client_destroy(&client);
+}
+
 int main(void)
 {
     test_tiny_buffer_rejected();
@@ -265,5 +297,6 @@ int main(void)
     test_multi_chunk_message_offsets_increase();
     test_abort_does_not_consume_storage();
     test_confirm_consumes_storage();
+    test_packetizer_peek_runs_under_client_lock();
     return 0;
 }

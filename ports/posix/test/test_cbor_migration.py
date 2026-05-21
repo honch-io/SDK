@@ -154,13 +154,16 @@ class PosixCborMigrationTest(unittest.TestCase):
 
     def test_core_routes_public_locking_through_platform_ops_when_available(self) -> None:
         core = read_sdk("core/src/honch_core.c")
+        lifecycle = read_sdk("core/src/honch_lifecycle.c")
         platform = read_sdk("ports/posix/src/posix_platform.c")
 
         self.assertIn("next->platform_ops.ctx = next", core)
         self.assertIn("honch_client_lock", core)
-        self.assertIn("client->platform->lock", core)
+        self.assertIn("honch_client_state_lock(client)", core)
+        self.assertIn("client->platform->lock", lifecycle)
         self.assertIn("honch_client_unlock", core)
-        self.assertIn("client->platform->unlock", core)
+        self.assertIn("honch_client_state_unlock(client)", core)
+        self.assertIn("client->platform->unlock", lifecycle)
         self.assertIn("honch_client_lock(client)", core)
         self.assertIn("honch_client_unlock(client)", core)
 
