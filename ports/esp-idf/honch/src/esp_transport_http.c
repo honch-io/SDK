@@ -123,13 +123,28 @@ static honch_status_t honch_esp_post_batch(
         return HONCH_STATUS_ERROR_TRANSPORT;
     }
 
-    esp_http_client_set_header(client, "Content-Type", "application/cbor");
-    if (post_encoding != NULL && strcmp(post_encoding, "gzip") == 0) {
-        esp_http_client_set_header(client, "Content-Encoding", "gzip");
+    esp_err_t err = esp_http_client_set_header(client, "Content-Type", "application/cbor");
+    if (err != ESP_OK) {
+        esp_http_client_cleanup(client);
+        free(compressed);
+        return HONCH_STATUS_ERROR_TRANSPORT;
     }
-    esp_http_client_set_post_field(client, (const char *)post_body, (int)post_body_size);
+    if (post_encoding != NULL && strcmp(post_encoding, "gzip") == 0) {
+        err = esp_http_client_set_header(client, "Content-Encoding", "gzip");
+        if (err != ESP_OK) {
+            esp_http_client_cleanup(client);
+            free(compressed);
+            return HONCH_STATUS_ERROR_TRANSPORT;
+        }
+    }
+    err = esp_http_client_set_post_field(client, (const char *)post_body, (int)post_body_size);
+    if (err != ESP_OK) {
+        esp_http_client_cleanup(client);
+        free(compressed);
+        return HONCH_STATUS_ERROR_TRANSPORT;
+    }
 
-    esp_err_t err = esp_http_client_perform(client);
+    err = esp_http_client_perform(client);
     int status = err == ESP_OK ? esp_http_client_get_status_code(client) : 0;
     esp_http_client_cleanup(client);
     free(compressed);
