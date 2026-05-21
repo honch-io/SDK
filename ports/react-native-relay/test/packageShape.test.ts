@@ -21,12 +21,41 @@ describe("React Native relay package shape", () => {
       "react-native.config.js",
       "android/build.gradle",
       "android/src/main/AndroidManifest.xml",
+      "android/src/main/java/io/honch/reactnativerelay/HonchReactNativeRelayModule.java",
+      "android/src/main/java/io/honch/reactnativerelay/HonchReactNativeRelayPackage.java",
+      "android/src/main/java/io/honch/reactnativerelay/HonchRelayUploadWorker.java",
       "ios/HonchReactNativeRelay.podspec",
+      "ios/HonchReactNativeRelay.h",
+      "ios/HonchReactNativeRelay.m",
       "example/README.md"
     ];
 
     for (const file of expectedFiles) {
       expect(existsSync(new URL(file, packageRoot)), `${file} should exist`).toBe(true);
+    }
+  });
+
+  it("exposes the native module methods used by the TypeScript bridge", () => {
+    const androidModule = readFileSync(
+      new URL(
+        "android/src/main/java/io/honch/reactnativerelay/HonchReactNativeRelayModule.java",
+        packageRoot
+      ),
+      "utf8"
+    ) as string;
+    const iosModule = readFileSync(new URL("ios/HonchReactNativeRelay.m", packageRoot), "utf8") as string;
+
+    for (const method of [
+      "startScan",
+      "stopScan",
+      "connect",
+      "disconnect",
+      "acknowledgeMessage",
+      "scheduleUpload",
+      "cancelUpload"
+    ]) {
+      expect(androidModule).toContain(method);
+      expect(iosModule).toContain(method);
     }
   });
 });
