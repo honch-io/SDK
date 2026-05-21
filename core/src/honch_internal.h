@@ -76,6 +76,7 @@ struct honch_client {
     char *state_directory;
     char *distinct_id;
     char *session_id;
+    bool configured_device_id;
     size_t batch_size;
     size_t max_queued_events;
     size_t max_event_bytes;

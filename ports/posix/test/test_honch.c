@@ -213,6 +213,20 @@ static int cbor_read_uint(cbor_reader_t *reader, unsigned char additional, unsig
     return 1;
 }
 
+static int cbor_read_big_endian_double(cbor_reader_t *reader, double *out)
+{
+    if (reader->length - reader->offset < 8u) {
+        return 0;
+    }
+
+    uint64_t bits = 0u;
+    for (size_t i = 0u; i < 8u; i++) {
+        bits = (bits << 8) | reader->data[reader->offset++];
+    }
+    memcpy(out, &bits, sizeof(bits));
+    return 1;
+}
+
 static int cbor_to_json_value(cbor_reader_t *reader, char *out, size_t out_size, size_t *used);
 
 static int cbor_to_json_items(cbor_reader_t *reader, unsigned long long count, char close, char *out, size_t out_size, size_t *used)
@@ -295,9 +309,14 @@ static int cbor_to_json_value(cbor_reader_t *reader, char *out, size_t out_size,
             if (additional == 22u) {
                 return append_literal(out, out_size, used, "null");
             }
-            if (additional == 27u && reader->length - reader->offset >= 8u) {
-                reader->offset += 8u;
-                return append_literal(out, out_size, used, "0.0");
+            if (additional == 27u) {
+                double number = 0.0;
+                if (!cbor_read_big_endian_double(reader, &number)) {
+                    return 0;
+                }
+                char number_text[32];
+                snprintf(number_text, sizeof(number_text), "%.15g", number);
+                return append_literal(out, out_size, used, number_text);
             }
             return 0;
         default:
@@ -642,6 +661,18 @@ static honch_config_t test_config(const char *queue_dir)
     return config;
 }
 
+static honch_config_t test_conformance_config(const char *queue_dir)
+{
+    honch_config_t config = test_config(queue_dir);
+    config.api_key = "test-key";
+    config.device_id = "dev_fixture";
+    config.device_model = "FixtureBoard";
+    config.firmware_version = "1.2.3";
+    config.environment = "test";
+    config.batch_size = 10u;
+    return config;
+}
+
 static void test_init_validation(void)
 {
     char queue_dir[128];
@@ -935,6 +966,188 @@ static void test_set_property_emits_event_and_autostamp_conflicts_win(void)
     long long timestamp = 0;
     EXPECT_TRUE(extract_timestamp_millis(transport.last_payload, &timestamp) != 0);
     EXPECT_TRUE(timestamp > 0);
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
+static void test_conformance_basic_track_fixture(void)
+{
+    const char *fixture = "spec/conformance/events/basic-track.json";
+    EXPECT_TRUE(strstr(fixture, "basic-track.json") != NULL);
+
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_conformance_config(queue_dir);
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "button_pressed", "{\"pin\":0,\"$device_id\":\"spoofed\"}"), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"button_pressed\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"distinct_id\":\"dev_fixture\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"pin\":0");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$device_id\":\"dev_fixture\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$device_model\":\"FixtureBoard\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$firmware_version\":\"1.2.3\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$environment\":\"test\"");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "spoofed");
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
+static void test_conformance_auto_stamp_conflict_fixture(void)
+{
+    const char *fixture = "spec/conformance/events/auto_stamp_wins_conflict.json";
+    EXPECT_TRUE(strstr(fixture, "auto_stamp_wins_conflict.json") != NULL);
+
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(
+        honch_track(
+            client,
+            "test_event",
+            "{\"$device_model\":\"SHOULD_BE_OVERWRITTEN\",\"$sdk_platform\":\"SHOULD_BE_OVERWRITTEN\",\"custom_key\":\"preserved\"}"),
+        HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"test_event\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$device_model\":\"X3-Pro\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$sdk_platform\":\"c-posix\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"custom_key\":\"preserved\"");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "SHOULD_BE_OVERWRITTEN");
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
+static void test_conformance_boot_event_fixture(void)
+{
+    const char *fixture = "spec/conformance/events/boot_event.json";
+    EXPECT_TRUE(strstr(fixture, "boot_event.json") != NULL);
+
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.device_id = "dev_a3f2c1d4e5f6";
+    config.batch_size = 10u;
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "$device_boot", "{\"reset_reason\":\"power_on\"}"), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$device_boot\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"distinct_id\":\"dev_a3f2c1d4e5f6\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$device_id\":\"dev_a3f2c1d4e5f6\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$device_model\":\"X3-Pro\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$firmware_version\":\"3.4.1\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$environment\":\"production\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"reset_reason\":\"power_on\"");
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
+static void test_conformance_custom_session_event_fixture(void)
+{
+    const char *fixture = "spec/conformance/events/custom_event_with_session.json";
+    EXPECT_TRUE(strstr(fixture, "custom_event_with_session.json") != NULL);
+
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.device_id = "dev_a3f2c1d4e5f6";
+    config.batch_size = 10u;
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_session_start(client, NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "hdr_burst_used", "{\"duration\":3.2,\"mode\":\"auto\"}"), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"hdr_burst_used\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"distinct_id\":\"dev_a3f2c1d4e5f6\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"duration\":3.2");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"mode\":\"auto\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$session_id\":\"sess_");
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
+static void test_conformance_session_track_fixture(void)
+{
+    const char *fixture = "spec/conformance/events/session-track.json";
+    EXPECT_TRUE(strstr(fixture, "session-track.json") != NULL);
+
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_conformance_config(queue_dir);
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_session_start(client, "recording"), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "recording_started", "{\"mode\":\"hdr\"}"), HONCH_OK);
+    EXPECT_EQ_INT(honch_session_end(client), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$session_start\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"recording_started\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$session_end\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"session_name\":\"recording\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"mode\":\"hdr\"");
+    EXPECT_TRUE(count_substring(transport.last_payload, "\"$session_id\":\"sess_") >= 3);
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
+static void test_conformance_identity_reset_fixture(void)
+{
+    const char *fixture = "spec/conformance/events/identity-reset.json";
+    EXPECT_TRUE(strstr(fixture, "identity-reset.json") != NULL);
+
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_conformance_config(queue_dir);
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_identify(client, "user_123", "{\"plan\":\"beta\"}"), HONCH_OK);
+    EXPECT_EQ_INT(honch_reset(client), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "after_reset", "{}"), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"after_reset\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"distinct_id\":\"dev_fixture\"");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"distinct_id\":\"user_123\"");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"event\":\"$identify\"");
 
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
@@ -1848,6 +2061,89 @@ static void test_flush_drains_multiple_batches(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_conformance_basic_batch_fixture(void)
+{
+    const char *fixture = "spec/conformance/envelopes/basic_batch.json";
+    EXPECT_TRUE(strstr(fixture, "basic_batch.json") != NULL);
+
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.api_key = "test_key_123";
+    config.device_id = "dev_a3f2c1d4e5f6";
+    config.batch_size = 10u;
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "button_pressed", "{\"pin\":0}"), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+
+    EXPECT_TRUE(strcmp(transport.last_api_key, "test_key_123") == 0);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"token\":\"test_key_123\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"batch\":[");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"button_pressed\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"distinct_id\":\"dev_a3f2c1d4e5f6\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"timestamp\":");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$device_id\":\"dev_a3f2c1d4e5f6\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$device_model\":\"X3-Pro\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$firmware_version\":\"3.4.1\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$environment\":\"production\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"pin\":0");
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
+static void expect_conformance_response_policy_case(long response_code, int should_preserve)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+
+    fake_transport_context_t transport = {.response_code = response_code};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "response_policy_event", NULL), HONCH_OK);
+    (void)honch_flush(client);
+
+    char pending_dir[160];
+    char dead_dir[160];
+    snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
+    snprintf(dead_dir, sizeof(dead_dir), "%s/dead", queue_dir);
+
+    if (should_preserve) {
+        EXPECT_TRUE(count_files_with_suffix(pending_dir, ".cbor") > 0u);
+        EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".cbor"), 0);
+    } else {
+        EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 0);
+    }
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
+static void test_conformance_response_policy_fixture(void)
+{
+    const char *fixture = "spec/conformance/http/response-policy.json";
+    EXPECT_TRUE(strstr(fixture, "response-policy.json") != NULL);
+
+    expect_conformance_response_policy_case(200L, 0);
+    expect_conformance_response_policy_case(202L, 0);
+    expect_conformance_response_policy_case(401L, 0);
+    expect_conformance_response_policy_case(400L, 0);
+    expect_conformance_response_policy_case(404L, 0);
+    expect_conformance_response_policy_case(429L, 1);
+    expect_conformance_response_policy_case(500L, 1);
+    expect_conformance_response_policy_case(503L, 1);
+    expect_conformance_response_policy_case(0L, 1);
+}
+
 static void test_batch_size_is_capped_to_esp_limit(void)
 {
     char queue_dir[128];
@@ -2090,6 +2386,12 @@ int main(void)
     test_existing_invalid_state_path_fails_init();
     test_configured_device_id_accessor();
     test_set_property_emits_event_and_autostamp_conflicts_win();
+    test_conformance_basic_track_fixture();
+    test_conformance_auto_stamp_conflict_fixture();
+    test_conformance_boot_event_fixture();
+    test_conformance_custom_session_event_fixture();
+    test_conformance_session_track_fixture();
+    test_conformance_identity_reset_fixture();
     test_auto_properties_callback_adds_platform_properties();
     test_auto_properties_callback_rejects_invalid_json_value();
     test_auto_properties_callback_cannot_override_sdk_owned_properties();
@@ -2118,6 +2420,8 @@ int main(void)
     test_background_flush_uses_esp_idf_default_threshold();
     test_background_flush_can_be_explicitly_disabled();
     test_flush_drains_multiple_batches();
+    test_conformance_basic_batch_fixture();
+    test_conformance_response_policy_fixture();
     test_batch_size_is_capped_to_esp_limit();
     test_flush_sends_raw_cbor_payload();
     test_flush_gzips_large_cbor_payload_when_enabled();

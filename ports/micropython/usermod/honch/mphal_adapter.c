@@ -191,6 +191,7 @@ honch_status_t honch_state_prepare(honch_client_t *client, const honch_core_conf
 
     if (config->device_id != NULL && !honch_is_blank(config->device_id)) {
         HONCH_MP_DEBUG_INIT("state_device_id_config_begin");
+        client->configured_device_id = true;
         client->device_id = honch_micropython_strdup(config->device_id);
         if (client->device_id == NULL) {
             return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
@@ -332,24 +333,39 @@ honch_status_t honch_state_reset(honch_client_t *client)
     if (client == NULL || client->storage == NULL) {
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
-    char generated[33];
-    honch_status_t status = honch_random_hex(generated);
-    if (status != HONCH_STATUS_OK) {
-        return status;
+    honch_status_t status = HONCH_STATUS_OK;
+    char *device_id = NULL;
+    char *distinct_id = NULL;
+    if (client->configured_device_id) {
+        device_id = honch_micropython_strdup(client->device_id);
+        distinct_id = honch_micropython_strdup(client->device_id);
+        if (device_id == NULL || distinct_id == NULL) {
+            free(device_id);
+            free(distinct_id);
+            return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
+        }
+    } else {
+        char generated[33];
+        status = honch_random_hex(generated);
+        if (status != HONCH_STATUS_OK) {
+            return status;
+        }
+        device_id = honch_micropython_strdup(generated);
+        distinct_id = honch_micropython_strdup(generated);
+        if (device_id == NULL || distinct_id == NULL) {
+            free(device_id);
+            free(distinct_id);
+            return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
+        }
     }
-    status = client->storage->state_set(client->storage->ctx, "device_id", (const uint8_t *)generated, strlen(generated));
+    status = client->storage->state_set(client->storage->ctx, "device_id", (const uint8_t *)device_id, strlen(device_id));
     if (status == HONCH_STATUS_OK) {
-        status = client->storage->state_set(client->storage->ctx, "distinct_id", (const uint8_t *)generated, strlen(generated));
+        status = client->storage->state_set(client->storage->ctx, "distinct_id", (const uint8_t *)distinct_id, strlen(distinct_id));
     }
     if (status != HONCH_STATUS_OK) {
-        return status;
-    }
-    char *device_id = honch_micropython_strdup(generated);
-    char *distinct_id = honch_micropython_strdup(generated);
-    if (device_id == NULL || distinct_id == NULL) {
         free(device_id);
         free(distinct_id);
-        return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
+        return status;
     }
     free(client->device_id);
     free(client->distinct_id);

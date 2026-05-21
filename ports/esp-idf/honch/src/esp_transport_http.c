@@ -155,6 +155,10 @@ static honch_status_t honch_esp_post_batch(
         return HONCH_STATUS_ERROR_TRANSPORT;
     }
 
+    if (status == 0) {
+        *result = HONCH_TRANSPORT_RETRY;
+        return HONCH_STATUS_ERROR_TRANSPORT;
+    }
     if (status >= 200 && status < 300) {
         *result = HONCH_TRANSPORT_ACCEPTED;
         return HONCH_STATUS_OK;
