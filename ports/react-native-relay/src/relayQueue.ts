@@ -1,4 +1,5 @@
 import { decodeRelayFrame } from "./frame";
+import type { DurableRelayChunk, RelayDurableStore } from "./durableStore";
 
 export type StoredRelayMessage = {
   deviceId: string;
@@ -13,6 +14,7 @@ export interface RelayQueue {
     frameBytes: Uint8Array
   ): Promise<{ complete: boolean; message?: StoredRelayMessage }>;
   markUploaded(deviceId: string, sequence: string): Promise<void>;
+  markDropped(deviceId: string, sequence: string): Promise<void>;
   pending(): Promise<StoredRelayMessage[]>;
 }
 
@@ -130,6 +132,10 @@ export function createInMemoryRelayQueue(): RelayQueue {
       }
     },
 
+    async markDropped(deviceId, sequence) {
+      await this.markUploaded(deviceId, sequence);
+    },
+
     async pending() {
       return completeMessages.map((message) => ({
         ...message,
@@ -137,6 +143,99 @@ export function createInMemoryRelayQueue(): RelayQueue {
       }));
     }
   };
+}
+
+export function createDurableRelayQueue(store: RelayDurableStore): RelayQueue {
+  return {
+    async putChunk(deviceId, frameBytes) {
+      const frame = decodeRelayFrame(frameBytes);
+      const sequence = frame.sequence.toString();
+      const existingChunks = await store.chunks(deviceId, sequence);
+      const existing = existingChunks.find((chunk) => chunk.offset === frame.offset);
+      if (existing !== undefined) {
+        if (!bytesEqual(existing.frameBytes, frameBytes)) {
+          throw new Error("relay duplicate chunk mismatch");
+        }
+        const existingMessage = (await store.completeMessages()).find(
+          (message) => message.deviceId === deviceId && message.sequence === sequence
+        );
+        return { complete: existingMessage !== undefined, message: existingMessage };
+      }
+
+      if (
+        existingChunks.length > 0 &&
+        existingChunks.some((chunk) => chunk.sourceType !== frame.sourceType)
+      ) {
+        throw new Error("relay frame source type mismatch");
+      }
+
+      const chunk: DurableRelayChunk = {
+        deviceId,
+        sourceType: frame.sourceType,
+        sequence,
+        offset: frame.offset,
+        frameBytes: new Uint8Array(frameBytes),
+        payload: new Uint8Array(frame.payload)
+      };
+      if (frame.final) {
+        chunk.finalEnd = frame.offset + frame.payload.length;
+      }
+      await store.putChunk(chunk);
+
+      const message = completeMessageFromChunks(deviceId, frame.sourceType, sequence, [
+        ...existingChunks,
+        chunk
+      ]);
+      if (message === undefined) {
+        return { complete: false };
+      }
+
+      await store.putCompleteMessage(message);
+      return { complete: true, message };
+    },
+
+    async markUploaded(deviceId, sequence) {
+      await store.deleteMessage(deviceId, sequence);
+    },
+
+    async markDropped(deviceId, sequence) {
+      await store.deleteMessage(deviceId, sequence);
+    },
+
+    async pending() {
+      return store.completeMessages();
+    }
+  };
+}
+
+function completeMessageFromChunks(
+  deviceId: string,
+  sourceType: number,
+  sequence: string,
+  chunks: DurableRelayChunk[]
+): StoredRelayMessage | undefined {
+  const finalEnd = chunks.find((chunk) => chunk.finalEnd !== undefined)?.finalEnd;
+  if (finalEnd === undefined) {
+    return undefined;
+  }
+
+  const sorted = [...chunks].sort((left, right) => left.offset - right.offset);
+  let cursor = 0;
+  for (const chunk of sorted) {
+    if (chunk.offset !== cursor) {
+      return undefined;
+    }
+    cursor += chunk.payload.length;
+  }
+  if (cursor !== finalEnd) {
+    return undefined;
+  }
+
+  const body = new Uint8Array(cursor);
+  for (const chunk of sorted) {
+    body.set(chunk.payload, chunk.offset);
+  }
+  return { deviceId, sourceType, sequence, body };
 }
 
 function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {

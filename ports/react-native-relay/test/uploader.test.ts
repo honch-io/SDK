@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { uploadRelayMessage } from "../src/uploader";
+import { uploadRelayMessage, uploadRelayMessageOutcome } from "../src/uploader";
+import { nextBackoffDelayMs } from "../src/retry";
 
 const config = {
   endpointUrl: "https://capture.example/",
@@ -45,5 +46,42 @@ describe("uploadRelayMessage", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 500 })));
 
     await expect(uploadRelayMessage(config, message)).rejects.toThrow("relay upload failed: 500");
+  });
+
+  it("classifies upload statuses using the canonical relay queue policy", async () => {
+    const cases = [
+      { status: 200, action: "consume" },
+      { status: 202, action: "consume" },
+      { status: 400, action: "drop" },
+      { status: 401, action: "drop" },
+      { status: 404, action: "drop" },
+      { status: 429, action: "retry" },
+      { status: 500, action: "retry" },
+      { status: 503, action: "retry" }
+    ] as const;
+
+    for (const testCase of cases) {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: testCase.status })));
+
+      await expect(uploadRelayMessageOutcome(config, message)).resolves.toMatchObject({
+        action: testCase.action,
+        status: testCase.status
+      });
+    }
+  });
+
+  it("classifies network failures as retryable", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("offline"))));
+
+    await expect(uploadRelayMessageOutcome(config, message)).resolves.toMatchObject({
+      action: "retry"
+    });
+  });
+
+  it("computes capped exponential backoff with deterministic jitter", () => {
+    expect(nextBackoffDelayMs(0, () => 0.5)).toBe(1000);
+    expect(nextBackoffDelayMs(1, () => 0.5)).toBe(2000);
+    expect(nextBackoffDelayMs(2, () => 1)).toBe(5000);
+    expect(nextBackoffDelayMs(20, () => 0.5)).toBe(300000);
   });
 });
