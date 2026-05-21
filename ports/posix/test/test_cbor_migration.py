@@ -49,6 +49,18 @@ class PosixCborMigrationTest(unittest.TestCase):
             transport.index("CURLOPT_POSTFIELDSIZE, (long)body_size"),
         )
 
+    def test_transport_builds_batch_url_without_int_length_cast(self) -> None:
+        transport = read_sdk("ports/posix/src/posix_transport_curl.c")
+        batch_url = transport[
+            transport.index("static honch_status_t honch_batch_url"):
+            transport.index("static honch_status_t honch_map_response")
+        ]
+
+        self.assertNotIn("(int)endpoint_length", batch_url)
+        self.assertNotIn("%.*s", batch_url)
+        self.assertIn("memcpy(url, endpoint_url, endpoint_length)", batch_url)
+        self.assertIn("memcpy(url + endpoint_length, suffix, suffix_length)", batch_url)
+
     def test_queue_persists_cbor_blobs_not_json_strings(self) -> None:
         queue = read_sdk("ports/posix/src/posix_storage.c")
         internal = read_sdk("core/src/honch_internal.h")
