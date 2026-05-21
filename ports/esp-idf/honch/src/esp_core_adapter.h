@@ -34,12 +34,13 @@ typedef struct honch_esp_ram_queue_entry {
 typedef struct honch_esp_storage {
     uint64_t peek_sequence;
     uint64_t read_sequence;
+    honch_esp_ram_queue_entry_t *ram_entries;
     uint8_t *ram_buffer;
     size_t ram_buffer_size;
     size_t ram_used;
     size_t ram_count;
+    size_t ram_entry_capacity;
     bool nvs_fallback_active;
-    honch_esp_ram_queue_entry_t ram_entries[HONCH_ESP_RAM_QUEUE_MAX_EVENTS];
 } honch_esp_storage_t;
 
 typedef struct honch_esp_transport {

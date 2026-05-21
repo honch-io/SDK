@@ -23,7 +23,6 @@ ports/esp-idf/**/managed_components/
 ports/esp-idf/**/dependencies.lock
 ports/esp-idf/**/sdkconfig
 ports/esp-idf/**/sdkconfig.old
-ports/esp-idf/footprint/
 
 # Compiled artifacts
 *.o
