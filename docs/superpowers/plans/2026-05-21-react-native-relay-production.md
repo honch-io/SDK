@@ -70,9 +70,9 @@
 - Create: `ports/react-native-relay/ios/HonchReactNativeRelay.podspec`
 - Create: `ports/react-native-relay/example/README.md`
 
-- [ ] **Step 1: Add package metadata tests or shape checks**
-- [ ] **Step 2: Add native package scaffold**
-- [ ] **Step 3: Add example app README**
+- [x] **Step 1: Add package metadata tests or shape checks**
+- [x] **Step 2: Add native package scaffold**
+- [x] **Step 3: Add example app README**
 
 ### Task 6: BLE And Background Implementations
 
