@@ -191,7 +191,7 @@ static honch_status_t honch_build_property_pairs(
         status = honch_append_property_pair(buffer, member_count, "$sdk_version", HONCH_SDK_VERSION);
     }
     if (status == HONCH_OK) {
-        status = honch_append_property_pair(buffer, member_count, "$sdk_platform", "c-posix");
+        status = honch_append_property_pair(buffer, member_count, "$sdk_platform", client->sdk_platform);
     }
 
     return status;
@@ -813,6 +813,7 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     next->api_key = honch_strdup(config->api_key);
     next->endpoint_url = honch_strdup(config->endpoint_url);
     next->queue_directory = honch_strdup(config->queue_directory);
+    next->sdk_platform = honch_strdup(honch_is_blank(config->sdk_platform) ? "c-posix" : config->sdk_platform);
     next->batch_size = config->batch_size == 0u ? HONCH_DEFAULT_BATCH_SIZE : config->batch_size;
     if (next->batch_size > HONCH_MAX_BATCH_SIZE) {
         next->batch_size = HONCH_MAX_BATCH_SIZE;
@@ -856,7 +857,8 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     bool lifetime_cond_initialized = false;
     bool mutex_initialized = false;
     bool scheduler_cond_initialized = false;
-    if (next->api_key == NULL || next->endpoint_url == NULL || next->queue_directory == NULL) {
+    if (next->api_key == NULL || next->endpoint_url == NULL || next->queue_directory == NULL ||
+        next->sdk_platform == NULL) {
         status = HONCH_ERROR_OUT_OF_MEMORY;
     }
     if (status == HONCH_OK) {

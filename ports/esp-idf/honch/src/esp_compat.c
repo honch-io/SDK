@@ -180,6 +180,7 @@ honch_err_t honch_init(const honch_config_t *config)
     core_config.device_model = s_device_model;
     core_config.firmware_version = s_firmware_version;
     core_config.environment = s_environment;
+    core_config.sdk_platform = "esp-idf";
     core_config.queue_directory = "nvs";
     core_config.flush_interval_seconds = config->flush_interval_seconds;
     core_config.flush_event_threshold = config->flush_event_threshold;

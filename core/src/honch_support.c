@@ -83,6 +83,7 @@ void honch_free_client_fields(honch_client_t *client)
     free(client->device_model);
     free(client->firmware_version);
     free(client->environment);
+    free(client->sdk_platform);
     free(client->queue_directory);
     free(client->pending_directory);
     free(client->dead_directory);

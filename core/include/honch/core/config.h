@@ -34,6 +34,7 @@ typedef struct honch_core_config {
     const char *device_model;
     const char *firmware_version;
     const char *environment;
+    const char *sdk_platform;
     const char *queue_directory;
     size_t batch_size;
     size_t max_queued_events;

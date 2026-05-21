@@ -69,6 +69,7 @@ struct honch_client {
     char *device_model;
     char *firmware_version;
     char *environment;
+    char *sdk_platform;
     char *queue_directory;
     char *pending_directory;
     char *dead_directory;

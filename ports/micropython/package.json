@@ -1,19 +1,12 @@
 {
-  "version": "0.1.0",
-  "description": "Honch analytics SDK for MicroPython",
+  "version": "0.2.0",
+  "description": "Honch analytics SDK wrapper for MicroPython firmware built with the Honch C core user module",
   "license": "Apache-2.0",
   "urls": [
     ["honch/__init__.py", "honch/__init__.py"],
     ["honch/client.py", "honch/client.py"],
     ["honch/config.py", "honch/config.py"],
-    ["honch/cbor.py", "honch/cbor.py"],
-    ["honch/encoder.py", "honch/encoder.py"],
     ["honch/errors.py", "honch/errors.py"],
-    ["honch/identity.py", "honch/identity.py"],
-    ["honch/platform.py", "honch/platform.py"],
-    ["honch/queue.py", "honch/queue.py"],
-    ["honch/scheduler.py", "honch/scheduler.py"],
-    ["honch/transport.py", "honch/transport.py"],
     ["honch/validation.py", "honch/validation.py"]
   ]
 }

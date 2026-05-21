@@ -1,94 +1,76 @@
+try:
+    import ujson as json
+except ImportError:
+    import json
+
+try:
+    import _honch_core
+except ImportError:
+    _honch_core = None
+
 from .config import HonchConfig
-from .encoder import build_batch_from_events, build_event, decode_event, encode_event
-from .errors import InvalidArgumentError, RejectedError
-from .identity import IdentityStore
-from .platform import DefaultPlatform
-from .queue import PersistentQueue
-from .scheduler import Scheduler
-from .transport import HttpTransport, post_batch
+from .errors import (
+    HonchError,
+    InvalidArgumentError,
+    NotInitializedError,
+    RateLimitedError,
+    RejectedError,
+    ServerError,
+    StorageError,
+    TransportError,
+)
 from .validation import require_distinct_id, require_event_name, require_json_value, require_properties
 
 
 class Honch:
     def __init__(self, **kwargs):
-        self.config = HonchConfig(**kwargs)
-        self.platform = kwargs.get("platform") or DefaultPlatform()
-        self.transport = kwargs.get("transport") or HttpTransport()
-        self.queue = PersistentQueue(
-            self.config.queue_directory,
-            self.platform,
-            self.config.max_queued_events,
-            self.config.max_event_bytes,
-        )
-        self.identity = IdentityStore(self.queue.state_dir, self.platform, self.config.device_id)
-        self.session_id = None
-        self.battery_low_emitted = False
-        self._connectivity_connected = None
-        self.scheduler = Scheduler(self)
+        if _honch_core is None:
+            raise ImportError("Honch MicroPython requires firmware built with the _honch_core user C module")
 
-        changed, previous = self.identity.check_firmware_version(self.config.firmware_version)
-        if changed:
-            self._track_internal(
-                "$firmware_update",
-                {"previous_version": previous, "new_version": self.config.firmware_version},
-                check_battery_low=True,
-            )
-        self._track_internal("$device_boot", {"reset_reason": self.platform.get_reset_reason()}, check_battery_low=True)
+        if (
+            kwargs.get("platform") is not None
+            or kwargs.get("transport") is not None
+            or kwargs.get("battery_callback") is not None
+            or kwargs.get("auto_properties_callback") is not None
+        ):
+            raise InvalidArgumentError("Python adapter hooks are not supported by the C-core MicroPython port")
+
+        self.config = HonchConfig(**kwargs)
+        self._core = _honch_core.Client(_config_to_dict(self.config))
+        self._connectivity_connected = None
 
     def get_device_id(self):
-        return self.identity.device_id
+        return self._call("get_device_id")
 
     def track(self, event_name, properties=None):
         require_event_name(event_name)
-        props = require_properties(properties)
-        self._track_internal(event_name, props, check_battery_low=True)
+        self._call("track", event_name, _json_object(require_properties(properties)))
 
     def identify(self, distinct_id, traits=None):
         require_distinct_id(distinct_id)
-        props = require_properties(traits)
-        previous = self.identity.set_distinct_id(distinct_id)
-        try:
-            self._track_internal("$identify", props, check_battery_low=False)
-        except Exception:
-            self.identity.restore_distinct_id(previous)
-            raise
+        self._call("identify", distinct_id, _json_object(require_properties(traits)))
 
     def set_property(self, key, value=None):
         if not isinstance(key, str) or key.strip() == "":
             raise InvalidArgumentError("invalid property key")
         require_json_value(value)
-        self.track("$set_property", {key: value})
+        self._call("set_property", key, _json_value(value))
 
     def session_start(self, session_name=None):
-        if self.session_id is not None:
-            self._track_internal("$session_end", {}, check_battery_low=True)
-            self.session_id = None
-        self.session_id = "sess_" + self.platform.random_hex(16)
-        props = {}
-        if session_name is not None and str(session_name).strip() != "":
-            props["session_name"] = str(session_name)
-        try:
-            self._track_internal("$session_start", props, check_battery_low=True)
-        except Exception:
-            self.session_id = None
-            raise
+        if session_name is not None:
+            session_name = str(session_name)
+        self._call("session_start", session_name)
 
     def session_end(self):
-        if self.session_id is None:
-            return
-        self._track_internal("$session_end", {}, check_battery_low=True)
-        self.session_id = None
+        self._call("session_end")
 
     def connectivity_changed(self, connected):
         if connected is not True and connected is not False:
             raise InvalidArgumentError("connected must be a boolean")
         if self._connectivity_connected == connected:
             return
-        state = "connected" if connected else "disconnected"
-        self._track_internal("$connectivity_change", {"state": state}, check_battery_low=True)
+        self._call("connectivity_changed", connected)
         self._connectivity_connected = connected
-        if connected:
-            self.scheduler.request_flush()
 
     def connected(self):
         self.connectivity_changed(True)
@@ -97,84 +79,99 @@ class Honch:
         self.connectivity_changed(False)
 
     def flush(self):
-        final_error = None
-        while self.queue.count() > 0:
-            batch = self.queue.read_batch(self.config.batch_size)
-            names = []
-            events = []
-            invalid_names = []
-            for name, data in batch:
-                if len(data) > self.config.max_event_bytes:
-                    invalid_names.append(name)
-                    continue
-                try:
-                    events.append(decode_event(data))
-                except (TypeError, ValueError):
-                    invalid_names.append(name)
-                    continue
-                names.append(name)
-            if invalid_names:
-                self.queue.move_to_dead(invalid_names)
-                final_error = RejectedError("invalid persisted event")
-            if not events:
-                continue
-            payload = build_batch_from_events(self.config.api_key, events)
-            try:
-                post_batch(self.config, self.platform, self.transport, payload)
-            except RejectedError as exc:
-                self.queue.move_to_dead(names)
-                raise exc
-            except Exception:
-                raise
-            else:
-                self.queue.delete_pending(names)
-        if final_error is not None:
-            raise final_error
+        self._call("flush")
 
     def reset(self):
-        self.identity.reset()
-        self.session_id = None
-        self.battery_low_emitted = False
-        self.queue.clear()
+        self._call("reset")
+        self._connectivity_connected = None
 
     def shutdown(self):
-        self.scheduler.stop()
-        self._track_internal("$device_shutdown", {}, check_battery_low=True, notify_scheduler=False)
-        self.flush()
+        self._call("shutdown")
 
-    def _track_internal(self, event_name, properties, check_battery_low, notify_scheduler=True):
-        battery_level = self._read_battery_level()
-        event = build_event(self, event_name, properties, battery_level)
-        self.queue.enqueue(encode_event(event))
-        if notify_scheduler:
-            self.scheduler.after_enqueue()
-        if check_battery_low:
-            self._emit_battery_low_if_needed(battery_level)
-
-    def _read_battery_level(self):
-        callback = self.config.battery_callback
-        if callback is None:
-            return None
+    def _call(self, name, *args):
         try:
-            value = callback()
-        except Exception:
-            return None
-        if value is None or value < 0:
-            return None
-        return int(value)
+            return getattr(self._core, name)(*args)
+        except Exception as exc:
+            _raise_mapped(exc)
 
-    def _emit_battery_low_if_needed(self, battery_level):
-        if battery_level is None:
-            return
-        if battery_level >= self.config.battery_low_threshold:
-            self.battery_low_emitted = False
-            return
-        if self.battery_low_emitted:
-            return
-        self.battery_low_emitted = True
-        self._track_internal(
-            "$battery_low",
-            {"level": battery_level},
-            check_battery_low=False,
-            notify_scheduler=True,
-        )
+
+def _config_to_dict(config):
+    return {
+        "api_key": config.api_key,
+        "endpoint_url": config.endpoint_url,
+        "device_id": config.device_id,
+        "device_model": config.device_model,
+        "firmware_version": config.firmware_version,
+        "environment": config.environment,
+        "queue_directory": config.queue_directory,
+        "batch_size": config.batch_size,
+        "max_queued_events": config.max_queued_events,
+        "max_event_bytes": config.max_event_bytes,
+        "transport_timeout_ms": config.transport_timeout_ms,
+        "flush_interval_seconds": config.flush_interval_seconds,
+        "flush_event_threshold": config.flush_event_threshold,
+        "flush_retry_initial_ms": config.flush_retry_initial_ms,
+        "flush_retry_max_ms": config.flush_retry_max_ms,
+        "disable_gzip": config.disable_gzip,
+        "gzip_min_bytes": config.gzip_min_bytes,
+        "disable_background_flush": config.disable_background_flush,
+        "battery_low_threshold": config.battery_low_threshold,
+    }
+
+
+def _json_object(value):
+    return _json_dumps(value)
+
+
+def _json_value(value):
+    return _json_dumps(value)
+
+
+def _json_dumps(value):
+    try:
+        return json.dumps(value, separators=(",", ":"))
+    except TypeError:
+        return json.dumps(value)
+
+
+def _raise_mapped(exc):
+    status = getattr(exc, "status", None)
+    if _honch_core is None:
+        raise exc
+
+    if status is None:
+        message = str(exc)
+        status = _STATUS_BY_MESSAGE.get(message)
+        if status is None:
+            raise exc
+
+    if status == getattr(_honch_core, "ERROR_INVALID_ARGUMENT", None):
+        raise InvalidArgumentError(str(exc))
+    if status == getattr(_honch_core, "ERROR_IO", None):
+        raise StorageError(str(exc))
+    if status == getattr(_honch_core, "ERROR_RATE_LIMITED", None):
+        raise RateLimitedError(str(exc))
+    if status == getattr(_honch_core, "ERROR_SERVER", None):
+        raise ServerError(str(exc))
+    if status == getattr(_honch_core, "ERROR_REJECTED", None):
+        raise RejectedError(str(exc))
+    if status == getattr(_honch_core, "ERROR_NOT_INITIALIZED", None):
+        raise NotInitializedError(str(exc))
+    if status == getattr(_honch_core, "ERROR_TRANSPORT", None) or status == getattr(_honch_core, "ERROR_TIMEOUT", None):
+        raise TransportError(str(exc))
+    if status == getattr(_honch_core, "ERROR_QUEUE_FULL", None):
+        raise StorageError(str(exc))
+    raise HonchError(str(exc))
+
+
+_STATUS_BY_MESSAGE = {
+    "invalid argument": getattr(_honch_core, "ERROR_INVALID_ARGUMENT", None),
+    "io error": getattr(_honch_core, "ERROR_IO", None),
+    "transport error": getattr(_honch_core, "ERROR_TRANSPORT", None),
+    "rate limited": getattr(_honch_core, "ERROR_RATE_LIMITED", None),
+    "server error": getattr(_honch_core, "ERROR_SERVER", None),
+    "rejected": getattr(_honch_core, "ERROR_REJECTED", None),
+    "not initialized": getattr(_honch_core, "ERROR_NOT_INITIALIZED", None),
+    "queue full": getattr(_honch_core, "ERROR_QUEUE_FULL", None),
+    "timeout": getattr(_honch_core, "ERROR_TIMEOUT", None),
+} if _honch_core is not None else {}
