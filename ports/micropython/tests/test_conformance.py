@@ -19,6 +19,10 @@ CANONICAL_FIXTURES = (
     "spec/conformance/http/response-policy.json",
 )
 
+IDENTITY_SEMANTICS_FIXTURES = (
+    "spec/conformance/events/persisted-identity-reboot.json",
+)
+
 
 def load_fixture(path):
     return json.loads((ROOT / path).read_text())
@@ -76,7 +80,7 @@ class ConformanceFixtureTests(unittest.TestCase):
         sys.modules.update(self.saved)
 
     def test_all_canonical_fixtures_are_exercised_by_micropython_conformance_tests(self):
-        for path in CANONICAL_FIXTURES:
+        for path in CANONICAL_FIXTURES + IDENTITY_SEMANTICS_FIXTURES:
             with self.subTest(path=path):
                 self.assertTrue((ROOT / path).exists())
 
@@ -138,6 +142,22 @@ class ConformanceFixtureTests(unittest.TestCase):
         )
         self.assertIn("client->configured_device_id = true", adapter)
         self.assertIn("if (client->configured_device_id)", adapter)
+
+    def test_persisted_identity_reboot_fixture_uses_identified_distinct_id_before_next_identify(self):
+        fixture = load_fixture("spec/conformance/events/persisted-identity-reboot.json")
+        adapter = (ROOT / "ports/micropython/usermod/honch/mphal_adapter.c").read_text()
+        module = (ROOT / "ports/micropython/usermod/honch/modhonch_core.c").read_text()
+
+        self.assertEqual(fixture["expect"]["pre_identify_distinct_id_after_reboot"], "user_123")
+        self.assertEqual(
+            [op["op"] for op in fixture["operations"]],
+            ["identify", "reboot", "track"],
+        )
+        self.assertIn('state_get(client->storage->ctx, "distinct_id"', adapter)
+        self.assertIn('state_get(client->storage->ctx, "distinct_id", (uint8_t *)client->distinct_id', adapter)
+        self.assertIn("client->distinct_id[distinct_size] = '\\0'", adapter)
+        self.assertIn("honch_core_identify(self->client", module)
+        self.assertIn("honch_core_track(self->client", module)
 
     def test_session_track_fixture_delegates_session_lifecycle_and_track(self):
         fixture = load_fixture("spec/conformance/events/session-track.json")
