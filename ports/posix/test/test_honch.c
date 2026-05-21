@@ -1214,8 +1214,8 @@ static void test_flush_dead_letters_invalid_persisted_queue_files(void)
     char oversized_path[240];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
     snprintf(dead_dir, sizeof(dead_dir), "%s/dead", queue_dir);
-    snprintf(malformed_path, sizeof(malformed_path), "%s/00000000000000000000-malformed.cbor", pending_dir);
-    snprintf(oversized_path, sizeof(oversized_path), "%s/00000000000000000001-oversized.cbor", pending_dir);
+    snprintf(malformed_path, sizeof(malformed_path), "%s/00000000000000000000-000000-malformed.cbor", pending_dir);
+    snprintf(oversized_path, sizeof(oversized_path), "%s/00000000000000000001-000001-oversized.cbor", pending_dir);
 
     EXPECT_TRUE(write_text_file(malformed_path, "{\"event\":") != 0);
 
@@ -1241,6 +1241,37 @@ static void test_flush_dead_letters_invalid_persisted_queue_files(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_flush_ignores_malformed_queue_filenames(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+
+    fake_transport_context_t transport = {.response_code = 202L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+
+    char pending_dir[160];
+    char dead_dir[160];
+    char malformed_path[240];
+    snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
+    snprintf(dead_dir, sizeof(dead_dir), "%s/dead", queue_dir);
+    snprintf(malformed_path, sizeof(malformed_path), "%s/00000000000000000000-malformed.cbor", pending_dir);
+    EXPECT_TRUE(write_text_file(malformed_path, "{\"event\":") != 0);
+
+    EXPECT_EQ_INT(honch_track(client, "valid_with_malformed_neighbor", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".cbor"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 1);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"valid_with_malformed_neighbor\"");
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
 static void test_flush_dead_letters_semantically_invalid_cbor_event(void)
 {
     char queue_dir[128];
@@ -1258,7 +1289,7 @@ static void test_flush_dead_letters_semantically_invalid_cbor_event(void)
     char invalid_path[240];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
     snprintf(dead_dir, sizeof(dead_dir), "%s/dead", queue_dir);
-    snprintf(invalid_path, sizeof(invalid_path), "%s/00000000000000000000-invalid.cbor", pending_dir);
+    snprintf(invalid_path, sizeof(invalid_path), "%s/00000000000000000000-000000-invalid.cbor", pending_dir);
 
     const unsigned char valid_but_not_event[] = {0xf6};
     EXPECT_TRUE(write_bytes_file(invalid_path, valid_but_not_event, sizeof(valid_but_not_event)) != 0);
@@ -1819,6 +1850,7 @@ int main(void)
     test_flush_retryable_http_status_keeps_events_until_success();
     test_flush_http_timeout_keeps_events_until_success();
     test_flush_dead_letters_invalid_persisted_queue_files();
+    test_flush_ignores_malformed_queue_filenames();
     test_flush_dead_letters_semantically_invalid_cbor_event();
     test_cbor_encoding_preserves_json_string_escapes();
     test_cbor_encoding_handles_escaped_and_long_object_keys();

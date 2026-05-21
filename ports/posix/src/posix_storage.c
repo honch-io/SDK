@@ -118,7 +118,12 @@ static bool honch_queue_sequence_from_name(const char *name, uint64_t *sequence)
     bool saw_digit = false;
     while (*cursor >= '0' && *cursor <= '9') {
         saw_digit = true;
-        value = (value * 10u) + (uint64_t)(*cursor - '0');
+        uint64_t digit = (uint64_t)(*cursor - '0');
+        if (value > (UINT64_MAX - digit) / 10u) {
+            *sequence = 0u;
+            return false;
+        }
+        value = (value * 10u) + digit;
         cursor++;
     }
 
@@ -135,8 +140,8 @@ static honch_file_entry_t *honch_find_queue_entry_by_sequence(honch_file_list_t 
 {
     for (size_t i = 0u; i < files->count; i++) {
         uint64_t entry_sequence = 0u;
-        (void)honch_queue_sequence_from_name(files->items[i].name, &entry_sequence);
-        if (entry_sequence == sequence) {
+        if (honch_queue_sequence_from_name(files->items[i].name, &entry_sequence) &&
+            entry_sequence == sequence) {
             return &files->items[i];
         }
     }
@@ -197,8 +202,8 @@ static honch_status_t honch_posix_queue_peek(void *ctx, honch_storage_reader_t *
         selected = files.count;
         for (size_t i = 0u; i < files.count; i++) {
             uint64_t entry_sequence = 0u;
-            (void)honch_queue_sequence_from_name(files.items[i].name, &entry_sequence);
-            if (entry_sequence == client->active_storage_reader_sequence) {
+            if (honch_queue_sequence_from_name(files.items[i].name, &entry_sequence) &&
+                entry_sequence == client->active_storage_reader_sequence) {
                 selected = i + 1u;
                 break;
             }
@@ -216,7 +221,10 @@ static honch_status_t honch_posix_queue_peek(void *ctx, honch_storage_reader_t *
     }
 
     uint64_t sequence = 0u;
-    (void)honch_queue_sequence_from_name(files.items[selected].name, &sequence);
+    if (!honch_queue_sequence_from_name(files.items[selected].name, &sequence)) {
+        honch_file_list_free(&files);
+        return HONCH_ERROR_NOT_INITIALIZED;
+    }
     client->active_storage_reader_sequence = sequence;
     *reader = (honch_storage_reader_t) {
         .ctx = client,
@@ -332,7 +340,26 @@ honch_status_t honch_posix_storage_ops_init(
 
 static honch_status_t honch_list_queue_files(honch_client_t *client, honch_file_list_t *files)
 {
-    return honch_list_files_with_suffix(client->pending_directory, ".cbor", files);
+    honch_status_t status = honch_list_files_with_suffix(client->pending_directory, ".cbor", files);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    size_t write_index = 0u;
+    for (size_t read_index = 0u; read_index < files->count; read_index++) {
+        uint64_t sequence = 0u;
+        if (honch_queue_sequence_from_name(files->items[read_index].name, &sequence)) {
+            if (write_index != read_index) {
+                files->items[write_index] = files->items[read_index];
+            }
+            write_index++;
+        } else {
+            free(files->items[read_index].name);
+            free(files->items[read_index].path);
+        }
+    }
+    files->count = write_index;
+    return HONCH_OK;
 }
 
 static honch_status_t honch_move_to_dead(honch_client_t *client, const honch_file_entry_t *entry)
