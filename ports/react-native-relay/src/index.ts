@@ -16,3 +16,5 @@ export { createRelayUploadScheduler } from "./scheduler";
 export type { RelayUploadSchedulerNative, RelayUploadSchedulerOptions } from "./scheduler";
 export { createMobileRelay } from "./mobileRelay";
 export type { MobileRelayOptions } from "./mobileRelay";
+export { createRelayNativeBindings } from "./nativeModule";
+export type { RelayNativeBindings, RelayNativeModule } from "./nativeModule";
