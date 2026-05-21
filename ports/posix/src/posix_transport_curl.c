@@ -287,6 +287,15 @@ honch_status_t honch_transport_post_batch(
         headers = next_header;
     }
 
+    if (body_size > (size_t)LONG_MAX) {
+        curl_slist_free_all(headers);
+        free(compressed);
+        free(url);
+        curl_easy_cleanup(curl);
+        *result = HONCH_HTTP_RETRY;
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, (const char *)body);
