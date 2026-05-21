@@ -911,7 +911,7 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
 honch_status_t honch_core_track(honch_client_t *client, const char *event_name, const char *properties_json)
 {
     if (client == NULL || honch_validate_event_name(event_name) != HONCH_OK ||
-        honch_validate_json_object_input(client, properties_json) != HONCH_OK) {
+        honch_cstring_exceeds(properties_json, client->max_event_bytes)) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
