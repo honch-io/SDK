@@ -146,6 +146,10 @@ static honch_status_t honch_esp_post_batch(
         *result = HONCH_TRANSPORT_RETRY;
         return HONCH_STATUS_ERROR_RATE_LIMITED;
     }
+    if (status == 408) {
+        *result = HONCH_TRANSPORT_RETRY;
+        return HONCH_STATUS_ERROR_TIMEOUT;
+    }
     if (status >= 400 && status < 500) {
         *result = HONCH_TRANSPORT_REJECTED;
         return HONCH_STATUS_OK;

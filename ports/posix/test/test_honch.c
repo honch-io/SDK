@@ -1156,6 +1156,39 @@ static void test_flush_retryable_http_status_keeps_events_until_success(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_flush_http_timeout_keeps_events_until_success(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+
+    fake_transport_context_t transport = {.response_code = 408L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "timeout_status", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_ERROR_TIMEOUT);
+
+    char pending_dir[160];
+    char dead_dir[160];
+    snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
+    snprintf(dead_dir, sizeof(dead_dir), "%s/dead", queue_dir);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 2);
+    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".cbor"), 0);
+
+    transport.response_code = 202L;
+    transport.last_payload[0] = '\0';
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".cbor"), 0);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"timeout_status\"");
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
 static void test_flush_dead_letters_invalid_persisted_queue_files(void)
 {
     char queue_dir[128];
@@ -1748,6 +1781,7 @@ int main(void)
     test_queue_limit_drops_oldest();
     test_flush_retry_keeps_events();
     test_flush_retryable_http_status_keeps_events_until_success();
+    test_flush_http_timeout_keeps_events_until_success();
     test_flush_dead_letters_invalid_persisted_queue_files();
     test_flush_dead_letters_semantically_invalid_cbor_event();
     test_cbor_encoding_preserves_json_string_escapes();

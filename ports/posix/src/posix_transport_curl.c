@@ -66,6 +66,11 @@ static honch_status_t honch_map_response(long response_code, honch_http_result_t
         return HONCH_OK;
     }
 
+    if (response_code == 408L) {
+        *result = HONCH_HTTP_RETRY;
+        return HONCH_ERROR_TIMEOUT;
+    }
+
     if (response_code == 429L || response_code >= 500L) {
         *result = HONCH_HTTP_RETRY;
         return response_code == 429L ? HONCH_ERROR_RATE_LIMITED : HONCH_ERROR_SERVER;

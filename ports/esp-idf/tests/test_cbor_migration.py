@@ -269,6 +269,8 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         transport = read("ports/esp-idf/honch/src/esp_transport_http.c")
 
         self.assertIn("status == 429", transport)
+        self.assertIn("status == 408", transport)
+        self.assertLess(transport.index("status == 408"), transport.index("status >= 400 && status < 500"))
         self.assertRegex(transport, r"status >= 400 && status < 500")
 
     def test_benchmark_app_detects_existing_wifi_connection(self) -> None:
