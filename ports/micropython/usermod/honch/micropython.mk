@@ -9,12 +9,12 @@ SRC_USERMOD_C += \
 	$(HONCH_MICROPYTHON_DIR)/pthread_stub.c \
 	$(HONCH_CORE_DIR)/src/honch_core.c \
 	$(HONCH_CORE_DIR)/src/honch_cbor.c \
-	$(HONCH_CORE_DIR)/src/honch_encoder.c \
 	$(HONCH_CORE_DIR)/src/honch_json.c \
 	$(HONCH_CORE_DIR)/src/honch_lifecycle.c \
 	$(HONCH_CORE_DIR)/src/honch_packetizer.c \
 	$(HONCH_CORE_DIR)/src/honch_queue_policy.c \
-	$(HONCH_CORE_DIR)/src/honch_support.c
+	$(HONCH_CORE_DIR)/src/honch_support.c \
+	$(HONCH_CORE_DIR)/src/honch_wire_v2.c
 
 CFLAGS_USERMOD += \
 	-I$(HONCH_MICROPYTHON_DIR) \

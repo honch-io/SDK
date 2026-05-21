@@ -19,7 +19,6 @@
 #define HONCH_DEFAULT_BATTERY_LOW_THRESHOLD 15
 #define HONCH_DEFAULT_FLUSH_RETRY_INITIAL_MS 1000u
 #define HONCH_DEFAULT_FLUSH_RETRY_MAX_MS 300000u
-#define HONCH_DEFAULT_GZIP_MIN_BYTES 1024u
 #define HONCH_MAX_EVENT_NAME 128u
 #define HONCH_MAX_DISTINCT_ID 256u
 
@@ -44,12 +43,6 @@ typedef struct honch_file_list {
     size_t count;
     size_t capacity;
 } honch_file_list_t;
-
-typedef enum honch_http_result {
-    HONCH_HTTP_OK,
-    HONCH_HTTP_RETRY,
-    HONCH_HTTP_REJECTED
-} honch_http_result_t;
 
 struct honch_client {
     pthread_mutex_t lifetime_mutex;
@@ -85,8 +78,8 @@ struct honch_client {
     size_t flush_event_threshold;
     unsigned int flush_retry_initial_ms;
     unsigned int flush_retry_max_ms;
-    bool gzip_enabled;
-    size_t gzip_min_bytes;
+    uint32_t wire_v2_message_id_seed;
+    char wire_v2_stream_id[9];
     honch_durability_mode_t durability_mode;
     uint64_t next_interval_flush_ms;
     uint64_t next_retry_flush_ms;
@@ -138,13 +131,6 @@ honch_status_t honch_cbor_append_json_object_members(
     size_t *member_count);
 bool honch_cbor_validate_event(const unsigned char *data, size_t length);
 
-honch_status_t honch_encoder_build_batch_cbor(
-    honch_client_t *client,
-    const honch_file_list_t *files,
-    size_t count,
-    honch_payload_t *out,
-    size_t *invalid_index);
-
 uint64_t honch_now_millis(void);
 honch_status_t honch_random_hex(char out[33]);
 honch_status_t honch_join_path(char **out, const char *left, const char *right);
@@ -184,11 +170,5 @@ void honch_client_leave(honch_client_t *client);
 honch_status_t honch_client_begin_shutdown(honch_client_t *client);
 honch_status_t honch_client_state_lock(honch_client_t *client);
 void honch_client_state_unlock(honch_client_t *client);
-
-honch_status_t honch_transport_post_batch(
-    honch_client_t *client,
-    const unsigned char *payload,
-    size_t payload_size,
-    honch_http_result_t *result);
 
 #endif

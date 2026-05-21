@@ -6,9 +6,10 @@ This package is intended for:
 
 - macOS/Linux development harnesses
 - embedded Linux devices
-- future reusable C core work for Zephyr, Arduino, bare-metal C, and MicroPython bindings
+- reusable C core validation before the same behavior is adapted by ESP-IDF,
+  MicroPython, and future C-derived ports
 
-The shared cross-SDK contract lives in [`../../spec/`](../../spec/). C/POSIX sends the same CBOR ingest payloads as the ESP-IDF SDK.
+The shared cross-SDK contract lives in [`../../spec/`](../../spec/). C/POSIX sends the same compact chunk wire payloads as the ESP-IDF SDK.
 
 ## Current Status
 
@@ -19,8 +20,7 @@ Implemented:
 - persistent generated `device_id`
 - persistent current `distinct_id`
 - epoch milliseconds event timestamps
-- tokenized CBOR batch flush envelopes
-- optional gzip transport compression for large `application/cbor` flush requests
+- compact chunk wire uploads to `POST /capture`
 - default background flushing with retry backoff and jitter
 - persisted firmware version change detection
 - `$set_property` event API parity with the ESP-IDF SDK
@@ -166,8 +166,6 @@ Optional config:
 - `flush_event_threshold`: defaults to `30`
 - `flush_retry_initial_ms`: defaults to `1000`
 - `flush_retry_max_ms`: defaults to `300000`
-- `disable_gzip`: set nonzero to always send raw CBOR
-- `gzip_min_bytes`: minimum encoded CBOR batch size before gzip is attempted; defaults to `1024`
 - `disable_background_flush`: set nonzero to disable the background worker
 - `battery_callback`: returns `0`-`100`, or negative when unknown
 - `battery_low_threshold`: defaults to `15`
@@ -239,6 +237,12 @@ ESP-IDF defaults of 60 seconds and 30 queued events. Set
 `honch_flush` call. Retryable transport failures use exponential backoff with
 jitter. Shutdown always attempts a synchronous best-effort flush for a valid
 client, even when background flushing is disabled.
+
+Flushes use the compact wire encoder in the shared core and send chunk frames to
+`POST /capture` with `Content-Type: application/vnd.honch.chunk`. The project
+key is sent as `X-Honch-Project-Key`; a boot-scoped stream ID is sent as
+`X-Honch-Stream-Id`. Capture also accepts the same format on `/e` and
+`/chunks`.
 
 GPIO tracking is intentionally kept out of the reusable C core. Use a platform
 adapter, like `example/posix_gpio`, to debounce platform-specific GPIO edge
@@ -333,8 +337,8 @@ Current C tests cover:
 - init validation
 - event persistence
 - epoch milliseconds timestamp encoding
-- tokenized CBOR batch envelope encoding
-- raw and gzipped `application/cbor` transport requests
+- compact chunk wire transport and response handling
+- chunk wire transport and response handling
 - strict JSON validation for public property input
 - generated `device_id` persistence
 - configured and generated device ID access

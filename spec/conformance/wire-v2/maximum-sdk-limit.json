@@ -1,0 +1,1195 @@
+{
+  "decoded_compact_message": {
+    "base_time_ms": 1700000006000,
+    "batch_context": {
+      "$device_id": "device-1",
+      "$device_model": "model-x",
+      "$environment": "production",
+      "$firmware_version": "1.0.0",
+      "$sdk_platform": "posix",
+      "$sdk_version": "0.2.0",
+      "distinct_id": "user-1"
+    },
+    "events": [
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 0
+          }
+        ],
+        "time_delta_ms": 0
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 1
+          }
+        ],
+        "time_delta_ms": 1
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 2
+          }
+        ],
+        "time_delta_ms": 2
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 3
+          }
+        ],
+        "time_delta_ms": 3
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 4
+          }
+        ],
+        "time_delta_ms": 4
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 5
+          }
+        ],
+        "time_delta_ms": 5
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 6
+          }
+        ],
+        "time_delta_ms": 6
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 7
+          }
+        ],
+        "time_delta_ms": 7
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 8
+          }
+        ],
+        "time_delta_ms": 8
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 9
+          }
+        ],
+        "time_delta_ms": 9
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 10
+          }
+        ],
+        "time_delta_ms": 10
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 11
+          }
+        ],
+        "time_delta_ms": 11
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 12
+          }
+        ],
+        "time_delta_ms": 12
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 13
+          }
+        ],
+        "time_delta_ms": 13
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 14
+          }
+        ],
+        "time_delta_ms": 14
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 15
+          }
+        ],
+        "time_delta_ms": 15
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 16
+          }
+        ],
+        "time_delta_ms": 16
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 17
+          }
+        ],
+        "time_delta_ms": 17
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 18
+          }
+        ],
+        "time_delta_ms": 18
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 19
+          }
+        ],
+        "time_delta_ms": 19
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 20
+          }
+        ],
+        "time_delta_ms": 20
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 21
+          }
+        ],
+        "time_delta_ms": 21
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 22
+          }
+        ],
+        "time_delta_ms": 22
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 23
+          }
+        ],
+        "time_delta_ms": 23
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 24
+          }
+        ],
+        "time_delta_ms": 24
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 25
+          }
+        ],
+        "time_delta_ms": 25
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 26
+          }
+        ],
+        "time_delta_ms": 26
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 27
+          }
+        ],
+        "time_delta_ms": 27
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 28
+          }
+        ],
+        "time_delta_ms": 28
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 29
+          }
+        ],
+        "time_delta_ms": 29
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 30
+          }
+        ],
+        "time_delta_ms": 30
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 31
+          }
+        ],
+        "time_delta_ms": 31
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 32
+          }
+        ],
+        "time_delta_ms": 32
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 33
+          }
+        ],
+        "time_delta_ms": 33
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 34
+          }
+        ],
+        "time_delta_ms": 34
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 35
+          }
+        ],
+        "time_delta_ms": 35
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 36
+          }
+        ],
+        "time_delta_ms": 36
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 37
+          }
+        ],
+        "time_delta_ms": 37
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 38
+          }
+        ],
+        "time_delta_ms": 38
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 39
+          }
+        ],
+        "time_delta_ms": 39
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 40
+          }
+        ],
+        "time_delta_ms": 40
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 41
+          }
+        ],
+        "time_delta_ms": 41
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 42
+          }
+        ],
+        "time_delta_ms": 42
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 43
+          }
+        ],
+        "time_delta_ms": 43
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 44
+          }
+        ],
+        "time_delta_ms": 44
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 45
+          }
+        ],
+        "time_delta_ms": 45
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 46
+          }
+        ],
+        "time_delta_ms": 46
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 47
+          }
+        ],
+        "time_delta_ms": 47
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 48
+          }
+        ],
+        "time_delta_ms": 48
+      },
+      {
+        "event": "sample",
+        "properties": [
+          {
+            "count": 49
+          }
+        ],
+        "time_delta_ms": 49
+      }
+    ],
+    "flags": [
+      "context_promotes_properties"
+    ],
+    "format_version": 2,
+    "message_kind": "event_batch",
+    "string_table": [
+      "user-1",
+      "device-1",
+      "model-x",
+      "1.0.0",
+      "posix",
+      "0.2.0",
+      "production",
+      "sample",
+      "count"
+    ]
+  },
+  "description": "Maximum official SDK event-count fixture: 50 events in one compact message.",
+  "expanded_event_json": [
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 0
+      },
+      "timestamp": 1700000006000
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 1
+      },
+      "timestamp": 1700000006001
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 2
+      },
+      "timestamp": 1700000006002
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 3
+      },
+      "timestamp": 1700000006003
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 4
+      },
+      "timestamp": 1700000006004
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 5
+      },
+      "timestamp": 1700000006005
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 6
+      },
+      "timestamp": 1700000006006
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 7
+      },
+      "timestamp": 1700000006007
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 8
+      },
+      "timestamp": 1700000006008
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 9
+      },
+      "timestamp": 1700000006009
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 10
+      },
+      "timestamp": 1700000006010
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 11
+      },
+      "timestamp": 1700000006011
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 12
+      },
+      "timestamp": 1700000006012
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 13
+      },
+      "timestamp": 1700000006013
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 14
+      },
+      "timestamp": 1700000006014
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 15
+      },
+      "timestamp": 1700000006015
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 16
+      },
+      "timestamp": 1700000006016
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 17
+      },
+      "timestamp": 1700000006017
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 18
+      },
+      "timestamp": 1700000006018
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 19
+      },
+      "timestamp": 1700000006019
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 20
+      },
+      "timestamp": 1700000006020
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 21
+      },
+      "timestamp": 1700000006021
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 22
+      },
+      "timestamp": 1700000006022
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 23
+      },
+      "timestamp": 1700000006023
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 24
+      },
+      "timestamp": 1700000006024
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 25
+      },
+      "timestamp": 1700000006025
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 26
+      },
+      "timestamp": 1700000006026
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 27
+      },
+      "timestamp": 1700000006027
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 28
+      },
+      "timestamp": 1700000006028
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 29
+      },
+      "timestamp": 1700000006029
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 30
+      },
+      "timestamp": 1700000006030
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 31
+      },
+      "timestamp": 1700000006031
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 32
+      },
+      "timestamp": 1700000006032
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 33
+      },
+      "timestamp": 1700000006033
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 34
+      },
+      "timestamp": 1700000006034
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 35
+      },
+      "timestamp": 1700000006035
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 36
+      },
+      "timestamp": 1700000006036
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 37
+      },
+      "timestamp": 1700000006037
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 38
+      },
+      "timestamp": 1700000006038
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 39
+      },
+      "timestamp": 1700000006039
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 40
+      },
+      "timestamp": 1700000006040
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 41
+      },
+      "timestamp": 1700000006041
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 42
+      },
+      "timestamp": 1700000006042
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 43
+      },
+      "timestamp": 1700000006043
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 44
+      },
+      "timestamp": 1700000006044
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 45
+      },
+      "timestamp": 1700000006045
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 46
+      },
+      "timestamp": 1700000006046
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 47
+      },
+      "timestamp": 1700000006047
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 48
+      },
+      "timestamp": 1700000006048
+    },
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0",
+        "count": 49
+      },
+      "timestamp": 1700000006049
+    }
+  ],
+  "expected_capture_response_code": 204,
+  "frames": [
+    {
+      "hex": "0207020101f0fe95ffbc310906757365722d31086465766963652d31076d6f64656c2d7805312e302e3005706f73697805302e322e300a70726f64756374696f6e0673616d706c6505636f756e740701070002070103070204070305070406070507070632070001110300070201110301070401110302070601110303070801110304070a01110305070c01110306070e0111030707100111030807120111030907140111030a07160111030b07180111030c071a0111030d071c0111030e071e0111030f072001110310072201110311072401110312072601110313072801110314072a01110315072c01110316072e0111031707300111031807320111031907340111031a07360111031b07380111031c073a0111031d073c0111031e073e0111031f074001110320074201110321074401110322074601110323074801110324074a01110325074c01110326074e0111032707500111032807520111032907540111032a07560111032b07580111032c075a0111032d075c0111032e075e0111032f0760011103300762011103311f5d",
+      "kind": "single"
+    }
+  ],
+  "generated_by": "tools/generate_wire_v2_fixtures.py",
+  "name": "maximum-sdk-limit",
+  "wire_format": "honch-wire-v2"
+}

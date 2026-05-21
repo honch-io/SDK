@@ -44,6 +44,8 @@ __pycache__/
 node_modules/
 !ports/react-native-relay/package.json
 !ports/react-native-relay/tsconfig.json
+!spec/conformance/wire-v2/
+!spec/conformance/wire-v2/*.json
 
 # Logs/temp files
 *.log

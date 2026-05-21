@@ -14,7 +14,6 @@ DEFAULT_FLUSH_EVENT_THRESHOLD = 30
 DEFAULT_FLUSH_RETRY_INITIAL_MS = 1000
 DEFAULT_FLUSH_RETRY_MAX_MS = 300000
 DEFAULT_BATTERY_LOW_THRESHOLD = 15
-DEFAULT_GZIP_MIN_BYTES = 1024
 
 
 def is_blank(value):
@@ -50,8 +49,6 @@ class HonchConfig:
         self.flush_retry_max_ms = int(kwargs.get("flush_retry_max_ms") or DEFAULT_FLUSH_RETRY_MAX_MS)
         if self.flush_retry_max_ms < self.flush_retry_initial_ms:
             self.flush_retry_max_ms = self.flush_retry_initial_ms
-        self.disable_gzip = bool(kwargs.get("disable_gzip", False))
-        self.gzip_min_bytes = int(kwargs.get("gzip_min_bytes") or DEFAULT_GZIP_MIN_BYTES)
         self.disable_background_flush = bool(kwargs.get("disable_background_flush", False))
         self.battery_callback = kwargs.get("battery_callback")
         self.battery_low_threshold = int(kwargs.get("battery_low_threshold") or DEFAULT_BATTERY_LOW_THRESHOLD)

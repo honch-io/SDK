@@ -2,8 +2,9 @@
 
 Product analytics for connected hardware. Drop this component into your ESP-IDF project and get device lifecycle events, custom tracking, and GPIO-triggered events flowing to Honch in minutes.
 
-Events are queued as CBOR blobs and sent to Capture as `application/cbor`
-batches. Large batches may be gzip-compressed when enabled and beneficial.
+Events are queued locally and sent to Capture as compact chunk wire frames.
+The default ESP-IDF integration uses a RAM-first queue for low `honch_track()`
+latency, with NVS used for overflow and dead-letter handling.
 
 ## Requirements
 
@@ -25,7 +26,9 @@ idf.py add-dependency "honch-io/honch^0.1.0"
 git submodule add https://github.com/honch-io/honch.git components/honch
 ```
 
-Or copy `ports/esp-idf/honch` into your project's `components/honch` folder.
+The ESP-IDF component package uses the repository root so the shared `core/`
+sources are included. If vendoring manually, copy or submodule the whole SDK
+repository as `components/honch`.
 
 ## Minimal init code
 
@@ -84,7 +87,7 @@ idf.py flash monitor
 - `$device_model` — from your config
 - `$firmware_version` — from your config
 - `$sdk_platform` — `"esp-idf"`
-- `$sdk_version` — `"0.1.0"`
+- `$sdk_version` — `"0.2.0"`
 - `$environment` — from your config (defaults to `"production"`)
 - `$session_id` — only when a session is active
 - `$battery_level` — only if you provide a `battery_callback`
@@ -107,16 +110,37 @@ idf.py flash monitor
 | `device_model`           | Yes      | —              | Hardware model identifier                  |
 | `firmware_version`       | Yes      | —              | Current firmware version string            |
 | `environment`            | No       | `"production"` | Environment tag                            |
-| `event_buffer`           | Yes      | —              | Caller-owned buffer for CBOR queue staging |
+| `event_buffer`           | Yes      | —              | Caller-owned buffer for queue staging      |
 | `event_buffer_size`      | Yes      | —              | Size of the buffer (recommend >= 8192)     |
 | `flush_interval_seconds` | No       | 60             | How often to flush events                  |
 | `flush_event_threshold`  | No       | 30             | Flush when this many events are queued     |
 | `battery_callback`       | No       | NULL           | Function returning 0-100 or -1             |
 | `battery_low_threshold`  | No       | 15             | Battery level that triggers `$battery_low` |
 
-**Kconfig options** (set via `idf.py menuconfig`):
-- `CONFIG_HONCH_ENABLE_GZIP` — gzip large HTTP CBOR batches when beneficial (default enabled)
-- `CONFIG_HONCH_GZIP_MIN_BYTES` — minimum CBOR payload size before gzip is attempted (default 1024)
+Background flush is enabled by default. The SDK flushes after
+`flush_interval_seconds` and also wakes the flush worker when the queue reaches
+`flush_event_threshold`.
+
+Flush sends compact chunk wire frames to `POST /capture` with
+`Content-Type: application/vnd.honch.chunk`, `X-Honch-Project-Key`, and
+`X-Honch-Stream-Id`. Capture also accepts the same format on `/e` and
+`/chunks`.
+
+## Queue storage policy
+
+The public `honch_init()` path is optimized for device hot paths: new events are
+queued into the caller-provided RAM buffer first, then flushed in compact batches.
+This keeps tracking calls fast and avoids NVS writes for every event.
+
+Tradeoff: events still in RAM can be lost on reset or power loss. NVS remains in
+the storage adapter for overflow and dead-letter handling, and any NVS-backed
+events already present at boot are drained before the SDK returns to RAM-only
+operation.
+
+If your product needs stricter reboot durability, the ESP-IDF storage adapter can
+be configured as an NVS-only queue by skipping the RAM queue setup and using the
+NVS queue operations directly. That mode is slower because each queued event is
+written to flash, but it forces queued events through persistent storage.
 
 ## Troubleshooting
 
@@ -130,7 +154,11 @@ idf.py flash monitor
 **Events queuing but never sending?**
 - Verify Wi-Fi is connected (look for "Got IP" in logs)
 - The SDK waits for an IP address before attempting any flushes
-- Capture must support the CBOR ingest contract for `POST /batch`
+- Capture must support `POST /capture` with `Content-Type:
+  application/vnd.honch.chunk`
+- With the default RAM-first queue, unsent events may be lost across reset or
+  power loss. Use an NVS-only storage integration when reboot durability matters
+  more than enqueue latency.
 
 **NVS errors at init?**
 - Make sure you call `nvs_flash_init()` before `honch_init()`

@@ -3,11 +3,13 @@ name: MicroPython SDK Tests
 on:
   push:
     paths:
+      - 'core/**'
       - 'ports/micropython/**'
       - 'spec/**'
       - '.github/workflows/micropython.yml'
   pull_request:
     paths:
+      - 'core/**'
       - 'ports/micropython/**'
       - 'spec/**'
       - '.github/workflows/micropython.yml'

@@ -13,105 +13,61 @@
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
-#include "miniz.h"
 
 static const char *TAG = "honch";
 
-#ifdef CONFIG_HONCH_ENABLE_GZIP
-static bool honch_esp_gzip_payload(
-    const uint8_t *body,
-    size_t body_size,
-    uint8_t **out,
-    size_t *out_size)
+static char *honch_esp_endpoint_url(const char *endpoint_url, const char *suffix)
 {
-    static const uint8_t header[10] = {
-        0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03
-    };
-
-    size_t deflated_size = 0u;
-    uint8_t *deflated = (uint8_t *)tdefl_compress_mem_to_heap(
-        body,
-        body_size,
-        &deflated_size,
-        TDEFL_DEFAULT_MAX_PROBES);
-    if (deflated == NULL) {
-        return false;
+    size_t endpoint_length = strlen(endpoint_url);
+    while (endpoint_length > 0u && endpoint_url[endpoint_length - 1u] == '/') {
+        endpoint_length--;
+    }
+    size_t suffix_length = strlen(suffix);
+    if (endpoint_length > SIZE_MAX - suffix_length - 1u) {
+        return NULL;
     }
 
-    if (deflated_size > SIZE_MAX - sizeof(header) - 8u) {
-        free(deflated);
-        return false;
+    char *url = (char *)malloc(endpoint_length + suffix_length + 1u);
+    if (url == NULL) {
+        return NULL;
     }
 
-    size_t compressed_size = sizeof(header) + deflated_size + 8u;
-    uint8_t *compressed = (uint8_t *)malloc(compressed_size);
-    if (compressed == NULL) {
-        free(deflated);
-        return false;
-    }
-
-    memcpy(compressed, header, sizeof(header));
-    memcpy(compressed + sizeof(header), deflated, deflated_size);
-    free(deflated);
-
-    uint32_t crc = mz_crc32(MZ_CRC32_INIT, body, body_size);
-    uint8_t *trailer = compressed + sizeof(header) + deflated_size;
-    trailer[0] = (uint8_t)(crc & 0xffu);
-    trailer[1] = (uint8_t)((crc >> 8u) & 0xffu);
-    trailer[2] = (uint8_t)((crc >> 16u) & 0xffu);
-    trailer[3] = (uint8_t)((crc >> 24u) & 0xffu);
-    trailer[4] = (uint8_t)(body_size & 0xffu);
-    trailer[5] = (uint8_t)((body_size >> 8u) & 0xffu);
-    trailer[6] = (uint8_t)((body_size >> 16u) & 0xffu);
-    trailer[7] = (uint8_t)((body_size >> 24u) & 0xffu);
-
-    if (compressed_size >= body_size) {
-        free(compressed);
-        return false;
-    }
-
-    *out = compressed;
-    *out_size = compressed_size;
-    return true;
+    memcpy(url, endpoint_url, endpoint_length);
+    memcpy(url + endpoint_length, suffix, suffix_length);
+    url[endpoint_length + suffix_length] = '\0';
+    return url;
 }
-#endif
 
-static honch_status_t honch_esp_post_batch(
+static char *honch_esp_chunk_url(const char *endpoint_url)
+{
+    return honch_esp_endpoint_url(endpoint_url, "/capture");
+}
+
+static honch_status_t honch_esp_post_chunk(
     void *ctx,
     const char *endpoint_url,
     const char *api_key,
+    const char *stream_id,
     const uint8_t *body,
     size_t body_size,
-    const char *content_encoding,
     honch_transport_result_t *result)
 {
     (void)ctx;
-    (void)api_key;
-    if (endpoint_url == NULL || body == NULL || body_size == 0u || result == NULL) {
+    if (endpoint_url == NULL || api_key == NULL || body == NULL || body_size == 0u || result == NULL) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    if (body_size > (size_t)INT_MAX) {
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
 
     *result = HONCH_TRANSPORT_RETRY;
-    const uint8_t *post_body = body;
-    size_t post_body_size = body_size;
-    const char *post_encoding = content_encoding;
-    uint8_t *compressed = NULL;
-
-#ifdef CONFIG_HONCH_ENABLE_GZIP
-    if (post_encoding == NULL && body_size >= CONFIG_HONCH_GZIP_MIN_BYTES &&
-        honch_esp_gzip_payload(body, body_size, &compressed, &post_body_size)) {
-        post_body = compressed;
-        post_encoding = "gzip";
-    }
-#endif
-
-    if (post_body_size > (size_t)INT_MAX) {
-        free(compressed);
-        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    char *url = honch_esp_chunk_url(endpoint_url);
+    if (url == NULL) {
+        return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
     }
 
     esp_http_client_config_t config = {
-        .url = endpoint_url,
+        .url = url,
         .method = HTTP_METHOD_POST,
         .timeout_ms = 10000,
         .crt_bundle_attach = esp_crt_bundle_attach,
@@ -119,47 +75,48 @@ static honch_status_t honch_esp_post_batch(
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (client == NULL) {
-        free(compressed);
+        free(url);
         return HONCH_STATUS_ERROR_TRANSPORT;
     }
 
-    esp_err_t err = esp_http_client_set_header(client, "Content-Type", "application/cbor");
-    if (err != ESP_OK) {
-        esp_http_client_cleanup(client);
-        free(compressed);
-        return HONCH_STATUS_ERROR_TRANSPORT;
+    esp_err_t err = esp_http_client_set_header(client, "Content-Type", "application/vnd.honch.chunk");
+    if (err == ESP_OK) {
+        err = esp_http_client_set_header(client, "X-Honch-Project-Key", api_key);
     }
-    if (post_encoding != NULL && strcmp(post_encoding, "gzip") == 0) {
-        err = esp_http_client_set_header(client, "Content-Encoding", "gzip");
-        if (err != ESP_OK) {
-            esp_http_client_cleanup(client);
-            free(compressed);
-            return HONCH_STATUS_ERROR_TRANSPORT;
-        }
+    if (err == ESP_OK && stream_id != NULL && stream_id[0] != '\0') {
+        err = esp_http_client_set_header(client, "X-Honch-Stream-Id", stream_id);
     }
-    err = esp_http_client_set_post_field(client, (const char *)post_body, (int)post_body_size);
-    if (err != ESP_OK) {
-        esp_http_client_cleanup(client);
-        free(compressed);
-        return HONCH_STATUS_ERROR_TRANSPORT;
+    if (err == ESP_OK) {
+        err = esp_http_client_set_post_field(client, (const char *)body, (int)body_size);
+    }
+    if (err == ESP_OK) {
+        ESP_LOGI(
+            TAG,
+            "HONCH_HTTP_PAYLOAD format=chunk bytes=%u url=%s stream_id=%s",
+            (unsigned)body_size,
+            url,
+            stream_id == NULL || stream_id[0] == '\0' ? "<none>" : stream_id);
+        err = esp_http_client_perform(client);
     }
 
-    err = esp_http_client_perform(client);
     int status = err == ESP_OK ? esp_http_client_get_status_code(client) : 0;
     esp_http_client_cleanup(client);
-    free(compressed);
+    free(url);
 
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "HTTP chunk request failed: %s", esp_err_to_name(err));
         *result = HONCH_TRANSPORT_RETRY;
         return HONCH_STATUS_ERROR_TRANSPORT;
     }
-
     if (status == 0) {
         *result = HONCH_TRANSPORT_RETRY;
         return HONCH_STATUS_ERROR_TRANSPORT;
     }
-    if (status >= 200 && status < 300) {
+    if (status == 202) {
+        *result = HONCH_TRANSPORT_CHUNK_STORED;
+        return HONCH_STATUS_OK;
+    }
+    if (status == 204) {
         *result = HONCH_TRANSPORT_ACCEPTED;
         return HONCH_STATUS_OK;
     }
@@ -174,6 +131,10 @@ static honch_status_t honch_esp_post_batch(
     if (status == 408) {
         *result = HONCH_TRANSPORT_RETRY;
         return HONCH_STATUS_ERROR_TIMEOUT;
+    }
+    if (status == 409) {
+        *result = HONCH_TRANSPORT_RETRY;
+        return HONCH_STATUS_ERROR_TRANSPORT;
     }
     if (status >= 400 && status < 500) {
         *result = HONCH_TRANSPORT_REJECTED;
@@ -192,7 +153,7 @@ honch_status_t honch_esp_transport_ops_init(honch_transport_ops_t *ops, honch_es
 
     *ctx = (honch_esp_transport_t) {0};
     *ops = (honch_transport_ops_t) {
-        .post_batch = honch_esp_post_batch,
+        .post_chunk = honch_esp_post_chunk,
         .ctx = ctx
     };
     return HONCH_STATUS_OK;

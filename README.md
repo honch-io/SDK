@@ -8,17 +8,19 @@ SDK contract plus platform SDKs for embedded and connected-device targets.
 | Platform | Status | Path |
 |----------|--------|------|
 | **ESP-IDF** | v0.1.0 | [`ports/esp-idf/`](ports/esp-idf/) |
-| **C/POSIX** | v0.1.0 | [`ports/posix/`](ports/posix/) |
-| **MicroPython** | v0.1.0 | [`ports/micropython/`](ports/micropython/) |
+| **C/POSIX** | v0.2.0 core-derived | [`ports/posix/`](ports/posix/) |
+| **MicroPython** | v0.2.0 C-core wrapper | [`ports/micropython/`](ports/micropython/) |
+| **React Native Relay** | In progress | [`ports/react-native-relay/`](ports/react-native-relay/) |
 
 ## Repository layout
 
-- [`core/`](core/) — canonical portable C SDK behavior: event semantics, CBOR,
-  identity, lifecycle, queue policy, retry classification, and packetization.
+- [`core/`](core/) — canonical portable C SDK behavior: event semantics,
+  compact wire encoding, identity, lifecycle, queue policy, retry
+  classification, and packetization.
 - [`ports/posix/`](ports/posix/) — C/POSIX SDK and local development port for
   the canonical core.
-- [`ports/esp-idf/`](ports/esp-idf/) — ESP-IDF component, example app, platform
-  adapters, and ESP-focused tests.
+- [`ports/esp-idf/`](ports/esp-idf/) — ESP-IDF component, example app,
+  RAM-first/NVS-configurable storage adapter, and ESP-focused tests.
 - [`ports/micropython/`](ports/micropython/) — MicroPython SDK validated against
   the same wire-format and lifecycle contract.
 - [`ports/react-native-relay/`](ports/react-native-relay/) — relay package for
@@ -62,6 +64,13 @@ Run the ESP-IDF migration guard from the repository root:
 python3 ports/esp-idf/tests/test_cbor_migration.py
 ```
 
+### Compact wire fixtures
+
+```bash
+python3 tools/generate_wire_v2_fixtures.py
+python3 -m unittest spec.conformance.test_wire_v2_fixtures
+```
+
 ### MicroPython
 
 ```bash
@@ -73,16 +82,18 @@ PYTHONPATH=ports/micropython python3 -m unittest discover \
 
 The [`spec/`](spec/) directory defines the cross-platform contract that all SDKs implement:
 
-- [Wire Format](spec/wire-format.md) — CBOR batch endpoint, payload shape, retry
+- [Wire Format](spec/wire-format.md) — compact binary chunk endpoint,
+  frame format, event message grammar, retry behavior, and conformance fixtures
+- [Compact Wire Format](spec/wire-format-v2.md) — implementation draft for the
+  current compact binary layout
 - [Auto Properties](spec/auto-properties.md) — required properties, lifecycle events
-- [Relay Envelope](spec/relay-envelope.md) — (future) gateway forwarding format
+- [Relay Envelope](spec/relay-envelope.md) — gateway forwarding and relay metadata
 - [Conformance Fixtures](spec/conformance/) — shared test data for cross-SDK validation
-- [Canonical C Core ADR](docs/adr/0001-canonical-c-core.md) — SDK architecture direction
 
 ## Adding a new SDK
 
 1. Create a directory under `ports/` (e.g. `ports/ios/`, `ports/android/`)
-2. Implement the wire format from `spec/wire-format.md`
+2. Implement the compact wire format from `spec/wire-format.md`
 3. Stamp all properties from `spec/auto-properties.md`
 4. Validate against the conformance fixtures in `spec/conformance/`
 5. Add a CI workflow in `.github/workflows/<platform>.yml`

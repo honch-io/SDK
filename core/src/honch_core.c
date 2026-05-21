@@ -268,6 +268,7 @@ static honch_status_t honch_cbor_patch_map_header(honch_buffer_t *buffer, size_t
 
 static uint64_t honch_client_now_millis(honch_client_t *client);
 static honch_status_t honch_client_random_hex(honch_client_t *client, char out[33]);
+static honch_status_t honch_client_init_wire_v2_identity(honch_client_t *client);
 static honch_status_t honch_client_queue_push(honch_client_t *client, const unsigned char *event, size_t event_size);
 static honch_status_t honch_client_queue_depth(honch_client_t *client, size_t *depth);
 static honch_status_t honch_client_queue_clear(honch_client_t *client);
@@ -383,6 +384,38 @@ static honch_status_t honch_client_random_hex(honch_client_t *client, char out[3
         out[(i * 2u) + 1u] = hex[bytes[i] & 0x0fu];
     }
     out[32] = '\0';
+    return HONCH_OK;
+}
+
+static uint32_t honch_hex_u32_prefix(const char hex[33])
+{
+    uint32_t value = 0u;
+    for (size_t i = 0u; i < 8u; i++) {
+        char c = hex[i];
+        uint32_t nibble = 0u;
+        if (c >= '0' && c <= '9') {
+            nibble = (uint32_t)(c - '0');
+        } else if (c >= 'a' && c <= 'f') {
+            nibble = (uint32_t)(c - 'a' + 10);
+        } else if (c >= 'A' && c <= 'F') {
+            nibble = (uint32_t)(c - 'A' + 10);
+        }
+        value = (value << 4u) | nibble;
+    }
+    return value;
+}
+
+static honch_status_t honch_client_init_wire_v2_identity(honch_client_t *client)
+{
+    char random[33];
+    honch_status_t status = honch_client_random_hex(client, random);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    memcpy(client->wire_v2_stream_id, random, 8u);
+    client->wire_v2_stream_id[8] = '\0';
+    client->wire_v2_message_id_seed = honch_hex_u32_prefix(random);
     return HONCH_OK;
 }
 
@@ -838,10 +871,6 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     if (next->flush_retry_max_ms < next->flush_retry_initial_ms) {
         next->flush_retry_max_ms = next->flush_retry_initial_ms;
     }
-    next->gzip_enabled = config->disable_gzip == 0;
-    next->gzip_min_bytes = config->gzip_min_bytes == 0u ?
-        HONCH_DEFAULT_GZIP_MIN_BYTES :
-        config->gzip_min_bytes;
     next->durability_mode = config->durability_mode;
     next->scheduler_enabled = config->disable_background_flush == 0 &&
         (next->flush_interval_seconds > 0u || next->flush_event_threshold > 0u);
@@ -863,6 +892,9 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     }
     if (status == HONCH_OK) {
         status = honch_state_prepare(next, config);
+    }
+    if (status == HONCH_OK) {
+        status = honch_client_init_wire_v2_identity(next);
     }
     if (status == HONCH_OK) {
         status = honch_client_queue_depth(next, &next->queued_event_count);
