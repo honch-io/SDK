@@ -1,6 +1,8 @@
 # Relay Chunks
 
-Relay chunks let a device without internet connectivity stream queued Honch data to a gateway, companion app, or hub. The gateway forwards data to Honch capture after durable receipt.
+Relay chunks let a device without internet connectivity stream queued Honch data
+to a gateway, companion app, or hub. The gateway forwards data to Honch capture
+after durable receipt.
 
 ## Frame Format
 
@@ -29,10 +31,25 @@ Relay chunks let a device without internet connectivity stream queued Honch data
 - Reject nonzero reserved bytes.
 - Reassemble by source device ID and sequence.
 - Accept duplicate chunks when offset and payload bytes match already stored bytes.
-- Acknowledge only after the complete message is durably stored or forwarded successfully.
+- Acknowledge only after the complete message is durably stored or forwarded
+  successfully.
+- React Native relay v0.1 treats BLE ACK as durable mobile receipt. Capture
+  upload success is tracked separately by the relay queue and retry scheduler.
 
 ## Initial Sources
 
 - `1`: events
 
 Additional source types require a spec update and conformance fixture.
+
+## React Native Relay v0.1 ACK Policy
+
+The mobile relay acknowledges a firmware message after every chunk for that
+message has passed frame validation and the reassembled CBOR body is durably
+stored. The embedded sender may then consume its local queue entry.
+
+If the later capture upload fails with a retryable response, the mobile relay
+keeps the complete message pending and schedules retry/backoff without asking
+the embedded sender to retransmit. If durable storage fails, the mobile relay
+must not acknowledge the message; the sender should abort packetization and
+retry from offset `0` later.
