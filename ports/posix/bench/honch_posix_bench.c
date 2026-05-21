@@ -17,8 +17,6 @@ typedef struct bench_transport {
     long status;
     size_t calls;
     size_t bytes;
-    size_t gzip_calls;
-    size_t identity_calls;
     size_t max_body_bytes;
 } bench_transport_t;
 
@@ -175,6 +173,7 @@ static queue_stats_t collect_queue_stats(const char *queue_dir)
 static honch_status_t fake_transport(
     const char *url,
     const char *api_key,
+    const char *stream_id,
     const unsigned char *body,
     size_t body_size,
     const char *content_encoding,
@@ -183,16 +182,13 @@ static honch_status_t fake_transport(
 {
     (void)url;
     (void)api_key;
+    (void)stream_id;
+    (void)content_encoding;
     bench_transport_t *transport = (bench_transport_t *)userdata;
     transport->calls++;
     transport->bytes += body_size;
     if (body_size > transport->max_body_bytes) {
         transport->max_body_bytes = body_size;
-    }
-    if (content_encoding != NULL && strcmp(content_encoding, "gzip") == 0) {
-        transport->gzip_calls++;
-    } else {
-        transport->identity_calls++;
     }
     if (body == NULL && body_size != 0u) {
         return HONCH_ERROR_TRANSPORT;
@@ -219,8 +215,6 @@ static honch_config_t bench_config(const char *queue_dir)
         .flush_event_threshold = 30u,
         .flush_retry_initial_ms = 1000u,
         .flush_retry_max_ms = 300000u,
-        .disable_gzip = 1,
-        .gzip_min_bytes = 1024u,
         .disable_background_flush = 1,
         .battery_callback = NULL,
         .battery_low_threshold = 15
@@ -266,13 +260,13 @@ static void result_from_samples(
 
 static void print_header(void)
 {
-    printf("name,phase,iterations,events_per_iteration,total_us,mean_us,min_us,p50_us,p95_us,p99_us,max_us,peak_rss_kb,sdk_current_bytes,sdk_peak_bytes,sdk_total_allocated_bytes,sdk_total_freed_bytes,sdk_malloc_calls,sdk_calloc_calls,sdk_realloc_calls,sdk_free_calls,sdk_failed_allocations,sdk_live_allocations,sdk_peak_live_allocations,transport_calls,transport_bytes,transport_max_body_bytes,transport_identity_calls,transport_gzip_calls,queue_pending_files,queue_pending_bytes,queue_dead_files,queue_dead_bytes,status\n");
+    printf("name,phase,iterations,events_per_iteration,total_us,mean_us,min_us,p50_us,p95_us,p99_us,max_us,peak_rss_kb,sdk_current_bytes,sdk_peak_bytes,sdk_total_allocated_bytes,sdk_total_freed_bytes,sdk_malloc_calls,sdk_calloc_calls,sdk_realloc_calls,sdk_free_calls,sdk_failed_allocations,sdk_live_allocations,sdk_peak_live_allocations,transport_calls,transport_bytes,transport_max_body_bytes,queue_pending_files,queue_pending_bytes,queue_dead_files,queue_dead_bytes,status\n");
 }
 
 static void print_result(const bench_result_t *result)
 {
     double mean = result->iterations == 0u ? 0.0 : (double)result->total_us / (double)result->iterations;
-    printf("%s,%s,%zu,%zu,%llu,%.2f,%llu,%llu,%llu,%llu,%llu,%ld,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%s\n",
+    printf("%s,%s,%zu,%zu,%llu,%.2f,%llu,%llu,%llu,%llu,%llu,%ld,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu,%s\n",
            result->name,
            result->phase,
            result->iterations,
@@ -299,8 +293,6 @@ static void print_result(const bench_result_t *result)
            result->transport.calls,
            result->transport.bytes,
            result->transport.max_body_bytes,
-           result->transport.identity_calls,
-           result->transport.gzip_calls,
            result->queue.pending_files,
            result->queue.pending_bytes,
            result->queue.dead_files,
@@ -393,7 +385,7 @@ static int run_track_scenario(const char *name, const char *properties, size_t i
     return status == HONCH_OK ? 0 : 1;
 }
 
-static int run_flush_scenario(const char *name, size_t events, int gzip_enabled, long http_status)
+static int run_flush_scenario(const char *name, size_t events, long http_status)
 {
     unsigned long long sample = 0u;
     char queue_dir[PATH_MAX];
@@ -406,8 +398,6 @@ static int run_flush_scenario(const char *name, size_t events, int gzip_enabled,
     honch_test_set_transport(fake_transport, &transport);
 
     honch_config_t config = bench_config(queue_dir);
-    config.disable_gzip = gzip_enabled ? 0 : 1;
-    config.gzip_min_bytes = gzip_enabled ? 0u : 1024u;
 
     honch_client_t *client = NULL;
     honch_status_t status = honch_init(&client, &config);
@@ -430,7 +420,6 @@ static int run_flush_scenario(const char *name, size_t events, int gzip_enabled,
     print_result(&result);
 
     if (client != NULL) {
-        config.disable_gzip = 1;
         honch_test_set_transport(fake_transport, &(bench_transport_t){.status = 202L});
         (void)honch_shutdown(client);
     }
@@ -458,22 +447,19 @@ int main(void)
     if (run_track_scenario("track_1kb_properties", "{\"blob\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}", 500u) != 0) {
         return 1;
     }
-    if (run_flush_scenario("flush_1_raw_success", 1u, 0, 202L) != 0) {
+    if (run_flush_scenario("flush_1_success", 1u, 202L) != 0) {
         return 1;
     }
-    if (run_flush_scenario("flush_50_raw_success", 50u, 0, 202L) != 0) {
+    if (run_flush_scenario("flush_50_success", 50u, 202L) != 0) {
         return 1;
     }
-    if (run_flush_scenario("flush_200_raw_success", 200u, 0, 202L) != 0) {
+    if (run_flush_scenario("flush_200_success", 200u, 202L) != 0) {
         return 1;
     }
-    if (run_flush_scenario("flush_50_gzip_success", 50u, 1, 202L) != 0) {
+    if (run_flush_scenario("flush_50_retry_500", 50u, 500L) != 0) {
         return 1;
     }
-    if (run_flush_scenario("flush_50_retry_500", 50u, 0, 500L) != 0) {
-        return 1;
-    }
-    if (run_flush_scenario("flush_50_rejected_400", 50u, 0, 400L) != 0) {
+    if (run_flush_scenario("flush_50_rejected_400", 50u, 400L) != 0) {
         return 1;
     }
 

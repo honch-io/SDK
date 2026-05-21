@@ -1,86 +1,60 @@
 # Wire Format
 
-All Honch SDKs send events to the capture endpoint using the CBOR ingest contract.
+Status: Draft for the compact binary upload contract.
+
+Honch SDKs upload events with compact chunk frames. This is the active SDK and
+gateway ingest path.
 
 ## Endpoint
 
-```
-POST <host>/batch
-Content-Type: application/cbor
-```
-
-The canonical payload is a CBOR map. HTTP transports may gzip the CBOR body for larger batches:
-
 ```text
-Content-Encoding: gzip
+POST /capture
+Content-Type: application/vnd.honch.chunk
+X-Honch-Project-Key: <project_api_key>
+X-Honch-Stream-Id: <stream_id>         # required for multi-chunk HTTP uploads
+X-Honch-Relay-Id: <gateway_id>         # optional
+X-Honch-Relay-SDK-Platform: <platform> # optional
+X-Honch-Relay-SDK-Version: <version>   # optional
 ```
 
-SDKs should use raw CBOR for small batches and fall back to raw CBOR when gzip is disabled, unavailable, fails, or does not reduce payload size. Gzip is a transport optimization over CBOR; it is not a JSON compatibility mode.
+`/e` and `/chunks` are capture aliases for the same ingest path.
 
-## Batch Envelope
+The request body contains exactly one chunk frame. `Content-Encoding` is not
+allowed for chunk frames. Compression can be added later as a frame-level
+feature, but the current upload path is one deterministic binary format.
 
-```text
-{
-  "token": "<api_key>",
-  "batch": [
-    {
-      "event": "<event_name>",
-      "distinct_id": "<distinct_id>",
-      "timestamp": 1770000000000,
-      "properties": { ... }
-    }
-  ]
-}
-```
+The project key is sent as a transport credential and is not encoded in the
+device message body. This keeps the compact device message reusable across
+direct and relay transports without repeating a long token inside every upload.
 
-### Fields
+## Upload Model
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `token` | string | Yes | Project API key |
-| `batch` | array | Yes | Array of event objects (1-50 per request) |
+Every upload uses the chunk frame, including direct Wi-Fi HTTP. A direct HTTP
+upload that fits in one request sends a single final frame. Transports with
+smaller MTUs split the same compact message into multiple frames.
 
-### Event Object
+Capture must accept:
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `event` | string | Yes | Event name (e.g. `"button_pressed"`, `"$device_boot"`) |
-| `distinct_id` | string | Yes | User or device identifier |
-| `timestamp` | integer | Yes | Epoch milliseconds, set when `track()` is called |
-| `properties` | map | Yes | All event properties (auto-stamped + user-supplied) |
+- a single complete frame;
+- an init frame followed by continuation frames for the same message;
+- duplicate frames whose payload bytes match already stored bytes.
 
-## CBOR Profile
+Capture must reject:
 
-- Use definite-length maps and arrays.
-- Use text keys, not compact integer keys.
-- Encode timestamps as signed epoch milliseconds.
-- Encode properties using JSON-compatible values: text, integer, float, boolean, null, arrays, and maps.
-- Do not use CBOR tags or byte-string property values for v1.
+- unsupported protocol versions;
+- unsupported source types;
+- nonzero reserved bits;
+- offset mismatches;
+- message ID collisions with different bytes;
+- CRC failures;
+- messages that exceed configured limits;
+- frames for expired or unknown partial messages.
 
-## Compression Policy
+## Full Encoding
 
-- Default HTTP behavior: gzip CBOR batches at or above 1024 bytes when gzip support is available.
-- Send raw CBOR below the threshold.
-- Send raw CBOR if compression fails or the compressed body is not smaller.
-- Capture accepts both raw CBOR and gzipped CBOR.
+The authoritative binary layout remains in [wire-format-v2.md](wire-format-v2.md)
+while implementation is in flight. That file describes the current compact
+chunk frame, compact message, string table, context, event, value, response,
+capture, SDK, relay, and fixture requirements.
 
-## Response Codes
-
-| Code | Meaning | SDK Behavior |
-|------|---------|-------------|
-| 2xx | Success | Remove events from queue |
-| 401 | Bad API key | Drop batch, log error, do not retry |
-| 5xx | Server error | Retain events, retry with exponential backoff |
-| Network error | Connection failed | Retain events, retry with exponential backoff |
-
-## Retry Strategy
-
-- Initial backoff: 1 second
-- Max backoff: 5 minutes
-- Jitter: +/-25% on each backoff interval
-- On success: reset backoff to initial value
-
-## Batch Size Limits
-
-- Maximum 50 events per batch.
-- SDKs should drain the queue in batches, sending multiple requests if needed.
+No active SDK or capture path should expose alternate upload contracts.

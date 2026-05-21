@@ -112,8 +112,6 @@ def _config_to_dict(config):
         "flush_event_threshold": config.flush_event_threshold,
         "flush_retry_initial_ms": config.flush_retry_initial_ms,
         "flush_retry_max_ms": config.flush_retry_max_ms,
-        "disable_gzip": config.disable_gzip,
-        "gzip_min_bytes": config.gzip_min_bytes,
         "disable_background_flush": config.disable_background_flush,
         "battery_low_threshold": config.battery_low_threshold,
     }

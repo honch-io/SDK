@@ -89,9 +89,7 @@ static mp_obj_t honch_client_make_new(
         status = honch_micropython_transport_ops_init(
             &transport_ops,
             &self->transport_ctx,
-            honch_mp_map_get_uint(args[0], MP_QSTR_transport_timeout_ms, 0),
-            honch_mp_map_get_bool(args[0], MP_QSTR_disable_gzip, 0),
-            honch_mp_map_get_size(args[0], MP_QSTR_gzip_min_bytes, 0));
+            honch_mp_map_get_uint(args[0], MP_QSTR_transport_timeout_ms, 0));
         HONCH_MP_DEBUG_INIT("transport_ops_done");
     }
     if (status != HONCH_STATUS_OK) {
@@ -116,8 +114,6 @@ static mp_obj_t honch_client_make_new(
         .flush_event_threshold = honch_mp_map_get_size(args[0], MP_QSTR_flush_event_threshold, 0),
         .flush_retry_initial_ms = honch_mp_map_get_uint(args[0], MP_QSTR_flush_retry_initial_ms, 0),
         .flush_retry_max_ms = honch_mp_map_get_uint(args[0], MP_QSTR_flush_retry_max_ms, 0),
-        .disable_gzip = honch_mp_map_get_bool(args[0], MP_QSTR_disable_gzip, 0),
-        .gzip_min_bytes = honch_mp_map_get_size(args[0], MP_QSTR_gzip_min_bytes, 0),
         .disable_background_flush = 1,
         .battery_callback = NULL,
         .battery_low_threshold = honch_mp_map_get_uint(args[0], MP_QSTR_battery_low_threshold, 0),

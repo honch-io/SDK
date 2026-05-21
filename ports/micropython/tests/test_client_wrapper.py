@@ -89,6 +89,7 @@ class ClientWrapperTests(unittest.TestCase):
         self.assertEqual(client.get_device_id(), "device-from-core")
         self.assertEqual(client._core.config["api_key"], "key")
         self.assertEqual(client._core.config["batch_size"], 3)
+        self.assertNotIn("enable_wire_v2", client._core.config)
 
         client.track("pressed", {"button": "power"})
         client.identify("user-1", {"plan": "beta"})
@@ -131,6 +132,20 @@ class ClientWrapperTests(unittest.TestCase):
 
         with self.assertRaises(honch.TransportError):
             client.flush()
+
+    def test_client_does_not_expose_legacy_wire_format_opt_in(self):
+        honch = importlib.import_module("honch")
+
+        client = honch.Honch(
+            api_key="key",
+            endpoint_url="http://collector.local",
+            device_model="model",
+            firmware_version="1.0",
+            queue_directory="/honch",
+        )
+
+        self.assertFalse(hasattr(client.config, "enable_wire_v2"))
+        self.assertNotIn("enable_wire_v2", client._core.config)
 
 
 if __name__ == "__main__":

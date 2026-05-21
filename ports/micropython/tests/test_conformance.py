@@ -9,7 +9,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 
 CANONICAL_FIXTURES = (
-    "spec/conformance/envelopes/basic_batch.json",
     "spec/conformance/events/basic-track.json",
     "spec/conformance/events/auto_stamp_wins_conflict.json",
     "spec/conformance/events/boot_event.json",
@@ -190,8 +189,11 @@ class ConformanceFixtureTests(unittest.TestCase):
                 if status == 0:
                     self.assertIn("http_status == 0", transport)
                     self.assertIn("HONCH_TRANSPORT_RETRY", transport)
+                elif case["result"] == "chunk_stored":
+                    self.assertIn("http_status == 202", transport)
+                    self.assertIn("HONCH_TRANSPORT_CHUNK_STORED", transport)
                 elif case["result"] == "accepted":
-                    self.assertIn("http_status >= 200 && http_status < 300", transport)
+                    self.assertIn("http_status == 204", transport)
                     self.assertIn("HONCH_TRANSPORT_ACCEPTED", transport)
                 elif case["result"] == "auth_error":
                     self.assertIn("http_status == 401", transport)
@@ -205,14 +207,14 @@ class ConformanceFixtureTests(unittest.TestCase):
                         self.assertIn(f"http_status == {status}", transport)
                     self.assertIn("HONCH_TRANSPORT_RETRY", transport)
 
-    def test_basic_batch_fixture_is_covered_by_the_c_core_user_module(self):
-        fixture = load_fixture("spec/conformance/envelopes/basic_batch.json")
+    def test_compact_wire_fixture_is_covered_by_the_c_core_user_module(self):
+        fixture = load_fixture("spec/conformance/wire-v2/single-required-context.json")
         module = (ROOT / "ports/micropython/usermod/honch/modhonch_core.c").read_text()
         cmake = (ROOT / "ports/micropython/usermod/honch/micropython.cmake").read_text()
 
-        self.assertEqual(fixture["expected"]["token"], "test_key_123")
+        self.assertEqual(fixture["expected_capture_response_code"], 204)
         self.assertIn("honch_core_flush(self->client)", module)
-        self.assertIn("../../../../core/src/honch_encoder.c", cmake)
+        self.assertIn("../../../../core/src/honch_wire_v2.c", cmake)
         self.assertIn("../../../../core/src/honch_cbor.c", cmake)
 
     def _client_from_fixture_config(self, config):

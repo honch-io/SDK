@@ -3,10 +3,12 @@ name: ESP-IDF Build
 on:
   push:
     paths:
+      - 'core/**'
       - 'ports/esp-idf/**'
       - 'spec/**'
   pull_request:
     paths:
+      - 'core/**'
       - 'ports/esp-idf/**'
       - 'spec/**'
 

@@ -1,8 +1,8 @@
 {
   "name": "http response policy",
   "cases": [
-    { "status": 200, "result": "accepted", "queue": "consume" },
-    { "status": 202, "result": "accepted", "queue": "consume" },
+    { "status": 202, "result": "chunk_stored", "queue": "preserve" },
+    { "status": 204, "result": "accepted", "queue": "consume" },
     { "status": 401, "result": "auth_error", "queue": "drop_or_dead_letter" },
     { "status": 400, "result": "rejected", "queue": "drop_or_dead_letter" },
     { "status": 404, "result": "rejected", "queue": "drop_or_dead_letter" },

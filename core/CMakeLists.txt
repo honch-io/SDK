@@ -1,12 +1,12 @@
 add_library(honch_core
     src/honch_core.c
     src/honch_cbor.c
-    src/honch_encoder.c
     src/honch_json.c
     src/honch_lifecycle.c
     src/honch_packetizer.c
     src/honch_queue_policy.c
     src/honch_support.c
+    src/honch_wire_v2.c
 )
 
 target_include_directories(honch_core
@@ -55,6 +55,17 @@ if(HONCH_BUILD_TESTS)
 
     add_test(NAME honch_core_packetizer_tests COMMAND honch_core_packetizer_tests)
 
+    add_executable(honch_core_wire_v2_tests
+        test/test_wire_v2.c
+    )
+
+    target_link_libraries(honch_core_wire_v2_tests PRIVATE honch_core)
+    target_compile_options(honch_core_wire_v2_tests PRIVATE
+        $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
+    )
+
+    add_test(NAME honch_core_wire_v2_tests COMMAND honch_core_wire_v2_tests)
+
     add_executable(honch_core_retry_tests
         test/test_retry.c
         src/honch_cbor.c
@@ -62,6 +73,7 @@ if(HONCH_BUILD_TESTS)
         src/honch_lifecycle.c
         src/honch_queue_policy.c
         src/honch_support.c
+        src/honch_wire_v2.c
     )
 
     target_include_directories(honch_core_retry_tests PRIVATE

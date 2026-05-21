@@ -18,7 +18,6 @@ endif()
 
 find_package(CURL REQUIRED)
 find_package(Threads REQUIRED)
-find_package(ZLIB QUIET)
 
 if(NOT TARGET honch_core)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../core ${CMAKE_CURRENT_BINARY_DIR}/core)
@@ -59,11 +58,6 @@ target_link_libraries(honch_posix
         CURL::libcurl
         Threads::Threads
 )
-
-if(ZLIB_FOUND)
-    target_link_libraries(honch_posix PRIVATE ZLIB::ZLIB)
-    target_compile_definitions(honch_posix PRIVATE HONCH_HAVE_ZLIB)
-endif()
 
 target_compile_definitions(honch_posix PRIVATE
     _POSIX_C_SOURCE=200809L

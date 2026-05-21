@@ -3,7 +3,8 @@
 MicroPython wrapper for the canonical Honch C core. The Python package keeps the
 small `honch.Honch` API, while SDK behavior comes from the same `core/` sources
 used by the ESP-IDF and POSIX ports: event semantics, CBOR, identity,
-lifecycle, queue policy, retry classification, and packetization.
+lifecycle, compact wire encoding, queue policy, retry classification, and
+packetization.
 
 ## Status
 
@@ -78,8 +79,6 @@ Optional:
 - `flush_event_threshold`
 - `flush_retry_initial_ms`
 - `flush_retry_max_ms`
-- `disable_gzip`
-- `gzip_min_bytes`
 - `disable_background_flush`
 - `battery_low_threshold`
 
@@ -123,9 +122,10 @@ state/
   firmware_version
 ```
 
-Flush sends CBOR batches to `POST <endpoint_url>/batch` with
-`Content-Type: application/cbor`. Retry and dead-letter behavior is inherited
-from the canonical C core.
+Flush sends compact chunk wire frames to `POST <endpoint_url>/capture` with
+`Content-Type: application/vnd.honch.chunk`, `X-Honch-Project-Key`, and
+`X-Honch-Stream-Id`. Retry and dead-letter behavior is inherited from the
+canonical C core. Capture also accepts the same format on `/e` and `/chunks`.
 
 ## Tests
 

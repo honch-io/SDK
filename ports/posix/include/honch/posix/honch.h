@@ -25,5 +25,11 @@ honch_status_t honch_posix_storage_ops_init(
     honch_posix_storage_t *ctx,
     const char *queue_directory);
 honch_status_t honch_posix_transport_ops_init(honch_transport_ops_t *ops, honch_posix_transport_t *ctx);
+honch_status_t honch_posix_transport_post_chunk(
+    honch_client_t *client,
+    const char *stream_id,
+    const unsigned char *payload,
+    size_t payload_size,
+    honch_transport_result_t *result);
 
 #endif

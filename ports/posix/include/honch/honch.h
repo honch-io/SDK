@@ -37,8 +37,6 @@ typedef struct honch_config {
     size_t flush_event_threshold;
     unsigned int flush_retry_initial_ms;
     unsigned int flush_retry_max_ms;
-    int disable_gzip;
-    size_t gzip_min_bytes;
     int disable_background_flush;
     int (*battery_callback)(void);
     int battery_low_threshold;
@@ -65,6 +63,7 @@ const char *honch_status_string(honch_status_t status);
 typedef honch_status_t (*honch_test_transport_fn)(
     const char *url,
     const char *api_key,
+    const char *stream_id,
     const unsigned char *body,
     size_t body_size,
     const char *content_encoding,

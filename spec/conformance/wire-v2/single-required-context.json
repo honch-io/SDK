@@ -1,0 +1,62 @@
+{
+  "decoded_compact_message": {
+    "base_time_ms": 1700000000000,
+    "batch_context": {
+      "$device_id": "device-1",
+      "$device_model": "model-x",
+      "$environment": "production",
+      "$firmware_version": "1.0.0",
+      "$sdk_platform": "posix",
+      "$sdk_version": "0.2.0",
+      "distinct_id": "user-1"
+    },
+    "events": [
+      {
+        "event": "boot",
+        "properties": [],
+        "time_delta_ms": 0
+      }
+    ],
+    "flags": [
+      "context_promotes_properties"
+    ],
+    "format_version": 2,
+    "message_kind": "event_batch",
+    "string_table": [
+      "user-1",
+      "device-1",
+      "model-x",
+      "1.0.0",
+      "posix",
+      "0.2.0",
+      "production",
+      "boot"
+    ]
+  },
+  "description": "Single final frame with one event and only required batch context.",
+  "expanded_event_json": [
+    {
+      "distinct_id": "user-1",
+      "event": "boot",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0"
+      },
+      "timestamp": 1700000000000
+    }
+  ],
+  "expected_capture_response_code": 204,
+  "frames": [
+    {
+      "hex": "020102010180d095ffbc310806757365722d31086465766963652d31076d6f64656c2d7805312e302e3005706f73697805302e322e300a70726f64756374696f6e04626f6f74070107000207010307020407030507040607050707060107000055f2",
+      "kind": "single"
+    }
+  ],
+  "generated_by": "tools/generate_wire_v2_fixtures.py",
+  "name": "single-required-context",
+  "wire_format": "honch-wire-v2"
+}

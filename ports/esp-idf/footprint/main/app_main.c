@@ -102,13 +102,13 @@ static void run_connected_baseline_sample(void)
     }
 
     esp_http_client_config_t http_cfg = {
-        .url = "http://127.0.0.1:1/batch",
+        .url = "http://127.0.0.1:1/capture",
         .method = HTTP_METHOD_POST,
         .timeout_ms = 1,
     };
     esp_http_client_handle_t client = esp_http_client_init(&http_cfg);
     if (client) {
-        esp_http_client_set_header(client, "Content-Type", "application/cbor");
+        esp_http_client_set_header(client, "Content-Type", "application/vnd.honch.chunk");
         esp_http_client_set_post_field(client, "baseline", 8);
         esp_http_client_cleanup(client);
     }

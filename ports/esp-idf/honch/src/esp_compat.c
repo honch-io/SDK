@@ -92,15 +92,13 @@ static honch_err_t honch_esp_copy_static_config_string(char *dest, size_t dest_s
 
 static honch_err_t honch_esp_copy_config(const honch_config_t *config)
 {
-    if (snprintf(s_endpoint_url, sizeof(s_endpoint_url), "%s/batch", config->host) >=
-        (int)sizeof(s_endpoint_url)) {
-        return HONCH_ERR_INVALID_ARG;
-    }
-
     const char *environment = config->environment != NULL && config->environment[0] != '\0'
         ? config->environment
         : "production";
     honch_err_t err = honch_esp_copy_static_config_string(s_api_key, sizeof(s_api_key), config->api_key);
+    if (err == HONCH_OK) {
+        err = honch_esp_copy_static_config_string(s_endpoint_url, sizeof(s_endpoint_url), config->host);
+    }
     if (err == HONCH_OK) {
         err = honch_esp_copy_static_config_string(s_device_model, sizeof(s_device_model), config->device_model);
     }
@@ -187,7 +185,7 @@ honch_err_t honch_init(const honch_config_t *config)
     core_config.battery_callback = config->battery_callback;
     core_config.battery_low_threshold = g_honch_battery_low_threshold;
     core_config.durability_mode = HONCH_DURABILITY_OS_BUFFERED;
-    core_config.disable_background_flush = 1;
+    core_config.disable_background_flush = 0;
     core_config.platform = &platform_ops;
     core_config.storage = &storage_ops;
     core_config.transport = &transport_ops;

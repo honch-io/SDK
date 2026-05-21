@@ -24,21 +24,20 @@ as package guidance, not as a replacement for the shared spec.
 
 ## Current Focus
 
-The current package is the future MicroPython SDK for Honch analytics on
+The current package is the MicroPython SDK for Honch analytics on
 MicroPython-capable devices.
 
-Initial goal:
+Current goal:
 
 - Provide a small, idiomatic MicroPython package that product firmware can
   import as `honch`.
-- Implement the shared Honch event contract from `../../spec/wire-format.md` and
-  `../../spec/auto-properties.md`.
-- Persist SDK state and queued events locally before delivery.
-- Keep encoder, queue, identity, clock, randomness, storage, compression, and
-  transport behavior isolated enough to handle board-specific differences.
-- Prefer a pure MicroPython implementation for the first milestone.
-- Keep a future C extension or canonical core binding possible, but do not start there
-  unless explicitly requested.
+- Bind the canonical Honch C core through the `_honch_core` user C module so
+  MicroPython, C/POSIX, and ESP-IDF share event semantics, CBOR encoding,
+  identity, lifecycle, retry, queue, and packetization behavior.
+- Keep the Python layer thin: public API validation, MicroPython-friendly value
+  conversion, and exception mapping.
+- Keep storage, transport, clock, randomness, compression, reset reason,
+  battery, and Wi-Fi status behind the C user-module adapters.
 - Include deterministic tests for public API behavior, queueing, validation,
   batching, retry, reset, persistence, lifecycle events, and constrained-device
   failure behavior.
@@ -51,21 +50,20 @@ ESP-IDF SDK behavior where the shared spec requires it.
 
 ## Package Shape
 
-Expected package shape once implementation begins:
+Expected package shape:
 
 - `honch/`: Importable MicroPython package.
 - `honch/__init__.py`: Public package exports.
-- `honch/client.py`: Public client API and high-level SDK behavior.
-- `honch/encoder.py`: Event and batch encoding.
-- `honch/queue.py`: Persistent bounded event queue.
-- `honch/identity.py`: Device and distinct ID persistence.
-- `honch/transport.py`: HTTP transport boundary.
-- `honch/platform.py`: Board-specific adapters for clock, randomness, storage,
-  Wi-Fi status, battery, reset reason, and optional gzip support.
+- `honch/client.py`: Public client wrapper around `_honch_core.Client`.
+- `honch/config.py`: MicroPython-facing config defaults and validation.
+- `honch/errors.py`: Public exception mapping.
+- `honch/validation.py`: Public API input validation.
+- `usermod/honch/`: MicroPython C user module, C-core bridge, and board-facing
+  storage/transport/platform adapters.
 - `examples/`: Minimal board-oriented examples.
 - `tests/`: Host-runnable tests and MicroPython-focused conformance checks.
-- `manifest.py`: Optional frozen-module manifest for production firmware builds.
-- `package.json`: Optional `mip` package metadata when publishing is in scope.
+- `manifest.py`: Frozen-module manifest for production firmware builds.
+- `package.json`: `mip` package metadata for wrapper files.
 - `../../spec`: Shared cross-SDK contract and conformance fixtures. Read these
   before large SDK changes.
 
@@ -202,15 +200,14 @@ Build and packaging standards:
 
 ## MicroPython SDK Standards
 
-- Prefer pure MicroPython for the initial SDK.
 - Keep the public API small, likely centered on an explicit `Honch` client
   object.
-- Validate public inputs before queueing or encoding events.
-- Accept Python dictionaries for event properties where possible, and encode
-  them using MicroPython-compatible JSON support.
+- Validate public inputs before handing calls to `_honch_core`.
+- Accept Python dictionaries for event properties where possible, and convert
+  them to MicroPython-compatible JSON before crossing into C.
 - Reject malformed or unsupported property values at API boundaries.
-- Do not hard-code the current ingest API shape deep into core logic. The SDK
-  may need to move to CBOR when the shared API/spec update lands.
+- Do not reimplement core ingest, queue, identity, lifecycle, or retry behavior
+  in Python.
 - Keep memory bounded and configurable.
 - Avoid loading the full queue into memory when a streaming or bounded approach
   is practical.
@@ -263,7 +260,6 @@ Do not add these unless explicitly requested:
 - Feature flags or experimentation runtime.
 - Production credential handling beyond SDK config.
 - New third-party dependencies.
-- A MicroPython C extension or canonical core binding.
 - Board-specific production firmware.
 
 When the shared specs describe future architecture, use them for direction, but

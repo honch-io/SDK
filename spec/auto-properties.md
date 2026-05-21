@@ -10,7 +10,7 @@ Every event emitted by a Honch SDK must include these properties. They are set a
 | `$device_model` | string | From SDK config |
 | `$firmware_version` | string | From SDK config |
 | `$sdk_platform` | string | SDK platform identifier (e.g. `"esp-idf"`, `"ios"`, `"android"`) |
-| `$sdk_version` | string | SDK version (e.g. `"0.1.0"`) |
+| `$sdk_version` | string | SDK behavior version (e.g. `"0.2.0"`) |
 | `$environment` | string | From SDK config, defaults to `"production"` |
 
 ## Conditional

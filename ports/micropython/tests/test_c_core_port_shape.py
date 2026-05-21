@@ -1,5 +1,7 @@
 import unittest
+import json
 from pathlib import Path
+import re
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -54,6 +56,22 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertIn("honch_storage_ops_t", adapters)
         self.assertIn("honch_transport_ops_t", adapters)
 
+    def test_micropython_transport_declares_chunk_wire_adapter(self):
+        transport = self.read("ports/micropython/usermod/honch/mptransport_adapter.c")
+        module = self.read("ports/micropython/usermod/honch/modhonch_core.c")
+        client = self.read("ports/micropython/honch/client.py")
+        config = self.read("ports/micropython/honch/config.py")
+
+        self.assertIn("/capture", transport)
+        self.assertIn("honch_mp_post_chunk", transport)
+        self.assertIn('"Content-Type", 12), mp_obj_new_str("application/vnd.honch.chunk"', transport)
+        self.assertIn('"X-Honch-Project-Key"', transport)
+        self.assertIn('"X-Honch-Stream-Id"', transport)
+        self.assertIn(".post_chunk = honch_mp_post_chunk", transport)
+        self.assertNotIn("MP_QSTR_enable_wire_v2", module)
+        self.assertNotIn("enable_wire_v2", config)
+        self.assertNotIn("enable_wire_v2", client)
+
     def test_python_client_is_thin_wrapper_over_c_module(self):
         client = self.read("ports/micropython/honch/client.py")
 
@@ -63,6 +81,20 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertNotIn("IdentityStore", client)
         self.assertNotIn("build_event", client)
         self.assertNotIn("post_batch", client)
+
+    def test_package_metadata_versions_match(self):
+        init_py = self.read("ports/micropython/honch/__init__.py")
+        package_json = json.loads(self.read("ports/micropython/package.json"))
+        pyproject = self.read("ports/micropython/pyproject.toml")
+
+        init_match = re.search(r'__version__ = "([^"]+)"', init_py)
+        pyproject_match = re.search(r'^version = "([^"]+)"', pyproject, re.MULTILINE)
+
+        self.assertIsNotNone(init_match)
+        self.assertIsNotNone(pyproject_match)
+        self.assertEqual("0.2.0", init_match.group(1))
+        self.assertEqual(init_match.group(1), package_json["version"])
+        self.assertEqual(init_match.group(1), pyproject_match.group(1))
 
 
 if __name__ == "__main__":

@@ -33,8 +33,6 @@ typedef struct honch_micropython_storage {
 typedef struct honch_micropython_transport {
     mp_obj_t requests_module;
     unsigned int timeout_ms;
-    int disable_gzip;
-    size_t gzip_min_bytes;
 } honch_micropython_transport_t;
 
 honch_status_t honch_micropython_platform_ops_init(
@@ -51,9 +49,7 @@ void honch_micropython_storage_ops_deinit(honch_micropython_storage_t *ctx);
 honch_status_t honch_micropython_transport_ops_init(
     honch_transport_ops_t *ops,
     honch_micropython_transport_t *ctx,
-    unsigned int timeout_ms,
-    int disable_gzip,
-    size_t gzip_min_bytes);
+    unsigned int timeout_ms);
 
 void honch_micropython_raise_status(honch_status_t status);
 char *honch_micropython_strdup(const char *value);
