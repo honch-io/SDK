@@ -38,13 +38,14 @@ static size_t honch_discard_response(char *ptr, size_t size, size_t nmemb, void 
 static honch_status_t honch_batch_url(const char *endpoint_url, char **out)
 {
     const char *suffix = "/batch";
+    size_t suffix_length = strlen(suffix);
     size_t endpoint_length = strlen(endpoint_url);
     while (endpoint_length > 0u && endpoint_url[endpoint_length - 1u] == '/') {
         endpoint_length--;
     }
 
     size_t total = 0u;
-    honch_status_t status = honch_size_add3(endpoint_length, strlen(suffix), 1u, &total);
+    honch_status_t status = honch_size_add3(endpoint_length, suffix_length, 1u, &total);
     if (status != HONCH_OK) {
         return status;
     }
@@ -54,7 +55,9 @@ static honch_status_t honch_batch_url(const char *endpoint_url, char **out)
         return HONCH_ERROR_OUT_OF_MEMORY;
     }
 
-    snprintf(url, total, "%.*s%s", (int)endpoint_length, endpoint_url, suffix);
+    memcpy(url, endpoint_url, endpoint_length);
+    memcpy(url + endpoint_length, suffix, suffix_length);
+    url[endpoint_length + suffix_length] = '\0';
     *out = url;
     return HONCH_OK;
 }
