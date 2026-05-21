@@ -3,6 +3,7 @@ add_library(honch_core
     src/honch_cbor.c
     src/honch_encoder.c
     src/honch_json.c
+    src/honch_lifecycle.c
     src/honch_packetizer.c
     src/honch_queue_policy.c
     src/honch_support.c
@@ -58,6 +59,7 @@ if(HONCH_BUILD_TESTS)
         test/test_retry.c
         src/honch_cbor.c
         src/honch_json.c
+        src/honch_lifecycle.c
         src/honch_queue_policy.c
         src/honch_support.c
     )

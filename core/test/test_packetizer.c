@@ -83,8 +83,16 @@ static honch_client_t fake_client_with_storage(fake_storage_t *storage, honch_st
     };
 
     honch_client_t client = {0};
+    assert(pthread_mutex_init(&client.lifetime_mutex, NULL) == 0);
+    assert(pthread_cond_init(&client.lifetime_cond, NULL) == 0);
     client.storage = ops;
     return client;
+}
+
+static void fake_client_destroy(honch_client_t *client)
+{
+    assert(pthread_cond_destroy(&client->lifetime_cond) == 0);
+    assert(pthread_mutex_destroy(&client->lifetime_mutex) == 0);
 }
 
 static uint64_t read_u64_be(const uint8_t *buffer)
@@ -131,6 +139,8 @@ static void test_tiny_buffer_rejected(void)
     assert(honch_packetizer_next(&packetizer, buffer, sizeof(buffer), &out_size, &complete) ==
         HONCH_ERROR_INVALID_ARGUMENT);
     assert(!storage.consumed);
+    assert(honch_packetizer_abort(&packetizer) == HONCH_OK);
+    fake_client_destroy(&client);
 }
 
 static void test_single_chunk_message_has_first_and_final_flags(void)
@@ -163,6 +173,8 @@ static void test_single_chunk_message_has_first_and_final_flags(void)
     assert(read_u16_be(buffer + 16u) == sizeof(message));
     assert(read_u16_be(buffer + 18u) == 0xb4c8u);
     assert(memcmp(buffer + HONCH_PACKET_HEADER_SIZE, message, sizeof(message)) == 0);
+    assert(honch_packetizer_abort(&packetizer) == HONCH_OK);
+    fake_client_destroy(&client);
 }
 
 static void test_multi_chunk_message_offsets_increase(void)
@@ -195,6 +207,8 @@ static void test_multi_chunk_message_offsets_increase(void)
     assert(second[2] == 0x00u);
     assert(read_u32_be(second + 12u) == 2u);
     assert(read_u16_be(second + 16u) == 2u);
+    assert(honch_packetizer_abort(&packetizer) == HONCH_OK);
+    fake_client_destroy(&client);
 }
 
 static void test_abort_does_not_consume_storage(void)
@@ -215,6 +229,7 @@ static void test_abort_does_not_consume_storage(void)
     assert(!storage.consumed);
     assert(storage.has_message);
     assert(!packetizer.active);
+    fake_client_destroy(&client);
 }
 
 static void test_confirm_consumes_storage(void)
@@ -240,6 +255,7 @@ static void test_confirm_consumes_storage(void)
     assert(storage.consumed);
     assert(!storage.has_message);
     assert(!packetizer.active);
+    fake_client_destroy(&client);
 }
 
 int main(void)

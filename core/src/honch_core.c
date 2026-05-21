@@ -861,6 +861,8 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     next->auto_properties_userdata = config->auto_properties_userdata;
 
     honch_status_t status = HONCH_OK;
+    bool lifetime_mutex_initialized = false;
+    bool lifetime_cond_initialized = false;
     bool mutex_initialized = false;
     bool scheduler_cond_initialized = false;
     if (next->api_key == NULL || next->endpoint_url == NULL || next->queue_directory == NULL) {
@@ -871,6 +873,16 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     }
     if (status == HONCH_OK) {
         status = honch_client_queue_depth(next, &next->queued_event_count);
+    }
+    if (status == HONCH_OK && pthread_mutex_init(&next->lifetime_mutex, NULL) != 0) {
+        status = HONCH_ERROR_IO;
+    } else if (status == HONCH_OK) {
+        lifetime_mutex_initialized = true;
+    }
+    if (status == HONCH_OK && pthread_cond_init(&next->lifetime_cond, NULL) != 0) {
+        status = HONCH_ERROR_IO;
+    } else if (status == HONCH_OK) {
+        lifetime_cond_initialized = true;
     }
     if (status == HONCH_OK && pthread_mutex_init(&next->mutex, NULL) != 0) {
         status = HONCH_ERROR_IO;
@@ -900,6 +912,12 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
         if (mutex_initialized) {
             pthread_mutex_destroy(&next->mutex);
         }
+        if (lifetime_cond_initialized) {
+            pthread_cond_destroy(&next->lifetime_cond);
+        }
+        if (lifetime_mutex_initialized) {
+            pthread_mutex_destroy(&next->lifetime_mutex);
+        }
         honch_free_client_fields(next);
         free(next);
         return status;
@@ -911,30 +929,45 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
 
 honch_status_t honch_core_track(honch_client_t *client, const char *event_name, const char *properties_json)
 {
-    if (client == NULL || honch_validate_event_name(event_name) != HONCH_OK ||
+    honch_status_t status = honch_client_enter(client);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    if (honch_validate_event_name(event_name) != HONCH_OK ||
         honch_cstring_exceeds(properties_json, client->max_event_bytes)) {
+        honch_client_leave(client);
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    honch_status_t status = honch_client_lock(client);
+    status = honch_client_lock(client);
     if (status != HONCH_OK) {
+        honch_client_leave(client);
         return status;
     }
 
     status = honch_track_locked(client, event_name, properties_json);
     honch_client_unlock(client);
+    honch_client_leave(client);
     return status;
 }
 
 honch_status_t honch_core_identify(honch_client_t *client, const char *distinct_id, const char *traits_json)
 {
-    if (client == NULL || honch_validate_distinct_id(distinct_id) != HONCH_OK ||
+    honch_status_t status = honch_client_enter(client);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    if (honch_validate_distinct_id(distinct_id) != HONCH_OK ||
         honch_validate_json_object_input(client, traits_json) != HONCH_OK) {
+        honch_client_leave(client);
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    honch_status_t status = honch_client_lock(client);
+    status = honch_client_lock(client);
     if (status != HONCH_OK) {
+        honch_client_leave(client);
         return status;
     }
 
@@ -944,6 +977,7 @@ honch_status_t honch_core_identify(honch_client_t *client, const char *distinct_
         free(previous_distinct_id);
         free(next_distinct_id);
         honch_client_unlock(client);
+        honch_client_leave(client);
         return HONCH_ERROR_OUT_OF_MEMORY;
     }
 
@@ -952,6 +986,7 @@ honch_status_t honch_core_identify(honch_client_t *client, const char *distinct_
         free(previous_distinct_id);
         free(next_distinct_id);
         honch_client_unlock(client);
+        honch_client_leave(client);
         return status;
     }
 
@@ -975,24 +1010,32 @@ honch_status_t honch_core_identify(honch_client_t *client, const char *distinct_
     free(previous_distinct_id);
     free(next_distinct_id);
     honch_client_unlock(client);
+    honch_client_leave(client);
     return status;
 }
 
 honch_status_t honch_core_set_property(honch_client_t *client, const char *key, const char *value_json)
 {
-    if (client == NULL || key == NULL ||
+    honch_status_t status = honch_client_enter(client);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    if (key == NULL ||
         honch_validate_json_value_input(client, value_json) != HONCH_OK) {
+        honch_client_leave(client);
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
     const char *value = value_json == NULL ? "null" : value_json;
     honch_buffer_t properties;
     size_t initial_capacity = 0u;
-    honch_status_t status = honch_size_add3(strlen(key), strlen(value), 16u, &initial_capacity);
+    status = honch_size_add3(strlen(key), strlen(value), 16u, &initial_capacity);
     if (status == HONCH_OK) {
         status = honch_buffer_init(&properties, initial_capacity);
     }
     if (status != HONCH_OK) {
+        honch_client_leave(client);
         return status;
     }
 
@@ -1010,22 +1053,29 @@ honch_status_t honch_core_set_property(honch_client_t *client, const char *key, 
         status = honch_buffer_append(&properties, "}");
     }
     if (status == HONCH_OK) {
-        status = honch_core_track(client, "$set_property", properties.data);
+        status = honch_client_lock(client);
+        if (status == HONCH_OK) {
+            status = honch_track_locked(client, "$set_property", properties.data);
+            honch_client_unlock(client);
+        }
     }
 
     honch_buffer_free(&properties);
+    honch_client_leave(client);
     return status;
 }
 
 honch_status_t honch_core_session_start(honch_client_t *client, const char *session_name)
 {
-    if (client == NULL) {
-        return HONCH_ERROR_INVALID_ARGUMENT;
+    honch_status_t status = honch_client_enter(client);
+    if (status != HONCH_OK) {
+        return status;
     }
 
     char *session_id = NULL;
-    honch_status_t status = honch_new_session_id(client, &session_id);
+    status = honch_new_session_id(client, &session_id);
     if (status != HONCH_OK) {
+        honch_client_leave(client);
         return status;
     }
 
@@ -1033,6 +1083,7 @@ honch_status_t honch_core_session_start(honch_client_t *client, const char *sess
     status = honch_build_session_start_properties(session_name, &properties_json);
     if (status != HONCH_OK) {
         free(session_id);
+        honch_client_leave(client);
         return status;
     }
 
@@ -1040,6 +1091,7 @@ honch_status_t honch_core_session_start(honch_client_t *client, const char *sess
     if (status != HONCH_OK) {
         free(properties_json);
         free(session_id);
+        honch_client_leave(client);
         return status;
     }
 
@@ -1063,17 +1115,20 @@ honch_status_t honch_core_session_start(honch_client_t *client, const char *sess
     honch_client_unlock(client);
     free(properties_json);
     free(session_id);
+    honch_client_leave(client);
     return status;
 }
 
 honch_status_t honch_core_session_end(honch_client_t *client)
 {
-    if (client == NULL) {
-        return HONCH_ERROR_INVALID_ARGUMENT;
+    honch_status_t status = honch_client_enter(client);
+    if (status != HONCH_OK) {
+        return status;
     }
 
-    honch_status_t status = honch_client_lock(client);
+    status = honch_client_lock(client);
     if (status != HONCH_OK) {
+        honch_client_leave(client);
         return status;
     }
 
@@ -1086,33 +1141,39 @@ honch_status_t honch_core_session_end(honch_client_t *client)
     }
 
     honch_client_unlock(client);
+    honch_client_leave(client);
     return status;
 }
 
 honch_status_t honch_core_flush(honch_client_t *client)
 {
-    if (client == NULL) {
-        return HONCH_ERROR_INVALID_ARGUMENT;
+    honch_status_t status = honch_client_enter(client);
+    if (status != HONCH_OK) {
+        return status;
     }
 
-    honch_status_t status = honch_client_lock(client);
+    status = honch_client_lock(client);
     if (status != HONCH_OK) {
+        honch_client_leave(client);
         return status;
     }
 
     status = honch_queue_flush_locked(client);
     honch_client_unlock(client);
+    honch_client_leave(client);
     return status;
 }
 
 honch_status_t honch_core_reset(honch_client_t *client)
 {
-    if (client == NULL) {
-        return HONCH_ERROR_INVALID_ARGUMENT;
+    honch_status_t status = honch_client_enter(client);
+    if (status != HONCH_OK) {
+        return status;
     }
 
-    honch_status_t status = honch_client_lock(client);
+    status = honch_client_lock(client);
     if (status != HONCH_OK) {
+        honch_client_leave(client);
         return status;
     }
 
@@ -1126,21 +1187,26 @@ honch_status_t honch_core_reset(honch_client_t *client)
         status = honch_client_queue_clear(client);
     }
     honch_client_unlock(client);
+    honch_client_leave(client);
     return status;
 }
 
 honch_status_t honch_core_shutdown(honch_client_t *client)
 {
-    if (client == NULL) {
-        return HONCH_ERROR_NOT_INITIALIZED;
+    honch_status_t status = honch_client_begin_shutdown(client);
+
+    if (status != HONCH_OK) {
+        return status;
     }
 
     honch_scheduler_stop(client);
 
-    honch_status_t status = honch_client_lock(client);
+    status = honch_client_lock(client);
     if (status != HONCH_OK) {
         pthread_cond_destroy(&client->scheduler_cond);
         pthread_mutex_destroy(&client->mutex);
+        pthread_cond_destroy(&client->lifetime_cond);
+        pthread_mutex_destroy(&client->lifetime_mutex);
         honch_free_client_fields(client);
         free(client);
         return status;
@@ -1155,6 +1221,8 @@ honch_status_t honch_core_shutdown(honch_client_t *client)
 
     pthread_cond_destroy(&client->scheduler_cond);
     pthread_mutex_destroy(&client->mutex);
+    pthread_cond_destroy(&client->lifetime_cond);
+    pthread_mutex_destroy(&client->lifetime_mutex);
     honch_free_client_fields(client);
     free(client);
     return status;
@@ -1162,21 +1230,30 @@ honch_status_t honch_core_shutdown(honch_client_t *client)
 
 const char *honch_core_get_device_id(honch_client_t *client)
 {
-    if (client == NULL) {
+    if (honch_client_enter(client) != HONCH_OK) {
         return NULL;
     }
 
-    return client->device_id;
+    const char *device_id = client->device_id;
+    honch_client_leave(client);
+    return device_id;
 }
 
 honch_status_t honch_core_copy_device_id(honch_client_t *client, char *buffer, size_t buffer_size)
 {
-    if (client == NULL || buffer == NULL || buffer_size == 0u) {
+    honch_status_t status = honch_client_enter(client);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    if (buffer == NULL || buffer_size == 0u) {
+        honch_client_leave(client);
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    honch_status_t status = honch_client_lock(client);
+    status = honch_client_lock(client);
     if (status != HONCH_OK) {
+        honch_client_leave(client);
         return status;
     }
 
@@ -1193,6 +1270,7 @@ honch_status_t honch_core_copy_device_id(honch_client_t *client, char *buffer, s
     }
 
     honch_client_unlock(client);
+    honch_client_leave(client);
     return status;
 }
 
