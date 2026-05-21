@@ -39,6 +39,16 @@ class PosixCborMigrationTest(unittest.TestCase):
         self.assertIn("find_package(ZLIB", cmake)
         self.assertIn("ZLIB::ZLIB", cmake)
 
+    def test_transport_guards_curl_post_field_size_cast(self) -> None:
+        transport = read_sdk("ports/posix/src/posix_transport_curl.c")
+
+        self.assertIn("body_size > (size_t)LONG_MAX", transport)
+        self.assertIn("CURLOPT_POSTFIELDSIZE, (long)body_size", transport)
+        self.assertLess(
+            transport.index("body_size > (size_t)LONG_MAX"),
+            transport.index("CURLOPT_POSTFIELDSIZE, (long)body_size"),
+        )
+
     def test_queue_persists_cbor_blobs_not_json_strings(self) -> None:
         queue = read_sdk("ports/posix/src/posix_storage.c")
         internal = read_sdk("core/src/honch_internal.h")
