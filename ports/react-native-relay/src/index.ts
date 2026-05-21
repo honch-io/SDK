@@ -10,3 +10,7 @@ export type { RelayUploaderConfig, RelayUploadOutcome } from "./uploader";
 export { drainRelayQueue } from "./drain";
 export type { DrainRelayQueueOptions } from "./drain";
 export { nextBackoffDelayMs } from "./retry";
+export { createBleRelayReceiver } from "./ble";
+export type { RelayBleNative, RelayBleReceiverOptions, RelayFrameReceipt } from "./ble";
+export { createRelayUploadScheduler } from "./scheduler";
+export type { RelayUploadSchedulerNative, RelayUploadSchedulerOptions } from "./scheduler";

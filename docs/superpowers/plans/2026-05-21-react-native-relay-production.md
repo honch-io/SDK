@@ -81,7 +81,7 @@
 - Create: `ports/react-native-relay/src/scheduler.ts`
 - Create: Android and iOS native module files under `ports/react-native-relay/android/` and `ports/react-native-relay/ios/`
 
-- [ ] **Step 1: Define TypeScript native interfaces**
+- [x] **Step 1: Define TypeScript native interfaces**
 - [ ] **Step 2: Implement Android first**
 - [ ] **Step 3: Implement iOS second**
 
