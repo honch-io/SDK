@@ -180,6 +180,8 @@ honch_status_t honch_queue_flush_locked(honch_client_t *client);
 honch_status_t honch_client_enter(honch_client_t *client);
 void honch_client_leave(honch_client_t *client);
 honch_status_t honch_client_begin_shutdown(honch_client_t *client);
+honch_status_t honch_client_state_lock(honch_client_t *client);
+void honch_client_state_unlock(honch_client_t *client);
 
 honch_status_t honch_transport_post_batch(
     honch_client_t *client,

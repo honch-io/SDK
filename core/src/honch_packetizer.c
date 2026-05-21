@@ -112,8 +112,15 @@ honch_status_t honch_packetizer_begin(honch_client_t *client, honch_packetizer_t
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
+    status = honch_client_state_lock(client);
+    if (status != HONCH_OK) {
+        honch_client_leave(client);
+        return status;
+    }
+
     status = honch_packetizer_reset_peek_cursor(client);
     if (status != HONCH_OK) {
+        honch_client_state_unlock(client);
         honch_client_leave(client);
         return status;
     }
@@ -121,10 +128,12 @@ honch_status_t honch_packetizer_begin(honch_client_t *client, honch_packetizer_t
     honch_storage_reader_t reader = {0};
     status = honch_packetizer_peek(client, &reader);
     if (status != HONCH_OK) {
+        honch_client_state_unlock(client);
         honch_client_leave(client);
         return status;
     }
     if (reader.read == NULL || reader.total_size == 0u || reader.total_size > UINT32_MAX) {
+        honch_client_state_unlock(client);
         honch_client_leave(client);
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
@@ -226,6 +235,7 @@ honch_status_t honch_packetizer_confirm(honch_packetizer_t *packetizer)
         packetizer->sequence);
     if (status == HONCH_OK) {
         packetizer->active = false;
+        honch_client_state_unlock(packetizer->client);
         honch_client_leave(packetizer->client);
     }
     return status;
@@ -238,6 +248,7 @@ honch_status_t honch_packetizer_abort(honch_packetizer_t *packetizer)
     }
 
     packetizer->active = false;
+    honch_client_state_unlock(packetizer->client);
     honch_client_leave(packetizer->client);
     return HONCH_OK;
 }

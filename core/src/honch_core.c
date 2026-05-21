@@ -415,21 +415,12 @@ static honch_status_t honch_client_queue_clear(honch_client_t *client)
 
 static honch_status_t honch_client_lock(honch_client_t *client)
 {
-    if (client != NULL && client->platform != NULL && client->platform->lock != NULL) {
-        return client->platform->lock(client->platform->ctx);
-    }
-
-    return pthread_mutex_lock(&client->mutex) == 0 ? HONCH_OK : HONCH_ERROR_IO;
+    return honch_client_state_lock(client);
 }
 
 static void honch_client_unlock(honch_client_t *client)
 {
-    if (client != NULL && client->platform != NULL && client->platform->unlock != NULL) {
-        (void)client->platform->unlock(client->platform->ctx);
-        return;
-    }
-
-    (void)pthread_mutex_unlock(&client->mutex);
+    honch_client_state_unlock(client);
 }
 
 static honch_status_t honch_track_locked_internal(
