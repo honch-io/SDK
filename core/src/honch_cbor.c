@@ -490,6 +490,7 @@ static honch_status_t honch_json_to_cbor_number(
         if (errno == 0 && end != NULL && *end == '\0') {
             return honch_cbor_append_int(buffer, (int64_t)integer);
         }
+        return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
     errno = 0;

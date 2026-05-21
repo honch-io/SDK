@@ -612,6 +612,10 @@ static void test_strict_json_validation(void)
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
     EXPECT_EQ_INT(honch_track(client, "bad_event", "[]"), HONCH_ERROR_INVALID_ARGUMENT);
     EXPECT_EQ_INT(honch_track(client, "bad_event", "{\"unterminated\""), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ_INT(honch_track(client, "overflow_integer", "{\"n\":9223372036854775808}"), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ_INT(honch_track(client, "max_integer", "{\"n\":9223372036854775807}"), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "min_integer", "{\"n\":-9223372036854775808}"), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "float_number", "{\"n\":1.5}"), HONCH_OK);
 
     char deep_json[256];
     size_t pos = 0u;
@@ -641,7 +645,7 @@ static void test_strict_json_validation(void)
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 2);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 5);
 
     honch_shutdown(client);
 }
