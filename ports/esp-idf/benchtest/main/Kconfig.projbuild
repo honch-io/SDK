@@ -59,6 +59,30 @@ menu "Honch Benchtest Configuration"
         help
             Time to wait after the final flush so async HTTP work can finish.
 
+    config BENCH_OFFLINE_QUEUE_PROOF
+        bool "Run offline queue preservation proof"
+        default n
+        help
+            Skip capture readiness at startup, emit events while capture is
+            expected to be unavailable, verify the queued estimate grows, then
+            retry flushes until capture is restored.
+
+    config BENCH_OFFLINE_QUEUE_PROOF_EVENTS
+        int "Offline queue proof event count"
+        default 40
+        range 1 1000
+        depends on BENCH_OFFLINE_QUEUE_PROOF
+        help
+            Number of proof events to queue before the recovery flush loop.
+
+    config BENCH_OFFLINE_RECOVERY_RETRY_SECONDS
+        int "Offline proof recovery retry delay seconds"
+        default 5
+        range 1 300
+        depends on BENCH_OFFLINE_QUEUE_PROOF
+        help
+            Delay between flush attempts while waiting for capture to recover.
+
     config BENCH_REPEAT
         bool "Repeat benchmark runs forever"
         default n

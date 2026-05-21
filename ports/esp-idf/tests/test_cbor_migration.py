@@ -434,6 +434,26 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn("honch_flush()", bench)
         self.assertIn("queued_estimate", bench)
 
+    def test_benchtest_app_has_offline_queue_proof_mode(self) -> None:
+        kconfig = read("ports/esp-idf/benchtest/main/Kconfig.projbuild")
+        bench = read("ports/esp-idf/benchtest/main/app_main.c")
+        readme = read("ports/esp-idf/benchtest/README.md")
+
+        self.assertIn("config BENCH_OFFLINE_QUEUE_PROOF", kconfig)
+        self.assertIn("config BENCH_OFFLINE_QUEUE_PROOF_EVENTS", kconfig)
+        self.assertIn("CONFIG_BENCH_OFFLINE_QUEUE_PROOF", bench)
+        for marker in (
+            "BENCH_OFFLINE_PROOF_START",
+            "BENCH_OFFLINE_QUEUE_GROWTH",
+            "BENCH_OFFLINE_RECOVERY_WAIT",
+            "BENCH_OFFLINE_RECOVERY_FLUSH",
+            "BENCH_OFFLINE_PROOF_DONE",
+        ):
+            self.assertIn(marker, bench)
+            self.assertIn(marker, readme)
+        self.assertIn("if (!CONFIG_BENCH_OFFLINE_QUEUE_PROOF && !wait_for_network_ready())", bench)
+        self.assertIn("s_queued_estimate > 0", bench)
+
     def test_esp_footprint_report_lives_with_benchmark_results(self) -> None:
         report = read("ports/esp-idf/benchtest/results/esp32-build-footprint-report.json")
         gitignore = read(".gitignore")
