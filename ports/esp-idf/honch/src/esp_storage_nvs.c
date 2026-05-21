@@ -728,16 +728,11 @@ static honch_status_t honch_esp_queue_dead_letter(void *ctx, uint64_t sequence)
     return honch_esp_queue_erase_sequence(sequence);
 }
 
-static honch_status_t honch_esp_queue_clear(void *ctx)
+static honch_status_t honch_esp_erase_namespace(const char *namespace_name)
 {
-    honch_esp_storage_t *storage = (honch_esp_storage_t *)ctx;
     nvs_handle_t handle = 0;
-    esp_err_t err = nvs_open(HONCH_ESP_QUEUE_NAMESPACE, NVS_READWRITE, &handle);
+    esp_err_t err = nvs_open(namespace_name, NVS_READWRITE, &handle);
     if (err == ESP_ERR_NVS_NOT_FOUND) {
-        if (storage != NULL) {
-            honch_esp_ram_queue_reset(storage);
-            storage->nvs_fallback_active = false;
-        }
         return HONCH_STATUS_OK;
     }
     if (err == ESP_OK) {
@@ -749,11 +744,19 @@ static honch_status_t honch_esp_queue_clear(void *ctx)
     if (err == ESP_OK || handle != 0) {
         nvs_close(handle);
     }
+    return honch_esp_nvs_status(err);
+}
+
+static honch_status_t honch_esp_queue_clear(void *ctx)
+{
+    honch_esp_storage_t *storage = (honch_esp_storage_t *)ctx;
+    honch_status_t queue_status = honch_esp_erase_namespace(HONCH_ESP_QUEUE_NAMESPACE);
+    honch_status_t dead_status = honch_esp_erase_namespace(HONCH_ESP_DEAD_NAMESPACE);
     if (storage != NULL) {
         honch_esp_ram_queue_reset(storage);
         storage->nvs_fallback_active = false;
     }
-    return honch_esp_nvs_status(err);
+    return queue_status != HONCH_STATUS_OK ? queue_status : dead_status;
 }
 
 static honch_status_t honch_esp_queue_depth(void *ctx, size_t *depth)

@@ -306,6 +306,20 @@ class EspIdfCborMigrationTest(unittest.TestCase):
             gpio.index("1ULL << pin"),
         )
 
+    def test_queue_clear_erases_dead_letter_namespace(self) -> None:
+        storage = read("ports/esp-idf/honch/src/esp_storage_nvs.c")
+        clear_start = storage.index("static honch_status_t honch_esp_queue_clear")
+        clear_body = storage[
+            clear_start:
+            storage.index("static honch_status_t honch_esp_queue_depth", clear_start)
+        ]
+
+        self.assertIn("HONCH_ESP_QUEUE_NAMESPACE", clear_body)
+        self.assertIn("HONCH_ESP_DEAD_NAMESPACE", clear_body)
+        self.assertIn("honch_esp_erase_namespace(HONCH_ESP_QUEUE_NAMESPACE)", clear_body)
+        self.assertIn("honch_esp_erase_namespace(HONCH_ESP_DEAD_NAMESPACE)", clear_body)
+        self.assertIn("nvs_erase_all", storage)
+
     def test_benchmark_app_detects_existing_wifi_connection(self) -> None:
         lifecycle = read("ports/esp-idf/benchtest/main/app_main.c")
 
