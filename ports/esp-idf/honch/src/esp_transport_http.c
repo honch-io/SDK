@@ -3,6 +3,7 @@
 
 #include "esp_core_adapter.h"
 
+#include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -104,6 +105,11 @@ static honch_status_t honch_esp_post_batch(
     }
 #endif
 
+    if (post_body_size > (size_t)INT_MAX) {
+        free(compressed);
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+
     esp_http_client_config_t config = {
         .url = endpoint_url,
         .method = HTTP_METHOD_POST,
@@ -121,7 +127,7 @@ static honch_status_t honch_esp_post_batch(
     if (post_encoding != NULL && strcmp(post_encoding, "gzip") == 0) {
         esp_http_client_set_header(client, "Content-Encoding", "gzip");
     }
-    esp_http_client_set_post_field(client, (const char *)post_body, post_body_size);
+    esp_http_client_set_post_field(client, (const char *)post_body, (int)post_body_size);
 
     esp_err_t err = esp_http_client_perform(client);
     int status = err == ESP_OK ? esp_http_client_get_status_code(client) : 0;

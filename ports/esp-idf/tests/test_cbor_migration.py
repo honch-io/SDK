@@ -273,6 +273,17 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertLess(transport.index("status == 408"), transport.index("status >= 400 && status < 500"))
         self.assertRegex(transport, r"status >= 400 && status < 500")
 
+    def test_transport_guards_esp_http_post_field_length(self) -> None:
+        transport = read("ports/esp-idf/honch/src/esp_transport_http.c")
+
+        self.assertIn("#include <limits.h>", transport)
+        self.assertIn("post_body_size > (size_t)INT_MAX", transport)
+        self.assertIn("esp_http_client_set_post_field(client, (const char *)post_body, (int)post_body_size)", transport)
+        self.assertLess(
+            transport.index("post_body_size > (size_t)INT_MAX"),
+            transport.index("esp_http_client_set_post_field"),
+        )
+
     def test_benchmark_app_detects_existing_wifi_connection(self) -> None:
         lifecycle = read("ports/esp-idf/benchtest/main/app_main.c")
 
