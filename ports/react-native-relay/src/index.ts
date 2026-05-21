@@ -14,3 +14,5 @@ export { createBleRelayReceiver } from "./ble";
 export type { RelayBleNative, RelayBleReceiverOptions, RelayFrameReceipt } from "./ble";
 export { createRelayUploadScheduler } from "./scheduler";
 export type { RelayUploadSchedulerNative, RelayUploadSchedulerOptions } from "./scheduler";
+export { createMobileRelay } from "./mobileRelay";
+export type { MobileRelayOptions } from "./mobileRelay";
