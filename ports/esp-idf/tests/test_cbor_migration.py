@@ -297,6 +297,15 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn("err = esp_http_client_set_post_field", setup_body)
         self.assertGreaterEqual(setup_body.count("if (err != ESP_OK)"), 3)
 
+    def test_gpio_registration_validates_pin_before_shift(self) -> None:
+        gpio = read("ports/esp-idf/honch/src/esp_gpio_adapter.c")
+
+        self.assertIn("pin < 0 || pin >= GPIO_NUM_MAX || pin >= 64", gpio)
+        self.assertLess(
+            gpio.index("pin < 0 || pin >= GPIO_NUM_MAX || pin >= 64"),
+            gpio.index("1ULL << pin"),
+        )
+
     def test_benchmark_app_detects_existing_wifi_connection(self) -> None:
         lifecycle = read("ports/esp-idf/benchtest/main/app_main.c")
 
