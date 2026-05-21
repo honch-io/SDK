@@ -29,6 +29,18 @@ static const char *TAG = "honch_benchtest";
 #define BENCH_NETWORK_READY_TIMEOUT_MS 10000
 #define PAD_SOURCE "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
+#ifndef CONFIG_BENCH_OFFLINE_QUEUE_PROOF
+#define CONFIG_BENCH_OFFLINE_QUEUE_PROOF 0
+#endif
+
+#ifndef CONFIG_BENCH_OFFLINE_QUEUE_PROOF_EVENTS
+#define CONFIG_BENCH_OFFLINE_QUEUE_PROOF_EVENTS 40
+#endif
+
+#ifndef CONFIG_BENCH_OFFLINE_RECOVERY_RETRY_SECONDS
+#define CONFIG_BENCH_OFFLINE_RECOVERY_RETRY_SECONDS 5
+#endif
+
 typedef struct {
     int64_t total_us;
     int64_t min_us;
@@ -330,6 +342,104 @@ static void run_benchmark_once(uint32_t run_id)
              s_queued_estimate);
 }
 
+static void run_offline_queue_proof(void)
+{
+    char pad[CONFIG_BENCH_PAYLOAD_BYTES + 1];
+    char properties[768];
+    uint32_t proof_id = (uint32_t)(esp_timer_get_time() / 1000);
+
+    fill_pad(pad, sizeof(pad));
+
+    ESP_LOGI(TAG,
+             "BENCH_OFFLINE_PROOF_START proof_id=%" PRIu32
+             " events=%d retry_seconds=%d queued_estimate=%" PRIu32,
+             proof_id,
+             CONFIG_BENCH_OFFLINE_QUEUE_PROOF_EVENTS,
+             CONFIG_BENCH_OFFLINE_RECOVERY_RETRY_SECONDS,
+             s_queued_estimate);
+    ESP_LOGW(TAG,
+             "BENCH_OFFLINE_RECOVERY_WAIT proof_id=%" PRIu32
+             " action=keep_capture_down_until_queue_growth_then_restore",
+             proof_id);
+
+    for (int i = 0; i < CONFIG_BENCH_OFFLINE_QUEUE_PROOF_EVENTS; i++) {
+        snprintf(properties, sizeof(properties),
+                 "{\"proof_id\":%" PRIu32 ",\"seq\":%d,\"phase\":\"offline\","
+                 "\"heap\":%" PRIu32 ",\"rssi\":%d,\"pad\":\"%s\"}",
+                 proof_id,
+                 i,
+                 (uint32_t)esp_get_free_heap_size(),
+                 current_rssi(),
+                 pad);
+
+        honch_err_t track_err = honch_track("bench_offline_queue_proof", properties);
+        if (track_err == HONCH_OK) {
+            s_queued_estimate++;
+        } else {
+            ESP_LOGE(TAG,
+                     "BENCH_OFFLINE_TRACK_FAILURE proof_id=%" PRIu32
+                     " seq=%d err=%d queued_estimate=%" PRIu32,
+                     proof_id,
+                     i,
+                     track_err,
+                     s_queued_estimate);
+        }
+
+        if (CONFIG_BENCH_EVENT_INTERVAL_MS > 0) {
+            vTaskDelay(pdMS_TO_TICKS(CONFIG_BENCH_EVENT_INTERVAL_MS));
+        }
+    }
+
+    ESP_LOGI(TAG,
+             "BENCH_OFFLINE_QUEUE_GROWTH proof_id=%" PRIu32
+             " queued_estimate=%" PRIu32 " expected_nonzero=%s",
+             proof_id,
+             s_queued_estimate,
+             s_queued_estimate > 0 ? "yes" : "no");
+
+    if (s_queued_estimate == 0) {
+        ESP_LOGE(TAG, "BENCH_OFFLINE_PROOF_ABORT proof_id=%" PRIu32 " reason=no_queued_events", proof_id);
+        return;
+    }
+
+    for (uint32_t attempt = 1;; attempt++) {
+        int64_t start_us = esp_timer_get_time();
+        honch_err_t flush_err = honch_flush();
+        int64_t flush_us = esp_timer_get_time() - start_us;
+        if (flush_err == HONCH_OK) {
+            s_queued_estimate = 0;
+            ESP_LOGI(TAG,
+                     "BENCH_OFFLINE_RECOVERY_FLUSH proof_id=%" PRIu32
+                     " attempt=%" PRIu32 " err=%d flush_us=%" PRId64
+                     " queued_estimate=%" PRIu32,
+                     proof_id,
+                     attempt,
+                     flush_err,
+                     flush_us,
+                     s_queued_estimate);
+            break;
+        }
+
+        ESP_LOGW(TAG,
+                 "BENCH_OFFLINE_RECOVERY_WAIT proof_id=%" PRIu32
+                 " attempt=%" PRIu32 " err=%d flush_us=%" PRId64
+                 " queued_estimate=%" PRIu32 " restore_capture_then_wait_seconds=%d",
+                 proof_id,
+                 attempt,
+                 flush_err,
+                 flush_us,
+                 s_queued_estimate,
+                 CONFIG_BENCH_OFFLINE_RECOVERY_RETRY_SECONDS);
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_BENCH_OFFLINE_RECOVERY_RETRY_SECONDS * 1000));
+    }
+
+    ESP_LOGI(TAG,
+             "BENCH_OFFLINE_PROOF_DONE proof_id=%" PRIu32
+             " queued_estimate=%" PRIu32 " clickhouse_event=bench_offline_queue_proof",
+             proof_id,
+             s_queued_estimate);
+}
+
 void app_main(void)
 {
     esp_err_t ret = nvs_flash_init();
@@ -342,7 +452,7 @@ void app_main(void)
     if (!wifi_init_sta()) {
         return;
     }
-    if (!wait_for_network_ready()) {
+    if (!CONFIG_BENCH_OFFLINE_QUEUE_PROOF && !wait_for_network_ready()) {
         return;
     }
 
@@ -366,6 +476,14 @@ void app_main(void)
     err = honch_track_gpio(GPIO_NUM_0, "bench_button", HONCH_GPIO_FALLING_EDGE);
     if (err != HONCH_OK) {
         ESP_LOGW(TAG, "Failed to register GPIO benchmark marker: %d", err);
+    }
+
+    if (CONFIG_BENCH_OFFLINE_QUEUE_PROOF) {
+        run_offline_queue_proof();
+        ESP_LOGI(TAG, "Offline queue proof complete. Verify bench_offline_queue_proof rows in ClickHouse.");
+        while (1) {
+            vTaskDelay(pdMS_TO_TICKS(60000));
+        }
     }
 
     uint32_t run_id = 1;

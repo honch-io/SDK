@@ -44,3 +44,28 @@ BENCH_RUN_END
 ```
 
 Use `Ctrl+]` to exit the ESP-IDF monitor.
+
+## Offline Queue Proof
+
+Enable `BENCH_OFFLINE_QUEUE_PROOF` when you need to prove ESP32 queue
+preservation through a capture outage.
+
+Expected flow:
+
+1. Stop capture or block the configured `Honch Host`.
+2. Flash/monitor the benchtest firmware with `BENCH_OFFLINE_QUEUE_PROOF=y`.
+3. Wait for `BENCH_OFFLINE_QUEUE_GROWTH queued_estimate=<nonzero>`.
+4. Restore capture.
+5. Wait for `BENCH_OFFLINE_RECOVERY_FLUSH queued_estimate=0`.
+6. Verify `bench_offline_queue_proof` rows for the logged `proof_id` in
+   ClickHouse.
+
+Proof-specific monitor markers:
+
+```text
+BENCH_OFFLINE_PROOF_START
+BENCH_OFFLINE_QUEUE_GROWTH
+BENCH_OFFLINE_RECOVERY_WAIT
+BENCH_OFFLINE_RECOVERY_FLUSH
+BENCH_OFFLINE_PROOF_DONE
+```
