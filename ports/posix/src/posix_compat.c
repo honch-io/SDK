@@ -10,6 +10,7 @@ static void honch_posix_config_to_core(const honch_config_t *config, honch_core_
         .device_model = config->device_model,
         .firmware_version = config->firmware_version,
         .environment = config->environment,
+        .sdk_platform = "c-posix",
         .queue_directory = config->queue_directory,
         .batch_size = config->batch_size,
         .max_queued_events = config->max_queued_events,

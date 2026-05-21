@@ -1,49 +1,39 @@
 # Honch MicroPython SDK
 
-MicroPython SDK for Honch analytics on connected hardware.
-
-This package implements the shared Honch SDK contract from `../../spec/`:
-
-- CBOR `POST <endpoint>/batch` with optional gzip transport compression
-- persistent local queue before delivery
-- persistent device and distinct identity
-- automatic lifecycle events and auto-stamped properties
-- bounded batching, retry preservation, and dead-letter handling
+MicroPython wrapper for the canonical Honch C core. The Python package keeps the
+small `honch.Honch` API, while SDK behavior comes from the same `core/` sources
+used by the ESP-IDF and POSIX ports: event semantics, CBOR, identity,
+lifecycle, queue policy, retry classification, and packetization.
 
 ## Status
 
-Initial v1 implementation. The public API is intentionally small and centered on
-an explicit `Honch` client instance.
+The MicroPython port is now C-core-derived. It is not a standalone pure-Python
+SDK and must be built into firmware with the `_honch_core` user C module.
 
-## Install
+## Build Into MicroPython
 
-For development on a connected board:
-
-```sh
-mpremote mount . run examples/basic.py
-```
-
-For a customer-like install on a Pico W, copy the package onto the device and
-drop in a `main.py` that uses the same E2E-style config and event sequence:
+From a MicroPython checkout, build a port with this repository's user module:
 
 ```sh
-mpremote connect auto mip install ports/micropython/package.json
-mpremote connect auto fs cp ports/micropython/examples/pico_w_main.py :main.py
-mpremote connect auto reset
+make -C ports/unix USER_C_MODULES=/path/to/SDK/ports/micropython/usermod/honch/micropython.cmake
 ```
 
-Note: `ENDPOINT_URL` in `examples/pico_w_main.py` is set to the local capture
-default used by the host-side E2E test. On a real Pico W, point it at a URL the
-board can reach on your network.
-
-For firmware builds, include the package through `manifest.py`:
+For board firmware, pass the same `USER_C_MODULES` path to the target port
+build. Freeze the thin Python wrapper with `manifest.py`:
 
 ```sh
-make BOARD=MYBOARD FROZEN_MANIFEST=/path/to/ports/micropython/manifest.py
+make BOARD=MYBOARD \
+  USER_C_MODULES=/path/to/SDK/ports/micropython/usermod/honch/micropython.cmake \
+  FROZEN_MANIFEST=/path/to/SDK/ports/micropython/manifest.py
 ```
 
-For `mip`/`mpremote mip` workflows, use `package.json` from this directory when
-publishing or installing from a hosted repository.
+`mip` can install the wrapper files from `package.json`, but those files require
+firmware that already contains `_honch_core`.
+
+The module reserves a 64 KiB C heap by default for ports such as `rp2`, where
+runtime `malloc`/`free` is unavailable unless firmware sets
+`MICROPY_C_HEAP_SIZE`. The shared Honch C core uses C allocation for client
+state, event buffers, CBOR packetization, and queue processing.
 
 ## Basic Usage
 
@@ -78,24 +68,24 @@ Required:
 
 Optional:
 
-- `device_id`: configured identity; generated and persisted when omitted
-- `environment`: defaults to `"production"`
-- `batch_size`: defaults to `20`, capped at `50`
-- `max_queued_events`: defaults to `1000`
-- `max_event_bytes`: defaults to `16384`
-- `transport_timeout_ms`: defaults to `10000`
-- `flush_interval_seconds`: defaults to `60`
-- `flush_event_threshold`: defaults to `30`
-- `flush_retry_initial_ms`: defaults to `1000`
-- `flush_retry_max_ms`: defaults to `300000`
-- `disable_gzip`: defaults to `False`; set true to always send raw CBOR
-- `gzip_min_bytes`: defaults to `1024`
-- `disable_background_flush`: defaults to `False`
-- `battery_callback`: returns `0`-`100`, or negative/`None` when unknown
-- `battery_low_threshold`: defaults to `15`
-- `auto_properties_callback`: returns a dict of JSON-compatible adapter properties
-- `platform`: optional board adapter
-- `transport`: optional HTTP adapter
+- `device_id`
+- `environment`
+- `batch_size`
+- `max_queued_events`
+- `max_event_bytes`
+- `transport_timeout_ms`
+- `flush_interval_seconds`
+- `flush_event_threshold`
+- `flush_retry_initial_ms`
+- `flush_retry_max_ms`
+- `disable_gzip`
+- `gzip_min_bytes`
+- `disable_background_flush`
+- `battery_low_threshold`
+
+Python `platform=`, `transport=`, `battery_callback=`, and
+`auto_properties_callback=` hooks are not supported by the C-core-derived port.
+Board behavior belongs in the C user-module adapters.
 
 ## Public API
 
@@ -115,35 +105,14 @@ client.get_device_id()
 ```
 
 `properties` and `traits` must be dictionaries containing JSON-compatible
-values. SDK-owned auto properties win over user-supplied properties with the
-same key.
+values. SDK-owned auto properties are stamped by the C core and win over
+user-supplied properties with the same key.
 
-`auto_properties_callback`, when configured, must return `None` or a dictionary
-with string keys and JSON-compatible values. SDK-owned auto properties still win
-over callback-supplied values, except `$wifi_rssi`, which platform adapters may
-provide.
+## Storage And Transport
 
-### Core Contract Mapping
-
-The shared SDK sheet describes six functions. MicroPython exposes the same
-contract through an explicit client object:
-
-| Shared contract | MicroPython API |
-| --- | --- |
-| `init(config)` | `client = honch.Honch(**config)` |
-| `track(event_name, properties)` | `client.track(event_name, properties)` |
-| `identify(distinct_id, properties)` | `client.identify(distinct_id, traits)` |
-| `set_property(key, value)` | `client.set_property(key, value)` |
-| `flush()` | `client.flush()` |
-| `reset()` | `client.reset()` |
-
-`session_start()`, `session_end()`, `connectivity_changed()`, `shutdown()`, and
-`get_device_id()` are MicroPython lifecycle and inspection extensions around
-that core contract.
-
-## Storage Layout
-
-The SDK stores state below `queue_directory`:
+The C user module owns the MicroPython storage and transport adapters. It stores
+state and queue files below `queue_directory` using the same logical layout as
+the other C-core ports:
 
 ```text
 pending/
@@ -154,100 +123,19 @@ state/
   firmware_version
 ```
 
-Events are written before delivery. Retryable network, `429`, and `5xx` errors
-leave pending events intact. Permanent `4xx` rejection moves attempted events to
-`dead/`.
-
-## Wire Format And Gzip
-
-The SDK queues and flushes CBOR payloads with `Content-Type:
-application/cbor`. Event timestamps are encoded as epoch milliseconds. Gzip is
-an optional HTTP transport optimization over CBOR, not JSON compatibility.
-
-By default the SDK attempts gzip only for encoded batches at or above 1024
-bytes. If gzip is unavailable, fails, or does not reduce the payload size, the
-SDK sends raw CBOR without `Content-Encoding`. Boards that provide compression
-can supply it through `platform.gzip_compress()`.
-
-## Background Flush
-
-Threshold flushing is notification-driven. When `flush_event_threshold` is
-reached, the SDK calls an optional `platform.request_flush(callback)` adapter;
-the adapter should schedule `callback` to run later on the board's timer, event
-loop, or worker primitive. It must not call the callback inline from `track()`.
-
-Interval flushing uses an optional
-`platform.start_periodic(interval_ms, callback)` adapter. Explicit `flush()` is
-always supported and is the fallback when no background adapter is available.
-
-## Connectivity Changes
-
-Board network code can notify the SDK when connectivity changes:
-
-```python
-client.connected()
-client.disconnected()
-client.connectivity_changed(True)
-client.connectivity_changed(False)
-```
-
-Each state transition queues a `$connectivity_change` lifecycle event with
-`state` set to `"connected"` or `"disconnected"`. Duplicate notifications for
-the current state are ignored. A transition to connected asks the scheduler for
-a deferred flush through `platform.request_flush(callback)` when background
-flush is enabled; the SDK does not perform network work inline from the
-notification call.
-
-## Relay Mode
-
-This package does not currently implement a relay drain API or sealed relay
-envelope. The ESP-IDF and C/POSIX SDKs do not expose that transport contract
-yet, and the shared relay byte format is still reserved for future work.
-
-Honch remains a payload, not a BLE, GATT, USB, UART, pairing, or customer packet
-protocol. Until the shared relay contract is implemented across SDKs,
-MicroPython supports direct HTTPS flush only.
-
-## Footprint Notes
-
-The source package is about 27 KB across the current `honch/*.py` modules before
-`.mpy` compilation, filesystem metadata, or firmware freezing. Exact flash and
-RAM use depends on the board firmware, MicroPython port, enabled modules, and
-whether the package is frozen into the image.
-
-Queue operations keep memory bounded by reading at most `batch_size` events per
-flush, capped at 50, and by rejecting events larger than `max_event_bytes`.
-Pending and dead-letter events are persisted as individual CBOR files below
-`queue_directory`, so storage cost scales with queued event count and event
-size.
-
-Direct flush uses compression for larger batches when available, but it is not
-blocked by a missing gzip implementation in the firmware.
+Flush sends CBOR batches to `POST <endpoint_url>/batch` with
+`Content-Type: application/cbor`. Retry and dead-letter behavior is inherited
+from the canonical C core.
 
 ## Tests
 
-Host-runnable checks use the Python standard library:
+Host-side tests verify the wrapper and user-module source shape:
 
 ```sh
-python -m unittest discover -v
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=ports/micropython python3 -m unittest discover \
+  -s ports/micropython/tests -t . -v
 ```
 
-The tests use fake transports, clocks, randomness, and temporary queue
-directories. They do not perform real network calls.
-
-Real capture E2E is opt-in and uses the same local-stack defaults as the
-C/POSIX SDK:
-
-```sh
-HONCH_E2E=1 python -m unittest tests.test_e2e_capture -v
-```
-
-Defaults:
-
-- `HONCH_E2E_ENDPOINT`: `http://127.0.0.1:8001`
-- `HONCH_E2E_CAPTURE_HEALTH_URL`: `http://127.0.0.1:8001/health`
-- `HONCH_E2E_WORKER_HEALTH_URL`: `http://127.0.0.1:8080/`
-- `HONCH_E2E_TOKEN`: `honch_e2e_test_key`
-- `HONCH_E2E_PROJECT_ID`: `00000000-0000-0000-0000-000000000002`
-- `HONCH_E2E_CLICKHOUSE_URL`: `http://127.0.0.1:8123`
-- `HONCH_E2E_CLICKHOUSE_DATABASE`: `platform`
+Full runtime validation requires building MicroPython with
+`ports/micropython/usermod/honch/micropython.cmake` and running the wrapper on
+that interpreter or firmware.

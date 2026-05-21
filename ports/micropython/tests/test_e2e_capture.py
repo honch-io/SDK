@@ -7,6 +7,13 @@ import urllib.request
 
 import honch
 
+try:
+    import _honch_core  # noqa: F401
+except ImportError:
+    HAS_C_CORE = False
+else:
+    HAS_C_CORE = True
+
 
 DEFAULT_CAPTURE_URL = "http://127.0.0.1:8001"
 DEFAULT_CAPTURE_HEALTH_URL = "http://127.0.0.1:8001/health"
@@ -88,47 +95,7 @@ def wait_for_clickhouse_event(clickhouse_url, database, project_id, event_name):
     raise AssertionError("E2E event did not appear in ClickHouse: %s" % event_name)
 
 
-class E2EPlatform:
-    def __init__(self):
-        self.wifi_rssi = -64
-
-    def now_ms(self):
-        return int(time.time() * 1000)
-
-    def sleep_ms(self, millis):
-        time.sleep(millis / 1000.0)
-
-    def random_hex(self, nbytes=16):
-        return os.urandom(nbytes).hex()
-
-    def gzip_compress(self, data):
-        import gzip
-
-        return gzip.compress(data)
-
-    def get_reset_reason(self):
-        return "unknown"
-
-    def get_wifi_rssi(self):
-        return self.wifi_rssi
-
-    def start_periodic(self, interval_ms, callback):
-        return None
-
-
-class UrlLibTransport:
-    def post(self, url, body, headers, timeout_ms):
-        request = urllib.request.Request(url, data=body, headers=headers, method="POST")
-        try:
-            with urllib.request.urlopen(request, timeout=timeout_ms / 1000.0) as response:
-                response.read()
-                return response.status
-        except urllib.error.HTTPError as exc:
-            exc.read()
-            return exc.code
-
-
-@unittest.skipUnless(E2E_ENABLED, "set HONCH_E2E=1 to run real capture E2E tests")
+@unittest.skipUnless(E2E_ENABLED and HAS_C_CORE, "set HONCH_E2E=1 and run with _honch_core to run real capture E2E tests")
 class HonchCaptureE2ETests(unittest.TestCase):
     def setUp(self):
         self.endpoint = env_or_default("HONCH_E2E_ENDPOINT", DEFAULT_CAPTURE_URL)
@@ -138,23 +105,12 @@ class HonchCaptureE2ETests(unittest.TestCase):
         self.clickhouse_url = env_or_default("HONCH_E2E_CLICKHOUSE_URL", DEFAULT_CLICKHOUSE_URL)
         self.project_id = env_or_default("HONCH_E2E_PROJECT_ID", DEFAULT_PROJECT_ID)
         self.database = env_or_default("HONCH_E2E_CLICKHOUSE_DATABASE", DEFAULT_CLICKHOUSE_DATABASE)
-        self.battery_level = 87
 
         http_get_ok(self.capture_health)
         http_get_ok(self.worker_health)
         http_get_ok(self.clickhouse_url)
 
     def make_client(self, queue_dir, firmware_version="e2e-fw-1"):
-        def battery_callback():
-            return self.battery_level
-
-        def auto_properties_callback():
-            return {
-                "$wifi_rssi": -64,
-                "adapter_property": "e2e-adapter",
-                "$device_id": "adapter-spoof",
-            }
-
         return honch.Honch(
             api_key=self.token,
             endpoint_url=self.endpoint,
@@ -168,11 +124,7 @@ class HonchCaptureE2ETests(unittest.TestCase):
             max_event_bytes=8192,
             transport_timeout_ms=15000,
             disable_background_flush=True,
-            battery_callback=battery_callback,
             battery_low_threshold=20,
-            auto_properties_callback=auto_properties_callback,
-            platform=E2EPlatform(),
-            transport=UrlLibTransport(),
         )
 
     def assert_common_row(self, row, event_name):
@@ -213,7 +165,6 @@ class HonchCaptureE2ETests(unittest.TestCase):
             with self.assertRaises(honch.InvalidArgumentError):
                 client.set_property("", "bad")
 
-            self.battery_level = 12
             client.track(
                 event_edge,
                 {
@@ -233,16 +184,9 @@ class HonchCaptureE2ETests(unittest.TestCase):
 
             row = self.verify_event(event_edge)
             self.assertIn('"source":"micropython-e2e"', row["properties"])
-            self.assertIn('"adapter_property":"e2e-adapter"', row["properties"])
-            self.assertIn('"$wifi_rssi":-64', row["properties"])
-            self.assertIn('"$battery_level":12', row["properties"])
             self.assertNotIn("spoofed-device", row["properties"])
             self.assertNotIn("spoofed-platform", row["properties"])
             self.assertEqual(row["device_id"], first_device_id)
-
-            row = self.verify_event("$battery_low")
-            self.assertIn('"level":12', row["properties"])
-            self.assertIn('"$battery_level":12', row["properties"])
 
             row = self.verify_event("$identify")
             self.assertEqual(row["distinct_id"], user_id)
@@ -269,7 +213,6 @@ class HonchCaptureE2ETests(unittest.TestCase):
 
             client.shutdown()
 
-            self.battery_level = 55
             client = self.make_client(queue_dir)
             restarted_device_id = client.get_device_id()
             self.assertEqual(restarted_device_id, first_device_id)

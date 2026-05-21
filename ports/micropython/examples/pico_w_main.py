@@ -13,11 +13,6 @@ try:
 except ImportError:
     sys = None
 
-try:
-    import io
-except ImportError:
-    import uio as io
-
 import honch
 
 honch.__path__ = "/lib/honch"
@@ -34,68 +29,6 @@ BATTERY_LOW_THRESHOLD = 20
 # Real Pico W network credentials from the Desktop test script.
 WIFI_SSID = "BT-Q2AT9P"
 WIFI_PASSWORD = "eDeNEKq6PmcPLg"
-
-
-class PicoWPlatform:
-    def _debug(self, *parts):
-        print("DEBUG:", *parts)
-
-    def now_ms(self):
-        return int(time.time() * 1000)
-
-    def sleep_ms(self, millis):
-        time.sleep(millis / 1000.0)
-
-    def random_hex(self, nbytes=16):
-        try:
-            import urandom as random
-        except ImportError:
-            import random
-        return "".join("%02x" % random.getrandbits(8) for _ in range(nbytes))
-
-    def gzip_compress(self, data):
-        self._debug("compress start", len(data), "bytes")
-        try:
-            import gzip
-
-            compressed = gzip.compress(data)
-            self._debug("compress gzip ok", len(compressed), "bytes")
-            return compressed
-        except Exception as exc:
-            self._debug("compress gzip unavailable", repr(exc))
-
-        try:
-            import deflate
-
-            buffer = io.BytesIO()
-            with deflate.DeflateIO(buffer, deflate.GZIP) as stream:
-                stream.write(data)
-            compressed = buffer.getvalue()
-            self._debug("compress deflate ok", len(compressed), "bytes")
-            return compressed
-        except Exception as exc:
-            self._debug("compress deflate unavailable", repr(exc))
-            return None
-
-    def get_reset_reason(self):
-        return "unknown"
-
-    def get_wifi_rssi(self):
-        if network is None:
-            return None
-        try:
-            sta = network.WLAN(network.STA_IF)
-            if sta.active() and sta.isconnected():
-                return -64
-        except Exception:
-            return None
-        return None
-
-    def start_periodic(self, interval_ms, callback):
-        return None
-
-    def request_flush(self, callback):
-        return False
 
 
 def connect_wifi(ssid, password, timeout_s=20):
@@ -125,25 +58,6 @@ def connect_wifi(ssid, password, timeout_s=20):
 
 def main():
     print("DEBUG: boot start")
-    battery_level = 87
-    log_state = {"battery": 0, "auto_properties": 0}
-
-    def battery_callback():
-        if log_state["battery"] == 0:
-            print("DEBUG: battery callback ready")
-        log_state["battery"] += 1
-        return battery_level
-
-    def auto_properties_callback():
-        if log_state["auto_properties"] == 0:
-            print("DEBUG: auto properties callback ready")
-        log_state["auto_properties"] += 1
-        return {
-            "$wifi_rssi": -64,
-            "adapter_property": "e2e-adapter",
-            "$device_id": "adapter-spoof",
-        }
-
     try:
         connect_wifi(WIFI_SSID, WIFI_PASSWORD)
     except Exception as exc:
@@ -167,19 +81,14 @@ def main():
         max_event_bytes=8192,
         transport_timeout_ms=15000,
         disable_background_flush=True,
-        battery_callback=battery_callback,
         battery_low_threshold=BATTERY_LOW_THRESHOLD,
-        auto_properties_callback=auto_properties_callback,
-        platform=PicoWPlatform(),
     )
 
     print("DEBUG: honch device id", client.get_device_id())
-    prefix = "micropython_e2e_%s" % client.platform.random_hex(4)
+    prefix = "micropython_e2e_%d" % int(time.time())
     event_edge = prefix + "_edge"
     event_session = prefix + "_session"
     user_id = prefix + "_user"
-
-    battery_level = 12
 
     print("DEBUG: track edge", event_edge)
     client.track(
@@ -202,21 +111,12 @@ def main():
     client.track(event_session, {"mode": "hdr"})
     print("DEBUG: session end")
     client.session_end()
-    compression_probe = client.platform.gzip_compress(b"probe")
-    if compression_probe is None:
-        print(
-            "DEBUG: compression unavailable on this firmware; relying on identity fallback"
-        )
-    else:
-        print("DEBUG: compression available", len(compression_probe), "bytes")
     print(
         "DEBUG: mock batch ready",
         {
             "edge": event_edge,
             "session": event_session,
             "user": user_id,
-            "battery_callback_calls": log_state["battery"],
-            "auto_properties_calls": log_state["auto_properties"],
         },
     )
     print("DEBUG: flush start")
