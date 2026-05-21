@@ -52,6 +52,8 @@ typedef enum honch_http_result {
 } honch_http_result_t;
 
 struct honch_client {
+    pthread_mutex_t lifetime_mutex;
+    pthread_cond_t lifetime_cond;
     pthread_mutex_t mutex;
     pthread_cond_t scheduler_cond;
     pthread_t scheduler_thread;
@@ -92,6 +94,8 @@ struct honch_client {
     bool scheduler_started;
     bool scheduler_stop;
     bool scheduler_flush_requested;
+    bool closing;
+    size_t active_calls;
     int (*battery_callback)(void);
     int battery_low_threshold;
     honch_auto_properties_fn auto_properties_callback;
@@ -172,6 +176,10 @@ honch_status_t honch_queue_enqueue(honch_client_t *client, const unsigned char *
 honch_status_t honch_queue_clear(honch_client_t *client);
 honch_status_t honch_queue_count_pending(honch_client_t *client, size_t *count);
 honch_status_t honch_queue_flush_locked(honch_client_t *client);
+
+honch_status_t honch_client_enter(honch_client_t *client);
+void honch_client_leave(honch_client_t *client);
+honch_status_t honch_client_begin_shutdown(honch_client_t *client);
 
 honch_status_t honch_transport_post_batch(
     honch_client_t *client,

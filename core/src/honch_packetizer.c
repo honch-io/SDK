@@ -83,32 +83,49 @@ static honch_status_t honch_packetizer_reset_peek_cursor(honch_client_t *client)
 
 bool honch_core_data_available(honch_client_t *client, uint32_t source_mask)
 {
-    if (client == NULL || !honch_packetizer_source_supported(source_mask) ||
+    honch_status_t status = honch_client_enter(client);
+    if (status != HONCH_OK) {
+        return false;
+    }
+
+    if (!honch_packetizer_source_supported(source_mask) ||
         client->storage == NULL || client->storage->queue_depth == NULL) {
+        honch_client_leave(client);
         return false;
     }
 
     size_t depth = 0u;
-    return client->storage->queue_depth(client->storage->ctx, &depth) == HONCH_OK && depth > 0u;
+    bool available = client->storage->queue_depth(client->storage->ctx, &depth) == HONCH_OK && depth > 0u;
+    honch_client_leave(client);
+    return available;
 }
 
 honch_status_t honch_packetizer_begin(honch_client_t *client, honch_packetizer_t *packetizer, uint32_t source_mask)
 {
-    if (client == NULL || packetizer == NULL || !honch_packetizer_source_supported(source_mask)) {
+    honch_status_t status = honch_client_enter(client);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    if (packetizer == NULL || !honch_packetizer_source_supported(source_mask)) {
+        honch_client_leave(client);
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    honch_status_t status = honch_packetizer_reset_peek_cursor(client);
+    status = honch_packetizer_reset_peek_cursor(client);
     if (status != HONCH_OK) {
+        honch_client_leave(client);
         return status;
     }
 
     honch_storage_reader_t reader = {0};
     status = honch_packetizer_peek(client, &reader);
     if (status != HONCH_OK) {
+        honch_client_leave(client);
         return status;
     }
     if (reader.read == NULL || reader.total_size == 0u || reader.total_size > UINT32_MAX) {
+        honch_client_leave(client);
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
@@ -209,6 +226,7 @@ honch_status_t honch_packetizer_confirm(honch_packetizer_t *packetizer)
         packetizer->sequence);
     if (status == HONCH_OK) {
         packetizer->active = false;
+        honch_client_leave(packetizer->client);
     }
     return status;
 }
@@ -220,5 +238,6 @@ honch_status_t honch_packetizer_abort(honch_packetizer_t *packetizer)
     }
 
     packetizer->active = false;
+    honch_client_leave(packetizer->client);
     return HONCH_OK;
 }
