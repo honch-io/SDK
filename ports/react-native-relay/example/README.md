@@ -2,6 +2,9 @@
 
 This directory is reserved for the internal mobile E2E harness.
 
+`App.tsx` wires the package to `NativeModules.HonchReactNativeRelay`, starts BLE
+scan, displays pending mobile relay messages, and exposes a manual upload drain.
+
 The example app should prove:
 
 - BLE scan/connect to a Honch firmware relay peripheral.

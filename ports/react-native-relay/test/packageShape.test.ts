@@ -27,7 +27,9 @@ describe("React Native relay package shape", () => {
       "ios/HonchReactNativeRelay.podspec",
       "ios/HonchReactNativeRelay.h",
       "ios/HonchReactNativeRelay.m",
-      "example/README.md"
+      "example/README.md",
+      "example/package.json",
+      "example/App.tsx"
     ];
 
     for (const file of expectedFiles) {
