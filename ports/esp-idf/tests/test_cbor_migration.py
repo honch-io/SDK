@@ -305,7 +305,7 @@ class EspIdfCborMigrationTest(unittest.TestCase):
         self.assertIn('"direct_honch_archive"', report)
         self.assertIn('"runtime"', report)
         self.assertIn('"landing_claims"', report)
-        self.assertIn("ports/esp-idf/footprint/", gitignore)
+        self.assertIn("ports/esp-idf/**/build-*", gitignore)
 
     def test_encoder_builds_cbor_epoch_millis_payloads(self) -> None:
         encoder = read("core/src/honch_encoder.c")

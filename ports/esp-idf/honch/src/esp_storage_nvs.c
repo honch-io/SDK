@@ -260,6 +260,15 @@ static void honch_esp_ram_queue_reset(honch_esp_storage_t *storage)
     storage->read_sequence = UINT64_MAX;
 }
 
+static uintptr_t honch_esp_align_up(uintptr_t value, uintptr_t alignment)
+{
+    uintptr_t remainder = value % alignment;
+    if (remainder == 0u) {
+        return value;
+    }
+    return value + alignment - remainder;
+}
+
 static honch_esp_ram_queue_entry_t *honch_esp_ram_queue_find(
     honch_esp_storage_t *storage,
     uint64_t sequence)
@@ -305,8 +314,9 @@ static honch_status_t honch_esp_ram_queue_push(
     if (storage == NULL || event == NULL || event_size == 0u) {
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
-    if (storage->ram_buffer == NULL || storage->nvs_fallback_active ||
-        storage->ram_count >= HONCH_ESP_RAM_QUEUE_MAX_EVENTS ||
+    if (storage->ram_buffer == NULL || storage->ram_entries == NULL ||
+        storage->nvs_fallback_active ||
+        storage->ram_count >= storage->ram_entry_capacity ||
         storage->ram_used > storage->ram_buffer_size ||
         event_size > storage->ram_buffer_size - storage->ram_used ||
         event_size > UINT32_MAX || storage->ram_used > UINT32_MAX) {
@@ -807,8 +817,31 @@ honch_status_t honch_esp_storage_use_ram_queue(
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
 
-    ctx->ram_buffer = buffer;
-    ctx->ram_buffer_size = buffer_size;
+    uintptr_t buffer_start = (uintptr_t)buffer;
+    uintptr_t entries_start = honch_esp_align_up(buffer_start, _Alignof(honch_esp_ram_queue_entry_t));
+    size_t alignment_padding = (size_t)(entries_start - buffer_start);
+    if (alignment_padding >= buffer_size) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+
+    size_t usable_size = buffer_size - alignment_padding;
+    size_t entry_capacity = usable_size / (sizeof(honch_esp_ram_queue_entry_t) + 1u);
+    if (entry_capacity > HONCH_ESP_RAM_QUEUE_MAX_EVENTS) {
+        entry_capacity = HONCH_ESP_RAM_QUEUE_MAX_EVENTS;
+    }
+    if (entry_capacity == 0u) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+
+    size_t entry_bytes = entry_capacity * sizeof(honch_esp_ram_queue_entry_t);
+    if (entry_bytes >= usable_size) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+
+    ctx->ram_entries = (honch_esp_ram_queue_entry_t *)entries_start;
+    ctx->ram_entry_capacity = entry_capacity;
+    ctx->ram_buffer = (uint8_t *)(entries_start + entry_bytes);
+    ctx->ram_buffer_size = usable_size - entry_bytes;
     honch_esp_ram_queue_reset(ctx);
 
     size_t nvs_depth = 0u;
