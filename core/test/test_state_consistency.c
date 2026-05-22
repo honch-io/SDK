@@ -348,6 +348,40 @@ static void test_failed_reset_second_identity_write_preserves_persisted_identity
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
+static void test_set_property_rejects_blank_key(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_storage_ops_t storage_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    int queue_push_calls = storage.queue_push_calls;
+    assert(honch_core_set_property(client, "", "\"value\"") == HONCH_ERROR_INVALID_ARGUMENT);
+    assert(honch_core_set_property(client, "   ", "\"value\"") == HONCH_ERROR_INVALID_ARGUMENT);
+    assert(storage.queue_push_calls == queue_push_calls);
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+static void test_set_property_rejects_reserved_key(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_storage_ops_t storage_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    int queue_push_calls = storage.queue_push_calls;
+    assert(honch_core_set_property(client, "$device_id", "\"spoof\"") == HONCH_ERROR_INVALID_ARGUMENT);
+    assert(honch_core_set_property(client, "$session_id", "\"spoof\"") == HONCH_ERROR_INVALID_ARGUMENT);
+    assert(storage.queue_push_calls == queue_push_calls);
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
 static void test_state_get_rejects_size_overflow(void)
 {
     fake_state_storage_t storage = {
@@ -428,6 +462,8 @@ int main(void)
     test_failed_firmware_update_queue_does_not_advance_persisted_version();
     test_failed_init_rolls_back_queued_lifecycle_events();
     test_failed_reset_second_identity_write_preserves_persisted_identity();
+    test_set_property_rejects_blank_key();
+    test_set_property_rejects_reserved_key();
     test_state_get_rejects_size_overflow();
     test_state_get_rejects_inconsistent_read_size();
     test_battery_callback_runs_outside_client_mutex();

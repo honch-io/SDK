@@ -28,6 +28,14 @@ static honch_status_t honch_validate_distinct_id(const char *distinct_id)
     return HONCH_OK;
 }
 
+static honch_status_t honch_validate_user_property_key(const char *key)
+{
+    if (honch_is_blank(key) || honch_property_key_is_reserved(key)) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    return HONCH_OK;
+}
+
 static bool honch_cstring_exceeds(const char *value, size_t max_length)
 {
     if (value == NULL) {
@@ -1337,7 +1345,7 @@ honch_status_t honch_core_set_property(honch_client_t *client, const char *key, 
         return status;
     }
 
-    if (key == NULL ||
+    if (honch_validate_user_property_key(key) != HONCH_OK ||
         honch_validate_json_value_input(client, value_json) != HONCH_OK) {
         honch_client_leave(client);
         return HONCH_ERROR_INVALID_ARGUMENT;
