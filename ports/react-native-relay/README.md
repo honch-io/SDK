@@ -37,6 +37,22 @@ X-Honch-Relay-SDK-Version: <package_version>
 bun install
 ```
 
+## Durable Storage
+
+Production mobile apps should use `react-native-mmkv` for relay queue storage:
+
+```ts
+import { createMMKV } from "react-native-mmkv";
+import { createMmkvRelayStore } from "@honch/react-native-relay";
+
+const relayStore = createMmkvRelayStore(createMMKV({ id: "honch-relay" }));
+```
+
+MMKV stores the relay queue under `honch.relay.queue.v1` using the same stable
+JSON schema as the local file-backed test adapter. Completed messages and
+incomplete assemblies remain pending across app restarts until capture accepts
+or permanently rejects them.
+
 ## Test
 
 ```sh

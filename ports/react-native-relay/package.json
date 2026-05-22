@@ -15,7 +15,9 @@
     "type": "modules",
     "jsSrcsDir": "src"
   },
-  "dependencies": {},
+  "dependencies": {
+    "react-native-mmkv": "^4.3.1"
+  },
   "devDependencies": {
     "@types/node": "^25.9.1",
     "typescript": "^5.0.0",
