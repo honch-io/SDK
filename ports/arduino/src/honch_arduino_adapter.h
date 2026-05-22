@@ -13,6 +13,8 @@ struct honch_arduino_platform {
 struct honch_arduino_storage {
   uint8_t *eventBuffer;
   size_t eventBufferSize;
+  uint64_t peekSequence;
+  uint64_t readSequence;
 };
 
 struct honch_arduino_transport {
