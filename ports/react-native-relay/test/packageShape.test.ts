@@ -1,4 +1,3 @@
-// @ts-expect-error Vitest runs these package-shape checks in Node.
 import { existsSync, readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
