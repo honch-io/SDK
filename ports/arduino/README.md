@@ -4,7 +4,8 @@ Arduino ESP32 wrapper around the canonical Honch C core.
 
 ## Status
 
-Preview. The first milestone targets ESP32 boards using the Arduino framework.
+In progress. The first milestone targets ESP32 boards using the Arduino
+framework and has not yet been end-to-end tested on ESP32 hardware.
 
 ## Support
 
