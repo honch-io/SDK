@@ -47,6 +47,10 @@ node_modules/
 !spec/conformance/wire-v2/
 !spec/conformance/wire-v2/*.json
 
+# Android local/generated project state
+ports/react-native-relay/android/.gradle/
+ports/react-native-relay/android/local.properties
+
 # Logs/temp files
 *.log
 *.tmp
