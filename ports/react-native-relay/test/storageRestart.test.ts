@@ -3,8 +3,10 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 
+import type { RelayDurableStore } from "../src/durableStore";
 import { createDurableRelayQueue } from "../src/relayQueue";
 import { createJsonFileRelayStore } from "../src/storage/jsonFileStore";
+import { createMmkvRelayStore } from "../src/storage/mmkvStore";
 
 function crc16(bytes: Uint8Array): number {
   let crc = 0xffff;
@@ -54,14 +56,18 @@ async function tempStorePath(): Promise<string> {
   return join(directory, "queue.json");
 }
 
-describe("JSON file relay durable store restart behavior", () => {
+type StoreFactory = () => RelayDurableStore | Promise<RelayDurableStore>;
+type StoreFactoryFactory = () => StoreFactory | Promise<StoreFactory>;
+
+function runRelayDurableStoreConformance(name: string, createStoreFactory: StoreFactoryFactory): void {
+  describe(`${name} restart behavior`, () => {
   it("continues an incomplete assembly after durable store re-instantiation", async () => {
-    const tempFile = await tempStorePath();
-    const firstQueue = createDurableRelayQueue(createJsonFileRelayStore(tempFile));
+    const createStore = await createStoreFactory();
+    const firstQueue = createDurableRelayQueue(await createStore());
 
     await firstQueue.putChunk("device-a", frame({ first: true, sequence: 1n, payload: [1, 2] }));
 
-    const restartedQueue = createDurableRelayQueue(createJsonFileRelayStore(tempFile));
+    const restartedQueue = createDurableRelayQueue(await createStore());
     const result = await restartedQueue.putChunk(
       "device-a",
       frame({ final: true, sequence: 1n, offset: 2, payload: [3, 4] })
@@ -72,16 +78,44 @@ describe("JSON file relay durable store restart behavior", () => {
   });
 
   it("keeps completed messages pending after durable store re-instantiation", async () => {
-    const tempFile = await tempStorePath();
-    const firstQueue = createDurableRelayQueue(createJsonFileRelayStore(tempFile));
+    const createStore = await createStoreFactory();
+    const firstQueue = createDurableRelayQueue(await createStore());
 
     await firstQueue.putChunk(
       "device-a",
       frame({ first: true, final: true, sequence: 7n, payload: [9] })
     );
 
-    const restartedQueue = createDurableRelayQueue(createJsonFileRelayStore(tempFile));
+    const restartedQueue = createDurableRelayQueue(await createStore());
 
     expect((await restartedQueue.pending()).map((message) => message.sequence)).toEqual(["7"]);
   });
+  });
+}
+
+runRelayDurableStoreConformance("JSON file relay durable store", async () => {
+  const tempFile = await tempStorePath();
+  return () => createJsonFileRelayStore(tempFile);
+});
+
+function fakeMmkv() {
+  const values = new Map<string, string>();
+  return {
+    getString(key: string): string | undefined {
+      return values.get(key);
+    },
+    set(key: string, value: string): void {
+      values.set(key, value);
+    },
+    remove(key: string): boolean {
+      const existed = values.has(key);
+      values.delete(key);
+      return existed;
+    }
+  };
+}
+
+runRelayDurableStoreConformance("MMKV relay durable store", () => {
+  const mmkv = fakeMmkv();
+  return () => createMmkvRelayStore(mmkv);
 });
