@@ -135,6 +135,11 @@ const subscription = relay.subscribeNativeFrames();
 Retryable upload failures keep messages pending and schedule the next native
 upload attempt with the canonical relay backoff.
 
+For custom transports, `buildRelayUploadBuffer(config, message)` returns the
+canonical compact wire-v2 `ArrayBuffer` for a pending relay message without
+marking queue state uploaded. Queue consumption must remain tied to an accepted
+capture response.
+
 ## Capture E2E
 
 The package includes an offline-capable E2E harness:

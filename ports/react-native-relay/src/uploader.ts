@@ -16,6 +16,19 @@ export type RelayUploadOutcome =
   | { action: "drop"; status: number }
   | { action: "retry"; status?: number; error?: unknown };
 
+export function buildRelayUploadBuffer(
+  config: Pick<RelayUploaderConfig, "messageId">,
+  message: StoredRelayMessage
+): ArrayBuffer {
+  const frame = buildSingleWireV2Frame({
+    messageId: config.messageId(message),
+    payload: message.body
+  });
+  const body = new ArrayBuffer(frame.byteLength);
+  new Uint8Array(body).set(frame);
+  return body;
+}
+
 export async function uploadRelayMessage(
   config: RelayUploaderConfig,
   message: StoredRelayMessage
@@ -34,12 +47,7 @@ export async function uploadRelayMessageOutcome(
   config: RelayUploaderConfig,
   message: StoredRelayMessage
 ): Promise<RelayUploadOutcome> {
-  const frame = buildSingleWireV2Frame({
-    messageId: config.messageId(message),
-    payload: message.body
-  });
-  const body = new ArrayBuffer(frame.byteLength);
-  new Uint8Array(body).set(frame);
+  const body = buildRelayUploadBuffer(config, message);
 
   let response: Response;
   try {
