@@ -56,6 +56,7 @@ describe("createMobileRelay", () => {
         async stopScan() {},
         async connect() {},
         async disconnect() {},
+        async subscribeFrames() {},
         async acknowledgeMessage(deviceId, sequence) {
           acknowledgements.push(`${deviceId}:${sequence}`);
         }
@@ -87,6 +88,7 @@ describe("createMobileRelay", () => {
         async stopScan() {},
         async connect() {},
         async disconnect() {},
+        async subscribeFrames() {},
         async acknowledgeMessage() {}
       },
       schedulerNative: {

@@ -5,6 +5,7 @@ export interface RelayBleNative {
   stopScan(): Promise<void>;
   connect(deviceId: string): Promise<void>;
   disconnect(deviceId: string): Promise<void>;
+  subscribeFrames(deviceId: string): Promise<void>;
   acknowledgeMessage(deviceId: string, sequence: string): Promise<void>;
 }
 
@@ -34,6 +35,10 @@ export function createBleRelayReceiver(options: RelayBleReceiverOptions) {
 
     disconnect(deviceId: string) {
       return options.native.disconnect(deviceId);
+    },
+
+    subscribeFrames(deviceId: string) {
+      return options.native.subscribeFrames(deviceId);
     },
 
     async receiveFrame(deviceId: string, frameBytes: Uint8Array): Promise<RelayFrameReceipt> {

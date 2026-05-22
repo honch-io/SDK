@@ -24,6 +24,11 @@ RCT_EXPORT_METHOD(disconnect:(NSString *)deviceId resolver:(RCTPromiseResolveBlo
   resolve(deviceId);
 }
 
+RCT_EXPORT_METHOD(subscribeFrames:(NSString *)deviceId resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+{
+  resolve(deviceId);
+}
+
 RCT_EXPORT_METHOD(acknowledgeMessage:(NSString *)deviceId sequence:(NSString *)sequence resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 {
   resolve([NSString stringWithFormat:@"%@:%@", deviceId, sequence]);

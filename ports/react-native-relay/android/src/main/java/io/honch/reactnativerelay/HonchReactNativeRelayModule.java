@@ -48,6 +48,11 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
+    public void subscribeFrames(String deviceId, Promise promise) {
+        promise.resolve(deviceId);
+    }
+
+    @ReactMethod
     public void acknowledgeMessage(String deviceId, String sequence, Promise promise) {
         promise.resolve(deviceId + ":" + sequence);
     }

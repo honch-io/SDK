@@ -13,6 +13,7 @@ const requiredMethods = [
   "stopScan",
   "connect",
   "disconnect",
+  "subscribeFrames",
   "acknowledgeMessage",
   "scheduleUpload",
   "cancelUpload"
@@ -33,6 +34,7 @@ export function createRelayNativeBindings(nativeModule: unknown): RelayNativeBin
       stopScan: () => typedModule.stopScan(),
       connect: (deviceId) => typedModule.connect(deviceId),
       disconnect: (deviceId) => typedModule.disconnect(deviceId),
+      subscribeFrames: (deviceId) => typedModule.subscribeFrames(deviceId),
       acknowledgeMessage: (deviceId, sequence) =>
         typedModule.acknowledgeMessage(deviceId, sequence)
     },

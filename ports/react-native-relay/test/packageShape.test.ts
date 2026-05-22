@@ -51,6 +51,7 @@ describe("React Native relay package shape", () => {
       "stopScan",
       "connect",
       "disconnect",
+      "subscribeFrames",
       "acknowledgeMessage",
       "scheduleUpload",
       "cancelUpload"
