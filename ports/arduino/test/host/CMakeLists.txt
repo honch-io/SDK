@@ -7,6 +7,9 @@ add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../../../../core ${CMAKE_BINARY_DIR}/
 add_executable(honch_arduino_wrapper_test
     test_arduino_wrapper.cpp
     ../../src/Honch.cpp
+    ../../src/honch_arduino_platform.cpp
+    ../../src/honch_arduino_storage.cpp
+    ../../src/honch_arduino_transport.cpp
 )
 
 target_include_directories(honch_arduino_wrapper_test PRIVATE
