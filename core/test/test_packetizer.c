@@ -18,6 +18,7 @@ typedef struct fake_storage {
     bool has_message;
     bool consumed;
     bool dead_lettered;
+    honch_status_t consume_status;
     honch_client_t *client;
     bool require_client_lock_on_peek;
     bool peek_saw_client_lock;
@@ -64,6 +65,10 @@ static honch_status_t fake_queue_consume(void *ctx, uint64_t sequence)
     fake_storage_t *storage = (fake_storage_t *)ctx;
     if (storage == NULL || sequence != storage->sequence) {
         return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (storage->consume_status != HONCH_OK) {
+        return storage->consume_status;
     }
 
     storage->consumed = true;
@@ -270,6 +275,33 @@ static void test_confirm_consumes_storage(void)
     fake_client_destroy(&client);
 }
 
+static void test_confirm_unlocks_client_on_consume_failure(void)
+{
+    const uint8_t message[] = {0xa0u};
+    fake_storage_t storage = {
+        .message = message,
+        .message_size = sizeof(message),
+        .sequence = HONCH_TEST_SEQUENCE,
+        .has_message = true,
+        .consume_status = HONCH_ERROR_IO
+    };
+    honch_storage_ops_t ops = {0};
+    honch_client_t client = fake_client_with_storage(&storage, &ops);
+    honch_packetizer_t packetizer = {0};
+    uint8_t buffer[64] = {0};
+    size_t out_size = 0u;
+    bool complete = false;
+
+    assert(honch_packetizer_begin(&client, &packetizer, HONCH_DATA_SOURCE_EVENTS) == HONCH_OK);
+    assert(honch_packetizer_next(&packetizer, buffer, sizeof(buffer), &out_size, &complete) == HONCH_OK);
+    assert(complete);
+    assert(honch_packetizer_confirm(&packetizer) == HONCH_ERROR_IO);
+    assert(packetizer.active);
+    assert(pthread_mutex_trylock(&client.mutex) == 0);
+    assert(pthread_mutex_unlock(&client.mutex) == 0);
+    fake_client_destroy(&client);
+}
+
 static void test_packetizer_peek_runs_under_client_lock(void)
 {
     const uint8_t message[] = {0xa0u};
@@ -297,6 +329,7 @@ int main(void)
     test_multi_chunk_message_offsets_increase();
     test_abort_does_not_consume_storage();
     test_confirm_consumes_storage();
+    test_confirm_unlocks_client_on_consume_failure();
     test_packetizer_peek_runs_under_client_lock();
     return 0;
 }

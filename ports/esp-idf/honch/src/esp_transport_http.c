@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Honch Dev
 
+#include "honch_internal.h"
+
 #include "esp_core_adapter.h"
 
 #include <limits.h>
@@ -52,8 +54,9 @@ static honch_status_t honch_esp_post_chunk(
     size_t body_size,
     honch_transport_result_t *result)
 {
-    (void)ctx;
-    if (endpoint_url == NULL || api_key == NULL || body == NULL || body_size == 0u || result == NULL) {
+    honch_client_t *core_client = (honch_client_t *)ctx;
+    if (core_client == NULL || endpoint_url == NULL || api_key == NULL || body == NULL || body_size == 0u ||
+        result == NULL) {
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
     if (body_size > (size_t)INT_MAX) {
@@ -66,28 +69,32 @@ static honch_status_t honch_esp_post_chunk(
         return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
     }
 
+    int timeout_ms = core_client->transport_timeout_ms > (unsigned int)INT_MAX ?
+        INT_MAX :
+        (int)core_client->transport_timeout_ms;
+
     esp_http_client_config_t config = {
         .url = url,
         .method = HTTP_METHOD_POST,
-        .timeout_ms = 10000,
+        .timeout_ms = timeout_ms == 0 ? 10000 : timeout_ms,
         .crt_bundle_attach = esp_crt_bundle_attach,
     };
 
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (client == NULL) {
+    esp_http_client_handle_t http_client = esp_http_client_init(&config);
+    if (http_client == NULL) {
         free(url);
         return HONCH_STATUS_ERROR_TRANSPORT;
     }
 
-    esp_err_t err = esp_http_client_set_header(client, "Content-Type", "application/vnd.honch.chunk");
+    esp_err_t err = esp_http_client_set_header(http_client, "Content-Type", "application/vnd.honch.chunk");
     if (err == ESP_OK) {
-        err = esp_http_client_set_header(client, "X-Honch-Project-Key", api_key);
+        err = esp_http_client_set_header(http_client, "X-Honch-Project-Key", api_key);
     }
     if (err == ESP_OK && stream_id != NULL && stream_id[0] != '\0') {
-        err = esp_http_client_set_header(client, "X-Honch-Stream-Id", stream_id);
+        err = esp_http_client_set_header(http_client, "X-Honch-Stream-Id", stream_id);
     }
     if (err == ESP_OK) {
-        err = esp_http_client_set_post_field(client, (const char *)body, (int)body_size);
+        err = esp_http_client_set_post_field(http_client, (const char *)body, (int)body_size);
     }
     if (err == ESP_OK) {
         ESP_LOGI(
@@ -96,11 +103,11 @@ static honch_status_t honch_esp_post_chunk(
             (unsigned)body_size,
             url,
             stream_id == NULL || stream_id[0] == '\0' ? "<none>" : stream_id);
-        err = esp_http_client_perform(client);
+        err = esp_http_client_perform(http_client);
     }
 
-    int status = err == ESP_OK ? esp_http_client_get_status_code(client) : 0;
-    esp_http_client_cleanup(client);
+    int status = err == ESP_OK ? esp_http_client_get_status_code(http_client) : 0;
+    esp_http_client_cleanup(http_client);
     free(url);
 
     if (err != ESP_OK) {

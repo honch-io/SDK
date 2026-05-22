@@ -235,9 +235,9 @@ honch_status_t honch_packetizer_confirm(honch_packetizer_t *packetizer)
         packetizer->sequence);
     if (status == HONCH_OK) {
         packetizer->active = false;
-        honch_client_state_unlock(packetizer->client);
-        honch_client_leave(packetizer->client);
     }
+    honch_client_state_unlock(packetizer->client);
+    honch_client_leave(packetizer->client);
     return status;
 }
 
