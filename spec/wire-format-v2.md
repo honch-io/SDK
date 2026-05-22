@@ -32,7 +32,7 @@ path.
 
 The project key is sent as a transport credential and is not encoded in the
 device message body. This keeps the device message reusable across direct and
-relay transports without repeating a long token inside every batch.
+relay transports without repeating a long token inside every message.
 
 ## Upload Model
 
@@ -95,7 +95,7 @@ Source types:
 
 | Value | Source | Description |
 |------:|--------|-------------|
-| 0 | events | Compact event batch |
+| 0 | events | Compact event message |
 | 1-7 | reserved | Requires a spec update |
 
 ### Init, Continuation, And Single Frames
@@ -193,7 +193,7 @@ events
 
 | Bit | Name | Meaning |
 |----:|------|---------|
-| 0 | context_promotes_properties | Capture expands batch context into each event's properties |
+| 0 | context_promotes_properties | Capture expands message context into each event's properties |
 | 1-63 | reserved | Must be zero |
 
 SDKs must set `context_promotes_properties`.
@@ -311,7 +311,7 @@ Reserved property IDs:
 | 7 | session_name | string ref |
 | 8-127 | reserved | Requires a spec update |
 
-SDKs must not repeat promoted batch context properties in each event. Capture
+SDKs must not repeat promoted message context properties in each event. Capture
 adds them during expansion.
 
 Custom property names must not exactly match any reserved property name or any
@@ -444,7 +444,7 @@ SDK encoders must produce canonical compact messages:
 - use unsigned varints for nonnegative integer fields;
 - use ZigZag varints for signed deltas and signed integer values;
 - intern every event name, custom key, and string value in the string table;
-- encode batch context before events;
+- encode message context before events;
 - do not encode promoted context properties per event;
 - do not emit duplicate keys in context, properties, or maps;
 - set all reserved bits to zero;
@@ -500,7 +500,7 @@ Required SDK units:
 - CRC16/CCITT-FALSE;
 - string table builder;
 - compact value encoder;
-- event batch encoder;
+- event message encoder;
 - chunk packetizer;
 - transport adapter for `/capture`;
 - conformance fixture generator.

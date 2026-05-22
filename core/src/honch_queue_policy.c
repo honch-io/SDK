@@ -736,14 +736,29 @@ static honch_status_t honch_core_build_wire_v2_message(
     }
 
     size_t message_size = 0u;
-    status = honch_wire_v2_encode_event_batch(
-        &context,
-        parsed[0].timestamp_ms,
-        compact_events,
-        parsed_count,
-        buffer,
-        HONCH_WIRE_V2_MAX_FRAME_BYTES,
-        &message_size);
+    size_t encoded_count = 0u;
+    status = HONCH_ERROR_OUT_OF_MEMORY;
+    for (size_t try_count = parsed_count; try_count > 0u; try_count--) {
+        status = honch_wire_v2_encode_event_batch(
+            &context,
+            parsed[0].timestamp_ms,
+            compact_events,
+            try_count,
+            buffer,
+            HONCH_WIRE_V2_MAX_FRAME_BYTES,
+            &message_size);
+        if (status == HONCH_OK) {
+            encoded_count = try_count;
+            break;
+        }
+        if (status != HONCH_ERROR_OUT_OF_MEMORY) {
+            break;
+        }
+        if (try_count == 1u) {
+            status = HONCH_ERROR_INVALID_ARGUMENT;
+            break;
+        }
+    }
     for (size_t i = 0u; i < event_count; i++) {
         honch_wire_v2_parsed_event_free(&parsed[i]);
     }
@@ -756,7 +771,7 @@ static honch_status_t honch_core_build_wire_v2_message(
 
     message->data = buffer;
     message->length = message_size;
-    *encoded_event_count = parsed_count;
+    *encoded_event_count = encoded_count;
     return HONCH_OK;
 }
 
@@ -905,12 +920,17 @@ static honch_status_t honch_core_flush_one(honch_client_t *client, bool *progres
         return status;
     }
 
-    honch_payload_t batch = {0};
+    honch_payload_t compact_message = {0};
     size_t encoded_event_count = event_count;
     if (client->transport == NULL || client->transport->post_chunk == NULL) {
         status = HONCH_ERROR_INVALID_ARGUMENT;
     } else {
-        status = honch_core_build_wire_v2_message(client, events, event_count, &batch, &encoded_event_count);
+        status = honch_core_build_wire_v2_message(
+            client,
+            events,
+            event_count,
+            &compact_message,
+            &encoded_event_count);
     }
     for (size_t i = 0u; i < event_count; i++) {
         free(events[i].data);
@@ -936,8 +956,13 @@ static honch_status_t honch_core_flush_one(honch_client_t *client, bool *progres
 
     honch_transport_result_t result = HONCH_TRANSPORT_RETRY;
     uint32_t message_id = client->wire_v2_message_id_seed + (uint32_t)sequences[0];
-    status = honch_core_post_wire_v2_message(client, &batch, message_id, client->wire_v2_stream_id, &result);
-    free(batch.data);
+    status = honch_core_post_wire_v2_message(
+        client,
+        &compact_message,
+        message_id,
+        client->wire_v2_stream_id,
+        &result);
+    free(compact_message.data);
 
     if (result == HONCH_TRANSPORT_ACCEPTED && status == HONCH_OK) {
         for (size_t i = 0u; status == HONCH_OK && i < event_count; i++) {

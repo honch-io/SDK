@@ -352,7 +352,7 @@ Current C tests cover:
 - bounded queue drop-oldest behavior
 - retryable flush preserving pending events
 - background threshold flush and retry backoff
-- multi-batch flush
+- multi-event flush
 - permanent rejection dead-letter behavior
 - reset queue clearing
 - reset identity behavior

@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -114,6 +115,42 @@ static honch_status_t fake_queue_depth(void *ctx, size_t *depth)
         }
     }
     return HONCH_OK;
+}
+
+static void build_heavy_event(
+    const char *event_name,
+    size_t property_count,
+    size_t array_length,
+    uint8_t **out_data,
+    size_t *out_size)
+{
+    assert(out_data != NULL);
+    assert(out_size != NULL);
+
+    honch_buffer_t buffer = {0};
+    assert(honch_buffer_init(&buffer, (property_count * array_length * 4u) + 256u) == HONCH_OK);
+    assert(honch_cbor_append_map(&buffer, 4u) == HONCH_OK);
+    assert(honch_cbor_append_text(&buffer, "event") == HONCH_OK);
+    assert(honch_cbor_append_text(&buffer, event_name) == HONCH_OK);
+    assert(honch_cbor_append_text(&buffer, "distinct_id") == HONCH_OK);
+    assert(honch_cbor_append_text(&buffer, "device-1") == HONCH_OK);
+    assert(honch_cbor_append_text(&buffer, "timestamp") == HONCH_OK);
+    assert(honch_cbor_append_int(&buffer, 1234) == HONCH_OK);
+    assert(honch_cbor_append_text(&buffer, "properties") == HONCH_OK);
+    assert(honch_cbor_append_map(&buffer, property_count) == HONCH_OK);
+    for (size_t i = 0u; i < property_count; i++) {
+        char key[8];
+        int key_length = snprintf(key, sizeof(key), "p%02zu", i);
+        assert(key_length > 0 && (size_t)key_length < sizeof(key));
+        assert(honch_cbor_append_text(&buffer, key) == HONCH_OK);
+        assert(honch_cbor_append_array(&buffer, array_length) == HONCH_OK);
+        for (size_t j = 0u; j < array_length; j++) {
+            assert(honch_cbor_append_int(&buffer, (int64_t)(i + j)) == HONCH_OK);
+        }
+    }
+
+    *out_data = (uint8_t *)buffer.data;
+    *out_size = buffer.length;
 }
 
 static honch_status_t fake_post_chunk(
@@ -253,6 +290,48 @@ static void test_v2_chunk_transport_consumes_events_on_acceptance(void)
     assert(transport.last_chunk[0] == 0x02u);
     assert(storage.events[0].consumed);
     assert(!storage.events[0].dead_lettered);
+}
+
+static void test_v2_chunk_transport_splits_oversized_batch_without_dead_lettering_first_event(void)
+{
+    uint8_t *first_event = NULL;
+    uint8_t *second_event = NULL;
+    size_t first_size = 0u;
+    size_t second_size = 0u;
+    build_heavy_event("first", 64u, 20u, &first_event, &first_size);
+    build_heavy_event("second", 64u, 20u, &second_event, &second_size);
+
+    fake_storage_t storage = {0};
+    storage.event_count = 2u;
+    storage.events[0] = (fake_event_t) {
+        .data = first_event,
+        .size = first_size,
+        .sequence = 1u,
+        .pending = true
+    };
+    storage.events[1] = (fake_event_t) {
+        .data = second_event,
+        .size = second_size,
+        .sequence = 2u,
+        .pending = true
+    };
+
+    fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
+    honch_storage_ops_t storage_ops = {0};
+    honch_transport_ops_t transport_ops = {0};
+    honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
+    client.max_event_bytes = 8192u;
+    transport_ops.post_chunk = fake_post_chunk;
+
+    assert(honch_queue_flush_locked(&client) == HONCH_OK);
+    assert(transport.chunk_calls == 2u);
+    assert(storage.events[0].consumed);
+    assert(storage.events[1].consumed);
+    assert(!storage.events[0].dead_lettered);
+    assert(!storage.events[1].dead_lettered);
+
+    free(first_event);
+    free(second_event);
 }
 
 static void test_v2_chunk_transport_preserves_string_properties(void)
@@ -760,6 +839,7 @@ int main(void)
 {
     test_2xx_consumes_events();
     test_v2_chunk_transport_consumes_events_on_acceptance();
+    test_v2_chunk_transport_splits_oversized_batch_without_dead_lettering_first_event();
     test_v2_chunk_transport_preserves_string_properties();
     test_v2_chunk_transport_preserves_nested_properties();
     test_v2_chunk_transport_preserves_float64_properties();
