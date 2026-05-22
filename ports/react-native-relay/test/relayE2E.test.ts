@@ -1,7 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildRelayFrame,
@@ -10,6 +10,38 @@ import {
 } from "../e2e/relay-capture-e2e";
 
 describe("relay capture E2E harness", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("fails early when live capture health is unavailable", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 503 })));
+    const tempDir = await mkdtemp(join(tmpdir(), "honch-relay-e2e-"));
+
+    await expect(
+      runRelayCaptureE2E({
+        tempFile: join(tempDir, "queue.json"),
+        captureUrl: "https://capture.example.test",
+        projectKey: "project-key"
+      })
+    ).rejects.toThrow("capture preflight failed: GET https://capture.example.test/health returned 503");
+  });
+
+  it("fails early when ClickHouse health is unavailable", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 500 })));
+    const tempDir = await mkdtemp(join(tmpdir(), "honch-relay-e2e-"));
+
+    await expect(
+      runRelayCaptureE2E({
+        tempFile: join(tempDir, "queue.json"),
+        captureUrl: "https://capture.example.test",
+        projectKey: "project-key",
+        clickHouseUrl: "https://clickhouse.example.test",
+        fetchImpl: vi.fn(async () => new Response(null, { status: 204 }))
+      })
+    ).rejects.toThrow("ClickHouse preflight failed: GET https://clickhouse.example.test/ping returned 500");
+  });
+
   it("runs the relay receipt, offline retry, capture drain, and malformed rejection flow", async () => {
     const tempDir = await mkdtemp(join(tmpdir(), "honch-relay-e2e-"));
     const uploads: Uint8Array[] = [];
