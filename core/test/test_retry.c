@@ -21,6 +21,9 @@ typedef struct fake_storage {
     fake_event_t events[2];
     size_t event_count;
     size_t peek_index;
+    size_t peek_calls;
+    size_t read_batch_calls;
+    size_t consume_batch_calls;
 } fake_storage_t;
 
 typedef struct fake_transport {
@@ -59,6 +62,7 @@ static honch_status_t fake_reader_read(void *ctx, uint32_t offset, uint8_t *buff
 static honch_status_t fake_queue_peek(void *ctx, honch_storage_reader_t *reader)
 {
     fake_storage_t *storage = (fake_storage_t *)ctx;
+    storage->peek_calls++;
     fake_event_t *event = NULL;
     for (size_t i = storage->peek_index; i < storage->event_count; i++) {
         if (storage->events[i].pending) {
@@ -80,6 +84,38 @@ static honch_status_t fake_queue_peek(void *ctx, honch_storage_reader_t *reader)
     return HONCH_OK;
 }
 
+static honch_status_t fake_queue_read_batch(
+    void *ctx,
+    honch_storage_event_t *events,
+    size_t max_events,
+    size_t max_event_bytes,
+    size_t *event_count)
+{
+    fake_storage_t *storage = (fake_storage_t *)ctx;
+    storage->read_batch_calls++;
+    *event_count = 0u;
+    for (size_t i = 0u; i < storage->event_count && *event_count < max_events; i++) {
+        fake_event_t *event = &storage->events[i];
+        if (!event->pending) {
+            continue;
+        }
+        if (event->size == 0u || event->size > max_event_bytes) {
+            return HONCH_ERROR_INVALID_ARGUMENT;
+        }
+
+        uint8_t *copy = (uint8_t *)malloc(event->size);
+        assert(copy != NULL);
+        memcpy(copy, event->data, event->size);
+        events[*event_count] = (honch_storage_event_t) {
+            .data = copy,
+            .length = event->size,
+            .sequence = event->sequence
+        };
+        (*event_count)++;
+    }
+    return *event_count == 0u ? HONCH_ERROR_NOT_INITIALIZED : HONCH_OK;
+}
+
 static honch_status_t fake_queue_consume(void *ctx, uint64_t sequence)
 {
     fake_event_t *event = find_event((fake_storage_t *)ctx, sequence);
@@ -89,6 +125,19 @@ static honch_status_t fake_queue_consume(void *ctx, uint64_t sequence)
 
     event->pending = false;
     event->consumed = true;
+    return HONCH_OK;
+}
+
+static honch_status_t fake_queue_consume_batch(void *ctx, const uint64_t *sequences, size_t sequence_count)
+{
+    fake_storage_t *storage = (fake_storage_t *)ctx;
+    storage->consume_batch_calls++;
+    for (size_t i = 0u; i < sequence_count; i++) {
+        honch_status_t status = fake_queue_consume(ctx, sequences[i]);
+        if (status != HONCH_OK) {
+            return status;
+        }
+    }
     return HONCH_OK;
 }
 
@@ -204,7 +253,9 @@ static honch_client_t fake_client(fake_storage_t *storage, honch_storage_ops_t *
 {
     *storage_ops = (honch_storage_ops_t) {
         .queue_peek = fake_queue_peek,
+        .queue_read_batch = fake_queue_read_batch,
         .queue_consume = fake_queue_consume,
+        .queue_consume_batch = fake_queue_consume_batch,
         .queue_dead_letter = fake_queue_dead_letter,
         .queue_depth = fake_queue_depth,
         .ctx = storage
@@ -687,6 +738,27 @@ static void test_v2_multi_frame_flush_passes_stream_id_to_transport(void)
     assert(!storage.events[0].consumed);
 }
 
+static void test_flush_uses_storage_batch_read_when_available(void)
+{
+    fake_storage_t storage;
+    setup_storage(&storage);
+    fake_transport_t transport = {
+        .result = HONCH_TRANSPORT_ACCEPTED,
+        .status = HONCH_OK
+    };
+    honch_storage_ops_t storage_ops = {0};
+    honch_transport_ops_t transport_ops = {0};
+    honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
+
+    assert(honch_queue_flush_locked(&client) == HONCH_OK);
+
+    assert(storage.read_batch_calls == 1u);
+    assert(storage.peek_calls == 0u);
+    assert(storage.consume_batch_calls == 1u);
+    assert(storage.events[0].consumed);
+    assert(storage.events[1].consumed);
+}
+
 static void test_v2_flush_splits_batches_by_distinct_id(void)
 {
     static const uint8_t second_distinct_event[] = {
@@ -849,6 +921,7 @@ int main(void)
     test_v2_chunk_transport_preserves_device_boot_event();
     test_v2_final_chunk_stored_response_preserves_event();
     test_v2_multi_frame_flush_passes_stream_id_to_transport();
+    test_flush_uses_storage_batch_read_when_available();
     test_v2_flush_splits_batches_by_distinct_id();
     test_v2_flush_dead_letters_semantically_invalid_event();
     test_401_dead_letters_events();

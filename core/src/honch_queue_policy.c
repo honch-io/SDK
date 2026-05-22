@@ -61,6 +61,50 @@ static honch_status_t honch_core_queue_dead_letter(honch_client_t *client, uint6
     return client->storage->queue_dead_letter(client->storage->ctx, sequence);
 }
 
+static honch_status_t honch_core_queue_consume_batch(
+    honch_client_t *client,
+    const uint64_t *sequences,
+    size_t sequence_count)
+{
+    if (client == NULL || sequences == NULL || client->storage == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    if (sequence_count == 0u) {
+        return HONCH_OK;
+    }
+    if (client->storage->queue_consume_batch != NULL) {
+        return client->storage->queue_consume_batch(client->storage->ctx, sequences, sequence_count);
+    }
+
+    honch_status_t status = HONCH_OK;
+    for (size_t i = 0u; status == HONCH_OK && i < sequence_count; i++) {
+        status = honch_core_queue_consume(client, sequences[i]);
+    }
+    return status;
+}
+
+static honch_status_t honch_core_queue_dead_letter_batch(
+    honch_client_t *client,
+    const uint64_t *sequences,
+    size_t sequence_count)
+{
+    if (client == NULL || sequences == NULL || client->storage == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    if (sequence_count == 0u) {
+        return HONCH_OK;
+    }
+    if (client->storage->queue_dead_letter_batch != NULL) {
+        return client->storage->queue_dead_letter_batch(client->storage->ctx, sequences, sequence_count);
+    }
+
+    honch_status_t status = HONCH_OK;
+    for (size_t i = 0u; status == HONCH_OK && i < sequence_count; i++) {
+        status = honch_core_queue_dead_letter(client, sequences[i]);
+    }
+    return status;
+}
+
 static honch_status_t honch_core_read_queue_event(
     honch_client_t *client,
     const honch_storage_reader_t *reader,
@@ -93,6 +137,67 @@ static honch_status_t honch_core_read_queue_event(
     event->data = data;
     event->length = reader->total_size;
     return HONCH_OK;
+}
+
+static void honch_core_free_storage_events(honch_storage_event_t *events, size_t event_count)
+{
+    if (events == NULL) {
+        return;
+    }
+    for (size_t i = 0u; i < event_count; i++) {
+        free(events[i].data);
+    }
+}
+
+static honch_status_t honch_core_read_queue_batch(
+    honch_client_t *client,
+    honch_payload_t *events,
+    uint64_t *sequences,
+    size_t batch_size,
+    size_t *event_count)
+{
+    if (event_count == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    *event_count = 0u;
+    if (client == NULL || events == NULL || sequences == NULL ||
+        client->storage == NULL || client->storage->queue_read_batch == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    honch_storage_event_t *storage_events = (honch_storage_event_t *)calloc(batch_size, sizeof(*storage_events));
+    if (storage_events == NULL) {
+        return HONCH_ERROR_OUT_OF_MEMORY;
+    }
+
+    honch_status_t status = client->storage->queue_read_batch(
+        client->storage->ctx,
+        storage_events,
+        batch_size,
+        client->max_event_bytes,
+        event_count);
+    if (status != HONCH_OK) {
+        honch_core_free_storage_events(storage_events, *event_count);
+        free(storage_events);
+        return status;
+    }
+
+    for (size_t i = 0u; i < *event_count; i++) {
+        if (storage_events[i].data == NULL || storage_events[i].length > client->max_event_bytes) {
+            honch_core_free_storage_events(storage_events, *event_count);
+            free(storage_events);
+            *event_count = i;
+            return HONCH_ERROR_INVALID_ARGUMENT;
+        }
+        events[i] = (honch_payload_t) {
+            .data = storage_events[i].data,
+            .length = storage_events[i].length
+        };
+        sequences[i] = storage_events[i].sequence;
+        storage_events[i].data = NULL;
+    }
+    free(storage_events);
+    return *event_count == 0u ? HONCH_ERROR_NOT_INITIALIZED : HONCH_OK;
 }
 
 static honch_status_t honch_cbor_event_read_u64(honch_cbor_event_reader_t *reader, uint8_t additional, uint64_t *out)
@@ -877,38 +982,51 @@ static honch_status_t honch_core_flush_one(honch_client_t *client, bool *progres
     }
     size_t event_count = 0u;
 
-    client->active_storage_reader_sequence = UINT64_MAX;
     honch_status_t status = HONCH_OK;
-    while (event_count < batch_size) {
-        honch_storage_reader_t reader = {0};
-        status = honch_core_queue_peek(client, &reader);
+    bool use_reader_path = client->storage == NULL || client->storage->queue_read_batch == NULL;
+    if (client->storage != NULL && client->storage->queue_read_batch != NULL) {
+        status = honch_core_read_queue_batch(client, events, sequences, batch_size, &event_count);
         if (status == HONCH_ERROR_NOT_INITIALIZED) {
             status = HONCH_OK;
-            break;
+        } else if (status == HONCH_ERROR_INVALID_ARGUMENT) {
+            event_count = 0u;
+            status = HONCH_OK;
+            use_reader_path = true;
         }
-        if (status != HONCH_OK) {
-            break;
-        }
-
-        honch_payload_t event = {0};
-        status = honch_core_read_queue_event(client, &reader, &event);
-        if (status == HONCH_ERROR_INVALID_ARGUMENT) {
-            honch_status_t dead_status = honch_core_queue_dead_letter(client, reader.sequence);
-            if (dead_status == HONCH_OK) {
-                *progressed = true;
-                status = HONCH_ERROR_REJECTED;
-            } else {
-                status = dead_status;
+    }
+    if (use_reader_path) {
+        client->active_storage_reader_sequence = UINT64_MAX;
+        while (event_count < batch_size) {
+            honch_storage_reader_t reader = {0};
+            status = honch_core_queue_peek(client, &reader);
+            if (status == HONCH_ERROR_NOT_INITIALIZED) {
+                status = HONCH_OK;
+                break;
             }
-            break;
-        }
-        if (status != HONCH_OK) {
-            break;
-        }
+            if (status != HONCH_OK) {
+                break;
+            }
 
-        events[event_count] = event;
-        sequences[event_count] = reader.sequence;
-        event_count++;
+            honch_payload_t event = {0};
+            status = honch_core_read_queue_event(client, &reader, &event);
+            if (status == HONCH_ERROR_INVALID_ARGUMENT) {
+                honch_status_t dead_status = honch_core_queue_dead_letter(client, reader.sequence);
+                if (dead_status == HONCH_OK) {
+                    *progressed = true;
+                    status = HONCH_ERROR_REJECTED;
+                } else {
+                    status = dead_status;
+                }
+                break;
+            }
+            if (status != HONCH_OK) {
+                break;
+            }
+
+            events[event_count] = event;
+            sequences[event_count] = reader.sequence;
+            event_count++;
+        }
     }
 
     if (status != HONCH_OK || event_count == 0u) {
@@ -965,9 +1083,7 @@ static honch_status_t honch_core_flush_one(honch_client_t *client, bool *progres
     free(compact_message.data);
 
     if (result == HONCH_TRANSPORT_ACCEPTED && status == HONCH_OK) {
-        for (size_t i = 0u; status == HONCH_OK && i < event_count; i++) {
-            status = honch_core_queue_consume(client, sequences[i]);
-        }
+        status = honch_core_queue_consume_batch(client, sequences, event_count);
         *progressed = status == HONCH_OK;
         free(events);
         free(sequences);
@@ -975,10 +1091,7 @@ static honch_status_t honch_core_flush_one(honch_client_t *client, bool *progres
     }
 
     if (result == HONCH_TRANSPORT_REJECTED || result == HONCH_TRANSPORT_AUTH_ERROR) {
-        honch_status_t dead_status = HONCH_OK;
-        for (size_t i = 0u; dead_status == HONCH_OK && i < event_count; i++) {
-            dead_status = honch_core_queue_dead_letter(client, sequences[i]);
-        }
+        honch_status_t dead_status = honch_core_queue_dead_letter_batch(client, sequences, event_count);
         if (dead_status == HONCH_OK) {
             *progressed = true;
             free(events);

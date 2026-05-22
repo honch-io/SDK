@@ -237,6 +237,73 @@ static honch_status_t honch_posix_queue_peek(void *ctx, honch_storage_reader_t *
     return HONCH_OK;
 }
 
+static void honch_posix_free_storage_events(honch_storage_event_t *events, size_t event_count)
+{
+    if (events == NULL) {
+        return;
+    }
+    for (size_t i = 0u; i < event_count; i++) {
+        free(events[i].data);
+        events[i].data = NULL;
+        events[i].length = 0u;
+        events[i].sequence = 0u;
+    }
+}
+
+static honch_status_t honch_posix_queue_read_batch(
+    void *ctx,
+    honch_storage_event_t *events,
+    size_t max_events,
+    size_t max_event_bytes,
+    size_t *event_count)
+{
+    honch_client_t *client = (honch_client_t *)ctx;
+    if (client == NULL || events == NULL || event_count == NULL || max_events == 0u) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    *event_count = 0u;
+    honch_file_list_t files = {0};
+    honch_status_t status = honch_list_queue_files(client, &files);
+    if (status != HONCH_OK) {
+        honch_file_list_free(&files);
+        return status;
+    }
+
+    for (size_t i = 0u; status == HONCH_OK && i < files.count && *event_count < max_events; i++) {
+        uint64_t sequence = 0u;
+        if (!honch_queue_sequence_from_name(files.items[i].name, &sequence)) {
+            continue;
+        }
+
+        honch_payload_t payload = {0};
+        status = honch_read_file_limited_bytes(files.items[i].path, max_event_bytes, &payload);
+        if (status != HONCH_OK) {
+            break;
+        }
+        if (payload.data == NULL || payload.length > max_event_bytes) {
+            free(payload.data);
+            status = HONCH_ERROR_INVALID_ARGUMENT;
+            break;
+        }
+
+        events[*event_count] = (honch_storage_event_t) {
+            .data = payload.data,
+            .length = payload.length,
+            .sequence = sequence
+        };
+        (*event_count)++;
+    }
+
+    honch_file_list_free(&files);
+    if (status != HONCH_OK) {
+        honch_posix_free_storage_events(events, *event_count);
+        *event_count = 0u;
+        return status;
+    }
+    return *event_count == 0u ? HONCH_ERROR_NOT_INITIALIZED : HONCH_OK;
+}
+
 static honch_status_t honch_posix_queue_consume(void *ctx, uint64_t sequence)
 {
     honch_client_t *client = (honch_client_t *)ctx;
@@ -260,6 +327,36 @@ static honch_status_t honch_posix_queue_consume(void *ctx, uint64_t sequence)
     return status;
 }
 
+static honch_status_t honch_posix_queue_consume_batch(
+    void *ctx,
+    const uint64_t *sequences,
+    size_t sequence_count)
+{
+    honch_client_t *client = (honch_client_t *)ctx;
+    if (client == NULL || (sequences == NULL && sequence_count > 0u)) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    if (sequence_count == 0u) {
+        return HONCH_OK;
+    }
+
+    honch_file_list_t files = {0};
+    honch_status_t status = honch_list_queue_files(client, &files);
+    for (size_t i = 0u; status == HONCH_OK && i < sequence_count; i++) {
+        honch_file_entry_t *entry = honch_find_queue_entry_by_sequence(&files, sequences[i]);
+        if (entry == NULL) {
+            status = HONCH_ERROR_NOT_INITIALIZED;
+            break;
+        }
+        status = honch_unlink_if_exists(entry->path);
+        if (status == HONCH_OK && client->queued_event_count > 0u) {
+            client->queued_event_count--;
+        }
+    }
+    honch_file_list_free(&files);
+    return status;
+}
+
 static honch_status_t honch_posix_queue_dead_letter(void *ctx, uint64_t sequence)
 {
     honch_client_t *client = (honch_client_t *)ctx;
@@ -278,6 +375,36 @@ static honch_status_t honch_posix_queue_dead_letter(void *ctx, uint64_t sequence
     }
     if (status == HONCH_OK && client->queued_event_count > 0u) {
         client->queued_event_count--;
+    }
+    honch_file_list_free(&files);
+    return status;
+}
+
+static honch_status_t honch_posix_queue_dead_letter_batch(
+    void *ctx,
+    const uint64_t *sequences,
+    size_t sequence_count)
+{
+    honch_client_t *client = (honch_client_t *)ctx;
+    if (client == NULL || (sequences == NULL && sequence_count > 0u)) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    if (sequence_count == 0u) {
+        return HONCH_OK;
+    }
+
+    honch_file_list_t files = {0};
+    honch_status_t status = honch_list_queue_files(client, &files);
+    for (size_t i = 0u; status == HONCH_OK && i < sequence_count; i++) {
+        honch_file_entry_t *entry = honch_find_queue_entry_by_sequence(&files, sequences[i]);
+        if (entry == NULL) {
+            status = HONCH_ERROR_NOT_INITIALIZED;
+            break;
+        }
+        status = honch_move_to_dead(client, entry);
+        if (status == HONCH_OK && client->queued_event_count > 0u) {
+            client->queued_event_count--;
+        }
     }
     honch_file_list_free(&files);
     return status;
@@ -329,8 +456,11 @@ honch_status_t honch_posix_storage_ops_init(
         .state_delete = honch_posix_state_delete,
         .queue_push = honch_posix_queue_push,
         .queue_peek = honch_posix_queue_peek,
+        .queue_read_batch = honch_posix_queue_read_batch,
         .queue_consume = honch_posix_queue_consume,
+        .queue_consume_batch = honch_posix_queue_consume_batch,
         .queue_dead_letter = honch_posix_queue_dead_letter,
+        .queue_dead_letter_batch = honch_posix_queue_dead_letter_batch,
         .queue_clear = honch_posix_queue_clear,
         .queue_depth = honch_posix_queue_depth,
         .ctx = NULL
