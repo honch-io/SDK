@@ -44,16 +44,6 @@ static unsigned int honch_mp_map_get_uint(mp_obj_t dict_obj, qstr key, unsigned 
     return value < 0 ? fallback : (unsigned int)value;
 }
 
-static int honch_mp_map_get_bool(mp_obj_t dict_obj, qstr key, int fallback)
-{
-    mp_map_t *map = mp_obj_dict_get_map(dict_obj);
-    mp_map_elem_t *elem = mp_map_lookup(map, MP_OBJ_NEW_QSTR(key), MP_MAP_LOOKUP);
-    if (elem == NULL || elem->value == mp_const_none) {
-        return fallback;
-    }
-    return mp_obj_is_true(elem->value) ? 1 : 0;
-}
-
 static mp_obj_t honch_client_make_new(
     const mp_obj_type_t *type,
     size_t n_args,

@@ -40,6 +40,11 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertIn("honch_core_flush(self->client", module)
         self.assertIn("honch_core_shutdown(self->client", module)
 
+    def test_c_binding_avoids_unused_config_helpers(self):
+        module = self.read("ports/micropython/usermod/honch/modhonch_core.c")
+
+        self.assertNotIn("honch_mp_map_get_bool", module)
+
     def test_micropython_adapters_implement_core_ops(self):
         adapters = "\n".join(
             [
