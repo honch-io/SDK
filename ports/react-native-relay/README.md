@@ -123,6 +123,18 @@ const relay = createMobileRelay({
 const subscription = relay.subscribeNativeFrames();
 ```
 
+## Upload Draining
+
+`createMobileRelay` exposes three upload controls:
+
+- `drainUploads()` immediately drains pending durable messages once.
+- `startUploadScheduler()` asks the native scheduler to run now and drains any
+  pending messages when the relay starts.
+- `stopUploadScheduler()` cancels native scheduled upload work.
+
+Retryable upload failures keep messages pending and schedule the next native
+upload attempt with the canonical relay backoff.
+
 ## Test
 
 ```sh

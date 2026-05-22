@@ -60,6 +60,15 @@ export function createMobileRelay(options: MobileRelayOptions) {
       return queue.pending();
     },
 
+    async startUploadScheduler(): Promise<void> {
+      await scheduler.schedule(0);
+      await this.drainUploads();
+    },
+
+    stopUploadScheduler(): Promise<void> {
+      return scheduler.cancel();
+    },
+
     drainUploads(): Promise<void> {
       return drainRelayQueue({
         queue,
