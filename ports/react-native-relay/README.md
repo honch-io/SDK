@@ -53,6 +53,25 @@ JSON schema as the local file-backed test adapter. Completed messages and
 incomplete assemblies remain pending across app restarts until capture accepts
 or permanently rejects them.
 
+## iOS Native Bridge
+
+The iOS module uses CoreBluetooth to scan for the relay service, connect to a
+discovered peripheral, subscribe to the frame notification characteristic, emit
+`HonchRelayFrame` events to JavaScript, and write ACK payloads to the ACK
+characteristic.
+
+Required host app setup:
+
+- Add `NSBluetoothAlwaysUsageDescription` to `Info.plist`.
+- Enable the `bluetooth-central` background mode if relay receipt should
+  continue while the app is backgrounded.
+- Install the package through a React Native iOS host `Podfile` so
+  `HonchReactNativeRelay.podspec` links CoreBluetooth and BackgroundTasks.
+
+This package directory does not currently include an `.xcodeproj`,
+`.xcworkspace`, or `Podfile`. Native iOS build validation must be run from the
+consuming React Native host before production sign-off.
+
 ## Test
 
 ```sh

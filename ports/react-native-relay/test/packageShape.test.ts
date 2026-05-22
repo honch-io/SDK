@@ -60,4 +60,28 @@ describe("React Native relay package shape", () => {
       expect(iosModule).toContain(method);
     }
   });
+
+  it("implements the iOS CoreBluetooth relay receiver contract", () => {
+    const iosHeader = readFileSync(new URL("ios/HonchReactNativeRelay.h", packageRoot), "utf8");
+    const iosModule = readFileSync(new URL("ios/HonchReactNativeRelay.m", packageRoot), "utf8");
+
+    expect(iosHeader).toContain("<CoreBluetooth/CoreBluetooth.h>");
+    expect(iosHeader).toContain("RCTEventEmitter");
+    expect(iosHeader).toContain("CBCentralManagerDelegate");
+    expect(iosHeader).toContain("CBPeripheralDelegate");
+
+    for (const expected of [
+      "484f4e43-482d-5245-4c41-592d53445631",
+      "484f4e43-482d-5245-4c41-592d4652414d",
+      "484f4e43-482d-5245-4c41-592d41434b31",
+      "HonchRelayFrame",
+      "scanForPeripheralsWithServices",
+      "connectPeripheral",
+      "setNotifyValue:YES",
+      "writeValue:ackData",
+      "CBCharacteristicWriteWithResponse"
+    ]) {
+      expect(iosModule).toContain(expected);
+    }
+  });
 });
