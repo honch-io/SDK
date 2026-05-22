@@ -12,6 +12,8 @@ typedef struct fake_state_storage {
     char firmware_version[64];
     size_t queue_depth;
     honch_status_t queue_push_status;
+    const char *state_size_fault_key;
+    const char *state_read_overreport_key;
     int fail_distinct_id_set;
 } fake_state_storage_t;
 
@@ -50,6 +52,25 @@ static honch_status_t fake_state_get(void *ctx, const char *key, uint8_t *buffer
     char *value = fake_state_value(storage, key);
     if (value == NULL || buffer_size == NULL) {
         return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (storage->state_size_fault_key != NULL && strcmp(key, storage->state_size_fault_key) == 0) {
+        *buffer_size = SIZE_MAX;
+        return HONCH_OK;
+    }
+
+    if (storage->state_read_overreport_key != NULL && strcmp(key, storage->state_read_overreport_key) == 0) {
+        if (buffer == NULL) {
+            *buffer_size = 3u;
+            return HONCH_OK;
+        }
+        if (*buffer_size < 3u) {
+            *buffer_size = 3u;
+            return HONCH_ERROR_INVALID_ARGUMENT;
+        }
+        memcpy(buffer, "abc", 3u);
+        *buffer_size = 4u;
+        return HONCH_OK;
     }
 
     size_t length = strlen(value);
@@ -225,10 +246,44 @@ static void test_failed_reset_second_identity_write_preserves_persisted_identity
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
+static void test_state_get_rejects_size_overflow(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .state_size_fault_key = "device_id"
+    };
+    honch_platform_ops_t platform;
+    honch_storage_ops_t storage_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_ERROR_INVALID_ARGUMENT);
+    assert(client == NULL);
+}
+
+static void test_state_get_rejects_inconsistent_read_size(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .state_read_overreport_key = "device_id"
+    };
+    honch_platform_ops_t platform;
+    honch_storage_ops_t storage_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_ERROR_INVALID_ARGUMENT);
+    assert(client == NULL);
+}
+
 int main(void)
 {
     test_core_state_lock_works_without_platform_lock_callbacks();
     test_failed_firmware_update_queue_does_not_advance_persisted_version();
     test_failed_reset_second_identity_write_preserves_persisted_identity();
+    test_state_get_rejects_size_overflow();
+    test_state_get_rejects_inconsistent_read_size();
     return 0;
 }

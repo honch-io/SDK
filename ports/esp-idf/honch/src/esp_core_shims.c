@@ -27,7 +27,12 @@ static honch_status_t honch_esp_state_get_string(
         return status;
     }
 
-    char *value = (char *)malloc(value_size + 1u);
+    size_t alloc_size = 0u;
+    if (honch_size_add(value_size, 1u, &alloc_size) != HONCH_STATUS_OK) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+
+    char *value = (char *)malloc(alloc_size);
     if (value == NULL) {
         return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
     }
@@ -37,6 +42,10 @@ static honch_status_t honch_esp_state_get_string(
     if (status != HONCH_STATUS_OK) {
         free(value);
         return status;
+    }
+    if (read_size > value_size) {
+        free(value);
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
 
     value[read_size] = '\0';
