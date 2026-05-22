@@ -20,3 +20,9 @@ export { createMobileRelay } from "./mobileRelay";
 export type { MobileRelayOptions } from "./mobileRelay";
 export { createRelayNativeBindings } from "./nativeModule";
 export type { RelayNativeBindings, RelayNativeModule } from "./nativeModule";
+export { RELAY_FRAME_EVENT_NAME, decodeRelayFrameEventPayload, subscribeRelayNativeFrames } from "./nativeFrameEvents";
+export type {
+  RelayNativeEventSubscription,
+  RelayNativeFrameEvent,
+  RelayNativeFrameEventSource
+} from "./nativeFrameEvents";
