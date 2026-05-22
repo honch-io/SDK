@@ -3,6 +3,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "honch/core/honch.h"
+
 struct HonchConfig {
   const char *apiKey;
   const char *host;
@@ -18,6 +20,7 @@ struct HonchConfig {
 
 class HonchClass {
 public:
+  HonchClass();
   bool begin(const HonchConfig &config);
   bool track(const char *eventName, const char *propertiesJson = "{}");
   bool identify(const char *distinctId, const char *traitsJson = "{}");
@@ -29,6 +32,12 @@ public:
   bool reset();
   const char *deviceId();
   const char *lastError();
+
+private:
+  bool setLastStatus(honch_status_t status);
+
+  honch_client_t *_client;
+  honch_status_t _lastStatus;
 };
 
 extern HonchClass Honch;
