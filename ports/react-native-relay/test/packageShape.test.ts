@@ -19,6 +19,7 @@ describe("React Native relay package shape", () => {
     const expectedFiles = [
       "react-native.config.js",
       "android/build.gradle",
+      "android/settings.gradle",
       "android/src/main/AndroidManifest.xml",
       "android/src/main/java/io/honch/reactnativerelay/HonchReactNativeRelayModule.java",
       "android/src/main/java/io/honch/reactnativerelay/HonchReactNativeRelayPackage.java",

@@ -170,6 +170,18 @@ bun run test
 bun run typecheck
 ```
 
+## Native Verification
+
+```sh
+bun run verify:ios:native
+bun run verify:android:native
+```
+
+`verify:ios:native` performs an iPhoneOS SDK Objective-C syntax check for the
+iOS bridge without launching a simulator. `verify:android:native` builds the
+Android library with Gradle and requires a local Android SDK through
+`ANDROID_HOME` or `android/local.properties`.
+
 ## Structure
 
 - `src/frame.ts`: relay frame decoder and CRC validation.
