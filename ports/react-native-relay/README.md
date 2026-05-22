@@ -72,6 +72,25 @@ This package directory does not currently include an `.xcodeproj`,
 `.xcworkspace`, or `Podfile`. Native iOS build validation must be run from the
 consuming React Native host before production sign-off.
 
+## Android Native Bridge
+
+The Android module uses platform BLE APIs to scan for the relay service, connect
+to a discovered device, discover the relay frame and ACK characteristics,
+subscribe to frame notifications, emit `HonchRelayFrame` events to JavaScript,
+and write ACK payloads with response.
+
+Required host app setup:
+
+- Request `BLUETOOTH_SCAN` and `BLUETOOTH_CONNECT` at runtime on Android 12+.
+- Request `ACCESS_FINE_LOCATION` where required by target SDK/device BLE scan
+  behavior.
+- Keep `androidx.work:work-runtime` available for scheduled upload drains.
+- Register the package through the consuming React Native Android host.
+
+This package directory does not currently include an Android example app,
+`settings.gradle`, or Gradle wrapper. Native Android build validation must be
+run from the consuming React Native host before production sign-off.
+
 ## Test
 
 ```sh
