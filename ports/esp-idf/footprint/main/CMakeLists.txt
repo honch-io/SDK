@@ -1,3 +1,6 @@
+# ESP-IDF component requirements are collected during early expansion before
+# this project's -D variant options are available. Keep Honch as an
+# unconditional build dependency; FOOTPRINT_ENABLE_HONCH controls references.
 idf_component_register(
     SRCS "app_main.c"
     INCLUDE_DIRS "."
