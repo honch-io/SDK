@@ -6,6 +6,12 @@ Verification:
 
 - `bun run typecheck`: passing.
 - `bun run test`: passing, 13 files / 51 tests.
+- `bun run verify:ios:native`: passing. This runs an iPhoneOS SDK
+  Objective-C syntax check for `ios/HonchReactNativeRelay.m`; it does not boot
+  or run a simulator.
+- `bun run verify:android:native`: currently blocked by local environment.
+  Gradle resolves the Android library build, then fails because no Android SDK
+  path is configured through `ANDROID_HOME` or `android/local.properties`.
 - Legacy production contract search:
   `rg -n "POST /batch|/batch|application/cbor" ports/react-native-relay spec`
   returns only negative assertions in uploader tests.
@@ -14,9 +20,13 @@ Verification:
 Known limitations:
 
 - No package-local iOS `.xcodeproj`, `.xcworkspace`, or `Podfile` exists.
-- No package-local Android host app, `settings.gradle`, or Gradle wrapper exists.
-- iOS and Android native bridge code has static/package-shape coverage only in
-  this repository. Host-app compile and hardware validation are still required.
+- No package-local Android host app or Gradle wrapper exists; Android library
+  build verification uses the React Native Gradle plugin wrapper from
+  `node_modules`.
+- iOS native bridge code has static/package-shape coverage plus an iPhoneOS SDK
+  syntax check. A host-app archive/build is still required.
+- Android native bridge code has static/package-shape coverage. Android compile
+  is blocked until an Android SDK path is configured.
 - Service-backed `bun run e2e:capture` with capture, worker, Pub/Sub emulator,
   Postgres, Redis, and ClickHouse running has not been executed in this pass.
 - Simulator/device runs were intentionally not performed.

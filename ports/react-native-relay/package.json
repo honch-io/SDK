@@ -9,7 +9,9 @@
   "scripts": {
     "e2e:capture": "bun e2e/relay-capture-e2e.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify:android:native": "./node_modules/@react-native/gradle-plugin/gradlew -p android assembleDebug",
+    "verify:ios:native": "scripts/verify-ios-syntax.sh"
   },
   "codegenConfig": {
     "name": "HonchReactNativeRelaySpec",
