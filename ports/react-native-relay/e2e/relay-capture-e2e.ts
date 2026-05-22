@@ -87,7 +87,13 @@ export async function runRelayCaptureE2E(options: RelayCaptureE2EOptions): Promi
 
     globalThis.fetch = options.fetchImpl ?? originalFetch;
     await relay.drainUploads();
-    assertEqual(await relay.pending(), [], "capture drain removes pending message");
+    const afterDrain = await relay.pending();
+    if (afterDrain.length !== 0) {
+      throw new Error(
+        "capture drain did not consume the pending relay message; ensure capture is running, " +
+          "the project key exists in Postgres, Pub/Sub is reachable, and capture returns an accepted status"
+      );
+    }
 
     const malformedRelay = createMobileRelay({
       durableStore: createMemoryDurableStore(),
