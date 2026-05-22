@@ -382,6 +382,25 @@ static void test_set_property_rejects_reserved_key(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
+static void test_sequence_wrap_rejects_enqueue_without_advancing(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_storage_ops_t storage_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    int queue_push_calls = storage.queue_push_calls;
+    client->sequence = UINT64_MAX;
+    assert(honch_core_track(client, "sequence_wrap_probe", NULL) == HONCH_ERROR_QUEUE_FULL);
+    assert(client->sequence == UINT64_MAX);
+    assert(storage.queue_push_calls == queue_push_calls);
+    client->sequence = 42u;
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
 static void test_state_get_rejects_size_overflow(void)
 {
     fake_state_storage_t storage = {
@@ -464,6 +483,7 @@ int main(void)
     test_failed_reset_second_identity_write_preserves_persisted_identity();
     test_set_property_rejects_blank_key();
     test_set_property_rejects_reserved_key();
+    test_sequence_wrap_rejects_enqueue_without_advancing();
     test_state_get_rejects_size_overflow();
     test_state_get_rejects_inconsistent_read_size();
     test_battery_callback_runs_outside_client_mutex();

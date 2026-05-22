@@ -302,6 +302,9 @@ honch_status_t honch_queue_enqueue(honch_client_t *client, const unsigned char *
     if (client == NULL || client->storage == NULL || client->storage->queue_push == NULL) {
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
+    if (client->sequence == UINT64_MAX) {
+        return HONCH_STATUS_ERROR_QUEUE_FULL;
+    }
 
     return client->storage->queue_push(client->storage->ctx, event, event_size, client->sequence++);
 }

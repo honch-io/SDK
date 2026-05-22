@@ -438,6 +438,10 @@ static honch_status_t honch_queue_enqueue_with_sequence(
 
 honch_status_t honch_queue_enqueue(honch_client_t *client, const unsigned char *event, size_t event_size)
 {
+    if (client == NULL || client->sequence == UINT64_MAX) {
+        return HONCH_ERROR_QUEUE_FULL;
+    }
+
     return honch_queue_enqueue_with_sequence(client, event, event_size, client->sequence++);
 }
 
