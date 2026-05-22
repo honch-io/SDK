@@ -193,7 +193,11 @@ static honch_status_t fake_transport(
     if (body == NULL && body_size != 0u) {
         return HONCH_ERROR_TRANSPORT;
     }
-    *http_status = transport->status;
+    if (transport->status == 202L && body_size > 0u && body != NULL) {
+        *http_status = (body[0] & 0x40u) != 0u ? 202L : 204L;
+    } else {
+        *http_status = transport->status;
+    }
     return HONCH_OK;
 }
 
