@@ -135,6 +135,29 @@ const subscription = relay.subscribeNativeFrames();
 Retryable upload failures keep messages pending and schedule the next native
 upload attempt with the canonical relay backoff.
 
+## Capture E2E
+
+The package includes an offline-capable E2E harness:
+
+```sh
+bun run e2e:capture
+```
+
+The harness wraps the compact wire-v2 `single-required-context` fixture in
+relay frames, feeds those frames through `createMobileRelay().receiveFrame()`,
+verifies offline retry preservation, drains to capture, rejects a malformed
+frame without ACK, and optionally verifies ClickHouse rows.
+
+For full service-backed verification, start capture, worker, Postgres, Redis,
+Pub/Sub emulator, and ClickHouse, then run:
+
+```sh
+HONCH_CAPTURE_URL=http://127.0.0.1:8001 \
+HONCH_PROJECT_KEY=<project_api_key> \
+CLICKHOUSE_URL=http://127.0.0.1:8123 \
+bun run e2e:capture
+```
+
 ## Test
 
 ```sh
