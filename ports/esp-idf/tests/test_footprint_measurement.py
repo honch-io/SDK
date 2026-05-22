@@ -140,6 +140,23 @@ I (300) honch_footprint: HONCH_FOOTPRINT_CPU samples=100 avg_us=76 min_us=40 p50
     def test_tool_targets_refactored_esp_idf_footprint_app(self):
         self.assertEqual(measure.FOOTPRINT_DIR, REPO_ROOT / "ports" / "esp-idf" / "footprint")
 
+    def test_footprint_registers_honch_requirement_before_variant_defines(self):
+        cmake = (REPO_ROOT / "ports" / "esp-idf" / "footprint" / "main" / "CMakeLists.txt").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("component requirements are collected during early expansion", cmake)
+        self.assertIn("PRIV_REQUIRES honch esp_event esp_http_client esp_netif esp_timer esp_wifi heap nvs_flash", cmake)
+        self.assertLess(cmake.index("idf_component_register("), cmake.index("if(HONCH_FOOTPRINT_WITH_SDK)"))
+
+    def test_footprint_app_uses_honch_component_directory_for_archive_attribution(self):
+        cmake = (REPO_ROOT / "ports" / "esp-idf" / "footprint" / "CMakeLists.txt").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('set(EXTRA_COMPONENT_DIRS "../honch")', cmake)
+        self.assertNotIn('set(EXTRA_COMPONENT_DIRS "../../..")', cmake)
+
     def test_runtime_cpu_sample_stays_on_ram_hot_path_before_api_setup(self):
         app = (REPO_ROOT / "ports" / "esp-idf" / "footprint" / "main" / "app_main.c").read_text(
             encoding="utf-8"
