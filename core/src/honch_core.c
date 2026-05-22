@@ -536,6 +536,10 @@ static honch_status_t honch_client_queue_push_recorded(
     size_t event_size,
     uint64_t *sequence_out)
 {
+    if (client == NULL || client->sequence == UINT64_MAX) {
+        return HONCH_ERROR_QUEUE_FULL;
+    }
+
     if (client != NULL && client->storage != NULL && client->storage->queue_push != NULL) {
         uint64_t sequence = client->sequence;
         honch_status_t status = client->storage->queue_push(client->storage->ctx, event, event_size, sequence);
@@ -548,7 +552,7 @@ static honch_status_t honch_client_queue_push_recorded(
         return status;
     }
 
-    uint64_t sequence = client != NULL ? client->sequence : 0u;
+    uint64_t sequence = client->sequence;
     honch_status_t status = honch_queue_enqueue(client, event, event_size);
     if (status == HONCH_OK && sequence_out != NULL) {
         *sequence_out = sequence;
