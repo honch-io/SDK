@@ -8,6 +8,11 @@
 #include <stdio.h>
 #include <string.h>
 
+#define FAKE_STORAGE_MAX_EVENTS 64u
+
+void honch_test_reset_wire_v2_encode_attempts(void);
+size_t honch_test_max_wire_v2_encode_attempts(void);
+
 typedef struct fake_event {
     uint8_t *data;
     size_t size;
@@ -18,7 +23,7 @@ typedef struct fake_event {
 } fake_event_t;
 
 typedef struct fake_storage {
-    fake_event_t events[2];
+    fake_event_t events[FAKE_STORAGE_MAX_EVENTS];
     size_t event_count;
     size_t peek_index;
     size_t peek_calls;
@@ -383,6 +388,46 @@ static void test_v2_chunk_transport_splits_oversized_batch_without_dead_letterin
 
     free(first_event);
     free(second_event);
+}
+
+static void test_v2_batch_shrink_does_not_retry_linearly(void)
+{
+    fake_storage_t storage = {0};
+    enum { event_count = 12u };
+    uint8_t *events[event_count];
+    memset(events, 0, sizeof(events));
+
+    storage.event_count = event_count;
+    for (size_t i = 0u; i < event_count; i++) {
+        char event_name[16];
+        int written = snprintf(event_name, sizeof(event_name), "heavy_%02zu", i);
+        assert(written > 0 && (size_t)written < sizeof(event_name));
+        size_t event_size = 0u;
+        build_heavy_event(event_name, 64u, 20u, &events[i], &event_size);
+        storage.events[i] = (fake_event_t) {
+            .data = events[i],
+            .size = event_size,
+            .sequence = i + 1u,
+            .pending = true
+        };
+    }
+
+    fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
+    honch_storage_ops_t storage_ops = {0};
+    honch_transport_ops_t transport_ops = {0};
+    honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
+    client.batch_size = event_count;
+    client.max_event_bytes = 8192u;
+    transport_ops.post_chunk = fake_post_chunk;
+
+    honch_test_reset_wire_v2_encode_attempts();
+    assert(honch_queue_flush_locked(&client) == HONCH_OK);
+    assert(honch_test_max_wire_v2_encode_attempts() <= 5u);
+
+    for (size_t i = 0u; i < event_count; i++) {
+        assert(storage.events[i].consumed);
+        free(events[i]);
+    }
 }
 
 static void test_v2_chunk_transport_preserves_string_properties(void)
@@ -912,6 +957,7 @@ int main(void)
     test_2xx_consumes_events();
     test_v2_chunk_transport_consumes_events_on_acceptance();
     test_v2_chunk_transport_splits_oversized_batch_without_dead_lettering_first_event();
+    test_v2_batch_shrink_does_not_retry_linearly();
     test_v2_chunk_transport_preserves_string_properties();
     test_v2_chunk_transport_preserves_nested_properties();
     test_v2_chunk_transport_preserves_float64_properties();

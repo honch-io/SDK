@@ -93,6 +93,9 @@ if(HONCH_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
+    target_compile_definitions(honch_core_retry_tests PRIVATE
+        HONCH_TESTING
+    )
     target_compile_options(honch_core_retry_tests PRIVATE
         $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
     )
