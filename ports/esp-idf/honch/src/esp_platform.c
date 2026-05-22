@@ -44,26 +44,6 @@ static honch_status_t honch_esp_random_bytes(void *ctx, uint8_t *buffer, size_t 
     return HONCH_STATUS_OK;
 }
 
-static honch_status_t honch_esp_lock(void *ctx)
-{
-    honch_esp_platform_t *platform = (honch_esp_platform_t *)ctx;
-    if (platform == NULL || platform->mutex == NULL) {
-        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
-    }
-
-    return xSemaphoreTake(platform->mutex, portMAX_DELAY) == pdTRUE ? HONCH_STATUS_OK : HONCH_STATUS_ERROR_IO;
-}
-
-static honch_status_t honch_esp_unlock(void *ctx)
-{
-    honch_esp_platform_t *platform = (honch_esp_platform_t *)ctx;
-    if (platform == NULL || platform->mutex == NULL) {
-        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
-    }
-
-    return xSemaphoreGive(platform->mutex) == pdTRUE ? HONCH_STATUS_OK : HONCH_STATUS_ERROR_IO;
-}
-
 static void honch_esp_log(void *ctx, honch_log_level_t level, const char *message)
 {
     (void)ctx;
@@ -91,18 +71,11 @@ honch_status_t honch_esp_platform_ops_init(honch_platform_ops_t *ops, honch_esp_
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
 
-    ctx->mutex = NULL;
-    ctx->mutex = xSemaphoreCreateMutex();
-    if (ctx->mutex == NULL) {
-        return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
-    }
-
+    ctx->reserved = NULL;
     *ops = (honch_platform_ops_t) {
         .now_ms = honch_esp_now_ms,
         .uptime_ms = honch_esp_uptime_ms,
         .random_bytes = honch_esp_random_bytes,
-        .lock = honch_esp_lock,
-        .unlock = honch_esp_unlock,
         .log = honch_esp_log,
         .ctx = ctx
     };
@@ -111,10 +84,5 @@ honch_status_t honch_esp_platform_ops_init(honch_platform_ops_t *ops, honch_esp_
 
 void honch_esp_platform_ops_deinit(honch_esp_platform_t *ctx)
 {
-    if (ctx == NULL || ctx->mutex == NULL) {
-        return;
-    }
-
-    vSemaphoreDelete(ctx->mutex);
-    ctx->mutex = NULL;
+    (void)ctx;
 }

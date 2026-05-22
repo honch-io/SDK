@@ -15,14 +15,13 @@
 #include "honch/core/transport.h"
 
 #include "freertos/FreeRTOS.h"
-#include "freertos/semphr.h"
 
 #define HONCH_ESP_RAM_QUEUE_MAX_EVENTS 64u
 
 typedef honch_client_t honch_esp_core_client_t;
 
 typedef struct honch_esp_platform {
-    SemaphoreHandle_t mutex;
+    void *reserved;
 } honch_esp_platform_t;
 
 typedef struct honch_esp_ram_queue_entry {

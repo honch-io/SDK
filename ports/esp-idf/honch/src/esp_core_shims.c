@@ -208,15 +208,17 @@ honch_status_t honch_state_check_firmware_version(
         *changed = true;
     }
 
-    status = honch_esp_write_state_string(client, "firmware_version", client->firmware_version);
-    if (status != HONCH_STATUS_OK) {
-        free(*previous_version);
-        *previous_version = NULL;
-        *changed = false;
+    free(stored_version);
+    return HONCH_STATUS_OK;
+}
+
+honch_status_t honch_state_save_firmware_version(honch_client_t *client)
+{
+    if (client == NULL || honch_is_blank(client->firmware_version)) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
 
-    free(stored_version);
-    return status;
+    return honch_esp_write_state_string(client, "firmware_version", client->firmware_version);
 }
 
 honch_status_t honch_state_reset(honch_client_t *client)
@@ -226,8 +228,16 @@ honch_status_t honch_state_reset(honch_client_t *client)
     }
 
     honch_status_t status = HONCH_STATUS_OK;
+    char *previous_device_id = honch_strdup(client->device_id);
+    char *previous_distinct_id = honch_strdup(client->distinct_id);
     char *device_id = NULL;
     char *distinct_id = NULL;
+    if (previous_device_id == NULL || previous_distinct_id == NULL) {
+        free(previous_device_id);
+        free(previous_distinct_id);
+        return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
+    }
+
     if (client->configured_device_id) {
         device_id = honch_strdup(client->device_id);
         distinct_id = honch_strdup(client->device_id);
@@ -254,6 +264,12 @@ honch_status_t honch_state_reset(honch_client_t *client)
     status = honch_esp_write_state_string(client, "device_id", device_id);
     if (status == HONCH_STATUS_OK) {
         status = honch_esp_write_state_string(client, "distinct_id", distinct_id);
+        if (status != HONCH_STATUS_OK) {
+            honch_status_t rollback_status = honch_esp_write_state_string(client, "device_id", previous_device_id);
+            if (rollback_status != HONCH_STATUS_OK) {
+                status = rollback_status;
+            }
+        }
     }
 
     if (status == HONCH_STATUS_OK) {
@@ -265,6 +281,8 @@ honch_status_t honch_state_reset(honch_client_t *client)
         distinct_id = NULL;
     }
 
+    free(previous_device_id);
+    free(previous_distinct_id);
     free(device_id);
     free(distinct_id);
     return status;

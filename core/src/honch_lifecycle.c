@@ -70,21 +70,12 @@ honch_status_t honch_client_state_lock(honch_client_t *client)
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    if (client->platform != NULL && client->platform->lock != NULL) {
-        return client->platform->lock(client->platform->ctx);
-    }
-
     return pthread_mutex_lock(&client->mutex) == 0 ? HONCH_OK : HONCH_ERROR_IO;
 }
 
 void honch_client_state_unlock(honch_client_t *client)
 {
     if (client == NULL) {
-        return;
-    }
-
-    if (client->platform != NULL && client->platform->unlock != NULL) {
-        (void)client->platform->unlock(client->platform->ctx);
         return;
     }
 
