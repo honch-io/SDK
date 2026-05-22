@@ -119,18 +119,6 @@ static honch_status_t honch_mp_random_bytes(void *ctx, uint8_t *buffer, size_t b
     return HONCH_STATUS_OK;
 }
 
-static honch_status_t honch_mp_lock(void *ctx)
-{
-    (void)ctx;
-    return HONCH_STATUS_OK;
-}
-
-static honch_status_t honch_mp_unlock(void *ctx)
-{
-    (void)ctx;
-    return HONCH_STATUS_OK;
-}
-
 static void honch_mp_log(void *ctx, honch_log_level_t level, const char *message)
 {
     (void)ctx;
@@ -150,8 +138,6 @@ honch_status_t honch_micropython_platform_ops_init(
         .now_ms = honch_mp_now_ms,
         .uptime_ms = honch_mp_uptime_ms,
         .random_bytes = honch_mp_random_bytes,
-        .lock = honch_mp_lock,
-        .unlock = honch_mp_unlock,
         .log = honch_mp_log,
         .ctx = ctx,
     };

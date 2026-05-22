@@ -793,15 +793,22 @@ static honch_status_t honch_emit_firmware_update_locked(honch_client_t *client)
     bool changed = false;
     char *previous_version = NULL;
     honch_status_t status = honch_state_check_firmware_version(client, &changed, &previous_version);
-    if (status != HONCH_OK || !changed) {
+    if (status != HONCH_OK) {
         free(previous_version);
         return status;
+    }
+    if (!changed) {
+        free(previous_version);
+        return honch_state_save_firmware_version(client);
     }
 
     char *properties_json = NULL;
     status = honch_build_firmware_update_properties(previous_version, client->firmware_version, &properties_json);
     if (status == HONCH_OK) {
         status = honch_track_locked(client, "$firmware_update", properties_json);
+    }
+    if (status == HONCH_OK) {
+        status = honch_state_save_firmware_version(client);
     }
 
     free(properties_json);

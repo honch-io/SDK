@@ -97,6 +97,26 @@ if(HONCH_BUILD_TESTS)
     )
 
     add_test(NAME honch_posix_tests COMMAND honch_posix_tests)
+
+    add_executable(honch_posix_state_consistency_tests
+        ../../core/test/test_state_consistency.c
+    )
+
+    target_link_libraries(honch_posix_state_consistency_tests PRIVATE honch_posix)
+    target_include_directories(honch_posix_state_consistency_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../core/src
+    )
+    target_compile_definitions(honch_posix_state_consistency_tests PRIVATE
+        _POSIX_C_SOURCE=200809L
+        _DEFAULT_SOURCE
+        _DARWIN_C_SOURCE
+    )
+    target_compile_options(honch_posix_state_consistency_tests PRIVATE
+        $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
+    )
+
+    add_test(NAME honch_posix_state_consistency_tests COMMAND honch_posix_state_consistency_tests)
+
     add_test(
         NAME honch_posix_cbor_migration_tests
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_cbor_migration.py

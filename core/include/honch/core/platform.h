@@ -21,8 +21,6 @@ typedef struct honch_platform_ops {
     uint64_t (*now_ms)(void *ctx);
     uint64_t (*uptime_ms)(void *ctx);
     honch_status_t (*random_bytes)(void *ctx, uint8_t *buffer, size_t buffer_size);
-    honch_status_t (*lock)(void *ctx);
-    honch_status_t (*unlock)(void *ctx);
     void (*log)(void *ctx, honch_log_level_t level, const char *message);
     void *ctx;
 } honch_platform_ops_t;

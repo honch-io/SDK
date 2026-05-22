@@ -869,37 +869,6 @@ static int wait_for_file_count(const char *directory, const char *suffix, size_t
     return 0;
 }
 
-typedef struct lifecycle_lock_context {
-    pthread_mutex_t mutex;
-    pthread_cond_t cond;
-    pthread_t holder_thread;
-    pthread_t waiter_thread;
-    pthread_t shutdown_thread;
-    int holder_thread_set;
-    int waiter_thread_set;
-    int shutdown_thread_set;
-    int locked;
-    int holder_blocked_in_unlock;
-    int release_holder;
-    int waiter_waiting;
-    int waiter_finished;
-    int shutdown_started;
-    int shutdown_waiting;
-    int shutdown_completed;
-    int shutdown_completed_before_waiter;
-} lifecycle_lock_context_t;
-
-typedef struct lifecycle_thread_context {
-    lifecycle_lock_context_t *lock;
-    honch_client_t *client;
-    honch_status_t status;
-} lifecycle_thread_context_t;
-
-static int same_thread(pthread_t left, pthread_t right)
-{
-    return pthread_equal(left, right) != 0;
-}
-
 static uint64_t lifecycle_now_ms(void *ctx)
 {
     (void)ctx;
@@ -912,60 +881,6 @@ static honch_status_t lifecycle_random_bytes(void *ctx, uint8_t *buffer, size_t 
     for (size_t i = 0u; i < buffer_size; i++) {
         buffer[i] = (uint8_t)i;
     }
-    return HONCH_OK;
-}
-
-static honch_status_t lifecycle_lock(void *ctx)
-{
-    lifecycle_lock_context_t *lock = (lifecycle_lock_context_t *)ctx;
-    pthread_t self = pthread_self();
-    pthread_mutex_lock(&lock->mutex);
-
-    while (lock->locked ||
-           (lock->waiter_thread_set && same_thread(self, lock->waiter_thread) && lock->shutdown_waiting &&
-            !lock->shutdown_completed)) {
-        if (lock->waiter_thread_set && same_thread(self, lock->waiter_thread)) {
-            lock->waiter_waiting = 1;
-            pthread_cond_broadcast(&lock->cond);
-            if (lock->shutdown_completed) {
-                lock->shutdown_completed_before_waiter = 1;
-                pthread_mutex_unlock(&lock->mutex);
-                return HONCH_ERROR_IO;
-            }
-        }
-        if (lock->shutdown_thread_set && same_thread(self, lock->shutdown_thread)) {
-            lock->shutdown_waiting = 1;
-            pthread_cond_broadcast(&lock->cond);
-        }
-        pthread_cond_wait(&lock->cond, &lock->mutex);
-    }
-
-    lock->locked = 1;
-    pthread_mutex_unlock(&lock->mutex);
-    return HONCH_OK;
-}
-
-static honch_status_t lifecycle_unlock(void *ctx)
-{
-    lifecycle_lock_context_t *lock = (lifecycle_lock_context_t *)ctx;
-    pthread_t self = pthread_self();
-    pthread_mutex_lock(&lock->mutex);
-
-    if (lock->holder_thread_set && same_thread(self, lock->holder_thread)) {
-        lock->holder_blocked_in_unlock = 1;
-        pthread_cond_broadcast(&lock->cond);
-        while (!lock->release_holder) {
-            pthread_cond_wait(&lock->cond, &lock->mutex);
-        }
-    }
-
-    if (lock->shutdown_thread_set && same_thread(self, lock->shutdown_thread)) {
-        lock->shutdown_completed = 1;
-    }
-
-    lock->locked = 0;
-    pthread_cond_broadcast(&lock->cond);
-    pthread_mutex_unlock(&lock->mutex);
     return HONCH_OK;
 }
 
@@ -986,63 +901,6 @@ static honch_status_t lifecycle_transport(
     (void)body_size;
     *result = HONCH_TRANSPORT_ACCEPTED;
     return HONCH_OK;
-}
-
-static int wait_for_lifecycle_flag(lifecycle_lock_context_t *lock, int *flag)
-{
-    for (int attempt = 0; attempt < 200; attempt++) {
-        pthread_mutex_lock(&lock->mutex);
-        int ready = *flag;
-        pthread_mutex_unlock(&lock->mutex);
-        if (ready) {
-            return 1;
-        }
-        usleep(10000u);
-    }
-    return 0;
-}
-
-static void *lifecycle_copy_device_id_thread(void *ctx)
-{
-    lifecycle_thread_context_t *thread = (lifecycle_thread_context_t *)ctx;
-    char device_id[64];
-    pthread_mutex_lock(&thread->lock->mutex);
-    if (!thread->lock->holder_thread_set) {
-        thread->lock->holder_thread = pthread_self();
-        thread->lock->holder_thread_set = 1;
-    } else {
-        thread->lock->waiter_thread = pthread_self();
-        thread->lock->waiter_thread_set = 1;
-    }
-    pthread_cond_broadcast(&thread->lock->cond);
-    pthread_mutex_unlock(&thread->lock->mutex);
-
-    thread->status = honch_core_copy_device_id(thread->client, device_id, sizeof(device_id));
-
-    pthread_mutex_lock(&thread->lock->mutex);
-    if (thread->lock->waiter_thread_set && same_thread(pthread_self(), thread->lock->waiter_thread)) {
-        thread->lock->waiter_finished = 1;
-        if (thread->lock->shutdown_completed) {
-            thread->lock->shutdown_completed_before_waiter = 1;
-        }
-    }
-    pthread_cond_broadcast(&thread->lock->cond);
-    pthread_mutex_unlock(&thread->lock->mutex);
-    return NULL;
-}
-
-static void *lifecycle_shutdown_thread(void *ctx)
-{
-    lifecycle_thread_context_t *thread = (lifecycle_thread_context_t *)ctx;
-    pthread_mutex_lock(&thread->lock->mutex);
-    thread->lock->shutdown_thread = pthread_self();
-    thread->lock->shutdown_thread_set = 1;
-    thread->lock->shutdown_started = 1;
-    pthread_cond_broadcast(&thread->lock->cond);
-    pthread_mutex_unlock(&thread->lock->mutex);
-
-    thread->status = honch_core_shutdown(thread->client);
-    return NULL;
 }
 
 static int test_battery_level = -1;
@@ -1775,22 +1633,15 @@ static void test_shutdown_flush_reports_transport_error(void)
     honch_test_set_transport(NULL, NULL);
 }
 
-static void test_shutdown_waits_for_api_call_already_waiting_on_client_lock(void)
+static void test_core_state_lock_works_without_platform_lock_callbacks(void)
 {
     char queue_dir[128];
     make_temp_dir(queue_dir, sizeof(queue_dir));
 
-    lifecycle_lock_context_t lock = {0};
-    EXPECT_EQ_INT(pthread_mutex_init(&lock.mutex, NULL), 0);
-    EXPECT_EQ_INT(pthread_cond_init(&lock.cond, NULL), 0);
-
     honch_platform_ops_t platform = {
         .now_ms = lifecycle_now_ms,
         .uptime_ms = lifecycle_now_ms,
-        .random_bytes = lifecycle_random_bytes,
-        .lock = lifecycle_lock,
-        .unlock = lifecycle_unlock,
-        .ctx = &lock
+        .random_bytes = lifecycle_random_bytes
     };
     honch_transport_ops_t transport = {
         .post_chunk = lifecycle_transport
@@ -1817,39 +1668,8 @@ static void test_shutdown_waits_for_api_call_already_waiting_on_client_lock(void
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_core_init(&client, &config), HONCH_OK);
-
-    lifecycle_thread_context_t holder = {.lock = &lock, .client = client};
-    lifecycle_thread_context_t waiter = {.lock = &lock, .client = client};
-    lifecycle_thread_context_t shutdown = {.lock = &lock, .client = client};
-    pthread_t holder_id;
-    pthread_t waiter_id;
-    pthread_t shutdown_id;
-
-    EXPECT_EQ_INT(pthread_create(&holder_id, NULL, lifecycle_copy_device_id_thread, &holder), 0);
-    EXPECT_TRUE(wait_for_lifecycle_flag(&lock, &lock.holder_blocked_in_unlock) != 0);
-
-    EXPECT_EQ_INT(pthread_create(&waiter_id, NULL, lifecycle_copy_device_id_thread, &waiter), 0);
-    EXPECT_TRUE(wait_for_lifecycle_flag(&lock, &lock.waiter_waiting) != 0);
-
-    EXPECT_EQ_INT(pthread_create(&shutdown_id, NULL, lifecycle_shutdown_thread, &shutdown), 0);
-    EXPECT_TRUE(wait_for_lifecycle_flag(&lock, &lock.shutdown_started) != 0);
-
-    pthread_mutex_lock(&lock.mutex);
-    lock.release_holder = 1;
-    pthread_cond_broadcast(&lock.cond);
-    pthread_mutex_unlock(&lock.mutex);
-
-    EXPECT_EQ_INT(pthread_join(holder_id, NULL), 0);
-    EXPECT_EQ_INT(pthread_join(waiter_id, NULL), 0);
-    EXPECT_EQ_INT(pthread_join(shutdown_id, NULL), 0);
-
-    EXPECT_EQ_INT(holder.status, HONCH_OK);
-    EXPECT_EQ_INT(waiter.status, HONCH_OK);
-    EXPECT_EQ_INT(shutdown.status, HONCH_OK);
-    EXPECT_TRUE(lock.shutdown_completed_before_waiter == 0);
-
-    pthread_cond_destroy(&lock.cond);
-    pthread_mutex_destroy(&lock.mutex);
+    EXPECT_EQ_INT(honch_core_track(client, "state_lock_contract", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_core_shutdown(client), HONCH_OK);
 }
 
 static void test_firmware_update_emitted_when_version_changes(void)
@@ -2922,7 +2742,7 @@ int main(void)
     test_session_events_and_context();
     test_lifecycle_events_are_queued();
     test_shutdown_flush_reports_transport_error();
-    test_shutdown_waits_for_api_call_already_waiting_on_client_lock();
+    test_core_state_lock_works_without_platform_lock_callbacks();
     test_firmware_update_emitted_when_version_changes();
     test_battery_callback_stamps_level_and_emits_low_event();
     test_battery_low_uses_same_sample_for_event_properties();

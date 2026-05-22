@@ -77,16 +77,6 @@ void honch_arduino_log(void *ctx, honch_log_level_t level, const char *message) 
 #endif
 }
 
-static honch_status_t honch_arduino_lock(void *ctx) {
-  (void)ctx;
-  return HONCH_OK;
-}
-
-static honch_status_t honch_arduino_unlock(void *ctx) {
-  (void)ctx;
-  return HONCH_OK;
-}
-
 honch_status_t honch_arduino_platform_ops_init(
     honch_platform_ops_t *ops,
     honch_arduino_platform_t *ctx) {
@@ -98,8 +88,6 @@ honch_status_t honch_arduino_platform_ops_init(
       honch_arduino_epoch_millis,
       honch_arduino_epoch_millis,
       honch_arduino_random_bytes,
-      honch_arduino_lock,
-      honch_arduino_unlock,
       honch_arduino_log,
       ctx,
   };
