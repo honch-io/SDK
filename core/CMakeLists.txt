@@ -1,4 +1,4 @@
-add_library(honch_core
+set(HONCH_CORE_SOURCES
     src/honch_core.c
     src/honch_cbor.c
     src/honch_json.c
@@ -9,25 +9,38 @@ add_library(honch_core
     src/honch_wire_v2.c
 )
 
-target_include_directories(honch_core
+add_library(honch_core_objects OBJECT
+    ${HONCH_CORE_SOURCES}
+)
+
+target_include_directories(honch_core_objects
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_compile_features(honch_core PUBLIC c_std_11)
+target_compile_features(honch_core_objects PUBLIC c_std_11)
 
-target_compile_options(honch_core PRIVATE
+target_compile_options(honch_core_objects PRIVATE
     $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
 )
 
 if(HONCH_BUILD_BENCHMARKS)
-    target_compile_options(honch_core PRIVATE
+    target_compile_options(honch_core_objects PRIVATE
         -include
         ${CMAKE_CURRENT_SOURCE_DIR}/../ports/posix/bench/honch_bench_alloc.h
     )
 endif()
+
+add_library(honch_core STATIC
+    $<TARGET_OBJECTS:honch_core_objects>
+)
+
+target_link_libraries(honch_core
+    PUBLIC
+        honch_core_objects
+)
 
 if(HONCH_BUILD_TESTS)
     add_executable(honch_core_storage_contract_tests
