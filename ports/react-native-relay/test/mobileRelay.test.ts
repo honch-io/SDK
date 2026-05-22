@@ -31,10 +31,12 @@ function frame(payload: number[]): Uint8Array {
 
 const uploaderConfig = {
   endpointUrl: "https://capture.example",
-  apiKey: "test-key",
+  projectKey: "test-key",
   relayId: "relay-1",
   relaySdkPlatform: "react-native",
-  relaySdkVersion: "0.1.0"
+  relaySdkVersion: "0.1.0",
+  streamId: () => "relay-stream",
+  messageId: (message: { sequence: string }) => Number(message.sequence)
 };
 
 describe("createMobileRelay", () => {

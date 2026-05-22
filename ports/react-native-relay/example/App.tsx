@@ -9,10 +9,12 @@ import {
 
 const captureConfig = {
   endpointUrl: "http://127.0.0.1:8001",
-  apiKey: "test_key_123",
+  projectKey: "test_key_123",
   relayId: "mobile-relay-example",
   relaySdkPlatform: "react-native",
-  relaySdkVersion: "0.1.0"
+  relaySdkVersion: "0.1.0",
+  streamId: (message: StoredRelayMessage) => `relay-${message.deviceId}`,
+  messageId: (message: StoredRelayMessage) => Number(message.sequence)
 };
 
 export default function App() {

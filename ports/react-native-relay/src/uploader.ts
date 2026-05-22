@@ -1,11 +1,14 @@
 import type { StoredRelayMessage } from "./relayQueue";
+import { buildSingleWireV2Frame } from "./wireV2";
 
 export type RelayUploaderConfig = {
   endpointUrl: string;
-  apiKey: string;
+  projectKey: string;
   relayId: string;
   relaySdkPlatform: string;
   relaySdkVersion: string;
+  streamId(message: StoredRelayMessage): string;
+  messageId(message: StoredRelayMessage): number;
 };
 
 export type RelayUploadOutcome =
@@ -31,19 +34,24 @@ export async function uploadRelayMessageOutcome(
   config: RelayUploaderConfig,
   message: StoredRelayMessage
 ): Promise<RelayUploadOutcome> {
-  const body = new ArrayBuffer(message.body.byteLength);
-  new Uint8Array(body).set(message.body);
+  const frame = buildSingleWireV2Frame({
+    messageId: config.messageId(message),
+    payload: message.body
+  });
+  const body = new ArrayBuffer(frame.byteLength);
+  new Uint8Array(body).set(frame);
 
   let response: Response;
   try {
-    response = await fetch(`${config.endpointUrl.replace(/\/$/, "")}/batch`, {
+    response = await fetch(`${config.endpointUrl.replace(/\/$/, "")}/capture`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/cbor",
+        "Content-Type": "application/vnd.honch.chunk",
+        "X-Honch-Project-Key": config.projectKey,
+        "X-Honch-Stream-Id": config.streamId(message),
         "X-Honch-Relay-Id": config.relayId,
         "X-Honch-Relay-SDK-Platform": config.relaySdkPlatform,
-        "X-Honch-Relay-SDK-Version": config.relaySdkVersion,
-        Authorization: `Bearer ${config.apiKey}`
+        "X-Honch-Relay-SDK-Version": config.relaySdkVersion
       },
       body
     });

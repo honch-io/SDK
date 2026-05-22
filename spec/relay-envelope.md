@@ -1,25 +1,29 @@
 # Relay Envelope
 
-> **Status: Future backend contract.** React Native relay v0.1 forwards the
-> original CBOR batch unchanged to `POST /batch` and sends relay metadata in
-> HTTP headers. The envelope below is reserved for a future capture contract
-> where relay metadata is part of the CBOR payload itself.
+> **Status: Historical design note.** Production React Native relay uploads use
+> the compact wire-v2 `POST /capture` contract. This envelope is not an active
+> production relay contract; it is retained only as background for any future
+> payload-level relay metadata design.
 
 ## Overview
 
-The relay envelope wraps a batch of events from one or more devices, allowing a
-gateway to forward events on behalf of devices that cannot reach the internet
-directly (BLE-only, Zigbee, Thread, etc.).
+The relay envelope was a proposed wrapper for a batch of events from one or
+more devices, allowing a gateway to forward events on behalf of devices that
+cannot reach the internet directly (BLE-only, Zigbee, Thread, etc.).
 
-For v0.1 relay uploads, the companion app does not decode or rewrite the CBOR
-batch produced by firmware. It forwards those bytes as `application/cbor` and
-adds:
+Production relay uploads do not use this envelope. Firmware relay chunks carry
+compact message bytes. The companion app validates and reassembles relay
+frames, durably stores the completed compact message, then uploads one or more
+compact wire-v2 HTTP chunk frames to `/capture` with:
 
+- `X-Honch-Project-Key`
+- `X-Honch-Stream-Id`
 - `X-Honch-Relay-Id`
 - `X-Honch-Relay-SDK-Platform`
 - `X-Honch-Relay-SDK-Version`
 
-Capture can use those headers to stamp relay metadata without changing the
+The relay may re-chunk for HTTP, but it must not rewrite the compact message
+body. Capture can use the headers to stamp relay metadata without changing the
 device-originated event body.
 
 ## Envelope Format
@@ -56,7 +60,7 @@ honch_status_t honch_packetizer_confirm(honch_packetizer_t *packetizer);
 honch_status_t honch_packetizer_abort(honch_packetizer_t *packetizer);
 ```
 
-The relay or companion app forwards the reassembled CBOR batch to capture and
-stamps relay metadata. In v0.1, relay metadata is supplied through headers; a
-future envelope implementation must remain backward compatible with raw CBOR
-relay uploads or explicitly version the ingest contract.
+The relay or companion app forwards the reassembled compact message to capture
+and stamps relay metadata through headers. A future envelope implementation
+must be explicitly versioned and must not replace the production compact
+wire-v2 relay ingest contract without a separate migration plan.
