@@ -143,6 +143,26 @@ SDKs should use a monotonically increasing 32-bit message ID seeded at boot.
 Gateways may replace the message ID when re-chunking a fully received device
 message, but must not change the compact message bytes.
 
+## Relay Uploads
+
+React Native relay uploads completed device messages to the canonical capture
+endpoint:
+
+```text
+POST /capture
+Content-Type: application/vnd.honch.chunk
+X-Honch-Project-Key: <project_api_key>
+X-Honch-Stream-Id: <relay_stream_id>
+X-Honch-Relay-Id: <mobile_relay_id>
+X-Honch-Relay-SDK-Platform: react-native
+X-Honch-Relay-SDK-Version: <package_version>
+```
+
+Firmware relay chunks carry compact message bytes. The mobile relay validates
+and reassembles relay frames, durably stores the completed compact message,
+then uploads one or more compact wire-v2 HTTP chunk frames to `/capture`. The
+relay may re-chunk for HTTP, but it must not rewrite the compact message body.
+
 ### Sender Rules
 
 - Send frames for a message in ascending offset order.

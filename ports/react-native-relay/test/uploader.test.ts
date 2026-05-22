@@ -4,11 +4,13 @@ import { uploadRelayMessage, uploadRelayMessageOutcome } from "../src/uploader";
 import { nextBackoffDelayMs } from "../src/retry";
 
 const config = {
-  endpointUrl: "https://capture.example/",
-  apiKey: "test-key",
+  endpointUrl: "https://capture.example.test/",
+  projectKey: "project-key",
   relayId: "relay-1",
   relaySdkPlatform: "react-native",
-  relaySdkVersion: "0.1.0"
+  relaySdkVersion: "0.1.0",
+  streamId: () => "relay-stream",
+  messageId: () => 7
 };
 
 const message = {
@@ -23,23 +25,39 @@ describe("uploadRelayMessage", () => {
     vi.unstubAllGlobals();
   });
 
-  it("uploads relay messages to the batch endpoint with relay headers", async () => {
+  it("uploads relay messages to the capture endpoint with relay headers", async () => {
     const fetchMock = vi.fn(async () => new Response(null, { status: 202 }));
     vi.stubGlobal("fetch", fetchMock);
 
     await uploadRelayMessage(config, message);
 
-    expect(fetchMock).toHaveBeenCalledWith("https://capture.example/batch", {
+    expect(fetchMock).toHaveBeenCalledWith("https://capture.example.test/capture", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/cbor",
+      headers: expect.objectContaining({
+        "Content-Type": "application/vnd.honch.chunk",
+        "X-Honch-Project-Key": "project-key",
+        "X-Honch-Stream-Id": "relay-stream",
         "X-Honch-Relay-Id": "relay-1",
         "X-Honch-Relay-SDK-Platform": "react-native",
-        "X-Honch-Relay-SDK-Version": "0.1.0",
-        Authorization: "Bearer test-key"
-      },
+        "X-Honch-Relay-SDK-Version": "0.1.0"
+      }),
       body: expect.any(ArrayBuffer)
     });
+  });
+
+  it("does not use the legacy batch CBOR upload contract", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await uploadRelayMessage(config, message);
+
+    const [fetchUrl, request] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      { headers: Record<string, string> }
+    ];
+    expect(fetchUrl).not.toContain("/batch");
+    expect(request.headers["Content-Type"]).not.toBe("application/cbor");
+    expect(request.headers).not.toHaveProperty("Authorization");
   });
 
   it("rejects failed relay uploads with the status code", async () => {

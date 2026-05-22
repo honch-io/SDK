@@ -49,10 +49,12 @@ function fixtureBody(path: keyof typeof fixtureData): Uint8Array {
 
 const config = {
   endpointUrl: "https://capture.example/",
-  apiKey: "test-key",
+  projectKey: "test-key",
   relayId: "relay-1",
   relaySdkPlatform: "react-native",
-  relaySdkVersion: "0.1.0"
+  relaySdkVersion: "0.1.0",
+  streamId: () => "relay-stream",
+  messageId: (message: { sequence: string }) => Number(message.sequence)
 };
 
 describe("React Native relay conformance fixtures", () => {
@@ -66,7 +68,7 @@ describe("React Native relay conformance fixtures", () => {
     }
   });
 
-  it("preserves canonical fixture payload bytes for relay upload", async () => {
+  it("preserves canonical fixture payload bytes inside the compact relay upload frame", async () => {
     const body = fixtureBody("spec/conformance/envelopes/basic_batch.json");
     const fetchMock = vi.fn(async () => new Response(null, { status: 202 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -84,7 +86,8 @@ describe("React Native relay conformance fixtures", () => {
     if (request === undefined) {
       throw new Error("relay upload request was not captured");
     }
-    expect(Array.from(new Uint8Array(request.body as ArrayBuffer))).toEqual(Array.from(body));
+    const frame = new Uint8Array(request.body as ArrayBuffer);
+    expect(Array.from(frame.slice(2, -2))).toEqual(Array.from(body));
   });
 
   it("implements the canonical response policy for relay upload statuses", async () => {
