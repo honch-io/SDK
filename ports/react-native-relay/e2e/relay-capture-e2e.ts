@@ -37,6 +37,8 @@ type RelayFrameOptions = {
 };
 
 export async function runRelayCaptureE2E(options: RelayCaptureE2EOptions): Promise<RelayCaptureE2EResult> {
+  await preflightLiveServices(options);
+
   const tempFile = options.tempFile ?? join(await mkdtemp(join(tmpdir(), "honch-relay-e2e-")), "queue.json");
   const compactMessage = await loadWireV2CompactMessageFixture("single-required-context");
   const firstFrame = buildRelayFrame({
@@ -136,6 +138,27 @@ export async function runRelayCaptureE2E(options: RelayCaptureE2EOptions): Promi
     };
   } finally {
     globalThis.fetch = originalFetch;
+  }
+}
+
+async function preflightLiveServices(options: RelayCaptureE2EOptions): Promise<void> {
+  if (options.fetchImpl === undefined) {
+    await preflightHttpEndpoint("capture", `${options.captureUrl.replace(/\/$/, "")}/health`);
+  }
+  if (options.clickHouseUrl !== undefined) {
+    await preflightHttpEndpoint("ClickHouse", `${options.clickHouseUrl.replace(/\/$/, "")}/ping`);
+  }
+}
+
+async function preflightHttpEndpoint(name: string, url: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(url);
+  } catch (error) {
+    throw new Error(`${name} preflight failed: GET ${url} failed: ${String(error)}`);
+  }
+  if (!response.ok) {
+    throw new Error(`${name} preflight failed: GET ${url} returned ${response.status}`);
   }
 }
 

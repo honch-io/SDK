@@ -152,6 +152,8 @@ The harness wraps the compact wire-v2 `single-required-context` fixture in
 relay frames, feeds those frames through `createMobileRelay().receiveFrame()`,
 verifies offline retry preservation, drains to capture, rejects a malformed
 frame without ACK, and optionally verifies ClickHouse rows.
+For live runs, the harness preflights capture `/health` and ClickHouse `/ping`
+so missing services fail before queue-drain assertions.
 
 For full service-backed verification, start capture, worker, Postgres, Redis,
 Pub/Sub emulator, and ClickHouse, then run:
