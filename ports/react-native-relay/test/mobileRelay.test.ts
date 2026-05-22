@@ -29,6 +29,10 @@ function frame(payload: number[]): Uint8Array {
   return bytes;
 }
 
+function base64(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString("base64");
+}
+
 const uploaderConfig = {
   endpointUrl: "https://capture.example",
   projectKey: "test-key",
@@ -102,5 +106,52 @@ describe("createMobileRelay", () => {
     await relay.drainUploads();
 
     expect(await relay.pending()).toEqual([]);
+  });
+
+  it("subscribes native frame events into durable BLE receipt", async () => {
+    const listeners = new Map<string, (event: { deviceId: string; frameBase64: string }) => void>();
+    const acknowledgements: string[] = [];
+    const relay = createMobileRelay({
+      durableStore: createMemoryDurableStore(),
+      uploaderConfig,
+      frameEvents: {
+        addListener(eventName, listener) {
+          listeners.set(eventName, listener);
+          return {
+            remove() {
+              listeners.delete(eventName);
+            }
+          };
+        }
+      },
+      bleNative: {
+        async startScan() {},
+        async stopScan() {},
+        async connect() {},
+        async disconnect() {},
+        async subscribeFrames() {},
+        async acknowledgeMessage(deviceId, sequence) {
+          acknowledgements.push(`${deviceId}:${sequence}`);
+        }
+      },
+      schedulerNative: {
+        async scheduleUpload() {},
+        async cancelUpload() {}
+      }
+    });
+
+    const subscription = relay.subscribeNativeFrames();
+    listeners.get("HonchRelayFrame")?.({
+      deviceId: "device-a",
+      frameBase64: base64(frame([6, 7]))
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(acknowledgements).toEqual(["device-a:1"]);
+    expect((await relay.pending()).map((message) => Array.from(message.body))).toEqual([[6, 7]]);
+
+    subscription.remove();
+    expect(listeners.has("HonchRelayFrame")).toBe(false);
   });
 });

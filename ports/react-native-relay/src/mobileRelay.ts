@@ -1,5 +1,6 @@
 import { createBleRelayReceiver } from "./ble";
 import { drainRelayQueue } from "./drain";
+import { subscribeRelayNativeFrames, type RelayNativeFrameEventSource } from "./nativeFrameEvents";
 import { createDurableRelayQueue, type StoredRelayMessage } from "./relayQueue";
 import { createRelayUploadScheduler } from "./scheduler";
 import { uploadRelayMessageOutcome, type RelayUploaderConfig } from "./uploader";
@@ -12,6 +13,7 @@ export type MobileRelayOptions = {
   uploaderConfig: RelayUploaderConfig;
   bleNative: RelayBleNative;
   schedulerNative: RelayUploadSchedulerNative;
+  frameEvents?: RelayNativeFrameEventSource;
   random?: () => number;
 };
 
@@ -43,6 +45,15 @@ export function createMobileRelay(options: MobileRelayOptions) {
 
     receiveFrame(deviceId: string, frameBytes: Uint8Array) {
       return receiver.receiveFrame(deviceId, frameBytes);
+    },
+
+    subscribeNativeFrames() {
+      if (options.frameEvents === undefined) {
+        throw new Error("native frame event source is not configured");
+      }
+      return subscribeRelayNativeFrames(options.frameEvents, async (deviceId, frameBytes) => {
+        await receiver.receiveFrame(deviceId, frameBytes);
+      });
     },
 
     pending(): Promise<StoredRelayMessage[]> {

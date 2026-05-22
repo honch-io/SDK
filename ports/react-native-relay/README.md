@@ -91,6 +91,38 @@ This package directory does not currently include an Android example app,
 `settings.gradle`, or Gradle wrapper. Native Android build validation must be
 run from the consuming React Native host before production sign-off.
 
+## Native Frame Events
+
+The native iOS and Android bridges emit relay notifications as:
+
+```text
+HonchRelayFrame
+{
+  deviceId: "<native peripheral id>",
+  frameBase64: "<relay frame bytes>"
+}
+```
+
+Wire that event source into `createMobileRelay` so native notifications enter
+the same durable validation, assembly, ACK, and upload path as manual
+`receiveFrame` calls:
+
+```ts
+import { NativeEventEmitter, NativeModules } from "react-native";
+import { createMobileRelay } from "@honch/react-native-relay";
+
+const nativeModule = NativeModules.HonchReactNativeRelay;
+const relay = createMobileRelay({
+  durableStore,
+  uploaderConfig,
+  bleNative,
+  schedulerNative,
+  frameEvents: new NativeEventEmitter(nativeModule)
+});
+
+const subscription = relay.subscribeNativeFrames();
+```
+
 ## Test
 
 ```sh
