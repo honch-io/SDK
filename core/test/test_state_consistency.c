@@ -401,6 +401,41 @@ static void test_sequence_wrap_rejects_enqueue_without_advancing(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
+static void test_track_rejects_embedded_nul_property_key(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_storage_ops_t storage_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    int queue_push_calls = storage.queue_push_calls;
+    assert(honch_core_track(client, "bad_property_key", "{\"bad\\u0000key\":1}") ==
+        HONCH_ERROR_INVALID_ARGUMENT);
+    assert(storage.queue_push_calls == queue_push_calls);
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+static void test_identify_rejects_embedded_nul_trait_key(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_storage_ops_t storage_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    int queue_push_calls = storage.queue_push_calls;
+    assert(honch_core_identify(client, "user-1", "{\"bad\\u0000key\":1}") ==
+        HONCH_ERROR_INVALID_ARGUMENT);
+    assert(strcmp(storage.distinct_id, storage.device_id) == 0);
+    assert(storage.queue_push_calls == queue_push_calls);
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
 static void test_state_get_rejects_size_overflow(void)
 {
     fake_state_storage_t storage = {
@@ -484,6 +519,8 @@ int main(void)
     test_set_property_rejects_blank_key();
     test_set_property_rejects_reserved_key();
     test_sequence_wrap_rejects_enqueue_without_advancing();
+    test_track_rejects_embedded_nul_property_key();
+    test_identify_rejects_embedded_nul_trait_key();
     test_state_get_rejects_size_overflow();
     test_state_get_rejects_inconsistent_read_size();
     test_battery_callback_runs_outside_client_mutex();

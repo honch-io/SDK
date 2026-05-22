@@ -686,8 +686,10 @@ static honch_status_t honch_json_to_cbor_object_members_single_pass(
         honch_cbor_key_t key;
         honch_cbor_key_init(&key);
         honch_status_t status = honch_json_decode_key(parser, &key);
-        bool include = status == HONCH_OK && memchr(key.data, '\0', key.length) == NULL &&
-            !honch_property_key_is_reserved(key.data);
+        if (status == HONCH_OK && memchr(key.data, '\0', key.length) != NULL) {
+            status = HONCH_ERROR_INVALID_ARGUMENT;
+        }
+        bool include = status == HONCH_OK && !honch_property_key_is_reserved(key.data);
         if (status == HONCH_OK && include) {
             status = honch_cbor_append_text_n(buffer, key.data, key.length);
         }
