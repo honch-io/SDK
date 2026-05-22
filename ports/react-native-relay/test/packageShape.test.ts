@@ -15,6 +15,17 @@ describe("React Native relay package shape", () => {
     expect(packageJson["react-native"]).toBe("src/index.ts");
   });
 
+  it("routes native verification through package-owned scripts", () => {
+    const packageJson = JSON.parse(readFileSync(new URL("package.json", packageRoot), "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+
+    expect(packageJson.scripts?.["verify:ios:native"]).toBe("scripts/verify-ios-syntax.sh");
+    expect(packageJson.scripts?.["verify:android:native"]).toBe("scripts/verify-android-native.sh");
+    expect(existsSync(new URL("scripts/verify-ios-syntax.sh", packageRoot))).toBe(true);
+    expect(existsSync(new URL("scripts/verify-android-native.sh", packageRoot))).toBe(true);
+  });
+
   it("includes native package metadata for Android and iOS", () => {
     const expectedFiles = [
       "react-native.config.js",
