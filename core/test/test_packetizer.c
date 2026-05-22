@@ -87,7 +87,7 @@ static honch_status_t fake_queue_dead_letter(void *ctx, uint64_t sequence)
     return HONCH_OK;
 }
 
-static honch_client_t fake_client_with_storage(fake_storage_t *storage, honch_storage_ops_t *ops)
+static void fake_client_with_storage(honch_client_t *client, fake_storage_t *storage, honch_storage_ops_t *ops)
 {
     *ops = (honch_storage_ops_t) {
         .queue_peek = fake_queue_peek,
@@ -96,13 +96,12 @@ static honch_client_t fake_client_with_storage(fake_storage_t *storage, honch_st
         .ctx = storage
     };
 
-    honch_client_t client = {0};
-    assert(pthread_mutex_init(&client.lifetime_mutex, NULL) == 0);
-    assert(pthread_cond_init(&client.lifetime_cond, NULL) == 0);
-    assert(pthread_mutex_init(&client.mutex, NULL) == 0);
-    client.storage = ops;
-    storage->client = &client;
-    return client;
+    *client = (honch_client_t){0};
+    assert(pthread_mutex_init(&client->lifetime_mutex, NULL) == 0);
+    assert(pthread_cond_init(&client->lifetime_cond, NULL) == 0);
+    assert(pthread_mutex_init(&client->mutex, NULL) == 0);
+    client->storage = ops;
+    storage->client = client;
 }
 
 static void fake_client_destroy(honch_client_t *client)
@@ -145,7 +144,8 @@ static void test_tiny_buffer_rejected(void)
         .has_message = true
     };
     honch_storage_ops_t ops = {0};
-    honch_client_t client = fake_client_with_storage(&storage, &ops);
+    honch_client_t client = {0};
+    fake_client_with_storage(&client, &storage, &ops);
     honch_packetizer_t packetizer = {0};
 
     assert(honch_packetizer_begin(&client, &packetizer, HONCH_DATA_SOURCE_EVENTS) == HONCH_OK);
@@ -170,7 +170,8 @@ static void test_single_chunk_message_has_first_and_final_flags(void)
         .has_message = true
     };
     honch_storage_ops_t ops = {0};
-    honch_client_t client = fake_client_with_storage(&storage, &ops);
+    honch_client_t client = {0};
+    fake_client_with_storage(&client, &storage, &ops);
     honch_packetizer_t packetizer = {0};
     uint8_t buffer[64] = {0};
     size_t out_size = 0u;
@@ -204,7 +205,8 @@ static void test_multi_chunk_message_offsets_increase(void)
         .has_message = true
     };
     honch_storage_ops_t ops = {0};
-    honch_client_t client = fake_client_with_storage(&storage, &ops);
+    honch_client_t client = {0};
+    fake_client_with_storage(&client, &storage, &ops);
     honch_packetizer_t packetizer = {0};
     uint8_t first[HONCH_PACKET_HEADER_SIZE + 2u] = {0};
     uint8_t second[HONCH_PACKET_HEADER_SIZE + 2u] = {0};
@@ -238,7 +240,8 @@ static void test_abort_does_not_consume_storage(void)
         .has_message = true
     };
     honch_storage_ops_t ops = {0};
-    honch_client_t client = fake_client_with_storage(&storage, &ops);
+    honch_client_t client = {0};
+    fake_client_with_storage(&client, &storage, &ops);
     honch_packetizer_t packetizer = {0};
 
     assert(honch_packetizer_begin(&client, &packetizer, HONCH_DATA_SOURCE_EVENTS) == HONCH_OK);
@@ -259,7 +262,8 @@ static void test_confirm_consumes_storage(void)
         .has_message = true
     };
     honch_storage_ops_t ops = {0};
-    honch_client_t client = fake_client_with_storage(&storage, &ops);
+    honch_client_t client = {0};
+    fake_client_with_storage(&client, &storage, &ops);
     honch_packetizer_t packetizer = {0};
     uint8_t buffer[64] = {0};
     size_t out_size = 0u;
@@ -286,7 +290,8 @@ static void test_confirm_unlocks_client_on_consume_failure(void)
         .consume_status = HONCH_ERROR_IO
     };
     honch_storage_ops_t ops = {0};
-    honch_client_t client = fake_client_with_storage(&storage, &ops);
+    honch_client_t client = {0};
+    fake_client_with_storage(&client, &storage, &ops);
     honch_packetizer_t packetizer = {0};
     uint8_t buffer[64] = {0};
     size_t out_size = 0u;
@@ -313,7 +318,8 @@ static void test_packetizer_peek_runs_under_client_lock(void)
         .require_client_lock_on_peek = true
     };
     honch_storage_ops_t ops = {0};
-    honch_client_t client = fake_client_with_storage(&storage, &ops);
+    honch_client_t client = {0};
+    fake_client_with_storage(&client, &storage, &ops);
     honch_packetizer_t packetizer = {0};
 
     assert(honch_packetizer_begin(&client, &packetizer, HONCH_DATA_SOURCE_EVENTS) == HONCH_OK);
