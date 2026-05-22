@@ -2,7 +2,9 @@ cmake_minimum_required(VERSION 3.16)
 
 project(honch_arduino_host_tests C CXX)
 
-add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../../../../core ${CMAKE_BINARY_DIR}/core)
+if(NOT TARGET honch_core)
+    add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../../../../core ${CMAKE_CURRENT_BINARY_DIR}/core)
+endif()
 
 add_executable(honch_arduino_wrapper_test
     test_arduino_wrapper.cpp

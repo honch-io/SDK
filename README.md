@@ -8,7 +8,7 @@ SDK contract plus platform SDKs for embedded and connected-device targets.
 | Platform | Status | Path |
 |----------|--------|------|
 | **ESP-IDF** | v0.1.0 | [`ports/esp-idf/`](ports/esp-idf/) |
-| **Arduino ESP32** | Planned | [`ports/arduino/`](ports/arduino/) |
+| **Arduino ESP32** | v0.1.0 preview | [`ports/arduino/`](ports/arduino/) |
 | **C/POSIX** | v0.2.0 core-derived | [`ports/posix/`](ports/posix/) |
 | **MicroPython** | v0.2.0 C-core wrapper | [`ports/micropython/`](ports/micropython/) |
 | **React Native Relay** | In progress | [`ports/react-native-relay/`](ports/react-native-relay/) |
@@ -65,6 +65,15 @@ Run the ESP-IDF migration guard from the repository root:
 
 ```bash
 python3 ports/esp-idf/tests/test_cbor_migration.py
+```
+
+### Arduino ESP32
+
+Run the Arduino host wrapper test and, when `arduino-cli` is installed, compile
+the ESP32 examples:
+
+```bash
+ports/arduino/scripts/verify-arduino.sh
 ```
 
 ### Compact wire fixtures
