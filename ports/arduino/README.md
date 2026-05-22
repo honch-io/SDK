@@ -38,3 +38,12 @@ void setup() {
 
 void loop() {}
 ```
+
+## Examples
+
+Compile the included examples with Arduino CLI:
+
+```sh
+arduino-cli compile --fqbn esp32:esp32:esp32 ports/arduino/examples/HonchBasic
+arduino-cli compile --fqbn esp32:esp32:esp32 ports/arduino/examples/HonchOfflineQueue
+```
