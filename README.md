@@ -8,7 +8,7 @@ SDK contract plus platform SDKs for embedded and connected-device targets.
 | Platform | Status | Path |
 |----------|--------|------|
 | **ESP-IDF** | v0.1.0 | [`ports/esp-idf/`](ports/esp-idf/) |
-| **Arduino ESP32** | v0.1.0 preview | [`ports/arduino/`](ports/arduino/) |
+| **Arduino ESP32** | In progress | [`ports/arduino/`](ports/arduino/) |
 | **C/POSIX** | v0.2.0 core-derived | [`ports/posix/`](ports/posix/) |
 | **MicroPython** | v0.2.0 C-core wrapper | [`ports/micropython/`](ports/micropython/) |
 | **React Native Relay** | In progress | [`ports/react-native-relay/`](ports/react-native-relay/) |
