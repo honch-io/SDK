@@ -42,6 +42,7 @@ add_library(honch_posix
     src/posix_storage.c
     src/posix_state.c
     src/posix_transport_curl.c
+    $<TARGET_OBJECTS:honch_core_objects>
 )
 
 target_include_directories(honch_posix
@@ -53,7 +54,7 @@ target_include_directories(honch_posix
 
 target_link_libraries(honch_posix
     PUBLIC
-        honch_core
+        honch_core_objects
     PRIVATE
         CURL::libcurl
         Threads::Threads
