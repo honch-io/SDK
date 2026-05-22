@@ -15,6 +15,9 @@ describe("createRelayNativeBindings", () => {
       async connect(deviceId: string) {
         calls.push(`connect:${deviceId}`);
       },
+      async subscribeFrames(deviceId: string) {
+        calls.push(`subscribeFrames:${deviceId}`);
+      },
       async disconnect(deviceId: string) {
         calls.push(`disconnect:${deviceId}`);
       },
@@ -31,6 +34,7 @@ describe("createRelayNativeBindings", () => {
 
     await bindings.bleNative.startScan();
     await bindings.bleNative.connect("device-a");
+    await bindings.bleNative.subscribeFrames("device-a");
     await bindings.bleNative.acknowledgeMessage("device-a", "1");
     await bindings.bleNative.disconnect("device-a");
     await bindings.bleNative.stopScan();
@@ -40,6 +44,7 @@ describe("createRelayNativeBindings", () => {
     expect(calls).toEqual([
       "startScan",
       "connect:device-a",
+      "subscribeFrames:device-a",
       "ack:device-a:1",
       "disconnect:device-a",
       "stopScan",

@@ -37,6 +37,10 @@ export function createMobileRelay(options: MobileRelayOptions) {
       return receiver.disconnect(deviceId);
     },
 
+    subscribeFrames(deviceId: string) {
+      return receiver.subscribeFrames(deviceId);
+    },
+
     receiveFrame(deviceId: string, frameBytes: Uint8Array) {
       return receiver.receiveFrame(deviceId, frameBytes);
     },
