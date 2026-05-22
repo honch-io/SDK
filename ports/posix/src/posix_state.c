@@ -36,7 +36,12 @@ static honch_status_t honch_read_optional_state_file(
             return status;
         }
 
-        char *value = (char *)malloc(value_size + 1u);
+        size_t alloc_size = 0u;
+        if (honch_size_add(value_size, 1u, &alloc_size) != HONCH_OK) {
+            return HONCH_ERROR_INVALID_ARGUMENT;
+        }
+
+        char *value = (char *)malloc(alloc_size);
         if (value == NULL) {
             return HONCH_ERROR_OUT_OF_MEMORY;
         }
@@ -46,6 +51,10 @@ static honch_status_t honch_read_optional_state_file(
         if (status != HONCH_OK) {
             free(value);
             return status;
+        }
+        if (read_size > value_size) {
+            free(value);
+            return HONCH_ERROR_INVALID_ARGUMENT;
         }
         value[read_size] = '\0';
         honch_trim_trailing_ws(value);
