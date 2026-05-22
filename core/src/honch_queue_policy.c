@@ -12,6 +12,7 @@
 
 #ifdef HONCH_TESTING
 static size_t s_honch_test_max_wire_v2_encode_attempts = 0u;
+static size_t s_honch_test_queued_cbor_string_copies = 0u;
 
 void honch_test_reset_wire_v2_encode_attempts(void)
 {
@@ -21,6 +22,16 @@ void honch_test_reset_wire_v2_encode_attempts(void)
 size_t honch_test_max_wire_v2_encode_attempts(void)
 {
     return s_honch_test_max_wire_v2_encode_attempts;
+}
+
+void honch_test_reset_queued_cbor_string_copies(void)
+{
+    s_honch_test_queued_cbor_string_copies = 0u;
+}
+
+size_t honch_test_queued_cbor_string_copies(void)
+{
+    return s_honch_test_queued_cbor_string_copies;
 }
 #endif
 
@@ -298,10 +309,28 @@ static honch_status_t honch_cbor_event_read_text_copy(
     if (copy == NULL) {
         return HONCH_ERROR_OUT_OF_MEMORY;
     }
+#ifdef HONCH_TESTING
+    s_honch_test_queued_cbor_string_copies++;
+#endif
     memcpy(copy, text, text_length);
     copy[text_length] = '\0';
     *out = copy;
     return HONCH_OK;
+}
+
+static char *honch_copy_text(const char *text, size_t text_length)
+{
+    if (text == NULL) {
+        return NULL;
+    }
+
+    char *copy = (char *)malloc(text_length + 1u);
+    if (copy == NULL) {
+        return NULL;
+    }
+    memcpy(copy, text, text_length);
+    copy[text_length] = '\0';
+    return copy;
 }
 
 static honch_status_t honch_cbor_event_read_int(honch_cbor_event_reader_t *reader, uint64_t *out)
@@ -349,9 +378,7 @@ static void honch_wire_v2_value_free(honch_wire_v2_value_t *value)
         return;
     }
 
-    if (value->type == HONCH_WIRE_V2_VALUE_TYPE_STRING) {
-        free((void *)value->string_value);
-    } else if (value->type == HONCH_WIRE_V2_VALUE_TYPE_BYTES) {
+    if (value->type == HONCH_WIRE_V2_VALUE_TYPE_BYTES) {
         free((void *)value->bytes.data);
     } else if (value->type == HONCH_WIRE_V2_VALUE_TYPE_ARRAY) {
         honch_wire_v2_value_t *items = (honch_wire_v2_value_t *)value->array.items;
@@ -445,15 +472,9 @@ static honch_status_t honch_parse_queued_cbor_property_value(
         if (status != HONCH_OK) {
             return status;
         }
-        char *copy = (char *)malloc(text_length + 1u);
-        if (copy == NULL) {
-            return HONCH_ERROR_OUT_OF_MEMORY;
-        }
-        memcpy(copy, text, text_length);
-        copy[text_length] = '\0';
         *value = (honch_wire_v2_value_t) {
             .type = HONCH_WIRE_V2_VALUE_TYPE_STRING,
-            .string_value = copy,
+            .string_value = text,
             .string_size = text_length
         };
         return HONCH_OK;
@@ -693,7 +714,7 @@ static honch_status_t honch_parse_queued_cbor_properties(
         if (strcmp(key, "$session_id") == 0 &&
             property.value.type == HONCH_WIRE_V2_VALUE_TYPE_STRING &&
             parsed->session_id == NULL) {
-            parsed->session_id = honch_strdup(property.value.string_value);
+            parsed->session_id = honch_copy_text(property.value.string_value, property.value.string_size);
             if (parsed->session_id == NULL) {
                 free(key);
                 honch_wire_v2_value_free(&property.value);
