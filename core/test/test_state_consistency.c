@@ -13,6 +13,12 @@ typedef struct fake_state_storage {
     char firmware_version[64];
     size_t queue_depth;
     honch_status_t queue_push_status;
+    uint64_t queued_sequences[8];
+    size_t queued_sequence_count;
+    int queue_push_calls;
+    int fail_queue_push_call;
+    int queue_consume_calls;
+    int track_queue_depth;
     const char *state_size_fault_key;
     const char *state_read_overreport_key;
     int fail_distinct_id_set;
@@ -116,18 +122,49 @@ static honch_status_t fake_queue_push(void *ctx, const uint8_t *event, size_t ev
 {
     (void)event;
     (void)event_size;
-    (void)sequence;
     fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
+    storage->queue_push_calls++;
     if (storage->queue_push_status != HONCH_OK) {
         return storage->queue_push_status;
     }
+    if (storage->fail_queue_push_call > 0 && storage->queue_push_calls == storage->fail_queue_push_call) {
+        return HONCH_ERROR_IO;
+    }
+    if (storage->queued_sequence_count >= sizeof(storage->queued_sequences) / sizeof(storage->queued_sequences[0])) {
+        return HONCH_ERROR_QUEUE_FULL;
+    }
+    storage->queued_sequences[storage->queued_sequence_count++] = sequence;
+    if (storage->track_queue_depth) {
+        storage->queue_depth = storage->queued_sequence_count;
+    }
     return HONCH_OK;
+}
+
+static honch_status_t fake_queue_consume(void *ctx, uint64_t sequence)
+{
+    fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
+    storage->queue_consume_calls++;
+    for (size_t i = 0u; i < storage->queued_sequence_count; i++) {
+        if (storage->queued_sequences[i] != sequence) {
+            continue;
+        }
+        for (size_t j = i + 1u; j < storage->queued_sequence_count; j++) {
+            storage->queued_sequences[j - 1u] = storage->queued_sequences[j];
+        }
+        storage->queued_sequence_count--;
+        if (storage->track_queue_depth) {
+            storage->queue_depth = storage->queued_sequence_count;
+        }
+        return HONCH_OK;
+    }
+    return HONCH_ERROR_NOT_INITIALIZED;
 }
 
 static honch_status_t fake_queue_clear(void *ctx)
 {
     fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
     storage->queue_depth = 0u;
+    storage->queued_sequence_count = 0u;
     return HONCH_OK;
 }
 
@@ -213,6 +250,7 @@ static honch_core_config_t fake_config(
         .state_set = fake_state_set,
         .state_delete = fake_state_delete,
         .queue_push = fake_queue_push,
+        .queue_consume = fake_queue_consume,
         .queue_clear = fake_queue_clear,
         .queue_depth = fake_queue_depth,
         .ctx = storage
@@ -263,6 +301,30 @@ static void test_failed_firmware_update_queue_does_not_advance_persisted_version
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_ERROR_IO);
     assert(client == NULL);
+    assert(strcmp(storage.firmware_version, "1.0.0") == 0);
+}
+
+static void test_failed_init_rolls_back_queued_lifecycle_events(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .fail_queue_push_call = 2,
+        .track_queue_depth = 1
+    };
+    snprintf(storage.firmware_version, sizeof(storage.firmware_version), "1.0.0");
+    honch_platform_ops_t platform;
+    honch_storage_ops_t storage_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    config.firmware_version = "1.1.0";
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_ERROR_IO);
+    assert(client == NULL);
+    assert(storage.queue_push_calls == 2);
+    assert(storage.queue_consume_calls == 1);
+    assert(storage.queue_depth == 0u);
+    assert(storage.queued_sequence_count == 0u);
     assert(strcmp(storage.firmware_version, "1.0.0") == 0);
 }
 
@@ -364,6 +426,7 @@ int main(void)
 {
     test_core_state_lock_works_without_platform_lock_callbacks();
     test_failed_firmware_update_queue_does_not_advance_persisted_version();
+    test_failed_init_rolls_back_queued_lifecycle_events();
     test_failed_reset_second_identity_write_preserves_persisted_identity();
     test_state_get_rejects_size_overflow();
     test_state_get_rejects_inconsistent_read_size();
