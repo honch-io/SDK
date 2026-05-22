@@ -10,6 +10,20 @@
 #define HONCH_WIRE_V2_MAX_PARSED_PROPERTIES 64u
 #define HONCH_WIRE_V2_MAX_PARSED_DEPTH 8u
 
+#ifdef HONCH_TESTING
+static size_t s_honch_test_max_wire_v2_encode_attempts = 0u;
+
+void honch_test_reset_wire_v2_encode_attempts(void)
+{
+    s_honch_test_max_wire_v2_encode_attempts = 0u;
+}
+
+size_t honch_test_max_wire_v2_encode_attempts(void)
+{
+    return s_honch_test_max_wire_v2_encode_attempts;
+}
+#endif
+
 typedef struct honch_cbor_event_reader {
     const uint8_t *data;
     size_t length;
@@ -842,8 +856,13 @@ static honch_status_t honch_core_build_wire_v2_message(
 
     size_t message_size = 0u;
     size_t encoded_count = 0u;
+    size_t encode_attempts = 0u;
     status = HONCH_ERROR_OUT_OF_MEMORY;
-    for (size_t try_count = parsed_count; try_count > 0u; try_count--) {
+    size_t low = 1u;
+    size_t high = parsed_count;
+    while (low <= high) {
+        size_t try_count = low + ((high - low) / 2u);
+        encode_attempts++;
         status = honch_wire_v2_encode_event_batch(
             &context,
             parsed[0].timestamp_ms,
@@ -854,16 +873,37 @@ static honch_status_t honch_core_build_wire_v2_message(
             &message_size);
         if (status == HONCH_OK) {
             encoded_count = try_count;
-            break;
+            low = try_count + 1u;
+            continue;
         }
         if (status != HONCH_ERROR_OUT_OF_MEMORY) {
             break;
         }
         if (try_count == 1u) {
-            status = HONCH_ERROR_INVALID_ARGUMENT;
             break;
         }
+        high = try_count - 1u;
     }
+    if (encoded_count > 0u) {
+        encode_attempts++;
+        status = honch_wire_v2_encode_event_batch(
+            &context,
+            parsed[0].timestamp_ms,
+            compact_events,
+            encoded_count,
+            buffer,
+            HONCH_WIRE_V2_MAX_FRAME_BYTES,
+            &message_size);
+    } else if (status == HONCH_ERROR_OUT_OF_MEMORY) {
+        status = HONCH_ERROR_INVALID_ARGUMENT;
+    }
+#ifdef HONCH_TESTING
+    if (encode_attempts > s_honch_test_max_wire_v2_encode_attempts) {
+        s_honch_test_max_wire_v2_encode_attempts = encode_attempts;
+    }
+#else
+    (void)encode_attempts;
+#endif
     for (size_t i = 0u; i < event_count; i++) {
         honch_wire_v2_parsed_event_free(&parsed[i]);
     }

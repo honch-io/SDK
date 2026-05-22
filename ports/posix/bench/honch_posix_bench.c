@@ -378,10 +378,7 @@ static int run_track_scenario(const char *name, const char *properties, size_t i
     print_result(&result);
 
     if (client != NULL) {
-        honch_status_t shutdown_status = honch_shutdown(client);
-        if (status == HONCH_OK) {
-            status = shutdown_status;
-        }
+        (void)honch_shutdown(client);
     }
     honch_test_set_transport(NULL, NULL);
     remove_tree(queue_dir);
