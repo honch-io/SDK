@@ -35,6 +35,47 @@ HostStorageState g_hostStorage;
 
 #ifdef ARDUINO
 Preferences g_preferences;
+static const char *HONCH_ARDUINO_STATE_NAMESPACE = "honch";
+static const char *HONCH_ARDUINO_QUEUE_NAMESPACE = "honch_q";
+static const size_t HONCH_ARDUINO_QUEUE_MAX_DEPTH = 256;
+#endif
+
+#ifdef ARDUINO
+void arduino_sequence_key(uint64_t sequence, char key[16]) {
+  static const char alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+  char digits[14];
+  size_t count = 0;
+  do {
+    digits[count++] = alphabet[sequence % 36u];
+    sequence /= 36u;
+  } while (sequence > 0 && count < sizeof(digits));
+
+  key[0] = 'q';
+  for (size_t i = 0; i < count; ++i) {
+    key[i + 1] = digits[count - i - 1];
+  }
+  key[count + 1] = '\0';
+}
+
+bool arduino_queue_blob_exists(Preferences &preferences, uint64_t sequence, size_t *valueSize) {
+  char key[16];
+  arduino_sequence_key(sequence, key);
+  size_t size = preferences.getBytesLength(key);
+  if (size == 0) {
+    return false;
+  }
+  if (valueSize != nullptr) {
+    *valueSize = size;
+  }
+  return true;
+}
+
+honch_status_t arduino_queue_advance_tail(Preferences &preferences, uint64_t head, uint64_t tail) {
+  while (tail < head && !arduino_queue_blob_exists(preferences, tail, nullptr)) {
+    tail++;
+  }
+  return preferences.putULong64("tail", tail) == sizeof(uint64_t) ? HONCH_OK : HONCH_ERROR_IO;
+}
 #endif
 
 honch_status_t arduino_state_get(void *ctx, const char *key, uint8_t *buffer, size_t *bufferSize) {
@@ -44,7 +85,7 @@ honch_status_t arduino_state_get(void *ctx, const char *key, uint8_t *buffer, si
   }
 
 #ifdef ARDUINO
-  if (!g_preferences.begin("honch", true)) {
+  if (!g_preferences.begin(HONCH_ARDUINO_STATE_NAMESPACE, true)) {
     return HONCH_ERROR_IO;
   }
   size_t valueSize = g_preferences.getBytesLength(key);
@@ -92,7 +133,7 @@ honch_status_t arduino_state_set(void *ctx, const char *key, const uint8_t *data
   }
 
 #ifdef ARDUINO
-  if (!g_preferences.begin("honch", false)) {
+  if (!g_preferences.begin(HONCH_ARDUINO_STATE_NAMESPACE, false)) {
     return HONCH_ERROR_IO;
   }
   size_t written = g_preferences.putBytes(key, data, dataSize);
@@ -115,7 +156,7 @@ honch_status_t arduino_state_delete(void *ctx, const char *key) {
   }
 
 #ifdef ARDUINO
-  if (!g_preferences.begin("honch", false)) {
+  if (!g_preferences.begin(HONCH_ARDUINO_STATE_NAMESPACE, false)) {
     return HONCH_ERROR_IO;
   }
   g_preferences.remove(key);
@@ -127,19 +168,81 @@ honch_status_t arduino_state_delete(void *ctx, const char *key) {
 }
 
 honch_status_t arduino_queue_push(void *ctx, const uint8_t *event, size_t eventSize, uint64_t sequence) {
-  (void)ctx;
   if (event == nullptr || eventSize == 0) {
     return HONCH_ERROR_INVALID_ARGUMENT;
   }
 
+#ifdef ARDUINO
+  (void)ctx;
+  if (!g_preferences.begin(HONCH_ARDUINO_QUEUE_NAMESPACE, false)) {
+    return HONCH_ERROR_IO;
+  }
+
+  uint64_t head = g_preferences.getULong64("head", 0);
+  uint64_t tail = g_preferences.getULong64("tail", 0);
+  while (head >= tail && head - tail >= HONCH_ARDUINO_QUEUE_MAX_DEPTH) {
+    char dropKey[16];
+    arduino_sequence_key(tail, dropKey);
+    g_preferences.remove(dropKey);
+    tail++;
+  }
+
+  uint64_t storedSequence = sequence < head ? head : sequence;
+  char key[16];
+  arduino_sequence_key(storedSequence, key);
+  size_t written = g_preferences.putBytes(key, event, eventSize);
+  if (written == eventSize) {
+    head = storedSequence + 1;
+    if (g_preferences.putULong64("head", head) != sizeof(uint64_t)) {
+      written = 0;
+    }
+  }
+  if (written == eventSize) {
+    (void)arduino_queue_advance_tail(g_preferences, head, tail);
+  }
+  g_preferences.end();
+  return written == eventSize ? HONCH_OK : HONCH_ERROR_IO;
+#else
+  (void)ctx;
   ArduinoQueueEntry entry;
   entry.sequence = sequence;
   entry.data.assign(event, event + eventSize);
   g_hostStorage.queue.push_back(entry);
   return HONCH_OK;
+#endif
 }
 
 honch_status_t arduino_reader_read(void *ctx, uint32_t offset, uint8_t *buffer, size_t bufferSize) {
+#ifdef ARDUINO
+  honch_arduino_storage_t *storage = static_cast<honch_arduino_storage_t *>(ctx);
+  if (storage == nullptr || buffer == nullptr) {
+    return HONCH_ERROR_INVALID_ARGUMENT;
+  }
+  if (!g_preferences.begin(HONCH_ARDUINO_QUEUE_NAMESPACE, true)) {
+    return HONCH_ERROR_IO;
+  }
+  char key[16];
+  arduino_sequence_key(storage->readSequence, key);
+  size_t valueSize = g_preferences.getBytesLength(key);
+  if (offset > valueSize || bufferSize > valueSize - offset) {
+    g_preferences.end();
+    return HONCH_ERROR_INVALID_ARGUMENT;
+  }
+  uint8_t *scratch = static_cast<uint8_t *>(malloc(valueSize));
+  if (scratch == nullptr) {
+    g_preferences.end();
+    return HONCH_ERROR_OUT_OF_MEMORY;
+  }
+  size_t readSize = g_preferences.getBytes(key, scratch, valueSize);
+  g_preferences.end();
+  if (readSize != valueSize) {
+    free(scratch);
+    return HONCH_ERROR_IO;
+  }
+  memcpy(buffer, scratch + offset, bufferSize);
+  free(scratch);
+  return HONCH_OK;
+#else
   ArduinoQueueEntry *entry = static_cast<ArduinoQueueEntry *>(ctx);
   if (entry == nullptr || buffer == nullptr || offset > entry->data.size() ||
       bufferSize > entry->data.size() - offset) {
@@ -148,14 +251,45 @@ honch_status_t arduino_reader_read(void *ctx, uint32_t offset, uint8_t *buffer, 
 
   memcpy(buffer, entry->data.data() + offset, bufferSize);
   return HONCH_OK;
+#endif
 }
 
 honch_status_t arduino_queue_peek(void *ctx, honch_storage_reader_t *reader) {
-  (void)ctx;
   if (reader == nullptr) {
     return HONCH_ERROR_INVALID_ARGUMENT;
   }
 
+#ifdef ARDUINO
+  honch_arduino_storage_t *storage = static_cast<honch_arduino_storage_t *>(ctx);
+  if (storage == nullptr) {
+    return HONCH_ERROR_INVALID_ARGUMENT;
+  }
+  if (!g_preferences.begin(HONCH_ARDUINO_QUEUE_NAMESPACE, true)) {
+    return HONCH_ERROR_NOT_INITIALIZED;
+  }
+  uint64_t head = g_preferences.getULong64("head", 0);
+  uint64_t tail = g_preferences.getULong64("tail", 0);
+  uint64_t start = storage->peekSequence == UINT64_MAX ? tail : storage->peekSequence + 1;
+  for (uint64_t sequence = start; sequence < head; ++sequence) {
+    size_t valueSize = 0;
+    if (!arduino_queue_blob_exists(g_preferences, sequence, &valueSize)) {
+      continue;
+    }
+    storage->peekSequence = sequence;
+    storage->readSequence = sequence;
+    *reader = honch_storage_reader_t{
+        storage,
+        arduino_reader_read,
+        valueSize,
+        sequence,
+    };
+    g_preferences.end();
+    return HONCH_OK;
+  }
+  g_preferences.end();
+  return HONCH_ERROR_NOT_INITIALIZED;
+#else
+  (void)ctx;
   if (g_hostStorage.peekIndex >= g_hostStorage.queue.size()) {
     g_hostStorage.peekIndex = 0;
     return HONCH_ERROR_NOT_INITIALIZED;
@@ -169,9 +303,27 @@ honch_status_t arduino_queue_peek(void *ctx, honch_storage_reader_t *reader) {
       entry.sequence,
   };
   return HONCH_OK;
+#endif
 }
 
 honch_status_t arduino_queue_consume(void *ctx, uint64_t sequence) {
+#ifdef ARDUINO
+  (void)ctx;
+  if (!g_preferences.begin(HONCH_ARDUINO_QUEUE_NAMESPACE, false)) {
+    return HONCH_ERROR_IO;
+  }
+  uint64_t head = g_preferences.getULong64("head", 0);
+  uint64_t tail = g_preferences.getULong64("tail", 0);
+  char key[16];
+  arduino_sequence_key(sequence, key);
+  g_preferences.remove(key);
+  if (sequence == tail) {
+    tail++;
+  }
+  honch_status_t status = arduino_queue_advance_tail(g_preferences, head, tail);
+  g_preferences.end();
+  return status;
+#else
   (void)ctx;
   for (std::vector<ArduinoQueueEntry>::iterator it = g_hostStorage.queue.begin(); it != g_hostStorage.queue.end(); ++it) {
     if (it->sequence == sequence) {
@@ -181,6 +333,7 @@ honch_status_t arduino_queue_consume(void *ctx, uint64_t sequence) {
     }
   }
   return HONCH_ERROR_NOT_INITIALIZED;
+#endif
 }
 
 honch_status_t arduino_queue_dead_letter(void *ctx, uint64_t sequence) {
@@ -188,30 +341,84 @@ honch_status_t arduino_queue_dead_letter(void *ctx, uint64_t sequence) {
 }
 
 honch_status_t arduino_queue_drop_oldest(void *ctx) {
+#ifdef ARDUINO
+  (void)ctx;
+  if (!g_preferences.begin(HONCH_ARDUINO_QUEUE_NAMESPACE, false)) {
+    return HONCH_ERROR_IO;
+  }
+  uint64_t head = g_preferences.getULong64("head", 0);
+  uint64_t tail = g_preferences.getULong64("tail", 0);
+  if (tail < head) {
+    char key[16];
+    arduino_sequence_key(tail, key);
+    g_preferences.remove(key);
+    tail++;
+  }
+  honch_status_t status = arduino_queue_advance_tail(g_preferences, head, tail);
+  g_preferences.end();
+  return status;
+#else
   (void)ctx;
   if (!g_hostStorage.queue.empty()) {
     g_hostStorage.queue.erase(g_hostStorage.queue.begin());
     g_hostStorage.peekIndex = 0;
   }
   return HONCH_OK;
+#endif
 }
 
 honch_status_t arduino_queue_clear(void *ctx) {
+#ifdef ARDUINO
+  honch_arduino_storage_t *storage = static_cast<honch_arduino_storage_t *>(ctx);
+  if (!g_preferences.begin(HONCH_ARDUINO_QUEUE_NAMESPACE, false)) {
+    return HONCH_ERROR_IO;
+  }
+  g_preferences.clear();
+  g_preferences.end();
+  if (storage != nullptr) {
+    storage->peekSequence = UINT64_MAX;
+    storage->readSequence = UINT64_MAX;
+  }
+  return HONCH_OK;
+#else
   (void)ctx;
   g_hostStorage.queue.clear();
   g_hostStorage.peekIndex = 0;
   return HONCH_OK;
+#endif
 }
 
 honch_status_t arduino_queue_depth(void *ctx, size_t *depth) {
-  (void)ctx;
   if (depth == nullptr) {
     return HONCH_ERROR_INVALID_ARGUMENT;
   }
 
+#ifdef ARDUINO
+  honch_arduino_storage_t *storage = static_cast<honch_arduino_storage_t *>(ctx);
+  if (storage != nullptr) {
+    storage->peekSequence = UINT64_MAX;
+    storage->readSequence = UINT64_MAX;
+  }
+  if (!g_preferences.begin(HONCH_ARDUINO_QUEUE_NAMESPACE, true)) {
+    *depth = 0;
+    return HONCH_OK;
+  }
+  uint64_t head = g_preferences.getULong64("head", 0);
+  uint64_t tail = g_preferences.getULong64("tail", 0);
+  *depth = 0;
+  for (uint64_t sequence = tail; sequence < head; ++sequence) {
+    if (arduino_queue_blob_exists(g_preferences, sequence, nullptr)) {
+      (*depth)++;
+    }
+  }
+  g_preferences.end();
+  return HONCH_OK;
+#else
+  (void)ctx;
   g_hostStorage.peekIndex = 0;
   *depth = g_hostStorage.queue.size();
   return HONCH_OK;
+#endif
 }
 
 honch_status_t arduino_state_get_string(honch_client_t *client, const char *key, char **out) {
@@ -278,6 +485,8 @@ honch_status_t honch_arduino_storage_ops_init(
 
   ctx->eventBuffer = config.eventBuffer;
   ctx->eventBufferSize = config.eventBufferSize;
+  ctx->peekSequence = UINT64_MAX;
+  ctx->readSequence = UINT64_MAX;
   *ops = honch_storage_ops_t{
       arduino_state_get,
       arduino_state_set,
