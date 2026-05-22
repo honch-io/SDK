@@ -22,7 +22,7 @@ adds:
 Capture can use those headers to stamp relay metadata without changing the
 device-originated event body.
 
-## Reserved Envelope Format
+## Envelope Format
 
 ```json
 {
@@ -56,18 +56,7 @@ honch_status_t honch_packetizer_confirm(honch_packetizer_t *packetizer);
 honch_status_t honch_packetizer_abort(honch_packetizer_t *packetizer);
 ```
 
-<<<<<<< HEAD
-The current relay or companion app forwards compact chunk payloads to capture
-and stamps relay metadata using transport headers:
-
-```text
-X-Honch-Relay-Id: <gateway_device_id>
-X-Honch-Relay-SDK-Platform: <platform>
-X-Honch-Relay-SDK-Version: <version>
-```
-=======
 The relay or companion app forwards the reassembled CBOR batch to capture and
 stamps relay metadata. In v0.1, relay metadata is supplied through headers; a
 future envelope implementation must remain backward compatible with raw CBOR
 relay uploads or explicitly version the ingest contract.
->>>>>>> 5c3e332 (feat(react-native-relay): add durable relay foundations)
