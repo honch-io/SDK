@@ -2,8 +2,9 @@
 
 This directory is reserved for the internal mobile E2E harness.
 
-`App.tsx` wires the package to `NativeModules.HonchReactNativeRelay`, starts BLE
-scan, displays pending mobile relay messages, and exposes a manual upload drain.
+`App.tsx` wires the package to `NativeModules.HonchReactNativeRelay`, subscribes
+to native `HonchRelayFrame` events, stores relay queue state in MMKV, displays
+pending mobile relay messages, and exposes manual scan/connect/drain controls.
 
 The example app should prove:
 
@@ -16,10 +17,17 @@ The example app should prove:
 Required app configuration:
 
 - Capture endpoint URL.
-- Honch API key or relay-scoped token.
+- Honch project key or relay-scoped token.
 - Relay ID.
-- Android BLE permissions and notification permission.
-- iOS CoreBluetooth background mode and BGTaskScheduler identifier.
+- iOS `NSBluetoothAlwaysUsageDescription`.
+- iOS `bluetooth-central` background mode for background receipt.
+- Android `BLUETOOTH_SCAN`.
+- Android `BLUETOOTH_CONNECT`.
+- Android `ACCESS_FINE_LOCATION` when required by target SDK/device behavior.
+- Android notification permission if upload status notifications are added by
+  the host app.
 
-The first production proof should target Android before iOS because Android
-WorkManager gives a clearer network-constrained retry path.
+The package directory is not a complete React Native host app. To run this
+example, copy the app into a generated React Native project or add platform
+host files (`ios/`, `android/`, `Podfile`, Gradle wrapper), then install this
+package through the host app.
