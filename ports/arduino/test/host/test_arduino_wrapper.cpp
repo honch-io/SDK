@@ -40,6 +40,12 @@ int main() {
   assert(Honch.begin(config));
   assert(Honch.flush());
   assert(honch_arduino_host_transport_call_count() > 0);
+  assert(strcmp(honch_arduino_host_transport_last_url(), "http://127.0.0.1:8001/capture") == 0);
+  assert(strcmp(honch_arduino_host_transport_last_content_type(), "application/vnd.honch.chunk") == 0);
+  assert(strcmp(honch_arduino_host_transport_last_project_key(), "test-key") == 0);
+  assert(strlen(honch_arduino_host_transport_last_stream_id()) > 0);
+  assert(honch_arduino_host_transport_last_body_size() > 0);
+  assert(honch_arduino_host_transport_last_body() != NULL);
   assert(Honch.shutdown());
   return 0;
 }
