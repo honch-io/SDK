@@ -226,9 +226,8 @@ static honch_status_t add_platform_properties(
 The SDK validates each key and JSON value before appending it. Adapter
 properties are added after user properties and before SDK-owned properties, so
 core-owned values such as `$device_id`, `$sdk_platform`, and `$firmware_version`
-cannot be overridden by either user input or an adapter. The callback runs while
-the SDK is constructing an event, so it should return quickly and must not call
-back into Honch APIs for the same client.
+cannot be overridden by either user input or an adapter. The callback should
+return quickly because event enqueueing waits for it to finish.
 
 Background flushing is enabled by default to match the ESP-IDF SDK. When
 `flush_interval_seconds` or `flush_event_threshold` are zero, the SDK uses the

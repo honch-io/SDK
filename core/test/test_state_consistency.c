@@ -1,6 +1,7 @@
-#include "honch/core/honch.h"
+#include "honch_internal.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -156,6 +157,45 @@ static honch_status_t fake_post_chunk(
     return HONCH_OK;
 }
 
+static honch_client_t *g_callback_lock_client = NULL;
+static int g_battery_callback_saw_unlocked_mutex = 0;
+static int g_auto_properties_callback_saw_unlocked_mutex = 0;
+
+static int lock_observing_battery_callback(void)
+{
+    if (g_callback_lock_client == NULL) {
+        return 50;
+    }
+
+    int lock_status = pthread_mutex_trylock(&g_callback_lock_client->mutex);
+    if (lock_status == 0) {
+        g_battery_callback_saw_unlocked_mutex = 1;
+        pthread_mutex_unlock(&g_callback_lock_client->mutex);
+    } else {
+        assert(lock_status == EBUSY);
+    }
+    return 50;
+}
+
+static honch_status_t lock_observing_auto_properties_callback(
+    void *userdata,
+    honch_property_sink_fn sink,
+    void *sink_ctx)
+{
+    (void)userdata;
+    if (g_callback_lock_client != NULL) {
+        int lock_status = pthread_mutex_trylock(&g_callback_lock_client->mutex);
+        if (lock_status == 0) {
+            g_auto_properties_callback_saw_unlocked_mutex = 1;
+            pthread_mutex_unlock(&g_callback_lock_client->mutex);
+        } else {
+            assert(lock_status == EBUSY);
+        }
+    }
+
+    return sink(sink_ctx, "$wifi_rssi", "-42");
+}
+
 static honch_core_config_t fake_config(
     fake_state_storage_t *storage,
     honch_platform_ops_t *platform,
@@ -278,6 +318,48 @@ static void test_state_get_rejects_inconsistent_read_size(void)
     assert(client == NULL);
 }
 
+static void test_battery_callback_runs_outside_client_mutex(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_storage_ops_t storage_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    config.battery_callback = lock_observing_battery_callback;
+
+    g_callback_lock_client = NULL;
+    g_battery_callback_saw_unlocked_mutex = 0;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    g_callback_lock_client = client;
+    assert(honch_core_track(client, "battery_lock_probe", NULL) == HONCH_OK);
+    assert(g_battery_callback_saw_unlocked_mutex == 1);
+    g_callback_lock_client = NULL;
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+static void test_auto_properties_callback_runs_outside_client_mutex(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_storage_ops_t storage_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    config.auto_properties_callback = lock_observing_auto_properties_callback;
+
+    g_callback_lock_client = NULL;
+    g_auto_properties_callback_saw_unlocked_mutex = 0;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    g_callback_lock_client = client;
+    assert(honch_core_track(client, "auto_properties_lock_probe", NULL) == HONCH_OK);
+    assert(g_auto_properties_callback_saw_unlocked_mutex == 1);
+    g_callback_lock_client = NULL;
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
 int main(void)
 {
     test_core_state_lock_works_without_platform_lock_callbacks();
@@ -285,5 +367,7 @@ int main(void)
     test_failed_reset_second_identity_write_preserves_persisted_identity();
     test_state_get_rejects_size_overflow();
     test_state_get_rejects_inconsistent_read_size();
+    test_battery_callback_runs_outside_client_mutex();
+    test_auto_properties_callback_runs_outside_client_mutex();
     return 0;
 }
