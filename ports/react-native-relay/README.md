@@ -87,9 +87,10 @@ Required host app setup:
 - Keep `androidx.work:work-runtime` available for scheduled upload drains.
 - Register the package through the consuming React Native Android host.
 
-This package directory does not currently include an Android example app,
-`settings.gradle`, or Gradle wrapper. Native Android build validation must be
-run from the consuming React Native host before production sign-off.
+This package includes an Android library `settings.gradle` for local compile
+verification, but it does not include a complete Android host app. Native
+Android host validation must still be run from the consuming React Native app
+before production sign-off.
 
 ## Native Frame Events
 
@@ -185,9 +186,10 @@ bun run verify:android:native
 ```
 
 `verify:ios:native` performs an iPhoneOS SDK Objective-C syntax check for the
-iOS bridge without launching a simulator. `verify:android:native` builds the
-Android library with Gradle and requires a local Android SDK through
-`ANDROID_HOME` or `android/local.properties`.
+iOS bridge without launching a simulator. `verify:android:native` preflights
+the Android SDK location, then builds the Android library with Gradle. Configure
+the SDK with `ANDROID_HOME`, `ANDROID_SDK_ROOT`, or
+`android/local.properties`.
 
 ## Structure
 
