@@ -84,4 +84,38 @@ describe("React Native relay package shape", () => {
       expect(iosModule).toContain(expected);
     }
   });
+
+  it("implements the Android BLE relay receiver contract", () => {
+    const androidManifest = readFileSync(new URL("android/src/main/AndroidManifest.xml", packageRoot), "utf8");
+    const androidModule = readFileSync(
+      new URL(
+        "android/src/main/java/io/honch/reactnativerelay/HonchReactNativeRelayModule.java",
+        packageRoot
+      ),
+      "utf8"
+    );
+
+    for (const permission of ["BLUETOOTH_SCAN", "BLUETOOTH_CONNECT", "ACCESS_FINE_LOCATION"]) {
+      expect(androidManifest).toContain(permission);
+    }
+
+    for (const expected of [
+      "BluetoothManager",
+      "BluetoothLeScanner",
+      "ScanCallback",
+      "BluetoothGattCallback",
+      "BluetoothGattCharacteristic",
+      "DeviceEventManagerModule.RCTDeviceEventEmitter",
+      "HonchRelayFrame",
+      "484f4e43-482d-5245-4c41-592d53445631",
+      "484f4e43-482d-5245-4c41-592d4652414d",
+      "484f4e43-482d-5245-4c41-592d41434b31",
+      "setCharacteristicNotification",
+      "writeCharacteristic",
+      "ByteBuffer.allocate(9)",
+      "putLong"
+    ]) {
+      expect(androidModule).toContain(expected);
+    }
+  });
 });
