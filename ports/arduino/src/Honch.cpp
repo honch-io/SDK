@@ -92,10 +92,13 @@ bool HonchClass::flush() {
 }
 
 bool HonchClass::shutdown() {
-  honch_status_t status = honch_core_shutdown(_client);
-  if (status == HONCH_OK) {
-    _client = nullptr;
+  if (_client == nullptr) {
+    return setLastStatus(HONCH_ERROR_NOT_INITIALIZED);
   }
+
+  honch_client_t *client = _client;
+  _client = nullptr;
+  honch_status_t status = honch_core_shutdown(client);
   return setLastStatus(status);
 }
 
