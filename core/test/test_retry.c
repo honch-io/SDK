@@ -123,6 +123,20 @@ static honch_status_t fake_queue_read_batch(
     return *event_count == 0u ? HONCH_ERROR_NOT_INITIALIZED : HONCH_OK;
 }
 
+static honch_status_t fake_queue_read_batch_overreports(
+    void *ctx,
+    honch_storage_event_t *events,
+    size_t max_events,
+    size_t max_event_bytes,
+    size_t *event_count)
+{
+    (void)ctx;
+    (void)events;
+    (void)max_event_bytes;
+    *event_count = max_events + 1u;
+    return HONCH_OK;
+}
+
 static honch_status_t fake_queue_consume(void *ctx, uint64_t sequence)
 {
     fake_event_t *event = find_event((fake_storage_t *)ctx, sequence);
@@ -838,6 +852,29 @@ static void test_flush_uses_storage_batch_read_when_available(void)
     assert(storage.events[1].consumed);
 }
 
+static void test_flush_rejects_overreported_storage_batch_count(void)
+{
+    fake_storage_t storage;
+    setup_storage(&storage);
+    fake_transport_t transport = {
+        .result = HONCH_TRANSPORT_ACCEPTED,
+        .status = HONCH_OK
+    };
+    honch_storage_ops_t storage_ops = {0};
+    honch_transport_ops_t transport_ops = {0};
+    honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
+    storage_ops.queue_read_batch = fake_queue_read_batch_overreports;
+
+    honch_status_t status = honch_queue_flush_locked(&client);
+    if (status != HONCH_ERROR_INTERNAL) {
+        fprintf(stderr, "overreported batch status=%d\n", status);
+        abort();
+    }
+    assert(transport.chunk_calls == 0u);
+    assert(!storage.events[0].consumed);
+    assert(!storage.events[1].consumed);
+}
+
 static void test_v2_flush_splits_batches_by_distinct_id(void)
 {
     static const uint8_t second_distinct_event[] = {
@@ -1003,6 +1040,7 @@ int main(void)
     test_v2_final_chunk_stored_response_preserves_event();
     test_v2_multi_frame_flush_passes_stream_id_to_transport();
     test_flush_uses_storage_batch_read_when_available();
+    test_flush_rejects_overreported_storage_batch_count();
     test_v2_flush_splits_batches_by_distinct_id();
     test_v2_flush_dead_letters_semantically_invalid_event();
     test_401_dead_letters_events();
