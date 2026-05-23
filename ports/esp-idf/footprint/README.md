@@ -1,23 +1,21 @@
 # Honch ESP-IDF Footprint
 
-This app measures landing-page-safe Honch SDK footprint numbers.
+This app measures landing-page-safe Honch SDK footprint numbers. Optional
+features, such as GPIO tracking, are excluded from the default claim and can be
+measured explicitly.
 
-## Current ESP32 Numbers
+## Current ESP32 Build-Size Numbers
 
-Measured on an ESP32-D0WD-V3 rev 3.1 board with ESP-IDF v6.0.1, default
-Honch production config, and `CONFIG_HONCH_PERF_LOGGING` disabled.
+Build-size numbers were measured for ESP32 with ESP-IDF v6.0.1 using the
+default footprint configuration, which excludes optional GPIO tracking.
 
 | Metric | Current value | Landing-safe claim |
 | --- | ---: | --- |
-| Linked Honch SDK code/data (`libhonch.a`) | 11,306 bytes | `<20 KB flash` |
-| Honch static RAM (`DRAM + IRAM`) | 1,748 bytes | `<2 KB static RAM` |
-| Runtime heap after `honch_init()` | 14,304 bytes | `<15 KB heap after init` |
-| Runtime heap after representative API setup | 16,740 bytes | `<17 KB heap after setup` |
-| `honch_track()` CPU, RAM queue hot path | avg 889 us, p50 873 us, p95 1,037 us | `<0.09% CPU at 1 event/sec` |
-| `honch_track()` CPU at 1 event/min | avg 889 us amortized | `<0.002% CPU at 1 event/min` |
+| Linked Honch SDK code/data (`libhonch.a`) | 32,230 bytes | `<32 KB flash` |
+| Honch static RAM (`DRAM + IRAM`) | 621 bytes | `<1 KB static RAM` |
 
 Do not market the whole app delta as the SDK size. From a minimal ESP-IDF app,
-the Honch footprint app adds 425,378 bytes because it pulls in normal ESP-IDF
+the default Honch footprint app adds 419,632 bytes because it pulls in normal ESP-IDF
 networking, TLS, HTTP, Wi-Fi, NVS, and CBOR dependencies. That is a worst-case
 "starting from empty firmware" number, not the size of Honch's own code.
 
@@ -44,6 +42,12 @@ From the SDK repo root:
 ```bash
 source /Users/morgana/.espressif/tools/activate_idf_v6.0.1.sh
 ./tools/measure_esp_idf_footprint.py --target esp32
+```
+
+To include optional GPIO tracking in the Honch footprint sample:
+
+```bash
+./tools/measure_esp_idf_footprint.py --target esp32 --include-gpio
 ```
 
 The script writes:

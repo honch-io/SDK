@@ -211,7 +211,14 @@ def _idf_py() -> list[str]:
     return ["idf.py"]
 
 
-def build_variant(target: str, build_dir: str, *, with_honch: bool, connected_baseline: bool = False) -> Path:
+def build_variant(
+    target: str,
+    build_dir: str,
+    *,
+    with_honch: bool,
+    connected_baseline: bool = False,
+    include_gpio: bool = False,
+) -> Path:
     args = _idf_py() + [
         "-B",
         build_dir,
@@ -221,6 +228,8 @@ def build_variant(target: str, build_dir: str, *, with_honch: bool, connected_ba
         f"HONCH_FOOTPRINT_WITH_SDK={'ON' if with_honch else 'OFF'}",
         "-D",
         f"HONCH_FOOTPRINT_CONNECTED_BASELINE={'ON' if connected_baseline else 'OFF'}",
+        "-D",
+        f"HONCH_FOOTPRINT_INCLUDE_GPIO={'ON' if include_gpio else 'OFF'}",
         "build",
     ]
     _run(args, FOOTPRINT_DIR)
@@ -265,6 +274,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", default="esp32", help="ESP-IDF target, e.g. esp32, esp32s3, esp32c3")
     parser.add_argument("--skip-build", action="store_true", help="Use existing build-footprint-* directories")
+    parser.add_argument(
+        "--include-gpio",
+        action="store_true",
+        help="Include optional GPIO tracking in the Honch footprint sample",
+    )
     parser.add_argument("--monitor-log", type=Path, help="Optional captured monitor log with HONCH_FOOTPRINT markers")
     parser.add_argument(
         "--output",
@@ -289,7 +303,7 @@ def main() -> int:
             with_honch=False,
             connected_baseline=True,
         )
-        honch_map = build_variant(args.target, honch_build, with_honch=True)
+        honch_map = build_variant(args.target, honch_build, with_honch=True, include_gpio=args.include_gpio)
 
     bare_total_json = FOOTPRINT_DIR / bare_build / "size-total.json"
     connected_total_json = FOOTPRINT_DIR / connected_build / "size-total.json"
