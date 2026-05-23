@@ -13,7 +13,6 @@
 
 #define HONCH_ESP_STATE_NAMESPACE "honch_state"
 #define HONCH_ESP_QUEUE_NAMESPACE "honch_q"
-#define HONCH_ESP_DEAD_NAMESPACE "honch_dead"
 #define HONCH_ESP_NVS_KEY_SIZE 16
 #define HONCH_ESP_DEFAULT_MAX_QUEUE_DEPTH 256u
 
@@ -28,6 +27,8 @@ static honch_status_t honch_esp_nvs_status(esp_err_t err)
             return HONCH_STATUS_OK;
         case ESP_ERR_NO_MEM:
             return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
+        case ESP_ERR_NVS_NOT_ENOUGH_SPACE:
+            return HONCH_STATUS_ERROR_QUEUE_FULL;
         case ESP_ERR_INVALID_ARG:
         case ESP_ERR_NVS_INVALID_LENGTH:
             return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
@@ -461,27 +462,43 @@ static honch_status_t honch_esp_nvs_queue_push(void *ctx, const uint8_t *event, 
         return status;
     }
 
-    nvs_handle_t handle = 0;
-    esp_err_t err = nvs_open(HONCH_ESP_QUEUE_NAMESPACE, NVS_READWRITE, &handle);
-    if (err != ESP_OK) {
-        return honch_esp_nvs_status(err);
+    for (size_t attempt = 0u; attempt <= HONCH_ESP_DEFAULT_MAX_QUEUE_DEPTH; attempt++) {
+        nvs_handle_t handle = 0;
+        esp_err_t err = nvs_open(HONCH_ESP_QUEUE_NAMESPACE, NVS_READWRITE, &handle);
+        if (err != ESP_OK) {
+            return honch_esp_nvs_status(err);
+        }
+
+        uint64_t stored_sequence = sequence < head ? head : sequence;
+        char key[HONCH_ESP_NVS_KEY_SIZE];
+        honch_esp_sequence_key(stored_sequence, key);
+        err = nvs_set_blob(handle, key, event, event_size);
+        if (err == ESP_OK) {
+            head = stored_sequence + 1u;
+            status = honch_esp_advance_tail_locked(handle, head, &tail);
+        } else {
+            status = honch_esp_nvs_status(err);
+        }
+
+        nvs_close(handle);
+        if (status == HONCH_STATUS_OK) {
+            return HONCH_STATUS_OK;
+        }
+        if (err != ESP_ERR_NVS_NOT_ENOUGH_SPACE) {
+            return status;
+        }
+
+        status = honch_esp_queue_drop_oldest(ctx);
+        if (status != HONCH_STATUS_OK) {
+            return status;
+        }
+        status = honch_esp_get_head_tail(&head, &tail);
+        if (status != HONCH_STATUS_OK) {
+            return status;
+        }
     }
 
-    uint64_t stored_sequence = sequence < head ? head : sequence;
-    char key[HONCH_ESP_NVS_KEY_SIZE];
-    honch_esp_sequence_key(stored_sequence, key);
-    err = nvs_set_blob(handle, key, event, event_size);
-    if (err == ESP_OK) {
-        head = stored_sequence + 1u;
-    }
-    if (err == ESP_OK) {
-        status = honch_esp_advance_tail_locked(handle, head, &tail);
-    } else {
-        status = honch_esp_nvs_status(err);
-    }
-
-    nvs_close(handle);
-    return status;
+    return HONCH_STATUS_ERROR_QUEUE_FULL;
 }
 
 static honch_status_t honch_esp_reader_read(void *ctx, uint32_t offset, uint8_t *buffer, size_t buffer_size)
@@ -659,70 +676,8 @@ static honch_status_t honch_esp_queue_consume(void *ctx, uint64_t sequence)
 static honch_status_t honch_esp_queue_dead_letter(void *ctx, uint64_t sequence)
 {
     honch_esp_storage_t *storage = (honch_esp_storage_t *)ctx;
-    honch_esp_ram_queue_entry_t *ram_entry = honch_esp_ram_queue_find(storage, sequence);
-    if (ram_entry != NULL) {
-        char key[HONCH_ESP_NVS_KEY_SIZE];
-        honch_esp_sequence_key(sequence, key);
-        nvs_handle_t dead_handle = 0;
-        esp_err_t err = nvs_open(HONCH_ESP_DEAD_NAMESPACE, NVS_READWRITE, &dead_handle);
-        if (err == ESP_OK) {
-            err = nvs_set_blob(
-                dead_handle,
-                key,
-                storage->ram_buffer + ram_entry->offset,
-                ram_entry->size);
-        }
-        if (err == ESP_OK) {
-            err = nvs_commit(dead_handle);
-        }
-        if (dead_handle != 0) {
-            nvs_close(dead_handle);
-        }
-        if (err != ESP_OK) {
-            return honch_esp_nvs_status(err);
-        }
+    if (honch_esp_ram_queue_find(storage, sequence) != NULL) {
         return honch_esp_ram_queue_consume(storage, sequence);
-    }
-
-    nvs_handle_t queue_handle = 0;
-    esp_err_t err = nvs_open(HONCH_ESP_QUEUE_NAMESPACE, NVS_READONLY, &queue_handle);
-    if (err != ESP_OK) {
-        return honch_esp_nvs_status(err);
-    }
-
-    char key[HONCH_ESP_NVS_KEY_SIZE];
-    honch_esp_sequence_key(sequence, key);
-    size_t value_size = 0u;
-    err = nvs_get_blob(queue_handle, key, NULL, &value_size);
-    if (err == ESP_OK && value_size > 0u) {
-        uint8_t *scratch = (uint8_t *)malloc(value_size);
-        if (scratch == NULL) {
-            nvs_close(queue_handle);
-            return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
-        }
-        size_t read_size = value_size;
-        err = nvs_get_blob(queue_handle, key, scratch, &read_size);
-        if (err == ESP_OK) {
-            nvs_handle_t dead_handle = 0;
-            esp_err_t dead_err = nvs_open(HONCH_ESP_DEAD_NAMESPACE, NVS_READWRITE, &dead_handle);
-            if (dead_err == ESP_OK) {
-                dead_err = nvs_set_blob(dead_handle, key, scratch, read_size);
-            }
-            if (dead_err == ESP_OK) {
-                dead_err = nvs_commit(dead_handle);
-            }
-            if (dead_err == ESP_OK || dead_handle != 0) {
-                nvs_close(dead_handle);
-            }
-            if (dead_err != ESP_OK) {
-                err = dead_err;
-            }
-        }
-        free(scratch);
-    }
-    nvs_close(queue_handle);
-    if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
-        return honch_esp_nvs_status(err);
     }
 
     return honch_esp_queue_erase_sequence(sequence);
@@ -751,12 +706,11 @@ static honch_status_t honch_esp_queue_clear(void *ctx)
 {
     honch_esp_storage_t *storage = (honch_esp_storage_t *)ctx;
     honch_status_t queue_status = honch_esp_erase_namespace(HONCH_ESP_QUEUE_NAMESPACE);
-    honch_status_t dead_status = honch_esp_erase_namespace(HONCH_ESP_DEAD_NAMESPACE);
     if (storage != NULL) {
         honch_esp_ram_queue_reset(storage);
         storage->nvs_fallback_active = false;
     }
-    return queue_status != HONCH_STATUS_OK ? queue_status : dead_status;
+    return queue_status;
 }
 
 static honch_status_t honch_esp_queue_depth(void *ctx, size_t *depth)

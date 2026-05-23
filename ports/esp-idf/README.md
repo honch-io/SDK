@@ -4,7 +4,8 @@ Product analytics for connected hardware. Drop this component into your ESP-IDF 
 
 Events are queued locally and sent to Capture as compact chunk wire frames.
 The default ESP-IDF integration uses a RAM-first queue for low `honch_track()`
-latency, with NVS used for overflow and dead-letter handling.
+latency. NVS is used for overflow, while permanently rejected events are dropped
+instead of dead-lettered to protect the shared Wi-Fi/NVS partition.
 
 ## Requirements
 
@@ -133,9 +134,11 @@ queued into the caller-provided RAM buffer first, then flushed in compact batche
 This keeps tracking calls fast and avoids NVS writes for every event.
 
 Tradeoff: events still in RAM can be lost on reset or power loss. NVS remains in
-the storage adapter for overflow and dead-letter handling, and any NVS-backed
-events already present at boot are drained before the SDK returns to RAM-only
-operation.
+the storage adapter for overflow, and any NVS-backed events already present at
+boot are drained before the SDK returns to RAM-only operation. Permanent
+rejections are discarded on ESP-IDF because persisting unused dead-letter
+payloads can exhaust the small default NVS partition shared with Wi-Fi
+calibration data.
 
 If your product needs stricter reboot durability, the ESP-IDF storage adapter can
 be configured as an NVS-only queue by skipping the RAM queue setup and using the
