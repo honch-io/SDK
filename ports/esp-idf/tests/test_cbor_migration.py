@@ -28,7 +28,7 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("core/src/honch_core.c", component_cmake)
         self.assertIn('set(EXTRA_COMPONENT_DIRS "../../..")', example_cmake)
         self.assertIn('set(EXTRA_COMPONENT_DIRS "../honch")', bench_cmake)
-        self.assertIn('set(EXTRA_COMPONENT_DIRS "../../..")', footprint_cmake)
+        self.assertIn('set(EXTRA_COMPONENT_DIRS "../honch")', footprint_cmake)
 
     def test_esp_transport_ops_post_chunk_wire_to_capture_endpoint(self) -> None:
         transport = read("ports/esp-idf/honch/src/esp_transport_http.c")
@@ -78,9 +78,13 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("#include \"honch/core/storage.h\"", adapter)
         self.assertIn('HONCH_ESP_STATE_NAMESPACE "honch_state"', storage)
         self.assertIn('HONCH_ESP_QUEUE_NAMESPACE "honch_q"', storage)
+        self.assertNotIn("HONCH_ESP_DEAD_NAMESPACE", storage)
         self.assertIn("honch_esp_queue_peek", storage)
         self.assertIn("honch_esp_queue_consume", storage)
         self.assertIn("honch_esp_queue_dead_letter", storage)
+        self.assertIn("return honch_esp_queue_erase_sequence(sequence);", storage)
+        self.assertIn("ESP_ERR_NVS_NOT_ENOUGH_SPACE", storage)
+        self.assertIn("HONCH_STATUS_ERROR_QUEUE_FULL", storage)
         self.assertIn(".queue_peek = honch_esp_queue_peek", storage)
         self.assertIn(".queue_consume = honch_esp_queue_consume", storage)
         self.assertIn(".queue_dead_letter = honch_esp_queue_dead_letter", storage)
