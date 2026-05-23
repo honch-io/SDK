@@ -7,7 +7,6 @@
 #include "honch/core/honch.h"
 
 #include "esp_core_adapter.h"
-#include "esp_gpio_adapter.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -35,6 +34,13 @@ const char *g_honch_environment = "production";
 int (*g_honch_battery_callback)(void) = NULL;
 int g_honch_battery_low_threshold = 15;
 volatile bool g_honch_connected = false;
+
+extern void honch_esp_gpio_shutdown_hook(void) __attribute__((weak));
+
+bool honch_esp_is_initialized(void)
+{
+    return s_client != NULL;
+}
 
 static honch_err_t honch_esp_status_to_err(honch_status_t status)
 {
@@ -199,14 +205,6 @@ honch_err_t honch_init(const honch_config_t *config)
         return honch_esp_status_to_err(status);
     }
 
-    err = honch_gpio_init();
-    if (err != HONCH_OK) {
-        (void)honch_core_shutdown(next);
-        honch_esp_platform_ops_deinit(&s_platform_ctx);
-        honch_esp_clear_legacy_globals();
-        return err;
-    }
-
     s_client = next;
     return HONCH_OK;
 }
@@ -217,7 +215,9 @@ honch_err_t honch_shutdown(void)
         return HONCH_ERR_NOT_INITIALIZED;
     }
 
-    honch_gpio_deinit();
+    if (honch_esp_gpio_shutdown_hook != NULL) {
+        honch_esp_gpio_shutdown_hook();
+    }
     honch_status_t status = honch_core_shutdown(s_client);
     s_client = NULL;
     honch_esp_platform_ops_deinit(&s_platform_ctx);
@@ -284,12 +284,4 @@ honch_err_t honch_reset(void)
 const char *honch_get_device_id(void)
 {
     return honch_core_get_device_id(s_client);
-}
-
-honch_err_t honch_track_gpio(gpio_num_t pin, const char *event_name, honch_gpio_mode_t mode)
-{
-    if (s_client == NULL) {
-        return HONCH_ERR_NOT_INITIALIZED;
-    }
-    return honch_gpio_register(pin, event_name, mode);
 }

@@ -127,7 +127,9 @@ static void run_representative_api_sample(void)
     (void)honch_set_property("firmware_channel", "\"footprint\"");
     (void)honch_session_start("footprint-session");
     (void)honch_session_end();
+#if FOOTPRINT_INCLUDE_GPIO
     (void)honch_track_gpio(GPIO_NUM_0, "footprint_button", HONCH_GPIO_FALLING_EDGE);
+#endif
 }
 
 static void run_honch_cpu_sample(void)

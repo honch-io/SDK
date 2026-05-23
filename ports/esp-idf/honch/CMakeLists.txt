@@ -8,6 +8,7 @@ set(HONCH_ESP_PORT_SOURCES
     "src/esp_storage_nvs.c"
     "src/esp_transport_http.c"
     "src/esp_gpio_adapter.c"
+    "src/esp_gpio_public.c"
 )
 list(TRANSFORM HONCH_ESP_PORT_SOURCES PREPEND "${HONCH_ESP_COMPONENT_DIR}/")
 
