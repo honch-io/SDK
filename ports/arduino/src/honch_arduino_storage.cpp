@@ -628,6 +628,13 @@ honch_status_t honch_state_check_firmware_version(
   return status;
 }
 
+honch_status_t honch_state_save_firmware_version(honch_client_t *client) {
+  if (client == nullptr) {
+    return HONCH_ERROR_INVALID_ARGUMENT;
+  }
+  return arduino_write_state_string(client, "firmware_version", client->firmware_version);
+}
+
 honch_status_t honch_state_reset(honch_client_t *client) {
   if (client == nullptr) {
     return HONCH_ERROR_INVALID_ARGUMENT;
