@@ -201,6 +201,11 @@ static honch_status_t honch_core_read_queue_batch(
         batch_size,
         client->max_event_bytes,
         event_count);
+    if (*event_count > batch_size) {
+        honch_core_free_storage_events(storage_events, batch_size);
+        free(storage_events);
+        return HONCH_ERROR_INTERNAL;
+    }
     if (status != HONCH_OK) {
         honch_core_free_storage_events(storage_events, *event_count);
         free(storage_events);

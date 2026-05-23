@@ -488,17 +488,20 @@ honch_status_t honch_arduino_storage_ops_init(
   ctx->peekSequence = UINT64_MAX;
   ctx->readSequence = UINT64_MAX;
   *ops = honch_storage_ops_t{
-      arduino_state_get,
-      arduino_state_set,
-      arduino_state_delete,
-      arduino_queue_push,
-      arduino_queue_peek,
-      arduino_queue_consume,
-      arduino_queue_dead_letter,
-      arduino_queue_drop_oldest,
-      arduino_queue_clear,
-      arduino_queue_depth,
-      ctx,
+      .state_get = arduino_state_get,
+      .state_set = arduino_state_set,
+      .state_delete = arduino_state_delete,
+      .queue_push = arduino_queue_push,
+      .queue_peek = arduino_queue_peek,
+      .queue_read_batch = nullptr,
+      .queue_consume = arduino_queue_consume,
+      .queue_consume_batch = nullptr,
+      .queue_dead_letter = arduino_queue_dead_letter,
+      .queue_dead_letter_batch = nullptr,
+      .queue_drop_oldest = arduino_queue_drop_oldest,
+      .queue_clear = arduino_queue_clear,
+      .queue_depth = arduino_queue_depth,
+      .ctx = ctx,
   };
   return HONCH_OK;
 }
