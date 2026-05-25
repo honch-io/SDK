@@ -1,0 +1,23 @@
+{
+  "description": "two relay chunks carrying one CBOR message",
+  "device_id": "device-a",
+  "source_type": 1,
+  "sequence": "8",
+  "frames": [
+    {
+      "hex": "010101000000000000000008000000000002b9c90102",
+      "first": true,
+      "final": false,
+      "offset": 0,
+      "payload_hex": "0102"
+    },
+    {
+      "hex": "010102000000000000000008000000020002fb9c0304",
+      "first": false,
+      "final": true,
+      "offset": 2,
+      "payload_hex": "0304"
+    }
+  ],
+  "message_hex": "01020304"
+}

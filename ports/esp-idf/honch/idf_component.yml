@@ -1,0 +1,11 @@
+description: "Honch product analytics SDK for ESP-IDF"
+version: "0.1.0"
+url: "https://github.com/honch-io/honch"
+license: "Apache-2.0"
+dependencies:
+  idf:
+    version: ">=5.0"
+  espressif/cbor:
+    version: "^0.6.1~4"
+  espressif/cjson:
+    version: "^1.7.19"

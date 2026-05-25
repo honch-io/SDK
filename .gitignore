@@ -17,13 +17,12 @@ Testing/
 compile_commands.json
 
 # ESP-IDF local/generated project state
-esp-idf/**/build/
-esp-idf/**/build-*/
-esp-idf/**/managed_components/
-esp-idf/**/dependencies.lock
-esp-idf/**/sdkconfig
-esp-idf/**/sdkconfig.old
-esp-idf/footprint/build-footprint-report.json
+ports/esp-idf/**/build/
+ports/esp-idf/**/build-*/
+ports/esp-idf/**/managed_components/
+ports/esp-idf/**/dependencies.lock
+ports/esp-idf/**/sdkconfig
+ports/esp-idf/**/sdkconfig.old
 
 # Compiled artifacts
 *.o
@@ -41,17 +40,31 @@ esp-idf/footprint/build-footprint-report.json
 __pycache__/
 *.py[cod]
 
+# JavaScript dependencies
+node_modules/
+!ports/react-native-relay/package.json
+!ports/react-native-relay/tsconfig.json
+!spec/conformance/wire-v2/
+!spec/conformance/wire-v2/*.json
+
+# Android local/generated project state
+ports/react-native-relay/android/.gradle/
+ports/react-native-relay/android/local.properties
+
 # Logs/temp files
 *.log
 *.tmp
+local-docs/
 
 # Benchmark outputs
-c-core/bench/*.csv
-c-core/bench/massif.out
-c-core/bench/massif.txt
+ports/posix/bench/*.csv
+ports/posix/bench/massif.out
+ports/posix/bench/massif.txt
+ports/posix/bench/results/
+!ports/esp-idf/benchtest/results/*.json
 
 # Local Honch SDK queues/state created by examples and smoke tests
 .honch-*/
 
 # Local agent instructions
-c-core/AGENTS.md
+ports/posix/AGENTS.md

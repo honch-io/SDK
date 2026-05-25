@@ -1,0 +1,12 @@
+{
+  "version": "0.2.0",
+  "description": "Honch analytics SDK wrapper for MicroPython firmware built with the Honch C core user module",
+  "license": "Apache-2.0",
+  "urls": [
+    ["honch/__init__.py", "honch/__init__.py"],
+    ["honch/client.py", "honch/client.py"],
+    ["honch/config.py", "honch/config.py"],
+    ["honch/errors.py", "honch/errors.py"],
+    ["honch/validation.py", "honch/validation.py"]
+  ]
+}

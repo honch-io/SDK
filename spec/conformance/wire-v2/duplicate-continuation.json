@@ -1,0 +1,65 @@
+{
+  "decoded_compact_message": {
+    "base_time_ms": 1700000003000,
+    "batch_context": {
+      "$device_id": "device-1",
+      "$device_model": "model-x",
+      "$environment": "production",
+      "$firmware_version": "1.0.0",
+      "$sdk_platform": "posix",
+      "$sdk_version": "0.2.0",
+      "distinct_id": "user-1"
+    },
+    "events": [
+      {
+        "event": "capture",
+        "properties": [
+          {
+            "mode": "hdr"
+          }
+        ],
+        "time_delta_ms": 10
+      }
+    ],
+    "flags": [
+      "context_promotes_properties"
+    ],
+    "format_version": 2,
+    "message_kind": "event_batch",
+    "string_table": [
+      "user-1",
+      "device-1",
+      "model-x",
+      "1.0.0",
+      "posix",
+      "0.2.0",
+      "production",
+      "capture",
+      "mode",
+      "hdr"
+    ]
+  },
+  "description": "Duplicate continuation frame whose bytes match an already stored continuation.",
+  "expanded_event_json": [],
+  "expected_capture_response_code": 202,
+  "frames": [
+    {
+      "hex": "42046d020101b8e795ffbc310a06757365722d31086465766963652d31076d6f64656c2d7805312e",
+      "kind": "init",
+      "offset": 0
+    },
+    {
+      "hex": "620425302e3005706f73697805302e322e300a70726f64756374696f6e0763617074757265046d6f",
+      "kind": "continuation",
+      "offset": 37
+    },
+    {
+      "hex": "620425302e3005706f73697805302e322e300a70726f64756374696f6e0763617074757265046d6f",
+      "kind": "duplicate",
+      "offset": 37
+    }
+  ],
+  "generated_by": "tools/generate_wire_v2_fixtures.py",
+  "name": "duplicate-continuation",
+  "wire_format": "honch-wire-v2"
+}

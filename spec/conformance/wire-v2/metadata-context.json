@@ -1,0 +1,69 @@
+{
+  "decoded_compact_message": {
+    "base_time_ms": 1700000008000,
+    "batch_context": {
+      "$device_id": "device-1",
+      "$device_model": "model-x",
+      "$environment": "production",
+      "$firmware_version": "1.0.0",
+      "$sdk_platform": "posix",
+      "$sdk_version": "0.2.0",
+      "capabilities": 3,
+      "device_time_source": 1,
+      "distinct_id": "user-1",
+      "extension_128": {
+        "gateway_batch": "alpha"
+      }
+    },
+    "events": [
+      {
+        "event": "boot",
+        "properties": [],
+        "time_delta_ms": 0
+      }
+    ],
+    "flags": [
+      "context_promotes_properties"
+    ],
+    "format_version": 2,
+    "message_kind": "event_batch",
+    "string_table": [
+      "user-1",
+      "device-1",
+      "model-x",
+      "1.0.0",
+      "posix",
+      "0.2.0",
+      "production",
+      "gateway_batch",
+      "alpha",
+      "boot"
+    ]
+  },
+  "description": "Single final frame with optional ingest metadata context keys that are accepted but not promoted to event properties.",
+  "expanded_event_json": [
+    {
+      "distinct_id": "user-1",
+      "event": "boot",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.0"
+      },
+      "timestamp": 1700000008000
+    }
+  ],
+  "expected_capture_response_code": 204,
+  "frames": [
+    {
+      "hex": "0209020101c08e96ffbc310a06757365722d31086465766963652d31076d6f64656c2d7805312e302e3005706f73697805302e322e300a70726f64756374696f6e0d676174657761795f626174636805616c70686104626f6f740a0107000207010307020407030507040607050707060903010a030380010a010f0708010900004472",
+      "kind": "single"
+    }
+  ],
+  "generated_by": "tools/generate_wire_v2_fixtures.py",
+  "name": "metadata-context",
+  "wire_format": "honch-wire-v2"
+}
