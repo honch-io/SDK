@@ -1,0 +1,92 @@
+menu "Honch Benchtest Configuration"
+
+    config HONCH_API_KEY
+        string "Honch API Key"
+        default ""
+        help
+            Your Honch project API key.
+
+    config HONCH_HOST
+        string "Honch Host"
+        default "https://capture.honch.io"
+        help
+            The Honch capture endpoint URL.
+
+    config WIFI_SSID
+        string "Wi-Fi SSID"
+        default ""
+        help
+            SSID of the Wi-Fi network to connect to.
+
+    config WIFI_PASSWORD
+        string "Wi-Fi Password"
+        default ""
+        help
+            Password for the Wi-Fi network.
+
+    config BENCH_EVENT_COUNT
+        int "Benchmark event count"
+        default 250
+        range 1 10000
+        help
+            Number of bench_event calls to emit per benchmark run.
+
+    config BENCH_EVENT_INTERVAL_MS
+        int "Delay between benchmark events (ms)"
+        default 100
+        range 0 60000
+        help
+            Delay between honch_track calls. Use 0 for a burst test.
+
+    config BENCH_FLUSH_EVERY
+        int "Flush after this many events"
+        default 25
+        range 1 1000
+        help
+            Calls honch_flush after each group of this many events.
+
+    config BENCH_PAYLOAD_BYTES
+        int "Approximate custom property payload bytes"
+        default 64
+        range 0 512
+        help
+            Adds a string property with roughly this many bytes to each event.
+
+    config BENCH_SETTLE_SECONDS
+        int "Seconds to wait after final flush"
+        default 10
+        range 0 300
+        help
+            Time to wait after the final flush so async HTTP work can finish.
+
+    config BENCH_OFFLINE_QUEUE_PROOF
+        bool "Run offline queue preservation proof"
+        default n
+        help
+            Skip capture readiness at startup, emit events while capture is
+            expected to be unavailable, verify the queued estimate grows, then
+            retry flushes until capture is restored.
+
+    config BENCH_OFFLINE_QUEUE_PROOF_EVENTS
+        int "Offline queue proof event count"
+        default 40
+        range 1 1000
+        depends on BENCH_OFFLINE_QUEUE_PROOF
+        help
+            Number of proof events to queue before the recovery flush loop.
+
+    config BENCH_OFFLINE_RECOVERY_RETRY_SECONDS
+        int "Offline proof recovery retry delay seconds"
+        default 5
+        range 1 300
+        depends on BENCH_OFFLINE_QUEUE_PROOF
+        help
+            Delay between flush attempts while waiting for capture to recover.
+
+    config BENCH_REPEAT
+        bool "Repeat benchmark runs forever"
+        default n
+        help
+            Repeat the benchmark after a short pause.
+
+endmenu

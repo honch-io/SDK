@@ -1,0 +1,30 @@
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+}
+
+plugins {
+  id "com.android.library"
+}
+
+android {
+  namespace "io.honch.reactnativerelay"
+  compileSdkVersion 35
+
+  defaultConfig {
+    minSdkVersion 23
+    targetSdkVersion 35
+  }
+}
+
+repositories {
+  google()
+  mavenCentral()
+}
+
+dependencies {
+  compileOnly "com.facebook.react:react-android:+"
+  implementation "androidx.work:work-runtime:2.9.1"
+}
