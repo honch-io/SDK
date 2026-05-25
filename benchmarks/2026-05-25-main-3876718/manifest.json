@@ -1,0 +1,75 @@
+{
+  "run_id": "2026-05-25-main-3876718",
+  "created_at": "2026-05-25T18:38:08.306436+00:00",
+  "repos": {
+    "SDK": {
+      "path": "/Users/morgana/Development/honch-io/SDK",
+      "exists": true,
+      "head": "3876718",
+      "branch": "main",
+      "status": [
+        "## main...origin/main"
+      ]
+    },
+    "sandbox-local": {
+      "path": "/Users/morgana/Development/honch-io/sandbox",
+      "exists": true,
+      "head": "ce7a0fa",
+      "branch": "main",
+      "status": [
+        "## main...origin/main [ahead 1]"
+      ]
+    },
+    "sandbox-clean": {
+      "path": "/private/tmp/honch-bench-main-repos/sandbox",
+      "exists": true,
+      "head": "021226c",
+      "branch": "HEAD",
+      "status": [
+        "## HEAD (no branch)"
+      ]
+    },
+    "capture": {
+      "path": "/Users/morgana/Development/honch-io/capture",
+      "exists": true,
+      "head": "59e6362",
+      "branch": "main",
+      "status": [
+        "## main...origin/main"
+      ]
+    },
+    "platform": {
+      "path": "/Users/morgana/Development/honch-io/platform",
+      "exists": true,
+      "head": "9f86dc9",
+      "branch": "main",
+      "status": [
+        "## main...origin/main"
+      ]
+    },
+    "worker-local": {
+      "path": "/Users/morgana/Development/honch-io/worker",
+      "exists": true,
+      "head": "86f99d9",
+      "branch": "main",
+      "status": [
+        "## main...origin/main [behind 3]",
+        " M Cargo.lock"
+      ]
+    },
+    "worker-clean": {
+      "path": "/private/tmp/honch-bench-main-repos/worker",
+      "exists": true,
+      "head": "3724a03",
+      "branch": "HEAD",
+      "status": [
+        "## HEAD (no branch)"
+      ]
+    }
+  },
+  "notes": [
+    "SDK untracked outputs were stashed before this run.",
+    "Worker local Cargo.lock changes were stashed, but local worker checkout remained dirty; clean origin/main worker worktree is used for stack execution.",
+    "Sandbox local checkout is ahead of origin/main; clean origin/main sandbox worktree is used for stack execution."
+  ]
+}

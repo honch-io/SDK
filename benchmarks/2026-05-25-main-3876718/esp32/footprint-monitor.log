@@ -1,0 +1,8 @@
+I (447) honch_footprint: HONCH_FOOTPRINT_BUILD with_honch=1 connected_baseline=0
+I (447) honch_footprint: HONCH_FOOTPRINT_RUNTIME phase=boot heap_free=265404 heap_min=264888 heap_largest=131072 stack_high_water=2648
+I (457) honch_footprint: HONCH_FOOTPRINT_RUNTIME phase=before_honch heap_free=265404 heap_min=264888 heap_largest=131072 stack_high_water=2648
+I (477) honch_footprint: HONCH_FOOTPRINT_RUNTIME phase=after_honch_init heap_free=260952 heap_min=260952 heap_largest=131072 stack_high_water=2152
+I (487) honch_footprint: HONCH_FOOTPRINT_CPU samples=32 failures=0 avg_us=224 min_us=213 p50_us=214 p95_us=221 max_us=555 cpu_pct_1hz=0.022400
+I (497) honch_footprint: HONCH_FOOTPRINT_RUNTIME phase=after_track_sample heap_free=260952 heap_min=259888 heap_largest=131072 stack_high_water=2152
+I (507) honch_footprint: HONCH_FOOTPRINT_DEVICE_ID value=d0e47a0c0c9881787c6863fa023a0797
+I (517) honch_footprint: HONCH_FOOTPRINT_RUNTIME phase=after_representative_api heap_free=260952 heap_min=259788 heap_largest=131072 stack_high_water=2152

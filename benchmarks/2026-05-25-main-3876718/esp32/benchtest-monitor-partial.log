@@ -1,0 +1,31 @@
+ESP32 benchtest partial run, 2026-05-25
+
+Firmware:
+- App: honch_benchtest
+- App version: 3876718
+- ESP-IDF: v6.0.1
+- Build dir: /private/tmp/honch-main-bench-build-2
+- SDKCONFIG: /private/tmp/honch-main-bench-sdkconfig
+- Capture host configured for run: http://192.168.1.95:8001
+
+Observed:
+- ESP32 connected to Wi-Fi and received IP 192.168.1.123.
+- Capture endpoint is reachable from macOS at http://192.168.1.95:8001/health.
+- ESP32 timed out connecting to http://192.168.1.95:8001/health during readiness checks.
+
+Relevant monitor lines:
+I (2042) esp_netif_handlers: sta ip: 192.168.1.123, mask: 255.255.255.0, gw: 192.168.1.254
+I (2042) honch_benchtest: Got IP: 192.168.1.123
+I (2042) honch_benchtest: Waiting for HTTP readiness: http://192.168.1.95:8001/health
+E (12072) esp-tls: [sock=54] select() timeout
+E (12072) transport_base: Failed to open a new connection: 32774
+E (12072) HTTP_CLIENT: Connection failed, sock < 0
+W (12072) honch_benchtest: HTTP readiness attempt 1/12 failed err=ESP_ERR_HTTP_CONNECT status=0
+E (23092) esp-tls: [sock=54] select() timeout
+E (23092) transport_base: Failed to open a new connection: 32774
+E (23092) HTTP_CLIENT: Connection failed, sock < 0
+W (23092) honch_benchtest: HTTP readiness attempt 2/12 failed err=ESP_ERR_HTTP_CONNECT status=0
+E (34112) esp-tls: [sock=54] select() timeout
+E (34112) transport_base: Failed to open a new connection: 32774
+E (34112) HTTP_CLIENT: Connection failed, sock < 0
+W (34112) honch_benchtest: HTTP readiness attempt 3/12 failed err=ESP_ERR_HTTP_CONNECT status=0

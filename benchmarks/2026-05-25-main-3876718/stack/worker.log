@@ -1,0 +1,337 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling proc-macro2 v1.0.106
+   Compiling quote v1.0.44
+   Compiling unicode-ident v1.0.22
+   Compiling cfg-if v1.0.4
+   Compiling libc v0.2.180
+   Compiling once_cell v1.21.3
+   Compiling serde_core v1.0.228
+   Compiling pin-project-lite v0.2.16
+   Compiling bytes v1.11.0
+   Compiling memchr v2.7.6
+   Compiling futures-core v0.3.31
+   Compiling parking_lot_core v0.9.12
+   Compiling itoa v1.0.17
+   Compiling scopeguard v1.2.0
+   Compiling lock_api v0.4.14
+   Compiling serde v1.0.228
+   Compiling version_check v0.9.5
+   Compiling smallvec v1.15.1
+   Compiling getrandom v0.3.4
+   Compiling pin-utils v0.1.0
+   Compiling futures-task v0.3.31
+   Compiling futures-io v0.3.31
+   Compiling zerocopy v0.8.36
+   Compiling slab v0.4.11
+   Compiling autocfg v1.5.0
+   Compiling futures-sink v0.3.31
+   Compiling core-foundation-sys v0.8.7
+   Compiling log v0.4.29
+   Compiling tracing-core v0.1.36
+   Compiling percent-encoding v2.3.2
+   Compiling typenum v1.19.0
+   Compiling generic-array v0.14.7
+   Compiling rustix v1.1.3
+   Compiling equivalent v1.0.2
+   Compiling hashbrown v0.16.1
+   Compiling tower-service v0.3.3
+   Compiling indexmap v2.13.0
+   Compiling futures-channel v0.3.31
+   Compiling errno v0.3.14
+   Compiling socket2 v0.6.2
+   Compiling syn v2.0.114
+   Compiling signal-hook-registry v1.4.8
+   Compiling parking_lot v0.12.5
+   Compiling mio v1.1.1
+   Compiling getrandom v0.2.17
+   Compiling bitflags v2.10.0
+   Compiling fastrand v2.3.0
+   Compiling zmij v1.0.17
+   Compiling tinyvec_macros v0.1.1
+   Compiling thiserror v1.0.69
+   Compiling tinyvec v1.10.0
+   Compiling native-tls v0.2.14
+   Compiling subtle v2.6.1
+   Compiling httparse v1.10.1
+   Compiling serde_json v1.0.149
+   Compiling unicode-normalization v0.1.25
+   Compiling form_urlencoded v1.2.2
+   Compiling ahash v0.8.12
+   Compiling try-lock v0.2.5
+   Compiling unicode-bidi v0.3.18
+   Compiling want v0.3.1
+   Compiling block-buffer v0.10.4
+   Compiling core-foundation v0.9.4
+   Compiling httpdate v1.0.3
+   Compiling find-msvc-tools v0.1.8
+   Compiling shlex v1.3.0
+   Compiling idna v0.4.0
+   Compiling cc v1.2.54
+   Compiling security-framework-sys v2.15.0
+   Compiling security-framework v2.11.1
+   Compiling ppv-lite86 v0.2.21
+   Compiling allocator-api2 v0.2.21
+   Compiling tower-layer v0.3.3
+   Compiling num-traits v0.2.19
+   Compiling rustversion v1.0.22
+   Compiling ring v0.17.14
+   Compiling base64 v0.21.7
+   Compiling http v1.4.0
+   Compiling tempfile v3.24.0
+   Compiling serde_derive v1.0.228
+   Compiling tokio-macros v2.6.0
+   Compiling tracing-attributes v0.1.31
+   Compiling futures-macro v0.3.31
+   Compiling thiserror-impl v1.0.69
+   Compiling async-trait v0.1.89
+   Compiling crossbeam-utils v0.8.21
+   Compiling tokio v1.49.0
+   Compiling fnv v1.0.7
+   Compiling untrusted v0.9.0
+   Compiling mime v0.3.17
+   Compiling futures-util v0.3.31
+   Compiling http v0.2.12
+   Compiling tracing v0.1.44
+   Compiling http-body v1.0.1
+   Compiling synstructure v0.13.2
+   Compiling crypto-common v0.1.7
+   Compiling rand_core v0.6.4
+   Compiling rand_chacha v0.3.1
+   Compiling digest v0.10.7
+   Compiling http-body v0.4.6
+   Compiling zerofrom-derive v0.1.6
+   Compiling url v2.4.0
+   Compiling base64 v0.22.1
+   Compiling minimal-lexical v0.2.1
+   Compiling yoke-derive v0.7.5
+   Compiling nom v7.1.3
+   Compiling rand v0.8.5
+   Compiling socket2 v0.5.10
+   Compiling iana-time-zone v0.1.65
+   Compiling zerofrom v0.1.6
+   Compiling sync_wrapper v1.0.2
+   Compiling stable_deref_trait v1.2.1
+   Compiling crunchy v0.2.4
+   Compiling event-listener v2.5.3
+   Compiling either v1.15.0
+   Compiling paste v1.0.15
+   Compiling anyhow v1.0.100
+   Compiling ryu v1.0.22
+   Compiling atomic-waker v1.1.2
+   Compiling ipnet v2.11.0
+   Compiling yoke v0.7.5
+   Compiling hashbrown v0.14.5
+   Compiling http-body-util v0.1.3
+   Compiling pin-project-internal v1.1.10
+   Compiling zerovec-derive v0.10.3
+   Compiling indexmap v1.9.3
+   Compiling encoding_rs v0.8.35
+   Compiling tiny-keccak v2.0.2
+   Compiling unicode_categories v0.1.1
+   Compiling crc-catalog v2.4.0
+   Compiling rustls v0.21.12
+   Compiling home v0.5.9
+   Compiling sqlformat v0.2.6
+   Compiling tokio-util v0.7.18
+   Compiling tokio-native-tls v0.3.1
+   Compiling hyper v1.8.1
+   Compiling zerovec v0.10.4
+   Compiling pin-project v1.1.10
+   Compiling h2 v0.3.27
+   Compiling tokio-stream v0.1.18
+   Compiling tower v0.5.3
+   Compiling hyper-util v0.1.19
+   Compiling crc v3.0.1
+   Compiling rustls-webpki v0.101.7
+   Compiling sct v0.7.1
+   Compiling itertools v0.12.1
+   Compiling serde_urlencoded v0.7.1
+   Compiling crossbeam-queue v0.3.12
+   Compiling axum-core v0.3.4
+   Compiling displaydoc v0.2.5
+   Compiling rustls-pemfile v1.0.4
+   Compiling cpufeatures v0.2.17
+   Compiling powerfmt v0.2.0
+   Compiling cfg_aliases v0.1.1
+   Compiling hex v0.4.3
+   Compiling dotenvy v0.15.7
+   Compiling bitflags v1.3.2
+   Compiling crc32fast v1.5.0
+   Compiling num-conv v0.1.0
+   Compiling thiserror v2.0.18
+   Compiling time-core v0.1.2
+   Compiling hashbrown v0.12.3
+   Compiling byteorder v1.5.0
+   Compiling time-macros v0.2.18
+   Compiling deranged v0.3.11
+   Compiling prost-derive v0.12.6
+   Compiling nix v0.28.0
+   Compiling hyper v0.14.32
+   Compiling axum v0.6.20
+   Compiling num-integer v0.1.46
+   Compiling thiserror-impl v2.0.18
+   Compiling matchit v0.7.3
+   Compiling zeroize v1.8.2
+   Compiling sync_wrapper v0.1.2
+   Compiling unicode-properties v0.1.4
+   Compiling unicode-segmentation v1.12.0
+   Compiling iri-string v0.7.10
+   Compiling ucd-trie v0.1.7
+   Compiling adler2 v2.0.1
+   Compiling simd-adler32 v0.3.8
+   Compiling pest v2.7.5
+   Compiling miniz_oxide v0.8.9
+   Compiling stringprep v0.1.5
+   Compiling prost v0.12.6
+   Compiling rustls-pki-types v1.14.0
+   Compiling num-bigint v0.4.6
+   Compiling hashlink v0.8.4
+   Compiling const-random-macro v0.1.16
+   Compiling tower-http v0.6.8
+   Compiling tokio-rustls v0.24.1
+   Compiling futures-intrusive v0.5.0
+   Compiling time v0.3.36
+   Compiling tower v0.4.13
+   Compiling tinystr v0.7.6
+   Compiling sha2 v0.10.9
+   Compiling hyper-tls v0.6.0
+   Compiling atoi v2.0.0
+   Compiling chrono v0.4.43
+   Compiling tokio-io-timeout v1.2.1
+   Compiling hmac v0.12.1
+   Compiling async-stream-impl v0.3.6
+   Compiling uuid v1.20.0
+   Compiling syn v1.0.109
+   Compiling litemap v0.7.5
+   Compiling writeable v0.5.5
+   Compiling whoami v1.6.1
+   Compiling async-stream v0.3.6
+   Compiling icu_locid v1.4.0
+   Compiling simple_asn1 v0.6.3
+   Compiling hkdf v0.12.4
+   Compiling hyper-timeout v0.4.1
+   Compiling reqwest v0.12.28
+   Compiling flate2 v1.1.9
+   Compiling const-random v0.1.18
+   Compiling pest_meta v2.7.5
+   Compiling sha1 v0.10.6
+   Compiling pem v3.0.6
+   Compiling md-5 v0.10.6
+   Compiling google-cloud-token v0.1.2
+   Compiling icu_provider_macros v1.4.0
+   Compiling system-configuration-sys v0.5.0
+   Compiling webpki-roots v0.25.4
+   Compiling atomic-write-file v0.1.4
+   Compiling sqlx-core v0.7.3
+   Compiling dlv-list v0.5.2
+   Compiling jsonwebtoken v9.3.1
+   Compiling icu_provider v1.4.0
+   Compiling pest_generator v2.7.5
+   Compiling heck v0.4.1
+   Compiling google-cloud-metadata v0.5.1
+   Compiling serde_spanned v0.6.9
+   Compiling toml_datetime v0.6.11
+   Compiling urlencoding v2.1.3
+   Compiling winnow v0.7.14
+   Compiling toml_write v0.1.2
+   Compiling regex-syntax v0.8.8
+   Compiling icu_locid_transform_data v1.4.0
+   Compiling google-cloud-googleapis v0.13.0
+   Compiling icu_locid_transform v1.4.0
+   Compiling pest_derive v2.7.5
+   Compiling ordered-multimap v0.7.3
+   Compiling sqlx-postgres v0.7.3
+   Compiling regex-automata v0.4.13
+   Compiling prost-types v0.12.6
+   Compiling tonic v0.10.2
+   Compiling toml_edit v0.22.27
+   Compiling tokio-retry v0.3.0
+   Compiling concurrent-queue v2.5.0
+   Compiling arraydeque v0.5.1
+   Compiling lazy_static v1.5.0
+   Compiling yaml-rust2 v0.8.1
+   Compiling sharded-slab v0.1.7
+   Compiling async-channel v1.9.0
+   Compiling system-configuration v0.5.1
+   Compiling rust-ini v0.20.0
+   Compiling json5 v0.4.1
+   Compiling google-cloud-auth v0.15.0
+   Compiling matchers v0.2.0
+   Compiling hyper-tls v0.5.0
+   Compiling convert_case v0.6.0
+   Compiling icu_collections v1.4.0
+   Compiling toml v0.8.23
+   Compiling rustls-native-certs v0.6.3
+   Compiling sqlx-macros-core v0.7.3
+   Compiling google-cloud-gax v0.17.0
+   Compiling combine v4.6.7
+   Compiling axum-core v0.4.5
+   Compiling tracing-serde v0.2.0
+   Compiling ron v0.8.1
+   Compiling socket2 v0.4.10
+   Compiling serde_path_to_error v0.1.20
+   Compiling tracing-log v0.2.0
+   Compiling regex-automata v0.2.0
+   Compiling sqlx-macros v0.7.3
+   Compiling thread_local v1.1.9
+   Compiling nu-ansi-term v0.50.3
+   Compiling icu_properties_data v1.4.1
+   Compiling pathdiff v0.2.3
+   Compiling icu_list_data v1.4.0
+   Compiling sha1_smol v1.0.1
+   Compiling tracing-subscriber v0.3.22
+   Compiling icu_properties v1.4.0
+   Compiling config v0.14.1
+   Compiling axum v0.7.9
+   Compiling icu_list v1.4.0
+   Compiling google-cloud-pubsub v0.25.0
+   Compiling sqlx v0.7.3
+   Compiling reqwest v0.11.27
+   Compiling google-cloud-auth v0.16.0
+   Compiling async-compression v0.4.5
+   Compiling base64ct v1.6.0
+   Compiling redis v0.23.3
+   Compiling honch-unified-worker v0.1.0 (/private/tmp/honch-bench-main-repos/worker)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 28.99s
+warning: the following packages contain code that will be rejected by a future version of Rust: redis v0.23.3, sqlx-postgres v0.7.3
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running `target/debug/honch-unified-worker`
+{"timestamp":"2026-05-25T18:39:57.083907Z","level":"INFO","fields":{"message":"Health server listening on 0.0.0.0:8080"},"target":"honch_unified_worker"}
+Error: missing field `events_pubsub_topic`
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.44s
+warning: the following packages contain code that will be rejected by a future version of Rust: redis v0.23.3, sqlx-postgres v0.7.3
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running `target/debug/honch-unified-worker`
+{"timestamp":"2026-05-25T18:42:23.928615Z","level":"INFO","fields":{"message":"Health server listening on 0.0.0.0:8080"},"target":"honch_unified_worker"}
+{"timestamp":"2026-05-25T18:42:23.930339Z","level":"INFO","fields":{"message":"Starting Honch Worker (events pipeline)"},"target":"honch_unified_worker"}
+{"timestamp":"2026-05-25T18:42:23.941069Z","level":"INFO","fields":{"message":"Connected to ClickHouse at http://localhost:8123"},"target":"honch_unified_worker::clickhouse"}
+{"timestamp":"2026-05-25T18:42:23.941152Z","level":"INFO","fields":{"message":"Connecting to PostgreSQL..."},"target":"honch_unified_worker"}
+{"timestamp":"2026-05-25T18:42:24.002136Z","level":"INFO","fields":{"message":"PostgreSQL connected (pool_size=20)"},"target":"honch_unified_worker"}
+{"timestamp":"2026-05-25T18:42:24.002184Z","level":"INFO","fields":{"message":"Creating Redis client..."},"target":"honch_unified_worker"}
+{"timestamp":"2026-05-25T18:42:24.002326Z","level":"INFO","fields":{"message":"Redis client created"},"target":"honch_unified_worker"}
+{"timestamp":"2026-05-25T18:42:24.002344Z","level":"INFO","fields":{"message":"Authenticating with GCP Pub/Sub..."},"target":"honch_unified_worker"}
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.40s
+warning: the following packages contain code that will be rejected by a future version of Rust: redis v0.23.3, sqlx-postgres v0.7.3
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running `target/debug/honch-unified-worker`
+{"timestamp":"2026-05-25T18:42:53.860359Z","level":"INFO","fields":{"message":"Health server listening on 0.0.0.0:8080"},"target":"honch_unified_worker"}
+{"timestamp":"2026-05-25T18:42:53.862182Z","level":"INFO","fields":{"message":"Starting Honch Worker (events pipeline)"},"target":"honch_unified_worker"}
+{"timestamp":"2026-05-25T18:42:53.872059Z","level":"INFO","fields":{"message":"Connected to ClickHouse at http://localhost:8123"},"target":"honch_unified_worker::clickhouse"}
+{"timestamp":"2026-05-25T18:42:53.872122Z","level":"INFO","fields":{"message":"Connecting to PostgreSQL..."},"target":"honch_unified_worker"}
+{"timestamp":"2026-05-25T18:42:53.937994Z","level":"INFO","fields":{"message":"PostgreSQL connected (pool_size=20)"},"target":"honch_unified_worker"}
+{"timestamp":"2026-05-25T18:42:53.938032Z","level":"INFO","fields":{"message":"Creating Redis client..."},"target":"honch_unified_worker"}
+{"timestamp":"2026-05-25T18:42:53.938162Z","level":"INFO","fields":{"message":"Redis client created"},"target":"honch_unified_worker"}
+{"timestamp":"2026-05-25T18:42:53.938187Z","level":"INFO","fields":{"message":"Authenticating with GCP Pub/Sub..."},"target":"honch_unified_worker"}
+{"timestamp":"2026-05-25T18:42:56.949619Z","level":"ERROR","fields":{"message":"Pub/Sub auth failed: GOOGLE_APPLICATION_CREDENTIALS or default credentials is required: No such file or directory (os error 2)"},"target":"honch_unified_worker"}
+Error: GOOGLE_APPLICATION_CREDENTIALS or default credentials is required: No such file or directory (os error 2)
+
+Caused by:
+    No such file or directory (os error 2)
