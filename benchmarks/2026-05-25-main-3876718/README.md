@@ -114,6 +114,41 @@ Pico W benchmark summary:
 
 Note: Pico W results are runtime heap and timing measurements from the connected device. They do not include an isolated RP2040 firmware image map contribution for `_honch_core`.
 
+## Arduino ESP32
+
+Arduino artifacts:
+
+- `arduino/RawWifiHttpBaseline/RawWifiHttpBaseline.ino`
+- `arduino/HonchArduinoBenchmark/HonchArduinoBenchmark.ino`
+- `arduino/raw-baseline.log`
+- `arduino/honch-benchmark.log`
+- `arduino/summary.json`
+
+Arduino toolchain:
+
+- Arduino CLI: 1.5.0
+- ESP32 Arduino core: 3.3.8
+- FQBN: `esp32:esp32:esp32`
+- Arduino home: `/Volumes/X9 Pro/Arduino`
+
+Arduino compile-size comparison:
+
+- Raw Wi-Fi/HTTP baseline: 1029088 bytes sketch, 48368 bytes globals.
+- Honch benchmark: 1067184 bytes sketch, 56800 bytes globals.
+- Honch delta over raw Wi-Fi/HTTP baseline: +38096 bytes sketch, +8432 bytes globals.
+
+Arduino runtime comparison:
+
+- Raw baseline includes Wi-Fi, HTTPClient, `/health`, and 20 equivalent JSON payload string builds.
+- Raw baseline after HTTP free heap: 227660 bytes; minimum free heap: 224828 bytes.
+- Raw payload-build latency: 87 us average, 85 us min, 99 us max.
+- Honch after init free heap: 218228 bytes.
+- Honch track latency: 15219 us average, 4485 us min, 79355 us max, 0 failures.
+- Honch flush latency: 1063194 us, error `ok`.
+- Honch runtime delta vs raw after network setup: -9284 bytes after Wi-Fi, -11036 bytes after work, -38500 bytes at minimum free heap.
+
+Arduino fix note: this run found and fixed an Arduino runtime bug where `Honch.begin()` failed with `io error` because the C core state key `firmware_version` exceeded the ESP32 Arduino Preferences/NVS 15-character key limit. The Arduino storage adapter now maps that logical key to the shorter NVS key `fw_version`.
+
 ## Pending
 
 - RP2040 firmware image/map footprint isolation is still pending if marketing needs a flash-size claim for the MicroPython user C module itself.

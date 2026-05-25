@@ -1,0 +1,86 @@
+{
+  "target": "arduino-esp32",
+  "host": "http://192.168.1.122:8001",
+  "toolchain": {
+    "arduino_cli": "1.5.0",
+    "esp32_core": "3.3.8",
+    "fqbn": "esp32:esp32:esp32",
+    "arduino_home": "/Volumes/X9 Pro/Arduino"
+  },
+  "compile_size": {
+    "raw_wifi_http_baseline": {
+      "sketch_bytes": 1029088,
+      "global_bytes": 48368
+    },
+    "honch_benchmark": {
+      "sketch_bytes": 1067184,
+      "global_bytes": 56800
+    },
+    "honch_delta_vs_raw_wifi_http": {
+      "sketch_bytes": 38096,
+      "global_bytes": 8432
+    }
+  },
+  "runtime": {
+    "raw_wifi_http_baseline": {
+      "device_ip": "192.168.1.123",
+      "health_status": 200,
+      "heap": {
+        "boot_free": 280980,
+        "after_wifi_free": 228916,
+        "after_http_free": 227660,
+        "after_payload_build_free": 228004,
+        "min_free": 224828,
+        "max_alloc": 110580
+      },
+      "payload_build": {
+        "count": 20,
+        "avg_us": 87,
+        "min_us": 85,
+        "max_us": 99
+      }
+    },
+    "honch_benchmark": {
+      "device_ip": "192.168.1.123",
+      "heap": {
+        "boot_free": 271636,
+        "after_wifi_free": 219632,
+        "after_init_free": 218228,
+        "after_track_free": 218228,
+        "after_flush_free": 216968,
+        "after_shutdown_free": 213024,
+        "min_free": 186328,
+        "max_alloc": 110580
+      },
+      "init": {
+        "ok": true,
+        "us": 61054
+      },
+      "track": {
+        "count": 20,
+        "failures": 0,
+        "avg_us": 15219,
+        "min_us": 4485,
+        "max_us": 79355
+      },
+      "flush": {
+        "ok": true,
+        "us": 1063194
+      },
+      "shutdown": {
+        "ok": true,
+        "us": 606628
+      }
+    },
+    "honch_delta_vs_raw_wifi_http": {
+      "after_wifi_free_heap_delta_bytes": -9284,
+      "post_work_free_heap_delta_bytes": -11036,
+      "min_free_heap_delta_bytes": -38500
+    }
+  },
+  "notes": [
+    "Raw baseline includes Wi-Fi, HTTPClient, /health request, and equivalent 20 JSON payload string construction without Honch.",
+    "Honch benchmark uses the same Wi-Fi network and capture host, tracks 20 events with 64-byte payload strings, flushes, and shuts down.",
+    "Build-time credentials were passed as compiler macros and are not stored in committed artifacts."
+  ]
+}
