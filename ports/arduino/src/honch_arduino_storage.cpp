@@ -41,6 +41,22 @@ static const size_t HONCH_ARDUINO_QUEUE_MAX_DEPTH = 256;
 #endif
 
 #ifdef ARDUINO
+const char *arduino_nvs_state_key(const char *key) {
+  if (key == nullptr) {
+    return nullptr;
+  }
+  if (strcmp(key, "firmware_version") == 0) {
+    return "fw_version";
+  }
+  if (strcmp(key, "distinct_id") == 0) {
+    return "distinct_id";
+  }
+  if (strcmp(key, "device_id") == 0) {
+    return "device_id";
+  }
+  return key;
+}
+
 void arduino_sequence_key(uint64_t sequence, char key[16]) {
   static const char alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyz";
   char digits[14];
@@ -85,10 +101,14 @@ honch_status_t arduino_state_get(void *ctx, const char *key, uint8_t *buffer, si
   }
 
 #ifdef ARDUINO
+  const char *nvsKey = arduino_nvs_state_key(key);
+  if (nvsKey == nullptr || strlen(nvsKey) > 15) {
+    return HONCH_ERROR_INVALID_ARGUMENT;
+  }
   if (!g_preferences.begin(HONCH_ARDUINO_STATE_NAMESPACE, true)) {
     return HONCH_ERROR_IO;
   }
-  size_t valueSize = g_preferences.getBytesLength(key);
+  size_t valueSize = g_preferences.getBytesLength(nvsKey);
   if (valueSize == 0) {
     *bufferSize = 0;
     g_preferences.end();
@@ -99,7 +119,7 @@ honch_status_t arduino_state_get(void *ctx, const char *key, uint8_t *buffer, si
     g_preferences.end();
     return buffer == nullptr ? HONCH_OK : HONCH_ERROR_INVALID_ARGUMENT;
   }
-  size_t readSize = g_preferences.getBytes(key, buffer, valueSize);
+  size_t readSize = g_preferences.getBytes(nvsKey, buffer, valueSize);
   g_preferences.end();
   if (readSize != valueSize) {
     return HONCH_ERROR_IO;
@@ -133,10 +153,14 @@ honch_status_t arduino_state_set(void *ctx, const char *key, const uint8_t *data
   }
 
 #ifdef ARDUINO
+  const char *nvsKey = arduino_nvs_state_key(key);
+  if (nvsKey == nullptr || strlen(nvsKey) > 15) {
+    return HONCH_ERROR_INVALID_ARGUMENT;
+  }
   if (!g_preferences.begin(HONCH_ARDUINO_STATE_NAMESPACE, false)) {
     return HONCH_ERROR_IO;
   }
-  size_t written = g_preferences.putBytes(key, data, dataSize);
+  size_t written = g_preferences.putBytes(nvsKey, data, dataSize);
   g_preferences.end();
   return written == dataSize ? HONCH_OK : HONCH_ERROR_IO;
 #else
@@ -156,10 +180,14 @@ honch_status_t arduino_state_delete(void *ctx, const char *key) {
   }
 
 #ifdef ARDUINO
+  const char *nvsKey = arduino_nvs_state_key(key);
+  if (nvsKey == nullptr || strlen(nvsKey) > 15) {
+    return HONCH_ERROR_INVALID_ARGUMENT;
+  }
   if (!g_preferences.begin(HONCH_ARDUINO_STATE_NAMESPACE, false)) {
     return HONCH_ERROR_IO;
   }
-  g_preferences.remove(key);
+  g_preferences.remove(nvsKey);
   g_preferences.end();
 #else
   g_hostStorage.state.erase(key);

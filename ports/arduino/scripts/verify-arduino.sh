@@ -3,6 +3,16 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 
+if [[ -n "${HONCH_ARDUINO_HOME:-}" ]]; then
+  mkdir -p \
+    "$HONCH_ARDUINO_HOME/data" \
+    "$HONCH_ARDUINO_HOME/downloads" \
+    "$HONCH_ARDUINO_HOME/user"
+  export ARDUINO_DIRECTORIES_DATA="$HONCH_ARDUINO_HOME/data"
+  export ARDUINO_DIRECTORIES_DOWNLOADS="$HONCH_ARDUINO_HOME/downloads"
+  export ARDUINO_DIRECTORIES_USER="$HONCH_ARDUINO_HOME/user"
+fi
+
 cmake -S "$ROOT_DIR/ports/arduino/test/host" -B "$ROOT_DIR/build/arduino-host"
 cmake --build "$ROOT_DIR/build/arduino-host"
 "$ROOT_DIR/build/arduino-host/honch_arduino_wrapper_test"
