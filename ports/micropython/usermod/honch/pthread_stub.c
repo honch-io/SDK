@@ -1,3 +1,5 @@
+#if !defined(__APPLE__) && !defined(__linux__) && !defined(__unix__)
+
 #include "compat/pthread.h"
 
 int clock_gettime(clockid_t clock_id, struct timespec *tp)
@@ -94,3 +96,5 @@ int pthread_join(pthread_t thread, void **retval)
     (void)retval;
     return 0;
 }
+
+#endif

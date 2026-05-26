@@ -314,6 +314,18 @@ honch_status_t honch_state_check_firmware_version(honch_client_t *client, bool *
     return write_status;
 }
 
+honch_status_t honch_state_save_firmware_version(honch_client_t *client)
+{
+    if (client == NULL || client->storage == NULL || honch_is_blank(client->firmware_version)) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    return client->storage->state_set(
+        client->storage->ctx,
+        "firmware_version",
+        (const uint8_t *)client->firmware_version,
+        strlen(client->firmware_version));
+}
+
 honch_status_t honch_state_reset(honch_client_t *client)
 {
     if (client == NULL || client->storage == NULL) {

@@ -101,6 +101,13 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertEqual(init_match.group(1), package_json["version"])
         self.assertEqual(init_match.group(1), pyproject_match.group(1))
 
+    def test_readme_clarifies_circuitpython_is_not_supported(self):
+        readme = self.read("ports/micropython/README.md")
+
+        self.assertIn("This port targets MicroPython", readme)
+        self.assertIn("CircuitPython is not covered", readme)
+        self.assertIn("_honch_core", readme)
+
 
 if __name__ == "__main__":
     unittest.main()

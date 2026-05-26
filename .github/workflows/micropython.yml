@@ -36,3 +36,40 @@ jobs:
         run: |
           python -m compileall honch tests examples
           python -m unittest discover -v
+
+  unix-runtime:
+    name: Build MicroPython unix port with _honch_core
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libffi-dev pkg-config
+
+      - name: Check out MicroPython
+        uses: actions/checkout@v4
+        with:
+          repository: micropython/micropython
+          path: micropython
+
+      - name: Build mpy-cross
+        run: make -C micropython/mpy-cross
+
+      - name: Fetch unix submodules
+        run: make -C micropython/ports/unix submodules
+
+      - name: Build unix port with Honch core module
+        run: |
+          make -C micropython/ports/unix \
+            VARIANT=standard \
+            USER_C_MODULES=$GITHUB_WORKSPACE/ports/micropython/usermod \
+            MICROPY_PY_FFI=0
+
+      - name: Run runtime smoke test
+        env:
+          MICROPYTHON_BIN: ${{ github.workspace }}/micropython/ports/unix/build-standard/micropython
+          HONCH_MICROPYTHON_QUEUE_DIR: ${{ runner.temp }}/honch-micropython-runtime-smoke
+        run: ports/micropython/scripts/run-unix-tests.sh

@@ -17,6 +17,15 @@ class MicroPythonUnixRuntimeRunnerTests(unittest.TestCase):
         self.assertIn("MICROPYPATH=", script)
         self.assertIn("tests/runtime_smoke.py", script)
 
+    def test_github_workflow_builds_unix_port_with_honch_core(self) -> None:
+        workflow = read(".github/workflows/micropython.yml")
+
+        self.assertIn("Build MicroPython unix port with _honch_core", workflow)
+        self.assertIn("micropython/micropython", workflow)
+        self.assertIn("make -C micropython/mpy-cross", workflow)
+        self.assertIn("USER_C_MODULES=$GITHUB_WORKSPACE/ports/micropython/usermod", workflow)
+        self.assertIn("ports/micropython/scripts/run-unix-tests.sh", workflow)
+
     def test_runtime_smoke_uses_real_honch_wrapper(self) -> None:
         smoke = read("ports/micropython/tests/runtime_smoke.py")
 
