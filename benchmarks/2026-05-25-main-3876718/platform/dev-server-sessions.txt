@@ -1,4 +1,0 @@
-backend_session_id=83753
-frontend_session_id=23109
-backend_url=http://127.0.0.1:3001/health
-frontend_url=http://127.0.0.1:5173

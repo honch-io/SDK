@@ -1,9 +1,0 @@
-__TEXT	__DATA	__OBJC	others	dec	hex
-2402	0	0	192	2594	a22	/private/tmp/honch-bench-c-core-build/core/CMakeFiles/honch_core_objects.dir/src/honch_json.c.o
-7692	0	0	128	7820	1e8c	/private/tmp/honch-bench-c-core-build/core/CMakeFiles/honch_core_objects.dir/src/honch_queue_policy.c.o
-1781	0	0	416	2197	895	/private/tmp/honch-bench-c-core-build/core/CMakeFiles/honch_core_objects.dir/src/honch_support.c.o
-11682	112	0	544	12338	3032	/private/tmp/honch-bench-c-core-build/core/CMakeFiles/honch_core_objects.dir/src/honch_wire_v2.c.o
-8241	0	0	480	8721	2211	/private/tmp/honch-bench-c-core-build/core/CMakeFiles/honch_core_objects.dir/src/honch_cbor.c.o
-432	0	0	160	592	250	/private/tmp/honch-bench-c-core-build/core/CMakeFiles/honch_core_objects.dir/src/honch_lifecycle.c.o
-1684	0	0	192	1876	754	/private/tmp/honch-bench-c-core-build/core/CMakeFiles/honch_core_objects.dir/src/honch_packetizer.c.o
-11631	104	0	736	12471	30b7	/private/tmp/honch-bench-c-core-build/core/CMakeFiles/honch_core_objects.dir/src/honch_core.c.o

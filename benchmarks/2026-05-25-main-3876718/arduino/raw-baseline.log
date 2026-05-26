@@ -1,9 +1,0 @@
-ARDUINO_RAW START
-ARDUINO_RAW HEAP label=boot free=280980 min=275196 max_alloc=110580
-ARDUINO_RAW WIFI connected=1 ip=192.168.1.123
-ARDUINO_RAW HEAP label=after_wifi free=228916 min=225344 max_alloc=110580
-ARDUINO_RAW HEALTH status=200
-ARDUINO_RAW HEAP label=after_http free=227660 min=224828 max_alloc=110580
-ARDUINO_RAW BUILD_SUMMARY count=20 avg_us=87 min_us=85 max_us=99
-ARDUINO_RAW HEAP label=after_payload_build free=228004 min=224828 max_alloc=110580
-ARDUINO_RAW DONE
