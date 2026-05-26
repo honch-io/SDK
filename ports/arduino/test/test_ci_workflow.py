@@ -46,6 +46,25 @@ class ArduinoCIWorkflowTests(unittest.TestCase):
         self.assertIn("HONCH_ARDUINO_HOME:", workflow)
         self.assertIn("ports/arduino/scripts/verify-arduino.sh --require-arduino-cli", workflow)
 
+    def test_platformio_manifest_declares_arduino_esp32_library(self) -> None:
+        manifest = read("ports/arduino/library.json")
+
+        self.assertIn('"name": "Honch"', manifest)
+        self.assertIn('"frameworks": "arduino"', manifest)
+        self.assertIn('"platforms": "espressif32"', manifest)
+        self.assertIn('"srcDir": "src"', manifest)
+        self.assertIn('"examples"', manifest)
+
+    def test_platformio_example_build_is_in_ci(self) -> None:
+        workflow = read(".github/workflows/arduino.yml")
+        platformio = read("ports/arduino/examples/platformio/platformio.ini")
+
+        self.assertIn("Install PlatformIO", workflow)
+        self.assertIn("pio run -d ports/arduino/examples/platformio", workflow)
+        self.assertIn("lib_extra_dirs = ../..", platformio)
+        self.assertIn("src_dir = ../HonchBasic", platformio)
+        self.assertIn("board = esp32dev", platformio)
+
 
 if __name__ == "__main__":
     unittest.main()

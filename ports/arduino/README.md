@@ -61,6 +61,12 @@ arduino-cli compile --fqbn esp32:esp32:esp32 ports/arduino/examples/HonchBasic
 arduino-cli compile --fqbn esp32:esp32:esp32 ports/arduino/examples/HonchOfflineQueue
 ```
 
+Or compile the PlatformIO example project:
+
+```sh
+pio run -d ports/arduino/examples/platformio
+```
+
 ## Verification
 
 From the repository root:
