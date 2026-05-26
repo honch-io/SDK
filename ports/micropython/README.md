@@ -139,3 +139,14 @@ PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=ports/micropython python3 -m unittest disco
 Full runtime validation requires building MicroPython with
 `ports/micropython/usermod/honch/micropython.cmake` and running the wrapper on
 that interpreter or firmware.
+
+After building the MicroPython unix port with `_honch_core`, run the runtime
+smoke test with:
+
+```sh
+MICROPYTHON_BIN=/path/to/micropython/ports/unix/build-standard/micropython \
+  ports/micropython/scripts/run-unix-tests.sh
+```
+
+The runner first imports `_honch_core`, then executes a MicroPython-compatible
+smoke test against the real `honch.Honch` wrapper.

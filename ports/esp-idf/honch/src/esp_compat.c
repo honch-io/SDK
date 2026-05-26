@@ -72,6 +72,17 @@ static honch_err_t honch_esp_status_to_err(honch_status_t status)
     }
 }
 
+static honch_durability_mode_t honch_esp_resolve_durability_mode(honch_durability_mode_t durability_mode)
+{
+    switch (durability_mode) {
+        case HONCH_DURABILITY_SYNC_ALWAYS:
+        case HONCH_DURABILITY_OS_BUFFERED:
+            return durability_mode;
+        default:
+            return HONCH_DURABILITY_OS_BUFFERED;
+    }
+}
+
 static void honch_esp_clear_legacy_globals(void)
 {
     g_honch_api_key = NULL;
@@ -190,7 +201,7 @@ honch_err_t honch_init(const honch_config_t *config)
     core_config.flush_event_threshold = config->flush_event_threshold;
     core_config.battery_callback = config->battery_callback;
     core_config.battery_low_threshold = g_honch_battery_low_threshold;
-    core_config.durability_mode = HONCH_DURABILITY_OS_BUFFERED;
+    core_config.durability_mode = honch_esp_resolve_durability_mode(config->durability_mode);
     core_config.disable_background_flush = 0;
     core_config.platform = &platform_ops;
     core_config.storage = &storage_ops;

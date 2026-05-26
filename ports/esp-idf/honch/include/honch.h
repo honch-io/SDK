@@ -8,6 +8,16 @@
 #include <stdint.h>
 #include "driver/gpio.h"
 
+#ifndef HONCH_CORE_NO_SHORT_STATUS_NAMES
+#define HONCH_CORE_NO_SHORT_STATUS_NAMES
+#define HONCH_ESP_UNDEFINE_CORE_NO_SHORT_STATUS_NAMES
+#endif
+#include "honch/core/config.h"
+#ifdef HONCH_ESP_UNDEFINE_CORE_NO_SHORT_STATUS_NAMES
+#undef HONCH_CORE_NO_SHORT_STATUS_NAMES
+#undef HONCH_ESP_UNDEFINE_CORE_NO_SHORT_STATUS_NAMES
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -43,6 +53,8 @@ typedef struct {
     uint32_t flush_event_threshold;      // optional, default 30
     int (*battery_callback)(void);       // optional, returns 0-100 or -1 if unknown
     int battery_low_threshold;           // optional, default 15
+    honch_durability_mode_t durability_mode; // optional, HONCH_DURABILITY_OS_BUFFERED default;
+                                             // HONCH_DURABILITY_SYNC_ALWAYS for stronger queue persistence
 } honch_config_t;
 
 honch_err_t honch_init(const honch_config_t *config);
