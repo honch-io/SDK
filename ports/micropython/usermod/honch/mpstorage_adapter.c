@@ -146,6 +146,40 @@ static honch_status_t honch_mp_storage_path(char **out, const char *directory, c
     return honch_micropython_join_path(out, directory, name);
 }
 
+static honch_status_t honch_mp_listdir(const char *directory, mp_obj_t *items);
+
+static int honch_mp_name_has_suffix(const char *name, size_t name_size, const char *suffix)
+{
+    size_t suffix_size = strlen(suffix);
+    return name != NULL && name_size >= suffix_size &&
+        memcmp(name + name_size - suffix_size, suffix, suffix_size) == 0;
+}
+
+static honch_status_t honch_mp_cleanup_tmp_files(const char *directory)
+{
+    mp_obj_t items = mp_const_none;
+    honch_status_t status = honch_mp_listdir(directory, &items);
+    if (status != HONCH_STATUS_OK) {
+        return HONCH_STATUS_OK;
+    }
+    size_t count = 0u;
+    mp_obj_t *entries = NULL;
+    mp_obj_get_array(items, &count, &entries);
+    for (size_t i = 0u; i < count; i++) {
+        size_t name_size = 0u;
+        const char *name = mp_obj_str_get_data(entries[i], &name_size);
+        if (!honch_mp_name_has_suffix(name, name_size, ".tmp")) {
+            continue;
+        }
+        char *path = NULL;
+        if (honch_mp_storage_path(&path, directory, name) == HONCH_STATUS_OK) {
+            (void)honch_mp_call_os1(MP_QSTR_remove, path);
+        }
+        free(path);
+    }
+    return HONCH_STATUS_OK;
+}
+
 static honch_status_t honch_mp_state_get(void *ctx, const char *key, uint8_t *buffer, size_t *buffer_size)
 {
     honch_micropython_storage_t *storage = (honch_micropython_storage_t *)ctx;
@@ -522,6 +556,15 @@ honch_status_t honch_micropython_storage_ops_init(
     if (status == HONCH_STATUS_OK) {
         HONCH_MP_DEBUG_INIT("storage_mkdir_state");
         status = honch_mp_mkdir_p(ctx->state_directory);
+    }
+    if (status == HONCH_STATUS_OK) {
+        status = honch_mp_cleanup_tmp_files(ctx->pending_directory);
+    }
+    if (status == HONCH_STATUS_OK) {
+        status = honch_mp_cleanup_tmp_files(ctx->dead_directory);
+    }
+    if (status == HONCH_STATUS_OK) {
+        status = honch_mp_cleanup_tmp_files(ctx->state_directory);
     }
     if (status != HONCH_STATUS_OK) {
         honch_micropython_storage_ops_deinit(ctx);

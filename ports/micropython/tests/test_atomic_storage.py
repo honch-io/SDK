@@ -26,6 +26,15 @@ class MicroPythonAtomicStorageTests(unittest.TestCase):
 
         self.assertIn("(void)honch_mp_call_os1(MP_QSTR_remove, temp_path);", storage)
 
+    def test_storage_init_cleans_orphaned_temp_files(self) -> None:
+        storage = read("ports/micropython/usermod/honch/mpstorage_adapter.c")
+
+        self.assertIn("honch_mp_cleanup_tmp_files", storage)
+        self.assertIn("honch_mp_name_has_suffix(name, name_size, \".tmp\")", storage)
+        self.assertIn("status = honch_mp_cleanup_tmp_files(ctx->pending_directory);", storage)
+        self.assertIn("status = honch_mp_cleanup_tmp_files(ctx->dead_directory);", storage)
+        self.assertIn("status = honch_mp_cleanup_tmp_files(ctx->state_directory);", storage)
+
 
 if __name__ == "__main__":
     unittest.main()
