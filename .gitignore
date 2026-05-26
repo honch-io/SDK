@@ -65,6 +65,3 @@ ports/posix/bench/results/
 
 # Local Honch SDK queues/state created by examples and smoke tests
 .honch-*/
-
-# Local agent instructions
-ports/posix/AGENTS.md
