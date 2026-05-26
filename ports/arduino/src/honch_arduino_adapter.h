@@ -60,6 +60,9 @@ size_t honch_arduino_host_transport_last_body_size(void);
 void honch_arduino_host_transport_set_result(
     honch_status_t status,
     honch_transport_result_t result);
+honch_status_t honch_arduino_host_classify_http_status(
+    int code,
+    honch_transport_result_t *result);
 void honch_arduino_host_set_millis(uint64_t nowMs);
 void honch_arduino_host_advance_millis(uint64_t deltaMs);
 #endif
