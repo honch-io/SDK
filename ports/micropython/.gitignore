@@ -5,5 +5,4 @@ __pycache__/
 .honch-queue/
 honch-state/
 *.mpy
-AGENTS.md
 !package.json
