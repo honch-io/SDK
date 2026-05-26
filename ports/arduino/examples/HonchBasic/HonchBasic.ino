@@ -35,7 +35,8 @@ void setup() {
 
   Honch.begin(config);
   Honch.track("boot", "{}");
-  Honch.flush();
 }
 
-void loop() {}
+void loop() {
+  Honch.tick();
+}

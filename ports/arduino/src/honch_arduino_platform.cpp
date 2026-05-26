@@ -12,6 +12,12 @@
 #include <time.h>
 #endif
 
+#ifndef ARDUINO
+namespace {
+uint64_t g_hostNowMs = 1700000000000ULL;
+}
+#endif
+
 uint64_t honch_arduino_epoch_millis(void *ctx) {
   (void)ctx;
 #ifdef ARDUINO
@@ -22,7 +28,7 @@ uint64_t honch_arduino_epoch_millis(void *ctx) {
   }
   return (uint64_t)millis();
 #else
-  return 1700000000000ULL;
+  return g_hostNowMs;
 #endif
 }
 
@@ -121,3 +127,13 @@ honch_status_t honch_random_hex(char out[33]) {
 }
 
 }
+
+#ifndef ARDUINO
+void honch_arduino_host_set_millis(uint64_t nowMs) {
+  g_hostNowMs = nowMs;
+}
+
+void honch_arduino_host_advance_millis(uint64_t deltaMs) {
+  g_hostNowMs += deltaMs;
+}
+#endif
