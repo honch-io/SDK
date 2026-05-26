@@ -19,16 +19,21 @@ jobs:
     name: Compile examples
     runs-on: ubuntu-latest
     env:
-      HONCH_ARDUINO_HOME: ${{ runner.temp }}/arduino
       HONCH_ARDUINO_FQBNS: esp32:esp32:esp32 esp32:esp32:esp32s2 esp32:esp32:esp32s3 esp32:esp32:esp32c3 esp32:esp32:esp32c6
-      ARDUINO_DIRECTORIES_DATA: ${{ runner.temp }}/arduino/data
-      ARDUINO_DIRECTORIES_DOWNLOADS: ${{ runner.temp }}/arduino/downloads
-      ARDUINO_DIRECTORIES_USER: ${{ runner.temp }}/arduino/user
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: arduino/setup-arduino-cli@v2
+
+      - name: Configure Arduino paths
+        run: |
+          {
+            echo "HONCH_ARDUINO_HOME=$RUNNER_TEMP/arduino"
+            echo "ARDUINO_DIRECTORIES_DATA=$RUNNER_TEMP/arduino/data"
+            echo "ARDUINO_DIRECTORIES_DOWNLOADS=$RUNNER_TEMP/arduino/downloads"
+            echo "ARDUINO_DIRECTORIES_USER=$RUNNER_TEMP/arduino/user"
+          } >> "$GITHUB_ENV"
 
       - name: Configure Arduino CLI
         run: |
