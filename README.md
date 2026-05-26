@@ -32,6 +32,30 @@ SDK contract plus platform SDKs for embedded and connected-device targets.
 
 ## Build and test
 
+### Production release E2E
+
+Use the release campaign runner before release candidates. It runs the
+automatable production gates, writes per-step logs, and generates a readiness
+report under `/private/tmp/honch-production-e2e-*`.
+
+```bash
+python3 tools/release_e2e.py --profile release --continue-on-fail
+```
+
+Profiles:
+
+- `smoke`: fastest deterministic host gate.
+- `host`: deterministic host checks only, no local services or hardware.
+- `services`: local sandbox/capture E2E checks only.
+- `toolchains`: ESP-IDF, Arduino CLI, and PlatformIO compile gates.
+- `hardware`: configured board preflights.
+- `release`: host + services + toolchains.
+- `full`: release + hardware.
+
+Missing required services, toolchains, or hardware inputs are reported as
+`BLOCKED`, not passed. Start the local sandbox with `./honch --plain sandbox`
+before the `services`, `release`, or `full` profiles.
+
 ### C/POSIX
 
 ```bash
