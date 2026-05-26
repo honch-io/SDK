@@ -8,6 +8,8 @@ namespace {
 
 static const uint32_t HONCH_ARDUINO_RETRY_INITIAL_MS = 1000;
 static const uint32_t HONCH_ARDUINO_RETRY_MAX_MS = 300000;
+static const uint32_t HONCH_ARDUINO_DEFAULT_FLUSH_INTERVAL_SECONDS = 60;
+static const uint32_t HONCH_ARDUINO_DEFAULT_FLUSH_EVENT_THRESHOLD = 30;
 
 honch_arduino_platform_t g_platform;
 honch_arduino_storage_t g_storage;
@@ -16,6 +18,14 @@ honch_platform_ops_t g_platformOps;
 honch_storage_ops_t g_storageOps;
 honch_transport_ops_t g_transportOps;
 char g_deviceId[32];
+
+uint32_t resolve_flush_interval_seconds(uint32_t value) {
+  return value == 0 ? HONCH_ARDUINO_DEFAULT_FLUSH_INTERVAL_SECONDS : value;
+}
+
+uint32_t resolve_flush_event_threshold(uint32_t value) {
+  return value == 0 ? HONCH_ARDUINO_DEFAULT_FLUSH_EVENT_THRESHOLD : value;
+}
 
 } // namespace
 
@@ -124,8 +134,8 @@ bool HonchClass::begin(const HonchConfig &config) {
     return setLastStatus(HONCH_ERROR_ALREADY_INITIALIZED);
   }
 
-  _flushIntervalSeconds = config.flushIntervalSeconds;
-  _flushEventThreshold = config.flushEventThreshold;
+  _flushIntervalSeconds = resolve_flush_interval_seconds(config.flushIntervalSeconds);
+  _flushEventThreshold = resolve_flush_event_threshold(config.flushEventThreshold);
   resetScheduler(honch_arduino_epoch_millis(nullptr));
 
   honch_core_config_t coreConfig = honch_arduino_make_core_config(config);

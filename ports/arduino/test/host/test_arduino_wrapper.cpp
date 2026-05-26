@@ -95,5 +95,20 @@ int main() {
   assert(Honch.loop());
   assert(honch_arduino_host_transport_call_count() > 0);
   assert(Honch.shutdown());
+
+  HonchConfig defaultScheduledConfig = config;
+  defaultScheduledConfig.flushIntervalSeconds = 0;
+  defaultScheduledConfig.flushEventThreshold = 0;
+  honch_arduino_host_transport_reset();
+  honch_arduino_host_set_millis(10000);
+  assert(Honch.begin(defaultScheduledConfig));
+  assert(Honch.track("default_interval", "{}"));
+  honch_arduino_host_advance_millis(59000);
+  assert(Honch.tick());
+  assert(honch_arduino_host_transport_call_count() == 0);
+  honch_arduino_host_advance_millis(1000);
+  assert(Honch.tick());
+  assert(honch_arduino_host_transport_call_count() > 0);
+  assert(Honch.shutdown());
   return 0;
 }
