@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(honch_posix_sdk C)
+project(honch_posix_sdk VERSION 0.1.0 LANGUAGES C)
+
+include(CMakePackageConfigHelpers)
+include(GNUInstallDirs)
 
 option(HONCH_BUILD_TESTS "Build Honch POSIX SDK tests" ON)
 option(HONCH_BUILD_EXAMPLES "Build Honch POSIX SDK examples" ON)
@@ -48,14 +51,14 @@ set(HONCH_POSIX_SOURCES
 function(honch_configure_posix_target target)
     target_include_directories(${target}
         PUBLIC
-            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../core/include>
+            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
         PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/../../core/src
     )
 
     target_link_libraries(${target}
-        PUBLIC
-            honch_core_objects
         PRIVATE
             CURL::libcurl
             Threads::Threads
@@ -163,3 +166,43 @@ if(HONCH_BUILD_BENCHMARKS)
 
     add_subdirectory(bench)
 endif()
+
+set(HONCH_POSIX_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/honch_posix")
+
+install(TARGETS honch_posix
+    EXPORT honch_posixTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+install(DIRECTORY include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../../core/include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+configure_package_config_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/honch_posixConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/honch_posixConfig.cmake
+    INSTALL_DESTINATION ${HONCH_POSIX_INSTALL_CMAKEDIR}
+)
+
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/honch_posixConfigVersion.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+install(EXPORT honch_posixTargets
+    NAMESPACE honch::
+    DESTINATION ${HONCH_POSIX_INSTALL_CMAKEDIR}
+)
+
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/honch_posixConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/honch_posixConfigVersion.cmake
+    DESTINATION ${HONCH_POSIX_INSTALL_CMAKEDIR}
+)

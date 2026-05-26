@@ -20,6 +20,7 @@ struct honch_arduino_storage {
 struct honch_arduino_transport {
   const char *apiKey;
   const char *host;
+  const char *rootCaPem;
   bool insecureSkipTlsVerify;
 };
 

@@ -9,6 +9,7 @@ int main() {
   HonchConfig config = {
     .apiKey = "test-key",
     .host = "http://127.0.0.1:8001",
+    .rootCaPem = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n",
     .deviceModel = "host-esp32",
     .firmwareVersion = "1.0.0",
     .environment = "test",
