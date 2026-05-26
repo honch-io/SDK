@@ -77,6 +77,14 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertNotIn("enable_wire_v2", config)
         self.assertNotIn("enable_wire_v2", client)
 
+    def test_micropython_transport_passes_configured_timeout_to_requests(self):
+        transport = self.read("ports/micropython/usermod/honch/mptransport_adapter.c")
+
+        self.assertIn("honch_mp_timeout_seconds", transport)
+        self.assertIn('MP_OBJ_NEW_QSTR(qstr_from_str("timeout"))', transport)
+        self.assertIn("mp_call_function_n_kw(post, 1, 3, args)", transport)
+        self.assertIn("transport->timeout_ms", transport)
+
     def test_python_client_is_thin_wrapper_over_c_module(self):
         client = self.read("ports/micropython/honch/client.py")
 
