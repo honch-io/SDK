@@ -46,11 +46,17 @@ void setup() {
 
   Honch.begin(config);
   Honch.track("boot", "{}");
-  Honch.flush();
 }
 
-void loop() {}
+void loop() {
+  Honch.tick();
+}
 ```
+
+`Honch.tick()` performs scheduled flush work when `flushIntervalSeconds` has
+elapsed or `flushEventThreshold` queued events have been reached. It does not
+start a hidden background task; call it from `loop()` or your own firmware task.
+Use `Honch.loop()` as an alias if that reads better in your sketch.
 
 ## Examples
 
@@ -94,3 +100,5 @@ HONCH_ARDUINO_HOME="/Volumes/X9 Pro/honch-arduino-verify" \
 - JSON strings are the v0 property interface; no Arduino property-builder DSL is included.
 - TLS root CA PEM configuration is application-owned via `rootCaPem`.
   `insecureSkipTlsVerify` exists for local testing only.
+- Scheduled flushing is cooperative. It runs only when the sketch calls
+  `Honch.tick()` or `Honch.loop()`.

@@ -20,6 +20,9 @@ int main() {
     .insecureSkipTlsVerify = true,
   };
 
+  assert(!Honch.tick());
+  assert(strcmp(Honch.lastError(), "not initialized") == 0);
+
   assert(Honch.begin(config));
   assert(Honch.track("button_pressed", "{\"count\":1}"));
   assert(Honch.identify("user-1", "{\"role\":\"tester\"}"));
@@ -47,6 +50,32 @@ int main() {
   assert(strlen(honch_arduino_host_transport_last_stream_id()) > 0);
   assert(honch_arduino_host_transport_last_body_size() > 0);
   assert(honch_arduino_host_transport_last_body() != NULL);
+  assert(Honch.shutdown());
+
+  HonchConfig scheduledConfig = config;
+  scheduledConfig.flushIntervalSeconds = 2;
+  scheduledConfig.flushEventThreshold = 2;
+  honch_arduino_host_transport_reset();
+  honch_arduino_host_set_millis(1000);
+  assert(Honch.begin(scheduledConfig));
+  assert(Honch.track("scheduled_one", "{}"));
+  assert(Honch.tick());
+  assert(honch_arduino_host_transport_call_count() == 0);
+  assert(Honch.track("scheduled_two", "{}"));
+  assert(Honch.tick());
+  assert(honch_arduino_host_transport_call_count() > 0);
+  assert(Honch.shutdown());
+
+  honch_arduino_host_transport_reset();
+  honch_arduino_host_set_millis(5000);
+  assert(Honch.begin(scheduledConfig));
+  assert(Honch.track("interval_one", "{}"));
+  honch_arduino_host_advance_millis(1000);
+  assert(Honch.loop());
+  assert(honch_arduino_host_transport_call_count() == 0);
+  honch_arduino_host_advance_millis(1000);
+  assert(Honch.loop());
+  assert(honch_arduino_host_transport_call_count() > 0);
   assert(Honch.shutdown());
   return 0;
 }

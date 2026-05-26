@@ -6,6 +6,9 @@ HonchClass Honch;
 
 namespace {
 
+static const uint32_t HONCH_ARDUINO_RETRY_INITIAL_MS = 1000;
+static const uint32_t HONCH_ARDUINO_RETRY_MAX_MS = 300000;
+
 honch_arduino_platform_t g_platform;
 honch_arduino_storage_t g_storage;
 honch_arduino_transport_t g_transport;
@@ -49,11 +52,71 @@ honch_core_config_t honch_arduino_make_core_config(const HonchConfig &config) {
 
 void honch_arduino_release_core_config(honch_core_config_t *) {}
 
-HonchClass::HonchClass() : _client(nullptr), _lastStatus(HONCH_ERROR_NOT_INITIALIZED) {}
+HonchClass::HonchClass()
+    : _client(nullptr),
+      _lastStatus(HONCH_ERROR_NOT_INITIALIZED),
+      _flushIntervalSeconds(0),
+      _flushEventThreshold(0),
+      _queuedSinceFlush(0),
+      _nextIntervalFlushMs(0),
+      _nextRetryFlushMs(0),
+      _retryDelayMs(HONCH_ARDUINO_RETRY_INITIAL_MS) {}
 
 bool HonchClass::setLastStatus(honch_status_t status) {
   _lastStatus = status;
   return status == HONCH_OK;
+}
+
+bool HonchClass::recordQueuedStatus(honch_status_t status) {
+  if (status == HONCH_OK) {
+    _queuedSinceFlush++;
+  }
+  return setLastStatus(status);
+}
+
+void HonchClass::resetScheduler(uint64_t nowMs) {
+  _queuedSinceFlush = 0;
+  _nextRetryFlushMs = 0;
+  _retryDelayMs = HONCH_ARDUINO_RETRY_INITIAL_MS;
+  _nextIntervalFlushMs = _flushIntervalSeconds == 0 ? 0 : nowMs + ((uint64_t)_flushIntervalSeconds * 1000ULL);
+}
+
+bool HonchClass::schedulerDue(uint64_t nowMs) const {
+  if (_client == nullptr) {
+    return false;
+  }
+  if (_nextRetryFlushMs != 0 && nowMs < _nextRetryFlushMs) {
+    return false;
+  }
+  if (_flushEventThreshold > 0 && _queuedSinceFlush >= _flushEventThreshold) {
+    return true;
+  }
+  return _flushIntervalSeconds > 0 && nowMs >= _nextIntervalFlushMs;
+}
+
+void HonchClass::recordSchedulerFlushResult(honch_status_t status, uint64_t nowMs) {
+  if (status == HONCH_OK) {
+    _queuedSinceFlush = 0;
+    _nextRetryFlushMs = 0;
+    _retryDelayMs = HONCH_ARDUINO_RETRY_INITIAL_MS;
+    _nextIntervalFlushMs = _flushIntervalSeconds == 0 ? 0 : nowMs + ((uint64_t)_flushIntervalSeconds * 1000ULL);
+    return;
+  }
+
+  if (status == HONCH_ERROR_TRANSPORT ||
+      status == HONCH_ERROR_RATE_LIMITED ||
+      status == HONCH_ERROR_TIMEOUT ||
+      status == HONCH_ERROR_SERVER) {
+    _nextRetryFlushMs = nowMs + _retryDelayMs;
+    if (_retryDelayMs < HONCH_ARDUINO_RETRY_MAX_MS / 2U) {
+      _retryDelayMs *= 2U;
+    } else {
+      _retryDelayMs = HONCH_ARDUINO_RETRY_MAX_MS;
+    }
+    return;
+  }
+
+  _nextIntervalFlushMs = _flushIntervalSeconds == 0 ? 0 : nowMs + ((uint64_t)_flushIntervalSeconds * 1000ULL);
 }
 
 bool HonchClass::begin(const HonchConfig &config) {
@@ -61,34 +124,61 @@ bool HonchClass::begin(const HonchConfig &config) {
     return setLastStatus(HONCH_ERROR_ALREADY_INITIALIZED);
   }
 
+  _flushIntervalSeconds = config.flushIntervalSeconds;
+  _flushEventThreshold = config.flushEventThreshold;
+  resetScheduler(honch_arduino_epoch_millis(nullptr));
+
   honch_core_config_t coreConfig = honch_arduino_make_core_config(config);
   honch_status_t status = honch_core_init(&_client, &coreConfig);
   honch_arduino_release_core_config(&coreConfig);
+  if (status != HONCH_OK) {
+    _client = nullptr;
+    resetScheduler(honch_arduino_epoch_millis(nullptr));
+  }
   return setLastStatus(status);
 }
 
 bool HonchClass::track(const char *eventName, const char *propertiesJson) {
-  return setLastStatus(honch_core_track(_client, eventName, propertiesJson == nullptr ? "{}" : propertiesJson));
+  return recordQueuedStatus(honch_core_track(_client, eventName, propertiesJson == nullptr ? "{}" : propertiesJson));
 }
 
 bool HonchClass::identify(const char *distinctId, const char *traitsJson) {
-  return setLastStatus(honch_core_identify(_client, distinctId, traitsJson == nullptr ? "{}" : traitsJson));
+  return recordQueuedStatus(honch_core_identify(_client, distinctId, traitsJson == nullptr ? "{}" : traitsJson));
 }
 
 bool HonchClass::setProperty(const char *key, const char *valueJson) {
-  return setLastStatus(honch_core_set_property(_client, key, valueJson == nullptr ? "null" : valueJson));
+  return recordQueuedStatus(honch_core_set_property(_client, key, valueJson == nullptr ? "null" : valueJson));
 }
 
 bool HonchClass::sessionStart(const char *sessionName) {
-  return setLastStatus(honch_core_session_start(_client, sessionName));
+  return recordQueuedStatus(honch_core_session_start(_client, sessionName));
 }
 
 bool HonchClass::sessionEnd() {
-  return setLastStatus(honch_core_session_end(_client));
+  return recordQueuedStatus(honch_core_session_end(_client));
 }
 
 bool HonchClass::flush() {
-  return setLastStatus(honch_core_flush(_client));
+  honch_status_t status = honch_core_flush(_client);
+  recordSchedulerFlushResult(status, honch_arduino_epoch_millis(nullptr));
+  return setLastStatus(status);
+}
+
+bool HonchClass::tick() {
+  if (_client == nullptr) {
+    return setLastStatus(HONCH_ERROR_NOT_INITIALIZED);
+  }
+  uint64_t nowMs = honch_arduino_epoch_millis(nullptr);
+  if (!schedulerDue(nowMs)) {
+    return true;
+  }
+  honch_status_t status = honch_core_flush(_client);
+  recordSchedulerFlushResult(status, nowMs);
+  return setLastStatus(status);
+}
+
+bool HonchClass::loop() {
+  return tick();
 }
 
 bool HonchClass::shutdown() {
@@ -99,6 +189,7 @@ bool HonchClass::shutdown() {
   honch_client_t *client = _client;
   _client = nullptr;
   honch_status_t status = honch_core_shutdown(client);
+  resetScheduler(honch_arduino_epoch_millis(nullptr));
   return setLastStatus(status);
 }
 

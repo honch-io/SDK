@@ -39,4 +39,6 @@ void setup() {
   Honch.flush();
 }
 
-void loop() {}
+void loop() {
+  Honch.tick();
+}
