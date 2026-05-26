@@ -117,6 +117,7 @@ idf.py flash monitor
 | `flush_event_threshold`  | No       | 30             | Flush when this many events are queued     |
 | `battery_callback`       | No       | NULL           | Function returning 0-100 or -1             |
 | `battery_low_threshold`  | No       | 15             | Battery level that triggers `$battery_low` |
+| `durability_mode`        | No       | `HONCH_DURABILITY_OS_BUFFERED` | Queue write durability mode |
 
 Background flush is enabled by default. The SDK flushes after
 `flush_interval_seconds` and also wakes the flush worker when the queue reaches
@@ -140,10 +141,12 @@ rejections are discarded on ESP-IDF because persisting unused dead-letter
 payloads can exhaust the small default NVS partition shared with Wi-Fi
 calibration data.
 
-If your product needs stricter reboot durability, the ESP-IDF storage adapter can
-be configured as an NVS-only queue by skipping the RAM queue setup and using the
-NVS queue operations directly. That mode is slower because each queued event is
-written to flash, but it forces queued events through persistent storage.
+If your product needs stricter reboot durability for NVS-backed queue writes, set
+`durability_mode` to `HONCH_DURABILITY_SYNC_ALWAYS`. The default
+`HONCH_DURABILITY_OS_BUFFERED` mode favors normal platform buffering. With the
+default public init path, new events still enter the caller-provided RAM queue
+first; strict durability only applies once events use the persistent storage
+adapter.
 
 ## Troubleshooting
 

@@ -23,6 +23,13 @@ class EspIdfDurabilityConfigTests(unittest.TestCase):
         self.assertIn("honch_esp_resolve_durability_mode(config->durability_mode)", compat)
         self.assertNotIn("core_config.durability_mode = HONCH_DURABILITY_OS_BUFFERED;", compat)
 
+    def test_readme_documents_durability_mode(self) -> None:
+        readme = read("ports/esp-idf/README.md")
+
+        self.assertIn("durability_mode", readme)
+        self.assertIn("HONCH_DURABILITY_OS_BUFFERED", readme)
+        self.assertIn("HONCH_DURABILITY_SYNC_ALWAYS", readme)
+
 
 if __name__ == "__main__":
     unittest.main()
