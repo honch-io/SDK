@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(honch_posix_sdk VERSION 0.1.0 LANGUAGES C)
+project(honch_posix_sdk VERSION 0.2.0 LANGUAGES C)
 
 include(CMakePackageConfigHelpers)
 include(GNUInstallDirs)
