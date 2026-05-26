@@ -32,6 +32,14 @@ static honch_status_t honch_mp_chunk_url(const char *endpoint_url, char **out)
     return honch_mp_endpoint_url(endpoint_url, "/capture", out);
 }
 
+static unsigned int honch_mp_timeout_seconds(unsigned int timeout_ms)
+{
+    if (timeout_ms == 0u) {
+        return 0u;
+    }
+    return (timeout_ms + 999u) / 1000u;
+}
+
 static honch_status_t honch_mp_post_chunk(
     void *ctx,
     const char *endpoint_url,
@@ -69,14 +77,17 @@ static honch_status_t honch_mp_post_chunk(
         mp_obj_dict_store(headers, mp_obj_new_str("X-Honch-Stream-Id", 17), mp_obj_new_str(stream_id, strlen(stream_id)));
     }
 
-    mp_obj_t args[5] = {
+    unsigned int timeout_seconds = honch_mp_timeout_seconds(transport->timeout_ms);
+    mp_obj_t args[7] = {
         mp_obj_new_str(url, strlen(url)),
         MP_OBJ_NEW_QSTR(MP_QSTR_data),
         mp_obj_new_bytes(body, body_size),
         MP_OBJ_NEW_QSTR(MP_QSTR_headers),
         headers,
+        MP_OBJ_NEW_QSTR(qstr_from_str("timeout")),
+        mp_obj_new_int_from_uint(timeout_seconds),
     };
-    mp_obj_t response = mp_call_function_n_kw(post, 1, 2, args);
+    mp_obj_t response = mp_call_function_n_kw(post, 1, 3, args);
     mp_obj_t status_obj = mp_load_attr(response, MP_QSTR_status_code);
     int http_status = mp_obj_get_int(status_obj);
     (void)honch_micropython_call_noarg_attr(response, MP_QSTR_close);
