@@ -1,0 +1,45 @@
+{
+  "name": "Honch",
+  "version": "0.1.0",
+  "description": "Product analytics for connected ESP32 devices.",
+  "keywords": [
+    "analytics",
+    "esp32",
+    "telemetry"
+  ],
+  "homepage": "https://github.com/honch-io/honch",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/honch-io/honch.git"
+  },
+  "authors": [
+    {
+      "name": "Honch",
+      "email": "support@honch.io",
+      "maintainer": true
+    }
+  ],
+  "license": "Proprietary",
+  "frameworks": "arduino",
+  "platforms": "espressif32",
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src"
+  },
+  "examples": [
+    {
+      "name": "HonchBasic",
+      "base": "examples/HonchBasic",
+      "files": [
+        "HonchBasic.ino"
+      ]
+    },
+    {
+      "name": "HonchOfflineQueue",
+      "base": "examples/HonchOfflineQueue",
+      "files": [
+        "HonchOfflineQueue.ino"
+      ]
+    }
+  ]
+}

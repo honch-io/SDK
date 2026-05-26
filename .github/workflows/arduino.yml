@@ -43,3 +43,9 @@ jobs:
 
       - name: Verify Arduino SDK
         run: ports/arduino/scripts/verify-arduino.sh --require-arduino-cli
+
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade platformio
+
+      - name: Verify PlatformIO example
+        run: pio run -d ports/arduino/examples/platformio
