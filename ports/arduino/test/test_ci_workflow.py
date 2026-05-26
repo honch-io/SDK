@@ -43,7 +43,8 @@ class ArduinoCIWorkflowTests(unittest.TestCase):
         self.assertIn("arduino/setup-arduino-cli", workflow)
         self.assertIn("arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json", workflow)
         self.assertIn("arduino-cli core install esp32:esp32", workflow)
-        self.assertIn("HONCH_ARDUINO_HOME:", workflow)
+        self.assertNotIn("runner.temp", workflow)
+        self.assertIn("HONCH_ARDUINO_HOME=$RUNNER_TEMP/arduino", workflow)
         self.assertIn("ports/arduino/scripts/verify-arduino.sh --require-arduino-cli", workflow)
 
     def test_platformio_manifest_declares_arduino_esp32_library(self) -> None:
