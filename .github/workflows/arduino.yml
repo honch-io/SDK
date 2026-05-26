@@ -1,0 +1,45 @@
+name: Arduino ESP32 SDK
+
+on:
+  push:
+    paths:
+      - "core/**"
+      - "ports/arduino/**"
+      - "spec/**"
+      - ".github/workflows/arduino.yml"
+  pull_request:
+    paths:
+      - "core/**"
+      - "ports/arduino/**"
+      - "spec/**"
+      - ".github/workflows/arduino.yml"
+
+jobs:
+  compile:
+    name: Compile examples
+    runs-on: ubuntu-latest
+    env:
+      HONCH_ARDUINO_HOME: ${{ runner.temp }}/arduino
+      HONCH_ARDUINO_FQBNS: esp32:esp32:esp32 esp32:esp32:esp32s2 esp32:esp32:esp32s3 esp32:esp32:esp32c3 esp32:esp32:esp32c6
+      ARDUINO_DIRECTORIES_DATA: ${{ runner.temp }}/arduino/data
+      ARDUINO_DIRECTORIES_DOWNLOADS: ${{ runner.temp }}/arduino/downloads
+      ARDUINO_DIRECTORIES_USER: ${{ runner.temp }}/arduino/user
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: arduino/setup-arduino-cli@v2
+
+      - name: Configure Arduino CLI
+        run: |
+          mkdir -p "$ARDUINO_DIRECTORIES_DATA" "$ARDUINO_DIRECTORIES_DOWNLOADS" "$ARDUINO_DIRECTORIES_USER"
+          arduino-cli config init --overwrite
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+
+      - name: Install ESP32 Arduino core
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32
+
+      - name: Verify Arduino SDK
+        run: ports/arduino/scripts/verify-arduino.sh --require-arduino-cli
