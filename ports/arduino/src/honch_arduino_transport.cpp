@@ -40,6 +40,46 @@ std::string capture_url(const char *host) {
   return url;
 }
 
+honch_status_t classify_http_status(int code, honch_transport_result_t *result) {
+  if (result == nullptr) {
+    return HONCH_ERROR_INVALID_ARGUMENT;
+  }
+  if (code == 202) {
+    *result = HONCH_TRANSPORT_CHUNK_STORED;
+    return HONCH_OK;
+  }
+  if (code == 204) {
+    *result = HONCH_TRANSPORT_ACCEPTED;
+    return HONCH_OK;
+  }
+  if (code == 401) {
+    *result = HONCH_TRANSPORT_AUTH_ERROR;
+    return HONCH_ERROR_REJECTED;
+  }
+  if (code == 408) {
+    *result = HONCH_TRANSPORT_RETRY;
+    return HONCH_ERROR_TIMEOUT;
+  }
+  if (code == 409) {
+    *result = HONCH_TRANSPORT_RETRY;
+    return HONCH_ERROR_TRANSPORT;
+  }
+  if (code == 429) {
+    *result = HONCH_TRANSPORT_RETRY;
+    return HONCH_ERROR_RATE_LIMITED;
+  }
+  if (code >= 500) {
+    *result = HONCH_TRANSPORT_RETRY;
+    return HONCH_ERROR_SERVER;
+  }
+  if (code >= 400) {
+    *result = HONCH_TRANSPORT_REJECTED;
+    return HONCH_ERROR_REJECTED;
+  }
+  *result = HONCH_TRANSPORT_RETRY;
+  return HONCH_ERROR_TRANSPORT;
+}
+
 honch_status_t arduino_post_chunk(
     void *ctx,
     const char *endpointUrl,
@@ -85,22 +125,7 @@ honch_status_t arduino_post_chunk(
 
   int code = http.POST(const_cast<uint8_t *>(body), bodySize);
   http.end();
-  if (code >= 200 && code < 300) {
-    *result = HONCH_TRANSPORT_ACCEPTED;
-    return HONCH_OK;
-  }
-  if (code == 400 || code == 401 || code == 404) {
-    *result = code == 401 ? HONCH_TRANSPORT_AUTH_ERROR : HONCH_TRANSPORT_REJECTED;
-    return HONCH_ERROR_REJECTED;
-  }
-  *result = HONCH_TRANSPORT_RETRY;
-  if (code == 429) {
-    return HONCH_ERROR_RATE_LIMITED;
-  }
-  if (code >= 500) {
-    return HONCH_ERROR_SERVER;
-  }
-  return HONCH_ERROR_TRANSPORT;
+  return classify_http_status(code, result);
 #else
   g_hostTransport.calls++;
   g_hostTransport.url = capture_url(endpointUrl);
@@ -172,5 +197,11 @@ void honch_arduino_host_transport_set_result(
     honch_transport_result_t result) {
   g_hostTransport.status = status;
   g_hostTransport.result = result;
+}
+
+honch_status_t honch_arduino_host_classify_http_status(
+    int code,
+    honch_transport_result_t *result) {
+  return classify_http_status(code, result);
 }
 #endif

@@ -4,6 +4,12 @@
 #include "../../src/Honch.h"
 #include "../../src/honch_arduino_adapter.h"
 
+static void assert_http_status(int code, honch_status_t status, honch_transport_result_t result) {
+  honch_transport_result_t actualResult = HONCH_TRANSPORT_RETRY;
+  assert(honch_arduino_host_classify_http_status(code, &actualResult) == status);
+  assert(actualResult == result);
+}
+
 int main() {
   static uint8_t buffer[8192];
   HonchConfig config = {
@@ -51,6 +57,18 @@ int main() {
   assert(honch_arduino_host_transport_last_body_size() > 0);
   assert(honch_arduino_host_transport_last_body() != NULL);
   assert(Honch.shutdown());
+
+  assert_http_status(202, HONCH_OK, HONCH_TRANSPORT_CHUNK_STORED);
+  assert_http_status(204, HONCH_OK, HONCH_TRANSPORT_ACCEPTED);
+  assert_http_status(400, HONCH_ERROR_REJECTED, HONCH_TRANSPORT_REJECTED);
+  assert_http_status(401, HONCH_ERROR_REJECTED, HONCH_TRANSPORT_AUTH_ERROR);
+  assert_http_status(408, HONCH_ERROR_TIMEOUT, HONCH_TRANSPORT_RETRY);
+  assert_http_status(409, HONCH_ERROR_TRANSPORT, HONCH_TRANSPORT_RETRY);
+  assert_http_status(413, HONCH_ERROR_REJECTED, HONCH_TRANSPORT_REJECTED);
+  assert_http_status(415, HONCH_ERROR_REJECTED, HONCH_TRANSPORT_REJECTED);
+  assert_http_status(422, HONCH_ERROR_REJECTED, HONCH_TRANSPORT_REJECTED);
+  assert_http_status(429, HONCH_ERROR_RATE_LIMITED, HONCH_TRANSPORT_RETRY);
+  assert_http_status(500, HONCH_ERROR_SERVER, HONCH_TRANSPORT_RETRY);
 
   HonchConfig scheduledConfig = config;
   scheduledConfig.flushIntervalSeconds = 2;
