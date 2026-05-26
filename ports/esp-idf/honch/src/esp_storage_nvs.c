@@ -286,6 +286,32 @@ static honch_esp_ram_queue_entry_t *honch_esp_ram_queue_find(
     return NULL;
 }
 
+static bool honch_esp_sequence_list_contains(
+    const uint64_t *sequences,
+    size_t sequence_count,
+    uint64_t sequence)
+{
+    for (size_t i = 0u; i < sequence_count; i++) {
+        if (sequences[i] == sequence) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool honch_esp_ram_queue_contains_all(
+    honch_esp_storage_t *storage,
+    const uint64_t *sequences,
+    size_t sequence_count)
+{
+    for (size_t i = 0u; i < sequence_count; i++) {
+        if (honch_esp_ram_queue_find(storage, sequences[i]) == NULL) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static honch_status_t honch_esp_ram_reader_read(
     void *ctx,
     uint32_t offset,
@@ -303,6 +329,58 @@ static honch_status_t honch_esp_ram_reader_read(
     }
 
     memcpy(buffer, storage->ram_buffer + entry->offset + offset, buffer_size);
+    return HONCH_STATUS_OK;
+}
+
+static honch_status_t honch_esp_ram_queue_read_batch(
+    honch_esp_storage_t *storage,
+    honch_storage_event_t *events,
+    size_t max_events,
+    size_t max_event_bytes,
+    size_t *event_count)
+{
+    if (storage == NULL || events == NULL || event_count == NULL) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+
+    *event_count = 0u;
+    if (max_events == 0u) {
+        return HONCH_STATUS_OK;
+    }
+    if (!honch_esp_ram_queue_has_events(storage)) {
+        return HONCH_STATUS_ERROR_NOT_INITIALIZED;
+    }
+
+    size_t count = 0u;
+    while (count < max_events && count < storage->ram_count) {
+        honch_esp_ram_queue_entry_t *entry = &storage->ram_entries[count];
+        if (entry->size == 0u || entry->size > max_event_bytes) {
+            for (size_t i = 0u; i < count; i++) {
+                free(events[i].data);
+                events[i] = (honch_storage_event_t){0};
+            }
+            return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+        }
+
+        uint8_t *copy = (uint8_t *)malloc(entry->size);
+        if (copy == NULL) {
+            for (size_t i = 0u; i < count; i++) {
+                free(events[i].data);
+                events[i] = (honch_storage_event_t){0};
+            }
+            return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
+        }
+
+        memcpy(copy, storage->ram_buffer + entry->offset, entry->size);
+        events[count] = (honch_storage_event_t) {
+            .data = copy,
+            .length = entry->size,
+            .sequence = entry->sequence
+        };
+        count++;
+    }
+
+    *event_count = count;
     return HONCH_STATUS_OK;
 }
 
@@ -408,6 +486,47 @@ static honch_status_t honch_esp_ram_queue_consume(honch_esp_storage_t *storage, 
     }
 
     return HONCH_STATUS_ERROR_NOT_INITIALIZED;
+}
+
+static honch_status_t honch_esp_ram_queue_consume_batch(
+    honch_esp_storage_t *storage,
+    const uint64_t *sequences,
+    size_t sequence_count)
+{
+    if (storage == NULL || (sequences == NULL && sequence_count > 0u)) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    if (sequence_count == 0u) {
+        return HONCH_STATUS_OK;
+    }
+    if (!honch_esp_ram_queue_contains_all(storage, sequences, sequence_count)) {
+        return HONCH_STATUS_ERROR_NOT_INITIALIZED;
+    }
+
+    size_t write_count = 0u;
+    size_t write_offset = 0u;
+    for (size_t read_count = 0u; read_count < storage->ram_count; read_count++) {
+        honch_esp_ram_queue_entry_t entry = storage->ram_entries[read_count];
+        if (honch_esp_sequence_list_contains(sequences, sequence_count, entry.sequence)) {
+            continue;
+        }
+
+        if ((size_t)entry.offset != write_offset) {
+            memmove(
+                storage->ram_buffer + write_offset,
+                storage->ram_buffer + entry.offset,
+                entry.size);
+        }
+        entry.offset = (uint32_t)write_offset;
+        storage->ram_entries[write_count++] = entry;
+        write_offset += entry.size;
+    }
+
+    storage->ram_count = write_count;
+    storage->ram_used = write_offset;
+    storage->peek_sequence = UINT64_MAX;
+    storage->read_sequence = UINT64_MAX;
+    return HONCH_STATUS_OK;
 }
 
 static honch_status_t honch_esp_queue_drop_oldest(void *ctx)
@@ -652,6 +771,32 @@ static honch_status_t honch_esp_queue_peek(void *ctx, honch_storage_reader_t *re
     return honch_esp_nvs_queue_peek(ctx, reader);
 }
 
+static honch_status_t honch_esp_queue_read_batch(
+    void *ctx,
+    honch_storage_event_t *events,
+    size_t max_events,
+    size_t max_event_bytes,
+    size_t *event_count)
+{
+    honch_esp_storage_t *storage = (honch_esp_storage_t *)ctx;
+    if (honch_esp_ram_queue_has_events(storage)) {
+        return honch_esp_ram_queue_read_batch(
+            storage,
+            events,
+            max_events,
+            max_event_bytes,
+            event_count);
+    }
+
+    if (event_count != NULL) {
+        *event_count = 0u;
+    }
+    if (storage != NULL && storage->nvs_fallback_active) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    return HONCH_STATUS_ERROR_NOT_INITIALIZED;
+}
+
 static honch_status_t honch_esp_queue_consume(void *ctx, uint64_t sequence)
 {
     honch_esp_storage_t *storage = (honch_esp_storage_t *)ctx;
@@ -673,6 +818,33 @@ static honch_status_t honch_esp_queue_consume(void *ctx, uint64_t sequence)
     return status;
 }
 
+static honch_status_t honch_esp_queue_consume_batch(
+    void *ctx,
+    const uint64_t *sequences,
+    size_t sequence_count)
+{
+    honch_esp_storage_t *storage = (honch_esp_storage_t *)ctx;
+    if (storage == NULL || (sequences == NULL && sequence_count > 0u)) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    if (sequence_count == 0u) {
+        return HONCH_STATUS_OK;
+    }
+
+    if (honch_esp_ram_queue_contains_all(storage, sequences, sequence_count)) {
+        return honch_esp_ram_queue_consume_batch(storage, sequences, sequence_count);
+    }
+
+    honch_status_t status = HONCH_STATUS_OK;
+    for (size_t i = 0u; i < sequence_count; i++) {
+        status = honch_esp_queue_consume(ctx, sequences[i]);
+        if (status != HONCH_STATUS_OK) {
+            return status;
+        }
+    }
+    return HONCH_STATUS_OK;
+}
+
 static honch_status_t honch_esp_queue_dead_letter(void *ctx, uint64_t sequence)
 {
     honch_esp_storage_t *storage = (honch_esp_storage_t *)ctx;
@@ -681,6 +853,33 @@ static honch_status_t honch_esp_queue_dead_letter(void *ctx, uint64_t sequence)
     }
 
     return honch_esp_queue_erase_sequence(sequence);
+}
+
+static honch_status_t honch_esp_queue_dead_letter_batch(
+    void *ctx,
+    const uint64_t *sequences,
+    size_t sequence_count)
+{
+    honch_esp_storage_t *storage = (honch_esp_storage_t *)ctx;
+    if (storage == NULL || (sequences == NULL && sequence_count > 0u)) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    if (sequence_count == 0u) {
+        return HONCH_STATUS_OK;
+    }
+
+    if (honch_esp_ram_queue_contains_all(storage, sequences, sequence_count)) {
+        return honch_esp_ram_queue_consume_batch(storage, sequences, sequence_count);
+    }
+
+    honch_status_t status = HONCH_STATUS_OK;
+    for (size_t i = 0u; i < sequence_count; i++) {
+        status = honch_esp_queue_dead_letter(ctx, sequences[i]);
+        if (status != HONCH_STATUS_OK) {
+            return status;
+        }
+    }
+    return HONCH_STATUS_OK;
 }
 
 static honch_status_t honch_esp_erase_namespace(const char *namespace_name)
@@ -722,6 +921,10 @@ static honch_status_t honch_esp_queue_depth(void *ctx, size_t *depth)
     if (storage != NULL) {
         storage->peek_sequence = UINT64_MAX;
     }
+    if (storage != NULL && !storage->nvs_fallback_active) {
+        *depth = storage->ram_count;
+        return HONCH_STATUS_OK;
+    }
 
     size_t nvs_depth = 0u;
     honch_status_t status = honch_esp_nvs_queue_depth(&nvs_depth);
@@ -755,8 +958,11 @@ honch_status_t honch_esp_storage_ops_init(honch_storage_ops_t *ops, honch_esp_st
         .state_delete = honch_esp_state_delete,
         .queue_push = honch_esp_queue_push,
         .queue_peek = honch_esp_queue_peek,
+        .queue_read_batch = honch_esp_queue_read_batch,
         .queue_consume = honch_esp_queue_consume,
+        .queue_consume_batch = honch_esp_queue_consume_batch,
         .queue_dead_letter = honch_esp_queue_dead_letter,
+        .queue_dead_letter_batch = honch_esp_queue_dead_letter_batch,
         .queue_drop_oldest = honch_esp_queue_drop_oldest,
         .queue_clear = honch_esp_queue_clear,
         .queue_depth = honch_esp_queue_depth,
