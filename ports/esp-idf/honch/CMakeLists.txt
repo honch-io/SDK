@@ -27,10 +27,11 @@ idf_component_register(
     SRCS
         ${HONCH_ESP_PORT_SOURCES}
         ${HONCH_CORE_SOURCES}
-    INCLUDE_DIRS "${HONCH_ESP_COMPONENT_DIR}/include"
+    INCLUDE_DIRS
+        "${HONCH_ESP_COMPONENT_DIR}/include"
+        "${HONCH_SDK_ROOT}/core/include"
     PRIV_INCLUDE_DIRS
         "${HONCH_ESP_COMPONENT_DIR}/src"
-        "${HONCH_SDK_ROOT}/core/include"
         "${HONCH_SDK_ROOT}/core/src"
     REQUIRES
         nvs_flash

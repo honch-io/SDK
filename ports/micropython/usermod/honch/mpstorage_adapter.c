@@ -32,6 +32,25 @@ static honch_status_t honch_mp_call_os1(qstr attr_name, const char *arg)
     return HONCH_STATUS_OK;
 }
 
+static honch_status_t honch_mp_call_os2(qstr attr_name, const char *arg1, const char *arg2)
+{
+    mp_obj_t fn = mp_const_none;
+    honch_status_t status = honch_mp_import_attr(MP_QSTR_os, attr_name, &fn);
+    if (status != HONCH_STATUS_OK) {
+        return status;
+    }
+    nlr_buf_t nlr;
+    if (nlr_push(&nlr) != 0) {
+        return HONCH_STATUS_ERROR_IO;
+    }
+    mp_call_function_2(
+        fn,
+        mp_obj_new_str(arg1, strlen(arg1)),
+        mp_obj_new_str(arg2, strlen(arg2)));
+    nlr_pop();
+    return HONCH_STATUS_OK;
+}
+
 static honch_status_t honch_mp_mkdir_p(const char *path)
 {
     if (path == NULL) {
@@ -89,6 +108,39 @@ static honch_status_t honch_mp_write_file(const char *path, const uint8_t *data,
     return HONCH_STATUS_OK;
 }
 
+static honch_status_t honch_mp_temp_path(char **out, const char *path)
+{
+    if (out == NULL || path == NULL) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    size_t path_size = strlen(path);
+    char *temp_path = malloc(path_size + 5u);
+    if (temp_path == NULL) {
+        return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
+    }
+    memcpy(temp_path, path, path_size);
+    memcpy(temp_path + path_size, ".tmp", 5u);
+    *out = temp_path;
+    return HONCH_STATUS_OK;
+}
+
+static honch_status_t honch_mp_write_file_atomic(const char *path, const uint8_t *data, size_t data_size)
+{
+    char *temp_path = NULL;
+    honch_status_t status = honch_mp_temp_path(&temp_path, path);
+    if (status == HONCH_STATUS_OK) {
+        status = honch_mp_write_file(temp_path, data, data_size);
+    }
+    if (status == HONCH_STATUS_OK) {
+        status = honch_mp_call_os2(MP_QSTR_rename, temp_path, path);
+    }
+    if (status != HONCH_STATUS_OK && temp_path != NULL) {
+        (void)honch_mp_call_os1(MP_QSTR_remove, temp_path);
+    }
+    free(temp_path);
+    return status;
+}
+
 static honch_status_t honch_mp_storage_path(char **out, const char *directory, const char *name)
 {
     return honch_micropython_join_path(out, directory, name);
@@ -132,7 +184,7 @@ static honch_status_t honch_mp_state_set(void *ctx, const char *key, const uint8
     char *path = NULL;
     honch_status_t status = honch_mp_storage_path(&path, storage->state_directory, key);
     if (status == HONCH_STATUS_OK) {
-        status = honch_mp_write_file(path, data, data_size);
+        status = honch_mp_write_file_atomic(path, data, data_size);
     }
     free(path);
     return status;
@@ -246,7 +298,7 @@ static honch_status_t honch_mp_queue_push(void *ctx, const uint8_t *event, size_
     char *path = NULL;
     honch_status_t status = honch_mp_storage_path(&path, storage->pending_directory, name);
     if (status == HONCH_STATUS_OK) {
-        status = honch_mp_write_file(path, event, event_size);
+        status = honch_mp_write_file_atomic(path, event, event_size);
     }
     free(path);
     return status;
@@ -352,17 +404,7 @@ static honch_status_t honch_mp_queue_dead_letter(void *ctx, uint64_t sequence)
         status = honch_mp_storage_path(&dst, storage->dead_directory, name);
     }
     if (status == HONCH_STATUS_OK) {
-        mp_obj_t rename_fn = mp_const_none;
-        status = honch_mp_import_attr(MP_QSTR_os, MP_QSTR_rename, &rename_fn);
-        if (status == HONCH_STATUS_OK) {
-            nlr_buf_t nlr;
-            if (nlr_push(&nlr) != 0) {
-                status = HONCH_STATUS_ERROR_IO;
-            } else {
-                mp_call_function_2(rename_fn, mp_obj_new_str(src, strlen(src)), mp_obj_new_str(dst, strlen(dst)));
-                nlr_pop();
-            }
-        }
+        status = honch_mp_call_os2(MP_QSTR_rename, src, dst);
     }
     free(src);
     free(dst);
