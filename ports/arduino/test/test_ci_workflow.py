@@ -15,8 +15,18 @@ class ArduinoCIWorkflowTests(unittest.TestCase):
 
         self.assertIn("--require-arduino-cli", script)
         self.assertIn("HONCH_REQUIRE_ARDUINO_CLI", script)
+        self.assertIn("check-core-sync.sh", script)
         self.assertIn("--build-path", script)
         self.assertIn("arduino-cli not found; install arduino-cli or omit --require-arduino-cli", script)
+
+    def test_vendored_core_sync_script_checks_sources_and_headers(self) -> None:
+        script = read("ports/arduino/scripts/check-core-sync.sh")
+
+        self.assertIn("core/src/honch_*.c", script)
+        self.assertIn("core/src/honch_internal.h", script)
+        self.assertIn("core/include/honch/core/*.h", script)
+        self.assertIn("cmp -s", script)
+        self.assertIn("Arduino vendored core drift", script)
 
     def test_verify_script_compiles_supported_esp32_families(self) -> None:
         script = read("ports/arduino/scripts/verify-arduino.sh")

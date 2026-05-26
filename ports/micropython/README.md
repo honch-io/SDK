@@ -11,15 +11,19 @@ packetization.
 The MicroPython port is now C-core-derived. It is not a standalone pure-Python
 SDK and must be built into firmware with the `_honch_core` user C module.
 
+This port targets MicroPython. CircuitPython is not covered by the current
+implementation because it does not use this MicroPython user C module build
+flow or guarantee the same native module ABI.
+
 ## Build Into MicroPython
 
 From a MicroPython checkout, build a port with this repository's user module:
 
 ```sh
-make -C ports/unix USER_C_MODULES=/path/to/SDK/ports/micropython/usermod/honch/micropython.cmake
+make -C ports/unix USER_C_MODULES=/path/to/SDK/ports/micropython/usermod
 ```
 
-For board firmware, pass the same `USER_C_MODULES` path to the target port
+For CMake-based board firmware, pass the module CMake file to the target port
 build. Freeze the thin Python wrapper with `manifest.py`:
 
 ```sh

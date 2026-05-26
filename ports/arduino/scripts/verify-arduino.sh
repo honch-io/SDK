@@ -27,6 +27,8 @@ if [[ -n "${HONCH_ARDUINO_HOME:-}" ]]; then
   export ARDUINO_DIRECTORIES_USER="$HONCH_ARDUINO_HOME/user"
 fi
 
+"$ROOT_DIR/ports/arduino/scripts/check-core-sync.sh"
+
 cmake -S "$ROOT_DIR/ports/arduino/test/host" -B "$ROOT_DIR/build/arduino-host"
 cmake --build "$ROOT_DIR/build/arduino-host"
 "$ROOT_DIR/build/arduino-host/honch_arduino_wrapper_test"
