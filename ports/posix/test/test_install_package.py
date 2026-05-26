@@ -31,6 +31,13 @@ class PosixInstallPackageTests(unittest.TestCase):
         self.assertIn("find_dependency(Threads)", config)
         self.assertIn('include("${CMAKE_CURRENT_LIST_DIR}/honch_posixTargets.cmake")', config)
 
+    def test_package_version_matches_documented_posix_version(self) -> None:
+        cmake = read("ports/posix/CMakeLists.txt")
+        root_readme = read("README.md")
+
+        self.assertIn("project(honch_posix_sdk VERSION 0.2.0 LANGUAGES C)", cmake)
+        self.assertIn("| **C/POSIX** | v0.2.0 core-derived |", root_readme)
+
 
 if __name__ == "__main__":
     unittest.main()
