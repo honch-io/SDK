@@ -36,7 +36,7 @@ if(HONCH_BUILD_BENCHMARKS AND NOT TARGET honch_bench_alloc_support)
     )
 endif()
 
-add_library(honch_posix
+set(HONCH_POSIX_SOURCES
     src/posix_compat.c
     src/posix_platform.c
     src/posix_storage.c
@@ -45,47 +45,46 @@ add_library(honch_posix
     $<TARGET_OBJECTS:honch_core_objects>
 )
 
-target_include_directories(honch_posix
-    PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-    PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../core/src
-)
-
-target_link_libraries(honch_posix
-    PUBLIC
-        honch_core_objects
-    PRIVATE
-        CURL::libcurl
-        Threads::Threads
-)
-
-target_compile_definitions(honch_posix PRIVATE
-    _POSIX_C_SOURCE=200809L
-)
-
-if(HONCH_BUILD_TESTS OR HONCH_BUILD_BENCHMARKS)
-    target_compile_definitions(honch_posix PRIVATE HONCH_TESTING)
-endif()
-
-if(HONCH_BUILD_BENCHMARKS)
-    target_compile_options(honch_posix PRIVATE
-        -include
-        ${CMAKE_CURRENT_SOURCE_DIR}/bench/honch_bench_alloc.h
+function(honch_configure_posix_target target)
+    target_include_directories(${target}
+        PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/../../core/src
     )
-    target_link_libraries(honch_posix PRIVATE honch_bench_alloc_support)
-endif()
 
-target_compile_options(honch_posix PRIVATE
-    $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
-)
+    target_link_libraries(${target}
+        PUBLIC
+            honch_core_objects
+        PRIVATE
+            CURL::libcurl
+            Threads::Threads
+    )
+
+    target_compile_definitions(${target} PRIVATE
+        _POSIX_C_SOURCE=200809L
+    )
+
+    target_compile_options(${target} PRIVATE
+        $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
+    )
+endfunction()
+
+add_library(honch_posix ${HONCH_POSIX_SOURCES})
+honch_configure_posix_target(honch_posix)
 
 if(HONCH_BUILD_TESTS)
+    add_library(honch_posix_test ${HONCH_POSIX_SOURCES})
+    honch_configure_posix_target(honch_posix_test)
+    target_compile_definitions(honch_posix_test PRIVATE
+        HONCH_TESTING
+    )
+
     add_executable(honch_posix_tests
         test/test_honch.c
     )
 
-    target_link_libraries(honch_posix_tests PRIVATE honch_posix)
+    target_link_libraries(honch_posix_tests PRIVATE honch_posix_test)
     target_compile_definitions(honch_posix_tests PRIVATE
         HONCH_TESTING
         _POSIX_C_SOURCE=200809L
@@ -149,5 +148,18 @@ if(HONCH_BUILD_EXAMPLES)
 endif()
 
 if(HONCH_BUILD_BENCHMARKS)
+    add_library(honch_posix_bench_instrumented ${HONCH_POSIX_SOURCES})
+    honch_configure_posix_target(honch_posix_bench_instrumented)
+    target_compile_definitions(honch_posix_bench_instrumented PRIVATE
+        HONCH_TESTING
+    )
+    target_compile_options(honch_posix_bench_instrumented PRIVATE
+        -include
+        ${CMAKE_CURRENT_SOURCE_DIR}/bench/honch_bench_alloc.h
+    )
+    target_link_libraries(honch_posix_bench_instrumented PRIVATE
+        honch_bench_alloc_support
+    )
+
     add_subdirectory(bench)
 endif()

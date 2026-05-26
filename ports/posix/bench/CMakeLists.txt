@@ -3,7 +3,7 @@ add_executable(honch_posix_bench
 )
 
 target_link_libraries(honch_posix_bench PRIVATE
-    honch_posix
+    honch_posix_bench_instrumented
     honch_bench_alloc_support
 )
 target_compile_definitions(honch_posix_bench PRIVATE
