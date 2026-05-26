@@ -8,6 +8,7 @@
 struct HonchConfig {
   const char *apiKey;
   const char *host;
+  const char *rootCaPem;
   const char *deviceModel;
   const char *firmwareVersion;
   const char *environment;

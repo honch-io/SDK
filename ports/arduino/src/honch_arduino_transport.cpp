@@ -61,7 +61,9 @@ honch_status_t arduino_post_chunk(
   WiFiClientSecure secureClient;
   bool https = url.rfind("https://", 0) == 0;
   if (https) {
-    if (transport != nullptr && transport->insecureSkipTlsVerify) {
+    if (transport != nullptr && transport->rootCaPem != nullptr && transport->rootCaPem[0] != '\0') {
+      secureClient.setCACert(transport->rootCaPem);
+    } else if (transport != nullptr && transport->insecureSkipTlsVerify) {
       secureClient.setInsecure();
     }
     if (!http.begin(secureClient, url.c_str())) {
@@ -123,6 +125,7 @@ honch_status_t honch_arduino_transport_ops_init(
 
   ctx->apiKey = config.apiKey;
   ctx->host = config.host;
+  ctx->rootCaPem = config.rootCaPem;
   ctx->insecureSkipTlsVerify = config.insecureSkipTlsVerify;
   *ops = honch_transport_ops_t{
       arduino_post_chunk,

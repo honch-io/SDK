@@ -20,6 +20,11 @@ framework and has not yet been end-to-end tested on ESP32 hardware.
 #include <Honch.h>
 
 static uint8_t eventBuffer[8192];
+static const char HONCH_ROOT_CA_PEM[] = R"EOF(
+-----BEGIN CERTIFICATE-----
+REPLACE_WITH_CAPTURE_ENDPOINT_ROOT_CA
+-----END CERTIFICATE-----
+)EOF";
 
 void setup() {
   WiFi.begin("ssid", "password");
@@ -28,6 +33,7 @@ void setup() {
   HonchConfig config = {
     .apiKey = "project-key",
     .host = "https://capture.honch.io",
+    .rootCaPem = HONCH_ROOT_CA_PEM,
     .deviceModel = "esp32-devkit",
     .firmwareVersion = "1.0.0",
     .environment = "production",
@@ -63,11 +69,22 @@ From the repository root:
 ports/arduino/scripts/verify-arduino.sh
 ```
 
-The script always runs the host wrapper test. If `arduino-cli` is installed, it also compiles the ESP32 examples; otherwise it reports that the Arduino compile checks were skipped.
+The script always runs the host wrapper test. If `arduino-cli` is installed, it
+also compiles the ESP32 examples; otherwise it reports that the Arduino compile
+checks were skipped.
+
+For release-style verification, require `arduino-cli` and keep Arduino CLI data
+on an external/cache volume:
+
+```sh
+HONCH_ARDUINO_HOME="/Volumes/X9 Pro/honch-arduino-verify" \
+  ports/arduino/scripts/verify-arduino.sh --require-arduino-cli
+```
 
 ## Limitations
 
 - ESP32 Arduino is the only supported Arduino board family.
 - BLE relay, OTA integration, and non-ESP32 boards are not part of this milestone.
 - JSON strings are the v0 property interface; no Arduino property-builder DSL is included.
-- TLS root CA configuration is application-owned. `insecureSkipTlsVerify` exists for local testing only.
+- TLS root CA PEM configuration is application-owned via `rootCaPem`.
+  `insecureSkipTlsVerify` exists for local testing only.

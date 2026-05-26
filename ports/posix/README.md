@@ -64,6 +64,24 @@ ctest --test-dir build --output-on-failure
 
 The C targets build with warnings enabled and warnings treated as errors.
 
+## Install
+
+Install the production library and headers:
+
+```sh
+cmake -S . -B build-install -DHONCH_BUILD_TESTS=OFF -DHONCH_BUILD_EXAMPLES=OFF \
+  -DCMAKE_INSTALL_PREFIX=/opt/honch-posix
+cmake --build build-install --target honch_posix
+cmake --install build-install
+```
+
+The install exports a CMake package:
+
+```cmake
+find_package(honch_posix REQUIRED)
+target_link_libraries(app PRIVATE honch::honch_posix)
+```
+
 ## E2E Capture Test
 
 The real ingest E2E test is opt-in because it sends events to the configured
