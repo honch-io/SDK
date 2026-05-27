@@ -161,7 +161,7 @@ honch_status_t honch_esp_transport_ops_init(honch_transport_ops_t *ops, honch_es
     *ctx = (honch_esp_transport_t) {0};
     *ops = (honch_transport_ops_t) {
         .post_chunk = honch_esp_post_chunk,
-        .ctx = ctx
+        .ctx = NULL
     };
     return HONCH_STATUS_OK;
 }
