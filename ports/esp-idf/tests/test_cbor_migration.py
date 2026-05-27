@@ -44,6 +44,8 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn('"X-Honch-Stream-Id"', transport)
         self.assertIn("HONCH_TRANSPORT_CHUNK_STORED", transport)
         self.assertIn(".post_chunk = honch_esp_post_chunk", transport)
+        self.assertIn(".ctx = NULL", transport)
+        self.assertNotIn(".ctx = ctx", transport)
         self.assertNotIn("post_batch", transport)
         self.assertNotIn("application/cbor", transport)
         self.assertNotIn("Content-Encoding", transport)
