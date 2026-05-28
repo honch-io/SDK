@@ -1,0 +1,75 @@
+from pathlib import Path
+import re
+import unittest
+
+
+ROOT = Path(__file__).resolve().parents[3]
+
+
+def read(path: str) -> str:
+    return (ROOT / path).read_text(encoding="utf-8")
+
+
+def c_function_body(source: str, name: str) -> str:
+    marker = f"{name}("
+    signature_start = source.find(marker)
+    if signature_start < 0:
+        raise AssertionError(f"function {name} not found")
+
+    open_brace = source.find("{", signature_start)
+    if open_brace < 0:
+        raise AssertionError(f"function {name} body not found")
+
+    depth = 0
+    for index in range(open_brace, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[open_brace + 1:index]
+
+    raise AssertionError(f"function {name} body is not closed")
+
+
+class EspGpioRegistrationTests(unittest.TestCase):
+    def test_gpio_register_rejects_unknown_mode(self) -> None:
+        adapter = read("ports/esp-idf/honch/src/esp_gpio_adapter.c")
+        register = c_function_body(adapter, "honch_gpio_register")
+
+        self.assertRegex(
+            register,
+            r"default:\s*return\s+HONCH_ERR_INVALID_ARG;",
+        )
+
+    def test_gpio_register_stages_mapping_until_after_fallible_setup(self) -> None:
+        adapter = read("ports/esp-idf/honch/src/esp_gpio_adapter.c")
+        register = c_function_body(adapter, "honch_gpio_register")
+
+        first_mapping_write = register.find("s_mappings[idx].pin")
+        handler_add = register.find("gpio_isr_handler_add")
+
+        self.assertGreaterEqual(first_mapping_write, 0)
+        self.assertGreaterEqual(handler_add, 0)
+        self.assertGreater(
+            first_mapping_write,
+            handler_add,
+            "mapping table should be committed only after GPIO setup succeeds",
+        )
+
+    def test_gpio_register_rolls_back_only_appended_mapping_slots(self) -> None:
+        adapter = read("ports/esp-idf/honch/src/esp_gpio_adapter.c")
+        register = c_function_body(adapter, "honch_gpio_register")
+
+        self.assertIn("bool added_mapping", register)
+        self.assertIn("added_mapping = true;", register)
+        self.assertNotIn("s_mapping_count--;", register)
+        self.assertIn("honch_gpio_rollback_mapping", adapter)
+        self.assertRegex(
+            register,
+            r"if\s*\(\s*err\s*!=\s*ESP_OK\s*\)\s*\{[^}]*honch_gpio_rollback_mapping",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
