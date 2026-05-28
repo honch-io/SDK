@@ -91,6 +91,17 @@ Required host app setup:
 - Keep `androidx.work:work-runtime` available for scheduled upload drains.
 - Register the package through the consuming React Native Android host.
 
+Host apps can call the SDK permission helper before `startScan()`:
+
+```ts
+import { requestRelayAndroidPermissions } from "@honch/react-native-relay";
+
+const permissions = await requestRelayAndroidPermissions();
+if (!permissions.granted) {
+  // Show host-app UI for permissions.denied before trying to scan.
+}
+```
+
 This package includes an Android library `settings.gradle` for local compile
 verification, but it does not include a complete Android host app. Native
 Android host validation must still be run from the consuming React Native app
