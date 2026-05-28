@@ -70,7 +70,14 @@ static bool honch_json_parse_string(honch_json_parser_t *parser)
                     return false;
             }
         } else {
-            parser->cursor++;
+            const char *start = parser->cursor;
+            do {
+                parser->cursor++;
+                ch = (unsigned char)*parser->cursor;
+            } while (ch != '\0' && ch != '"' && ch != '\\' && ch >= 0x20u);
+            if (!honch_utf8_is_valid(start, (size_t)(parser->cursor - start))) {
+                return false;
+            }
         }
     }
 
@@ -258,6 +265,10 @@ bool honch_json_is_object(const char *json)
 
 honch_status_t honch_json_append_string(honch_buffer_t *buffer, const char *value)
 {
+    if (value == NULL || !honch_utf8_is_valid(value, strlen(value))) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
     honch_status_t status = honch_buffer_append(buffer, "\"");
     if (status != HONCH_OK) {
         return status;

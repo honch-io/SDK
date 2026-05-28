@@ -1149,6 +1149,12 @@ static void test_strict_json_validation(void)
     EXPECT_EQ_INT(honch_track(client, "bad_event", "[]"), HONCH_ERROR_INVALID_ARGUMENT);
     EXPECT_EQ_INT(honch_track(client, "bad_event", "{\"unterminated\""), HONCH_ERROR_INVALID_ARGUMENT);
     EXPECT_EQ_INT(honch_track(client, "overflow_integer", "{\"n\":9223372036854775808}"), HONCH_ERROR_INVALID_ARGUMENT);
+    const char invalid_event_name[] = {'b', 'a', 'd', (char)0xff, '\0'};
+    const char invalid_json_value[] = {'{', '"', 'b', 'a', 'd', '"', ':', '"', (char)0xff, '"', '}', '\0'};
+    const char invalid_json_key[] = {'{', '"', (char)0xff, '"', ':', '"', 'v', 'a', 'l', 'u', 'e', '"', '}', '\0'};
+    EXPECT_EQ_INT(honch_track(client, invalid_event_name, "{}"), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ_INT(honch_track(client, "bad_value", invalid_json_value), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ_INT(honch_track(client, "bad_key", invalid_json_key), HONCH_ERROR_INVALID_ARGUMENT);
     EXPECT_EQ_INT(honch_track(client, "max_integer", "{\"n\":9223372036854775807}"), HONCH_OK);
     EXPECT_EQ_INT(honch_track(client, "min_integer", "{\"n\":-9223372036854775808}"), HONCH_OK);
     EXPECT_EQ_INT(honch_track(client, "float_number", "{\"n\":1.5}"), HONCH_OK);
@@ -2072,10 +2078,11 @@ static void test_cbor_encoding_preserves_json_string_escapes(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "string_escape_event", "{\"accent\":\"\\u00e9\",\"nul\":\"a\\u0000b\"}"), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "string_escape_event", "{\"accent\":\"\\u00e9\",\"raw\":\"\xc3\xa9\",\"nul\":\"a\\u0000b\"}"), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 
     EXPECT_STR_CONTAINS(transport.last_payload, "\"accent\":\"\xc3\xa9\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"raw\":\"\xc3\xa9\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"nul\":\"a\\u0000b\"");
     EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"accent\":\"?\"");
 
