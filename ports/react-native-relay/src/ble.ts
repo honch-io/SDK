@@ -1,8 +1,15 @@
 import type { RelayQueue, StoredRelayMessage } from "./relayQueue";
 
+export type RelayDiscoveredDevice = {
+  id: string;
+  name?: string;
+  rssi?: number;
+};
+
 export interface RelayBleNative {
   startScan(): Promise<void>;
   stopScan(): Promise<void>;
+  discoveredDevices(): Promise<RelayDiscoveredDevice[]>;
   connect(deviceId: string): Promise<void>;
   disconnect(deviceId: string): Promise<void>;
   subscribeFrames(deviceId: string): Promise<void>;
@@ -27,6 +34,10 @@ export function createBleRelayReceiver(options: RelayBleReceiverOptions) {
 
     stopScan() {
       return options.native.stopScan();
+    },
+
+    discoveredDevices() {
+      return options.native.discoveredDevices();
     },
 
     connect(deviceId: string) {

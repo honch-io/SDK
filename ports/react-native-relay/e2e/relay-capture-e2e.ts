@@ -63,6 +63,9 @@ export async function runRelayCaptureE2E(options: RelayCaptureE2EOptions): Promi
     bleNative: {
       async startScan() {},
       async stopScan() {},
+      async discoveredDevices() {
+        return [];
+      },
       async connect() {},
       async disconnect() {},
       async subscribeFrames() {},
@@ -111,6 +114,9 @@ export async function runRelayCaptureE2E(options: RelayCaptureE2EOptions): Promi
       bleNative: {
         async startScan() {},
         async stopScan() {},
+        async discoveredDevices() {
+          return [];
+        },
         async connect() {},
         async disconnect() {},
         async subscribeFrames() {},

@@ -11,6 +11,7 @@ export type RelayNativeBindings = {
 const requiredMethods = [
   "startScan",
   "stopScan",
+  "discoveredDevices",
   "connect",
   "disconnect",
   "subscribeFrames",
@@ -32,6 +33,7 @@ export function createRelayNativeBindings(nativeModule: unknown): RelayNativeBin
     bleNative: {
       startScan: () => typedModule.startScan(),
       stopScan: () => typedModule.stopScan(),
+      discoveredDevices: () => typedModule.discoveredDevices(),
       connect: (deviceId) => typedModule.connect(deviceId),
       disconnect: (deviceId) => typedModule.disconnect(deviceId),
       subscribeFrames: (deviceId) => typedModule.subscribeFrames(deviceId),

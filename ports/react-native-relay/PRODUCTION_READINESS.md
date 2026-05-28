@@ -5,13 +5,12 @@ Status: not production-ready until native host builds and live capture E2E are r
 Verification:
 
 - `bun run typecheck`: passing.
-- `bun run test`: passing, 13 files / 51 tests.
-- `bun run verify:ios:native`: passing. This runs an iPhoneOS SDK
-  Objective-C syntax check for `ios/HonchReactNativeRelay.m`; it does not boot
-  or run a simulator.
-- `bun run verify:android:native`: currently blocked by local environment.
-  Gradle resolves the Android library build, then fails because no Android SDK
-  path is configured through `ANDROID_HOME` or `android/local.properties`.
+- `bun run test`: passing, 13 files / 56 tests.
+- `DEVELOPER_DIR=/Volumes/X9\ Pro/Applications/Xcode.app/Contents/Developer bun run verify:ios:native`:
+  passing. This runs an iPhoneOS SDK Objective-C syntax check for
+  `ios/HonchReactNativeRelay.m`; it does not boot or run a simulator.
+- `bun run verify:android:native`: passing. This builds the Android relay
+  library with Gradle using the configured local Android SDK.
 - Legacy production contract search:
   `rg -n "POST /batch|/batch|application/cbor" ports/react-native-relay spec`
   returns only negative assertions in uploader tests.
@@ -25,8 +24,8 @@ Known limitations:
   `node_modules`.
 - iOS native bridge code has static/package-shape coverage plus an iPhoneOS SDK
   syntax check. A host-app archive/build is still required.
-- Android native bridge code has static/package-shape coverage. Android compile
-  is blocked until an Android SDK path is configured.
+- Android native bridge code has static/package-shape coverage plus Android
+  library compile verification.
 - Service-backed `bun run e2e:capture` with capture, worker, Pub/Sub emulator,
   Postgres, Redis, and ClickHouse running has not been executed in this pass.
 - Simulator/device runs were intentionally not performed.
@@ -38,10 +37,11 @@ Supported storage adapter:
 
 Supported native platforms:
 
-- iOS: CoreBluetooth scan/connect/subscribe, `HonchRelayFrame` event emission,
-  and ACK characteristic writes are implemented.
-- Android: BLE scan/connect/subscribe, `HonchRelayFrame` event emission, ACK
-  characteristic writes, and WorkManager upload scheduling are implemented.
+- iOS: CoreBluetooth scan/discovery/connect/subscribe, `HonchRelayFrame` event
+  emission, and ACK characteristic writes are implemented.
+- Android: BLE scan/discovery/connect/subscribe, `HonchRelayFrame` event
+  emission, ACK characteristic writes, and WorkManager upload scheduling are
+  implemented.
 
 Capture contract:
 

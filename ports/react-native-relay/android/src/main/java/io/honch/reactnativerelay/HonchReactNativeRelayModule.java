@@ -26,6 +26,7 @@ import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
+import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 
@@ -50,6 +51,7 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
 
     private final ReactApplicationContext reactContext;
     private final Map<String, BluetoothDevice> devicesById = new HashMap<>();
+    private final Map<String, RelayDeviceInfo> discoveredDevicesById = new HashMap<>();
     private final Map<String, BluetoothGatt> gattsById = new HashMap<>();
     private final Map<String, BluetoothGattCharacteristic> ackCharacteristicsById = new HashMap<>();
     private BluetoothLeScanner scanner;
@@ -59,7 +61,14 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
         public void onScanResult(int callbackType, ScanResult result) {
             BluetoothDevice device = result.getDevice();
             if (device != null) {
-                devicesById.put(device.getAddress(), device);
+                String deviceId = device.getAddress();
+                devicesById.put(deviceId, device);
+                String name = null;
+                try {
+                    name = device.getName();
+                } catch (SecurityException ignored) {
+                }
+                discoveredDevicesById.put(deviceId, new RelayDeviceInfo(deviceId, name, result.getRssi()));
             }
         }
     };
@@ -141,6 +150,15 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
         } catch (SecurityException error) {
             promise.reject("missing_bluetooth_permission", error);
         }
+    }
+
+    @ReactMethod
+    public void discoveredDevices(Promise promise) {
+        WritableArray devices = Arguments.createArray();
+        for (RelayDeviceInfo device : discoveredDevicesById.values()) {
+            devices.pushMap(device.toMap());
+        }
+        promise.resolve(devices);
     }
 
     @ReactMethod
@@ -243,6 +261,28 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
             Context.BLUETOOTH_SERVICE
         );
         return manager == null ? null : manager.getAdapter();
+    }
+
+    private static final class RelayDeviceInfo {
+        private final String id;
+        private final String name;
+        private final int rssi;
+
+        RelayDeviceInfo(String id, String name, int rssi) {
+            this.id = id;
+            this.name = name;
+            this.rssi = rssi;
+        }
+
+        WritableMap toMap() {
+            WritableMap map = Arguments.createMap();
+            map.putString("id", id);
+            if (name != null) {
+                map.putString("name", name);
+            }
+            map.putInt("rssi", rssi);
+            return map;
+        }
     }
 
     private void subscribeFrameNotifications(BluetoothGatt gatt) {
