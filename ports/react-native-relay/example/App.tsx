@@ -15,6 +15,7 @@ import {
   createMobileRelay,
   createMmkvRelayStore,
   createRelayNativeBindings,
+  requestRelayAndroidPermissions,
   type RelayDiscoveredDevice,
   type StoredRelayMessage
 } from "@honch/react-native-relay";
@@ -92,6 +93,10 @@ export default function App() {
 
   async function startScan() {
     await run("scanning", async () => {
+      const permissions = await requestRelayAndroidPermissions();
+      if (!permissions.granted) {
+        throw new Error(`Missing relay permissions: ${permissions.denied.join(", ")}`);
+      }
       await relay.startScan();
       await refreshDevices();
     });
