@@ -548,6 +548,12 @@ static honch_status_t honch_client_queue_push_recorded(
             if (sequence_out != NULL) {
                 *sequence_out = sequence;
             }
+            size_t depth = 0u;
+            if (honch_client_queue_depth(client, &depth) == HONCH_OK) {
+                client->queued_event_count = depth;
+            } else if (client->queued_event_count < SIZE_MAX) {
+                client->queued_event_count++;
+            }
         }
         return status;
     }
