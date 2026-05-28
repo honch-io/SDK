@@ -70,6 +70,22 @@ class EspGpioRegistrationTests(unittest.TestCase):
             r"if\s*\(\s*err\s*!=\s*ESP_OK\s*\)\s*\{[^}]*honch_gpio_rollback_mapping",
         )
 
+    def test_gpio_register_restores_replaced_handler_on_add_failure(self) -> None:
+        adapter = read("ports/esp-idf/honch/src/esp_gpio_adapter.c")
+        register = c_function_body(adapter, "honch_gpio_register")
+
+        remove_index = register.find("gpio_isr_handler_remove(pin)")
+        add_index = register.find("gpio_isr_handler_add(pin, gpio_isr_handler")
+        failure_index = register.find("Failed to add ISR handler")
+        restore_index = register.find("honch_gpio_restore_replaced_handler")
+
+        self.assertGreaterEqual(remove_index, 0)
+        self.assertGreaterEqual(add_index, 0)
+        self.assertGreaterEqual(failure_index, 0)
+        self.assertGreaterEqual(restore_index, 0)
+        self.assertLess(remove_index, add_index)
+        self.assertGreater(restore_index, failure_index)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

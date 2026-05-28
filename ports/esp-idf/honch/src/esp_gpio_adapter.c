@@ -57,6 +57,13 @@ static void honch_gpio_rollback_mapping(bool added_mapping, int idx)
     }
 }
 
+static void honch_gpio_restore_replaced_handler(bool added_mapping, gpio_num_t pin)
+{
+    if (!added_mapping) {
+        (void)gpio_isr_handler_add(pin, gpio_isr_handler, (void *)(uintptr_t)pin);
+    }
+}
+
 static void gpio_worker_task(void *arg)
 {
     (void)arg;
@@ -242,6 +249,7 @@ honch_err_t honch_gpio_register(gpio_num_t pin, const char *event_name,
     err = gpio_isr_handler_add(pin, gpio_isr_handler, (void *)(uintptr_t)pin);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to add ISR handler for GPIO %d: %s", pin, esp_err_to_name(err));
+        honch_gpio_restore_replaced_handler(added_mapping, pin);
         honch_gpio_rollback_mapping(added_mapping, idx);
         return HONCH_ERR_INTERNAL;
     }
