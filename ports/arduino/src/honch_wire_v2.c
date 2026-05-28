@@ -83,6 +83,8 @@ typedef struct honch_wire_v2_string_table {
     size_t count;
 } honch_wire_v2_string_table_t;
 
+static const char s_honch_wire_v2_empty_string[] = "";
+
 static honch_status_t honch_wire_v2_append_uvarint(
     uint64_t value,
     uint8_t *out,
@@ -189,7 +191,7 @@ static honch_status_t honch_wire_v2_table_intern(
     if (table == NULL || value == NULL || index == NULL) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
-    if (value_size == SIZE_MAX || (value_size == 0u && value[0] != '\0')) {
+    if (value_size == SIZE_MAX) {
         value_size = strlen(value);
     }
     if (!allow_empty && value_size == 0u) {
@@ -197,7 +199,8 @@ static honch_status_t honch_wire_v2_table_intern(
     }
 
     for (size_t i = 0u; i < table->count; i++) {
-        if (table->sizes[i] == value_size && memcmp(table->items[i], value, value_size) == 0) {
+        if (table->sizes[i] == value_size &&
+            (value_size == 0u || memcmp(table->items[i], value, value_size) == 0)) {
             *index = i;
             return HONCH_OK;
         }
@@ -211,7 +214,7 @@ static honch_status_t honch_wire_v2_table_intern(
     }
 
     *index = table->count;
-    table->items[table->count] = value;
+    table->items[table->count] = value_size == 0u ? s_honch_wire_v2_empty_string : value;
     table->sizes[table->count] = value_size;
     table->count++;
     table->total_bytes += value_size;
@@ -227,12 +230,13 @@ static honch_status_t honch_wire_v2_table_find(
     if (table == NULL || value == NULL || index == NULL) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
-    if (value_size == SIZE_MAX || (value_size == 0u && value[0] != '\0')) {
+    if (value_size == SIZE_MAX) {
         value_size = strlen(value);
     }
 
     for (size_t i = 0u; i < table->count; i++) {
-        if (table->sizes[i] == value_size && memcmp(table->items[i], value, value_size) == 0) {
+        if (table->sizes[i] == value_size &&
+            (value_size == 0u || memcmp(table->items[i], value, value_size) == 0)) {
             *index = i;
             return HONCH_OK;
         }

@@ -514,6 +514,42 @@ static void test_v2_flush_borrows_string_property_values(void)
     assert(honch_test_queued_cbor_string_copies() == 3u);
 }
 
+static void test_v2_flush_accepts_queued_empty_string_property_value(void)
+{
+    static const uint8_t event_with_empty_string_property[] = {
+        0xa4u,
+        0x65u, 'e', 'v', 'e', 'n', 't',
+        0x65u, 'e', 'v', 'e', 'n', 't',
+        0x6bu, 'd', 'i', 's', 't', 'i', 'n', 'c', 't', '_', 'i', 'd',
+        0x68u, 'd', 'e', 'v', 'i', 'c', 'e', '-', '1',
+        0x69u, 't', 'i', 'm', 'e', 's', 't', 'a', 'm', 'p',
+        0x19u, 0x04u, 0xd2u,
+        0x6au, 'p', 'r', 'o', 'p', 'e', 'r', 't', 'i', 'e', 's',
+        0xa2u,
+        0x65u, 'e', 'm', 'p', 't', 'y',
+        0x60u,
+        0x61u, 'x',
+        0xf6u
+    };
+
+    fake_storage_t storage;
+    setup_storage(&storage);
+    storage.events[0].data = (uint8_t *)event_with_empty_string_property;
+    storage.events[0].size = sizeof(event_with_empty_string_property);
+    storage.events[1].pending = false;
+    fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
+    honch_storage_ops_t storage_ops = {0};
+    honch_transport_ops_t transport_ops = {0};
+    honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
+    transport_ops.post_chunk = fake_post_chunk;
+
+    assert(honch_queue_flush_locked(&client) == HONCH_OK);
+    assert(transport.calls == 0u);
+    assert(transport.chunk_calls == 1u);
+    assert(storage.events[0].consumed);
+    assert(!storage.events[0].dead_lettered);
+}
+
 static void test_v2_chunk_transport_preserves_nested_properties(void)
 {
     static const uint8_t event_with_nested_properties[] = {
@@ -1031,6 +1067,7 @@ int main(void)
     test_v2_batch_shrink_does_not_retry_linearly();
     test_v2_chunk_transport_preserves_string_properties();
     test_v2_flush_borrows_string_property_values();
+    test_v2_flush_accepts_queued_empty_string_property_value();
     test_v2_chunk_transport_preserves_nested_properties();
     test_v2_chunk_transport_preserves_float64_properties();
     test_v2_chunk_transport_preserves_float32_bool_and_null_properties();

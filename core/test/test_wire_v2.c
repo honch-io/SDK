@@ -359,7 +359,8 @@ static void test_event_batch_encoder_writes_context_extension_values(void)
             .key_id = 128u,
             .value = {
                 .type = HONCH_WIRE_V2_VALUE_TYPE_STRING,
-                .string_value = "edge"
+                .string_value = "edge",
+                .string_size = SIZE_MAX
             }
         }
     };
@@ -501,7 +502,8 @@ static void test_event_batch_encoder_writes_custom_string_property(void)
             .key = "mode",
             .value = {
                 .type = HONCH_WIRE_V2_VALUE_TYPE_STRING,
-                .string_value = "auto"
+                .string_value = "auto",
+                .string_size = SIZE_MAX
             }
         }
     };
@@ -573,6 +575,40 @@ static void test_event_batch_encoder_allows_empty_string_property_values(void)
     };
     assert(message[5] == 0x0au);
     assert(bytes_end_with(message, message_size, expected_suffix, sizeof(expected_suffix)));
+}
+
+static void test_event_batch_encoder_treats_zero_string_size_as_empty(void)
+{
+    uint8_t message[128] = {0};
+    size_t message_size = 0u;
+    honch_wire_v2_batch_context_t context = test_context();
+    honch_wire_v2_property_t properties[] = {
+        {
+            .key = "note",
+            .value = {
+                .type = HONCH_WIRE_V2_VALUE_TYPE_STRING,
+                .string_value = "sentinel",
+                .string_size = 0u
+            }
+        }
+    };
+    honch_wire_v2_event_t event = {
+        .event_name = "annotated",
+        .timestamp_ms = 1000u,
+        .properties = properties,
+        .property_count = 1u
+    };
+
+    assert(honch_wire_v2_encode_event_batch(
+        &context,
+        1000u,
+        &event,
+        1u,
+        message,
+        sizeof(message),
+        &message_size) == HONCH_OK);
+
+    assert(!bytes_contain(message, message_size, (const uint8_t *)"sentinel", 8u));
 }
 
 static void test_event_batch_encoder_uses_reserved_property_key_refs(void)
@@ -771,11 +807,13 @@ static void test_event_batch_encoder_writes_nested_array_and_map_values(void)
     honch_wire_v2_value_t modes[] = {
         {
             .type = HONCH_WIRE_V2_VALUE_TYPE_STRING,
-            .string_value = "hdr"
+            .string_value = "hdr",
+            .string_size = SIZE_MAX
         },
         {
             .type = HONCH_WIRE_V2_VALUE_TYPE_STRING,
-            .string_value = "auto"
+            .string_value = "auto",
+            .string_size = SIZE_MAX
         }
     };
     honch_wire_v2_map_pair_t detail_pairs[] = {
@@ -924,14 +962,16 @@ static void test_event_batch_encoder_rejects_duplicate_map_keys(void)
             .key = "mode",
             .value = {
                 .type = HONCH_WIRE_V2_VALUE_TYPE_STRING,
-                .string_value = "hdr"
+                .string_value = "hdr",
+                .string_size = SIZE_MAX
             }
         },
         {
             .key = "mode",
             .value = {
                 .type = HONCH_WIRE_V2_VALUE_TYPE_STRING,
-                .string_value = "auto"
+                .string_value = "auto",
+                .string_size = SIZE_MAX
             }
         }
     };
@@ -974,14 +1014,16 @@ static void test_event_batch_encoder_rejects_null_map_keys(void)
             .key = "mode",
             .value = {
                 .type = HONCH_WIRE_V2_VALUE_TYPE_STRING,
-                .string_value = "hdr"
+                .string_value = "hdr",
+                .string_size = SIZE_MAX
             }
         },
         {
             .key = NULL,
             .value = {
                 .type = HONCH_WIRE_V2_VALUE_TYPE_STRING,
-                .string_value = "auto"
+                .string_value = "auto",
+                .string_size = SIZE_MAX
             }
         }
     };
@@ -1024,7 +1066,8 @@ static void test_event_batch_encoder_rejects_promoted_context_property_duplicate
             .key = "$device_id",
             .value = {
                 .type = HONCH_WIRE_V2_VALUE_TYPE_STRING,
-                .string_value = "spoof"
+                .string_value = "spoof",
+                .string_size = SIZE_MAX
             }
         }
     };
@@ -1055,14 +1098,16 @@ static void test_event_batch_encoder_rejects_duplicate_property_keys(void)
             .key = "mode",
             .value = {
                 .type = HONCH_WIRE_V2_VALUE_TYPE_STRING,
-                .string_value = "auto"
+                .string_value = "auto",
+                .string_size = SIZE_MAX
             }
         },
         {
             .key = "mode",
             .value = {
                 .type = HONCH_WIRE_V2_VALUE_TYPE_STRING,
-                .string_value = "manual"
+                .string_value = "manual",
+                .string_size = SIZE_MAX
             }
         }
     };
@@ -1095,7 +1140,8 @@ static void test_event_batch_encoder_rejects_string_table_entry_over_sdk_limit(v
             .key = "note",
             .value = {
                 .type = HONCH_WIRE_V2_VALUE_TYPE_STRING,
-                .string_value = long_value
+                .string_value = long_value,
+                .string_size = SIZE_MAX
             }
         }
     };
@@ -1127,7 +1173,8 @@ static void test_event_batch_encoder_rejects_invalid_utf8_strings(void)
             .key = "note",
             .value = {
                 .type = HONCH_WIRE_V2_VALUE_TYPE_STRING,
-                .string_value = invalid_utf8
+                .string_value = invalid_utf8,
+                .string_size = SIZE_MAX
             }
         }
     };
@@ -1162,7 +1209,8 @@ static void test_event_batch_encoder_rejects_total_string_table_bytes_over_sdk_l
             .key = i == 0u ? "note0" : i == 1u ? "note1" : i == 2u ? "note2" : i == 3u ? "note3" : "note4",
             .value = {
                 .type = HONCH_WIRE_V2_VALUE_TYPE_STRING,
-                .string_value = values[i]
+                .string_value = values[i],
+                .string_size = SIZE_MAX
             }
         };
     }
@@ -1241,6 +1289,7 @@ int main(void)
     test_event_batch_encoder_rejects_invalid_device_time_source();
     test_event_batch_encoder_writes_custom_string_property();
     test_event_batch_encoder_allows_empty_string_property_values();
+    test_event_batch_encoder_treats_zero_string_size_as_empty();
     test_event_batch_encoder_uses_reserved_property_key_refs();
     test_event_batch_encoder_writes_float64_little_endian();
     test_event_batch_encoder_writes_bytes_values();
