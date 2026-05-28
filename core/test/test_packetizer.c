@@ -279,7 +279,7 @@ static void test_confirm_consumes_storage(void)
     fake_client_destroy(&client);
 }
 
-static void test_confirm_unlocks_client_on_consume_failure(void)
+static void test_confirm_failure_invalidates_packetizer_after_releasing_client(void)
 {
     const uint8_t message[] = {0xa0u};
     fake_storage_t storage = {
@@ -301,7 +301,9 @@ static void test_confirm_unlocks_client_on_consume_failure(void)
     assert(honch_packetizer_next(&packetizer, buffer, sizeof(buffer), &out_size, &complete) == HONCH_OK);
     assert(complete);
     assert(honch_packetizer_confirm(&packetizer) == HONCH_ERROR_IO);
-    assert(packetizer.active);
+    assert(!packetizer.active);
+    assert(packetizer.client == NULL);
+    assert(honch_packetizer_abort(&packetizer) == HONCH_ERROR_INVALID_ARGUMENT);
     assert(pthread_mutex_trylock(&client.mutex) == 0);
     assert(pthread_mutex_unlock(&client.mutex) == 0);
     fake_client_destroy(&client);
@@ -335,7 +337,7 @@ int main(void)
     test_multi_chunk_message_offsets_increase();
     test_abort_does_not_consume_storage();
     test_confirm_consumes_storage();
-    test_confirm_unlocks_client_on_consume_failure();
+    test_confirm_failure_invalidates_packetizer_after_releasing_client();
     test_packetizer_peek_runs_under_client_lock();
     return 0;
 }

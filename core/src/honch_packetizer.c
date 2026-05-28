@@ -230,25 +230,27 @@ honch_status_t honch_packetizer_confirm(honch_packetizer_t *packetizer)
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
+    honch_client_t *client = packetizer->client;
     honch_status_t status = packetizer->client->storage->queue_consume(
         packetizer->client->storage->ctx,
         packetizer->sequence);
-    if (status == HONCH_OK) {
-        packetizer->active = false;
-    }
-    honch_client_state_unlock(packetizer->client);
-    honch_client_leave(packetizer->client);
+    packetizer->active = false;
+    packetizer->client = NULL;
+    honch_client_state_unlock(client);
+    honch_client_leave(client);
     return status;
 }
 
 honch_status_t honch_packetizer_abort(honch_packetizer_t *packetizer)
 {
-    if (packetizer == NULL || !packetizer->active) {
+    if (packetizer == NULL || !packetizer->active || packetizer->client == NULL) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
+    honch_client_t *client = packetizer->client;
     packetizer->active = false;
-    honch_client_state_unlock(packetizer->client);
-    honch_client_leave(packetizer->client);
+    packetizer->client = NULL;
+    honch_client_state_unlock(client);
+    honch_client_leave(client);
     return HONCH_OK;
 }
