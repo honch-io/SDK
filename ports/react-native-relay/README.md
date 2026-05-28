@@ -37,6 +37,10 @@ X-Honch-Relay-SDK-Version: <package_version>
 bun install
 ```
 
+The package depends on `react-native-mmkv` for the production durable store and
+`react-native-nitro-modules` for MMKV's native runtime. Both must be autolinked
+by the consuming React Native app before native builds will pass.
+
 ## Durable Storage
 
 Production mobile apps should use `react-native-mmkv` for relay queue storage:
