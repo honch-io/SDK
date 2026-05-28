@@ -45,6 +45,18 @@ static void IRAM_ATTR gpio_isr_handler(void *arg)
     }
 }
 
+static void honch_gpio_rollback_mapping(bool added_mapping, int idx)
+{
+    if (!added_mapping || idx < 0 || idx >= s_mapping_count || idx >= MAX_GPIO_PINS) {
+        return;
+    }
+
+    memset(&s_mappings[idx], 0, sizeof(s_mappings[idx]));
+    if (idx == s_mapping_count - 1) {
+        s_mapping_count -= 1;
+    }
+}
+
 static void gpio_worker_task(void *arg)
 {
     (void)arg;
@@ -156,29 +168,6 @@ honch_err_t honch_gpio_register(gpio_num_t pin, const char *event_name,
         return HONCH_ERR_INVALID_ARG;
     }
 
-    // Check if pin is already registered, replace if so
-    int idx = -1;
-    for (int i = 0; i < s_mapping_count; i++) {
-        if (s_mappings[i].pin == pin) {
-            idx = i;
-            gpio_isr_handler_remove(pin);
-            break;
-        }
-    }
-
-    if (idx < 0) {
-        if (s_mapping_count >= MAX_GPIO_PINS) {
-            ESP_LOGE(TAG, "Maximum GPIO pins (%d) already registered", MAX_GPIO_PINS);
-            return HONCH_ERR_NO_MEM;
-        }
-        idx = s_mapping_count++;
-    }
-
-    s_mappings[idx].pin = pin;
-    strncpy(s_mappings[idx].event_name, event_name, sizeof(s_mappings[idx].event_name) - 1);
-    s_mappings[idx].event_name[sizeof(s_mappings[idx].event_name) - 1] = '\0';
-    s_mappings[idx].last_trigger_us = 0;
-
     // Configure GPIO
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << pin),
@@ -197,12 +186,40 @@ honch_err_t honch_gpio_register(gpio_num_t pin, const char *event_name,
         case HONCH_GPIO_BOTH_EDGES:
             io_conf.intr_type = GPIO_INTR_ANYEDGE;
             break;
+        default:
+            return HONCH_ERR_INVALID_ARG;
+    }
+
+    gpio_mapping_t next_mapping = {
+        .pin = pin,
+        .last_trigger_us = 0
+    };
+    strncpy(next_mapping.event_name, event_name, sizeof(next_mapping.event_name) - 1);
+    next_mapping.event_name[sizeof(next_mapping.event_name) - 1] = '\0';
+
+    // Check if pin is already registered, replace if so
+    int idx = -1;
+    for (int i = 0; i < s_mapping_count; i++) {
+        if (s_mappings[i].pin == pin) {
+            idx = i;
+            break;
+        }
+    }
+
+    bool added_mapping = false;
+    if (idx < 0) {
+        if (s_mapping_count >= MAX_GPIO_PINS) {
+            ESP_LOGE(TAG, "Maximum GPIO pins (%d) already registered", MAX_GPIO_PINS);
+            return HONCH_ERR_NO_MEM;
+        }
+        idx = s_mapping_count;
+        added_mapping = true;
     }
 
     esp_err_t err = gpio_config(&io_conf);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to configure GPIO %d: %s", pin, esp_err_to_name(err));
-        s_mapping_count--;
+        honch_gpio_rollback_mapping(added_mapping, idx);
         return HONCH_ERR_INTERNAL;
     }
 
@@ -214,16 +231,28 @@ honch_err_t honch_gpio_register(gpio_num_t pin, const char *event_name,
             s_isr_service_installed = true;
         } else {
             ESP_LOGE(TAG, "Failed to install GPIO ISR service: %s", esp_err_to_name(err));
+            honch_gpio_rollback_mapping(added_mapping, idx);
             return HONCH_ERR_INTERNAL;
         }
     }
 
+    if (!added_mapping) {
+        gpio_isr_handler_remove(pin);
+    }
     err = gpio_isr_handler_add(pin, gpio_isr_handler, (void *)(uintptr_t)pin);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to add ISR handler for GPIO %d: %s", pin, esp_err_to_name(err));
+        honch_gpio_rollback_mapping(added_mapping, idx);
         return HONCH_ERR_INTERNAL;
     }
 
+    s_mappings[idx].pin = next_mapping.pin;
+    strncpy(s_mappings[idx].event_name, next_mapping.event_name, sizeof(s_mappings[idx].event_name) - 1);
+    s_mappings[idx].event_name[sizeof(s_mappings[idx].event_name) - 1] = '\0';
+    s_mappings[idx].last_trigger_us = next_mapping.last_trigger_us;
+    if (added_mapping) {
+        s_mapping_count++;
+    }
     ESP_LOGI(TAG, "GPIO %d registered for event '%s'", pin, event_name);
     return HONCH_OK;
 }
