@@ -97,6 +97,8 @@ struct honch_wire_v2_value {
             size_t count;
         } map;
     };
+    /* For string values, SIZE_MAX means NUL-terminated C string.
+       Any other value is an exact UTF-8 byte length; 0 encodes empty. */
     size_t string_size;
 };
 
