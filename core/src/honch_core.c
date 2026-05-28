@@ -1496,7 +1496,12 @@ honch_status_t honch_core_session_start(honch_client_t *client, const char *sess
         return status;
     }
 
-    if (client->session_id != NULL) {
+    honch_lifecycle_queue_tracker_t replacement_tracker;
+    honch_lifecycle_queue_tracker_begin(client, &replacement_tracker);
+    char *old_session_id = NULL;
+    bool replacing_session = client->session_id != NULL;
+
+    if (replacing_session) {
         status = honch_track_locked_internal(
             client,
             "$session_end",
@@ -1504,9 +1509,9 @@ honch_status_t honch_core_session_start(honch_client_t *client, const char *sess
             end_event_context.battery_level,
             true,
             &end_event_context.auto_properties,
-            NULL);
+            &replacement_tracker);
         if (status == HONCH_OK) {
-            free(client->session_id);
+            old_session_id = client->session_id;
             client->session_id = NULL;
         }
     }
@@ -1520,11 +1525,22 @@ honch_status_t honch_core_session_start(honch_client_t *client, const char *sess
             start_event_context.battery_level,
             true,
             &start_event_context.auto_properties,
-            NULL);
+            &replacement_tracker);
         if (status != HONCH_OK) {
             free(client->session_id);
-            client->session_id = NULL;
+            client->session_id = old_session_id;
+            old_session_id = NULL;
+            if (replacing_session) {
+                honch_status_t rollback_status =
+                    honch_lifecycle_queue_tracker_rollback(client, &replacement_tracker);
+                if (rollback_status != HONCH_OK) {
+                    status = rollback_status;
+                }
+            }
         }
+    }
+    if (status == HONCH_OK) {
+        free(old_session_id);
     }
 
     honch_client_unlock(client);
@@ -1532,6 +1548,7 @@ honch_status_t honch_core_session_start(honch_client_t *client, const char *sess
     honch_event_context_free(&start_event_context);
     free(properties_json);
     free(session_id);
+    free(old_session_id);
     honch_client_leave(client);
     return status;
 }

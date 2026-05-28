@@ -472,6 +472,39 @@ static void test_custom_storage_drops_oldest_at_queue_limit(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
+static void test_failed_session_replacement_preserves_old_session(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .track_queue_depth = 1
+    };
+    honch_platform_ops_t platform;
+    honch_storage_ops_t storage_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(honch_core_session_start(client, "old") == HONCH_OK);
+    assert(client->session_id != NULL);
+    char old_session_id[64];
+    snprintf(old_session_id, sizeof(old_session_id), "%s", client->session_id);
+    size_t depth_before_replacement = storage.queue_depth;
+
+    storage.fail_queue_push_call = storage.queue_push_calls + 2;
+    assert(honch_core_session_start(client, "replacement") == HONCH_ERROR_IO);
+    assert(client->session_id != NULL);
+    assert(strcmp(client->session_id, old_session_id) == 0);
+    assert(storage.queue_depth == depth_before_replacement);
+
+    storage.fail_queue_push_call = 0;
+    storage.track_queue_depth = 0;
+    storage.queue_depth = 0u;
+    storage.queued_sequence_count = 0u;
+    client->queued_event_count = 0u;
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
 static void test_track_rejects_embedded_nul_property_key(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
@@ -592,6 +625,7 @@ int main(void)
     test_sequence_wrap_rejects_enqueue_without_advancing();
     test_custom_storage_enqueue_refreshes_cached_queue_depth();
     test_custom_storage_drops_oldest_at_queue_limit();
+    test_failed_session_replacement_preserves_old_session();
     test_track_rejects_embedded_nul_property_key();
     test_identify_rejects_embedded_nul_trait_key();
     test_state_get_rejects_size_overflow();
