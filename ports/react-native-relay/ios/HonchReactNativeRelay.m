@@ -9,6 +9,7 @@ static NSString * const HonchRelayFrameEventName = @"HonchRelayFrame";
 {
   CBCentralManager *_centralManager;
   NSMutableDictionary<NSString *, CBPeripheral *> *_peripheralsById;
+  NSMutableDictionary<NSString *, NSDictionary *> *_discoveredDevicesById;
   NSMutableDictionary<NSString *, CBCharacteristic *> *_ackCharacteristicsById;
   BOOL _hasListeners;
 }
@@ -22,6 +23,7 @@ RCT_EXPORT_MODULE()
 {
   if ((self = [super init])) {
     _peripheralsById = [NSMutableDictionary new];
+    _discoveredDevicesById = [NSMutableDictionary new];
     _ackCharacteristicsById = [NSMutableDictionary new];
   }
   return self;
@@ -65,6 +67,11 @@ RCT_EXPORT_METHOD(stopScan:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseR
   [self ensureCentralManager];
   [_centralManager stopScan];
   resolve(nil);
+}
+
+RCT_EXPORT_METHOD(discoveredDevices:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+{
+  resolve(_discoveredDevicesById.allValues);
 }
 
 RCT_EXPORT_METHOD(connect:(NSString *)deviceId resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
@@ -158,6 +165,14 @@ RCT_EXPORT_METHOD(cancelUpload:(RCTPromiseResolveBlock)resolve rejecter:(RCTProm
 {
   NSString *deviceId = peripheral.identifier.UUIDString;
   _peripheralsById[deviceId] = peripheral;
+  NSMutableDictionary *device = [@{
+    @"id": deviceId,
+    @"rssi": RSSI
+  } mutableCopy];
+  if (peripheral.name != nil) {
+    device[@"name"] = peripheral.name;
+  }
+  _discoveredDevicesById[deviceId] = device;
   peripheral.delegate = self;
 }
 

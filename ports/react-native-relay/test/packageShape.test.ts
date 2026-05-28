@@ -61,6 +61,7 @@ describe("React Native relay package shape", () => {
     for (const method of [
       "startScan",
       "stopScan",
+      "discoveredDevices",
       "connect",
       "disconnect",
       "subscribeFrames",

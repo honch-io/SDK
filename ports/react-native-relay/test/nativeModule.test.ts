@@ -12,6 +12,10 @@ describe("createRelayNativeBindings", () => {
       async stopScan() {
         calls.push("stopScan");
       },
+      async discoveredDevices() {
+        calls.push("discoveredDevices");
+        return [{ id: "device-a", name: "Relay A", rssi: -42 }];
+      },
       async connect(deviceId: string) {
         calls.push(`connect:${deviceId}`);
       },
@@ -33,6 +37,9 @@ describe("createRelayNativeBindings", () => {
     });
 
     await bindings.bleNative.startScan();
+    await expect(bindings.bleNative.discoveredDevices()).resolves.toEqual([
+      { id: "device-a", name: "Relay A", rssi: -42 }
+    ]);
     await bindings.bleNative.connect("device-a");
     await bindings.bleNative.subscribeFrames("device-a");
     await bindings.bleNative.acknowledgeMessage("device-a", "1");
@@ -43,6 +50,7 @@ describe("createRelayNativeBindings", () => {
 
     expect(calls).toEqual([
       "startScan",
+      "discoveredDevices",
       "connect:device-a",
       "subscribeFrames:device-a",
       "ack:device-a:1",

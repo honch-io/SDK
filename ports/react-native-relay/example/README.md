@@ -4,11 +4,12 @@ This directory is reserved for the internal mobile E2E harness.
 
 `App.tsx` wires the package to `NativeModules.HonchReactNativeRelay`, subscribes
 to native `HonchRelayFrame` events, stores relay queue state in MMKV, displays
-pending mobile relay messages, and exposes manual scan/connect/drain controls.
+discovered relay devices and pending mobile relay messages, and exposes manual
+scan/connect/drain controls.
 
 The example app should prove:
 
-- BLE scan/connect to a Honch firmware relay peripheral.
+- BLE scan, discovery listing, and connect to a Honch firmware relay peripheral.
 - Relay chunk receipt and CRC validation.
 - Durable mobile-side message assembly.
 - Manual and scheduled upload draining.

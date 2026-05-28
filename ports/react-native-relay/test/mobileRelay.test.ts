@@ -58,6 +58,9 @@ describe("createMobileRelay", () => {
       bleNative: {
         async startScan() {},
         async stopScan() {},
+        async discoveredDevices() {
+          return [];
+        },
         async connect() {},
         async disconnect() {},
         async subscribeFrames() {},
@@ -90,6 +93,9 @@ describe("createMobileRelay", () => {
       bleNative: {
         async startScan() {},
         async stopScan() {},
+        async discoveredDevices() {
+          return [];
+        },
         async connect() {},
         async disconnect() {},
         async subscribeFrames() {},
@@ -116,6 +122,9 @@ describe("createMobileRelay", () => {
       bleNative: {
         async startScan() {},
         async stopScan() {},
+        async discoveredDevices() {
+          return [];
+        },
         async connect() {},
         async disconnect() {},
         async subscribeFrames() {},
@@ -145,6 +154,9 @@ describe("createMobileRelay", () => {
       bleNative: {
         async startScan() {},
         async stopScan() {},
+        async discoveredDevices() {
+          return [];
+        },
         async connect() {},
         async disconnect() {},
         async subscribeFrames() {},
@@ -163,6 +175,32 @@ describe("createMobileRelay", () => {
     await relay.stopUploadScheduler();
 
     expect(calls).toEqual(["cancel"]);
+  });
+
+  it("exposes discovered BLE relay devices", async () => {
+    const relay = createMobileRelay({
+      durableStore: createMemoryDurableStore(),
+      uploaderConfig,
+      bleNative: {
+        async startScan() {},
+        async stopScan() {},
+        async discoveredDevices() {
+          return [{ id: "device-a", name: "Relay A", rssi: -64 }];
+        },
+        async connect() {},
+        async disconnect() {},
+        async subscribeFrames() {},
+        async acknowledgeMessage() {}
+      },
+      schedulerNative: {
+        async scheduleUpload() {},
+        async cancelUpload() {}
+      }
+    });
+
+    await expect(relay.discoveredDevices()).resolves.toEqual([
+      { id: "device-a", name: "Relay A", rssi: -64 }
+    ]);
   });
 
   it("subscribes native frame events into durable BLE receipt", async () => {
@@ -184,6 +222,9 @@ describe("createMobileRelay", () => {
       bleNative: {
         async startScan() {},
         async stopScan() {},
+        async discoveredDevices() {
+          return [];
+        },
         async connect() {},
         async disconnect() {},
         async subscribeFrames() {},

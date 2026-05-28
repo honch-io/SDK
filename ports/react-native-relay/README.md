@@ -55,10 +55,10 @@ or permanently rejects them.
 
 ## iOS Native Bridge
 
-The iOS module uses CoreBluetooth to scan for the relay service, connect to a
-discovered peripheral, subscribe to the frame notification characteristic, emit
-`HonchRelayFrame` events to JavaScript, and write ACK payloads to the ACK
-characteristic.
+The iOS module uses CoreBluetooth to scan for the relay service, expose
+discovered peripherals to JavaScript, connect to a selected peripheral,
+subscribe to the frame notification characteristic, emit `HonchRelayFrame`
+events to JavaScript, and write ACK payloads to the ACK characteristic.
 
 Required host app setup:
 
@@ -74,10 +74,10 @@ consuming React Native host before production sign-off.
 
 ## Android Native Bridge
 
-The Android module uses platform BLE APIs to scan for the relay service, connect
-to a discovered device, discover the relay frame and ACK characteristics,
-subscribe to frame notifications, emit `HonchRelayFrame` events to JavaScript,
-and write ACK payloads with response.
+The Android module uses platform BLE APIs to scan for the relay service, expose
+discovered devices to JavaScript, connect to a selected device, discover the
+relay frame and ACK characteristics, subscribe to frame notifications, emit
+`HonchRelayFrame` events to JavaScript, and write ACK payloads with response.
 
 Required host app setup:
 
@@ -123,6 +123,9 @@ const relay = createMobileRelay({
 
 const subscription = relay.subscribeNativeFrames();
 ```
+
+Use `relay.discoveredDevices()` after scanning to populate host-app selection
+UI before calling `connect(deviceId)` and `subscribeFrames(deviceId)`.
 
 ## Upload Draining
 

@@ -31,6 +31,10 @@ export function createMobileRelay(options: MobileRelayOptions) {
       return receiver.stopScan();
     },
 
+    discoveredDevices() {
+      return receiver.discoveredDevices();
+    },
+
     connect(deviceId: string) {
       return receiver.connect(deviceId);
     },

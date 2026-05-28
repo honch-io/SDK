@@ -46,6 +46,9 @@ function fakeNative(acknowledgements: string[]): RelayBleNative {
   return {
     async startScan() {},
     async stopScan() {},
+    async discoveredDevices() {
+      return [];
+    },
     async connect() {},
     async disconnect() {},
     async subscribeFrames() {},
