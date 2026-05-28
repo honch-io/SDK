@@ -16,6 +16,7 @@ import android.bluetooth.le.ScanSettings;
 import android.content.Context;
 import android.os.ParcelUuid;
 import android.util.Base64;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 import androidx.work.OneTimeWorkRequest;
@@ -42,6 +43,7 @@ import java.util.concurrent.TimeUnit;
 public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
     public static final String NAME = "HonchReactNativeRelay";
 
+    private static final String TAG = "HonchRelay";
     private static final String RELAY_FRAME_EVENT_NAME = "HonchRelayFrame";
     private static final UUID RELAY_SERVICE_UUID = UUID.fromString("484f4e43-482d-5245-4c41-592d53445631");
     private static final UUID FRAME_CHARACTERISTIC_UUID = UUID.fromString("484f4e43-482d-5245-4c41-592d4652414d");
@@ -69,7 +71,13 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
                 } catch (SecurityException ignored) {
                 }
                 discoveredDevicesById.put(deviceId, new RelayDeviceInfo(deviceId, name, result.getRssi()));
+                Log.d(TAG, "Discovered relay candidate " + deviceId + " rssi=" + result.getRssi());
             }
+        }
+
+        @Override
+        public void onScanFailed(int errorCode) {
+            Log.e(TAG, "BLE scan failed with errorCode=" + errorCode);
         }
     };
 
@@ -115,14 +123,17 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
     @ReactMethod
     public void startScan(Promise promise) {
         try {
+            Log.d(TAG, "startScan requested");
             BluetoothAdapter adapter = bluetoothAdapter();
             if (adapter == null || !adapter.isEnabled()) {
+                Log.w(TAG, "Bluetooth adapter unavailable or disabled");
                 promise.reject("bluetooth_unavailable", "Bluetooth is not enabled");
                 return;
             }
 
             scanner = adapter.getBluetoothLeScanner();
             if (scanner == null) {
+                Log.w(TAG, "BLE scanner unavailable");
                 promise.reject("scanner_unavailable", "BLE scanner is not available");
                 return;
             }
@@ -134,10 +145,25 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
                 .build();
             scanner.startScan(Arrays.asList(filter), settings, scanCallback);
+            Log.d(TAG, "BLE scan started");
             promise.resolve(null);
         } catch (SecurityException error) {
+            Log.e(TAG, "Missing bluetooth permission during scan", error);
             promise.reject("missing_bluetooth_permission", error);
+        } catch (RuntimeException error) {
+            Log.e(TAG, "Unexpected scan failure", error);
+            promise.reject("scan_failed", error);
         }
+    }
+
+    @ReactMethod
+    public void addListener(String eventName) {
+        // Required by NativeEventEmitter on recent React Native versions.
+    }
+
+    @ReactMethod
+    public void removeListeners(double count) {
+        // Required by NativeEventEmitter on recent React Native versions.
     }
 
     @ReactMethod

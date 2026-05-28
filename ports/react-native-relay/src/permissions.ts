@@ -49,9 +49,9 @@ async function resolvePermissionDeps(deps: RelayPermissionDeps) {
     };
   }
 
-  const reactNative = (await import("react-native")) as {
+  const reactNative = require("react-native") as {
     Platform: { OS: string };
-    PermissionsAndroid: RelayPermissionDeps["permissions"];
+    PermissionsAndroid?: RelayPermissionDeps["permissions"];
   };
   if (reactNative.PermissionsAndroid === undefined) {
     throw new Error("React Native PermissionsAndroid is unavailable");

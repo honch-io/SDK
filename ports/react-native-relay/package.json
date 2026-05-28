@@ -13,11 +13,6 @@
     "verify:android:native": "scripts/verify-android-native.sh",
     "verify:ios:native": "scripts/verify-ios-syntax.sh"
   },
-  "codegenConfig": {
-    "name": "HonchReactNativeRelaySpec",
-    "type": "modules",
-    "jsSrcsDir": "src"
-  },
   "dependencies": {
     "react-native-mmkv": "^4.3.1",
     "react-native-nitro-modules": "^0.35.7"
