@@ -7,7 +7,9 @@
 #include "honch/core/honch.h"
 
 #include "esp_core_adapter.h"
+#include "honch_internal.h"
 
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -17,6 +19,8 @@
 static const char *TAG = "honch";
 
 static honch_client_t *s_client = NULL;
+static bool s_client_initializing = false;
+static pthread_mutex_t s_client_mutex = PTHREAD_MUTEX_INITIALIZER;
 static honch_esp_platform_t s_platform_ctx;
 static honch_esp_storage_t s_storage_ctx;
 static honch_esp_transport_t s_transport_ctx;
@@ -37,9 +41,98 @@ volatile bool g_honch_connected = false;
 
 extern void honch_esp_gpio_shutdown_hook(void) __attribute__((weak));
 
+static honch_err_t honch_esp_status_to_err(honch_status_t status);
+
+static honch_err_t honch_esp_client_acquire(honch_client_t **out)
+{
+    if (out == NULL) {
+        return HONCH_ERR_INVALID_ARG;
+    }
+    *out = NULL;
+
+    if (pthread_mutex_lock(&s_client_mutex) != 0) {
+        return HONCH_ERR_INTERNAL;
+    }
+
+    honch_client_t *client = s_client;
+    if (client == NULL) {
+        (void)pthread_mutex_unlock(&s_client_mutex);
+        return HONCH_ERR_NOT_INITIALIZED;
+    }
+
+    honch_status_t status = honch_client_enter(client);
+    if (status != HONCH_STATUS_OK) {
+        (void)pthread_mutex_unlock(&s_client_mutex);
+        return honch_esp_status_to_err(status);
+    }
+
+    *out = client;
+    (void)pthread_mutex_unlock(&s_client_mutex);
+    return HONCH_OK;
+}
+
+static void honch_esp_client_release(honch_client_t *client)
+{
+    honch_client_leave(client);
+}
+
+static honch_err_t honch_esp_client_detach(honch_client_t **out)
+{
+    if (out == NULL) {
+        return HONCH_ERR_INVALID_ARG;
+    }
+    *out = NULL;
+
+    if (pthread_mutex_lock(&s_client_mutex) != 0) {
+        return HONCH_ERR_INTERNAL;
+    }
+
+    if (s_client == NULL) {
+        (void)pthread_mutex_unlock(&s_client_mutex);
+        return HONCH_ERR_NOT_INITIALIZED;
+    }
+
+    *out = s_client;
+    s_client = NULL;
+    (void)pthread_mutex_unlock(&s_client_mutex);
+    return HONCH_OK;
+}
+
+static honch_err_t honch_esp_init_begin(void)
+{
+    if (pthread_mutex_lock(&s_client_mutex) != 0) {
+        return HONCH_ERR_INTERNAL;
+    }
+
+    if (s_client != NULL || s_client_initializing) {
+        (void)pthread_mutex_unlock(&s_client_mutex);
+        return HONCH_ERR_ALREADY_INITIALIZED;
+    }
+
+    s_client_initializing = true;
+    (void)pthread_mutex_unlock(&s_client_mutex);
+    return HONCH_OK;
+}
+
+static void honch_esp_init_finish(honch_client_t *client)
+{
+    if (pthread_mutex_lock(&s_client_mutex) != 0) {
+        return;
+    }
+
+    s_client = client;
+    s_client_initializing = false;
+    (void)pthread_mutex_unlock(&s_client_mutex);
+}
+
 bool honch_esp_is_initialized(void)
 {
-    return s_client != NULL;
+    bool initialized = false;
+    if (pthread_mutex_lock(&s_client_mutex) == 0) {
+        initialized = s_client != NULL;
+        (void)pthread_mutex_unlock(&s_client_mutex);
+    }
+    return initialized;
 }
 
 static honch_err_t honch_esp_status_to_err(honch_status_t status)
@@ -144,17 +237,21 @@ static honch_err_t honch_esp_copy_config(const honch_config_t *config)
 
 honch_err_t honch_init(const honch_config_t *config)
 {
-    if (s_client != NULL) {
-        return HONCH_ERR_ALREADY_INITIALIZED;
+    honch_err_t err = honch_esp_init_begin();
+    if (err != HONCH_OK) {
+        return err;
     }
+
     if (config == NULL || config->api_key == NULL || config->host == NULL ||
         config->device_model == NULL || config->firmware_version == NULL ||
         config->event_buffer == NULL || config->event_buffer_size == 0u) {
+        honch_esp_init_finish(NULL);
         return HONCH_ERR_INVALID_ARG;
     }
 
-    honch_err_t err = honch_esp_copy_config(config);
+    err = honch_esp_copy_config(config);
     if (err != HONCH_OK) {
+        honch_esp_init_finish(NULL);
         return err;
     }
 
@@ -165,12 +262,14 @@ honch_err_t honch_init(const honch_config_t *config)
     honch_status_t status = honch_esp_platform_ops_init(&platform_ops, &s_platform_ctx);
     if (status != HONCH_STATUS_OK) {
         honch_esp_clear_legacy_globals();
+        honch_esp_init_finish(NULL);
         return honch_esp_status_to_err(status);
     }
     status = honch_esp_storage_ops_init(&storage_ops, &s_storage_ctx);
     if (status != HONCH_STATUS_OK) {
         honch_esp_platform_ops_deinit(&s_platform_ctx);
         honch_esp_clear_legacy_globals();
+        honch_esp_init_finish(NULL);
         return honch_esp_status_to_err(status);
     }
     status = honch_esp_storage_use_ram_queue(
@@ -180,12 +279,14 @@ honch_err_t honch_init(const honch_config_t *config)
     if (status != HONCH_STATUS_OK) {
         honch_esp_platform_ops_deinit(&s_platform_ctx);
         honch_esp_clear_legacy_globals();
+        honch_esp_init_finish(NULL);
         return honch_esp_status_to_err(status);
     }
     status = honch_esp_transport_ops_init(&transport_ops, &s_transport_ctx);
     if (status != HONCH_STATUS_OK) {
         honch_esp_platform_ops_deinit(&s_platform_ctx);
         honch_esp_clear_legacy_globals();
+        honch_esp_init_finish(NULL);
         return honch_esp_status_to_err(status);
     }
 
@@ -212,25 +313,27 @@ honch_err_t honch_init(const honch_config_t *config)
     if (status != HONCH_STATUS_OK) {
         honch_esp_platform_ops_deinit(&s_platform_ctx);
         honch_esp_clear_legacy_globals();
+        honch_esp_init_finish(NULL);
         ESP_LOGE(TAG, "Core init failed: %s", honch_status_string(status));
         return honch_esp_status_to_err(status);
     }
 
-    s_client = next;
+    honch_esp_init_finish(next);
     return HONCH_OK;
 }
 
 honch_err_t honch_shutdown(void)
 {
-    if (s_client == NULL) {
-        return HONCH_ERR_NOT_INITIALIZED;
+    honch_client_t *client = NULL;
+    honch_err_t err = honch_esp_client_detach(&client);
+    if (err != HONCH_OK) {
+        return err;
     }
 
     if (honch_esp_gpio_shutdown_hook != NULL) {
         honch_esp_gpio_shutdown_hook();
     }
-    honch_status_t status = honch_core_shutdown(s_client);
-    s_client = NULL;
+    honch_status_t status = honch_core_shutdown(client);
     honch_esp_platform_ops_deinit(&s_platform_ctx);
     honch_esp_clear_legacy_globals();
     return honch_esp_status_to_err(status);
@@ -238,61 +341,95 @@ honch_err_t honch_shutdown(void)
 
 honch_err_t honch_track(const char *event, const char *properties_json)
 {
-    if (s_client == NULL) {
-        return HONCH_ERR_NOT_INITIALIZED;
+    honch_client_t *client = NULL;
+    honch_err_t err = honch_esp_client_acquire(&client);
+    if (err != HONCH_OK) {
+        return err;
     }
-    return honch_esp_status_to_err(honch_core_track(s_client, event, properties_json));
+    honch_status_t status = honch_core_track(client, event, properties_json);
+    honch_esp_client_release(client);
+    return honch_esp_status_to_err(status);
 }
 
 honch_err_t honch_identify(const char *distinct_id, const char *properties_json)
 {
-    if (s_client == NULL) {
-        return HONCH_ERR_NOT_INITIALIZED;
+    honch_client_t *client = NULL;
+    honch_err_t err = honch_esp_client_acquire(&client);
+    if (err != HONCH_OK) {
+        return err;
     }
-    return honch_esp_status_to_err(honch_core_identify(s_client, distinct_id, properties_json));
+    honch_status_t status = honch_core_identify(client, distinct_id, properties_json);
+    honch_esp_client_release(client);
+    return honch_esp_status_to_err(status);
 }
 
 honch_err_t honch_set_property(const char *key, const char *value_json)
 {
-    if (s_client == NULL) {
-        return HONCH_ERR_NOT_INITIALIZED;
+    honch_client_t *client = NULL;
+    honch_err_t err = honch_esp_client_acquire(&client);
+    if (err != HONCH_OK) {
+        return err;
     }
-    return honch_esp_status_to_err(honch_core_set_property(s_client, key, value_json));
+    honch_status_t status = honch_core_set_property(client, key, value_json);
+    honch_esp_client_release(client);
+    return honch_esp_status_to_err(status);
 }
 
 honch_err_t honch_session_start(const char *session_name)
 {
-    if (s_client == NULL) {
-        return HONCH_ERR_NOT_INITIALIZED;
+    honch_client_t *client = NULL;
+    honch_err_t err = honch_esp_client_acquire(&client);
+    if (err != HONCH_OK) {
+        return err;
     }
-    return honch_esp_status_to_err(honch_core_session_start(s_client, session_name));
+    honch_status_t status = honch_core_session_start(client, session_name);
+    honch_esp_client_release(client);
+    return honch_esp_status_to_err(status);
 }
 
 honch_err_t honch_session_end(void)
 {
-    if (s_client == NULL) {
-        return HONCH_ERR_NOT_INITIALIZED;
+    honch_client_t *client = NULL;
+    honch_err_t err = honch_esp_client_acquire(&client);
+    if (err != HONCH_OK) {
+        return err;
     }
-    return honch_esp_status_to_err(honch_core_session_end(s_client));
+    honch_status_t status = honch_core_session_end(client);
+    honch_esp_client_release(client);
+    return honch_esp_status_to_err(status);
 }
 
 honch_err_t honch_flush(void)
 {
-    if (s_client == NULL) {
-        return HONCH_ERR_NOT_INITIALIZED;
+    honch_client_t *client = NULL;
+    honch_err_t err = honch_esp_client_acquire(&client);
+    if (err != HONCH_OK) {
+        return err;
     }
-    return honch_esp_status_to_err(honch_core_flush(s_client));
+    honch_status_t status = honch_core_flush(client);
+    honch_esp_client_release(client);
+    return honch_esp_status_to_err(status);
 }
 
 honch_err_t honch_reset(void)
 {
-    if (s_client == NULL) {
-        return HONCH_ERR_NOT_INITIALIZED;
+    honch_client_t *client = NULL;
+    honch_err_t err = honch_esp_client_acquire(&client);
+    if (err != HONCH_OK) {
+        return err;
     }
-    return honch_esp_status_to_err(honch_core_reset(s_client));
+    honch_status_t status = honch_core_reset(client);
+    honch_esp_client_release(client);
+    return honch_esp_status_to_err(status);
 }
 
 const char *honch_get_device_id(void)
 {
-    return honch_core_get_device_id(s_client);
+    honch_client_t *client = NULL;
+    if (honch_esp_client_acquire(&client) != HONCH_OK) {
+        return NULL;
+    }
+    const char *device_id = honch_core_get_device_id(client);
+    honch_esp_client_release(client);
+    return device_id;
 }

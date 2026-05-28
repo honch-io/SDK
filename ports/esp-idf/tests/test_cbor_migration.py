@@ -66,8 +66,11 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("honch_esp_storage_ops_init(&storage_ops", compat)
         self.assertIn("honch_esp_transport_ops_init(&transport_ops", compat)
         self.assertIn("honch_core_init(&next", compat)
-        self.assertIn("honch_core_track(s_client", compat)
-        self.assertIn("honch_core_flush(s_client)", compat)
+        self.assertIn("honch_esp_client_acquire(&client)", compat)
+        self.assertIn("honch_core_track(client", compat)
+        self.assertIn("honch_core_flush(client)", compat)
+        self.assertNotIn("honch_core_track(s_client", compat)
+        self.assertNotIn("honch_core_flush(s_client)", compat)
         self.assertIn("honch_client_t", adapter)
         self.assertIn("honch_state_prepare", shims)
 
