@@ -18,6 +18,7 @@ typedef struct fake_state_storage {
     int queue_push_calls;
     int fail_queue_push_call;
     int queue_consume_calls;
+    int queue_drop_oldest_calls;
     int track_queue_depth;
     const char *state_size_fault_key;
     const char *state_read_overreport_key;
@@ -168,6 +169,24 @@ static honch_status_t fake_queue_clear(void *ctx)
     return HONCH_OK;
 }
 
+static honch_status_t fake_queue_drop_oldest(void *ctx)
+{
+    fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
+    storage->queue_drop_oldest_calls++;
+    if (storage->queued_sequence_count == 0u) {
+        return HONCH_ERROR_NOT_INITIALIZED;
+    }
+
+    for (size_t i = 1u; i < storage->queued_sequence_count; i++) {
+        storage->queued_sequences[i - 1u] = storage->queued_sequences[i];
+    }
+    storage->queued_sequence_count--;
+    if (storage->track_queue_depth) {
+        storage->queue_depth = storage->queued_sequence_count;
+    }
+    return HONCH_OK;
+}
+
 static honch_status_t fake_queue_depth(void *ctx, size_t *depth)
 {
     fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
@@ -251,6 +270,7 @@ static honch_core_config_t fake_config(
         .state_delete = fake_state_delete,
         .queue_push = fake_queue_push,
         .queue_consume = fake_queue_consume,
+        .queue_drop_oldest = fake_queue_drop_oldest,
         .queue_clear = fake_queue_clear,
         .queue_depth = fake_queue_depth,
         .ctx = storage
@@ -426,6 +446,32 @@ static void test_custom_storage_enqueue_refreshes_cached_queue_depth(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
+static void test_custom_storage_drops_oldest_at_queue_limit(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .track_queue_depth = 1
+    };
+    honch_platform_ops_t platform;
+    honch_storage_ops_t storage_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    config.max_queued_events = 1u;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(storage.queue_depth == 1u);
+    assert(honch_core_track(client, "bounded_custom_queue", NULL) == HONCH_OK);
+    assert(storage.queue_drop_oldest_calls == 1);
+    assert(storage.queue_depth == 1u);
+    assert(client->queued_event_count == 1u);
+    storage.track_queue_depth = 0;
+    storage.queue_depth = 0u;
+    storage.queued_sequence_count = 0u;
+    client->queued_event_count = 0u;
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
 static void test_track_rejects_embedded_nul_property_key(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
@@ -545,6 +591,7 @@ int main(void)
     test_set_property_rejects_reserved_key();
     test_sequence_wrap_rejects_enqueue_without_advancing();
     test_custom_storage_enqueue_refreshes_cached_queue_depth();
+    test_custom_storage_drops_oldest_at_queue_limit();
     test_track_rejects_embedded_nul_property_key();
     test_identify_rejects_embedded_nul_trait_key();
     test_state_get_rejects_size_overflow();

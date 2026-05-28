@@ -352,6 +352,39 @@ static honch_status_t honch_client_queue_clear(honch_client_t *client);
 static honch_status_t honch_client_lock(honch_client_t *client);
 static void honch_client_unlock(honch_client_t *client);
 
+static honch_status_t honch_client_enforce_custom_queue_limit(honch_client_t *client)
+{
+    if (client == NULL || client->storage == NULL ||
+        client->storage->queue_depth == NULL || client->storage->queue_drop_oldest == NULL) {
+        return HONCH_OK;
+    }
+
+    size_t depth = 0u;
+    honch_status_t status = honch_client_queue_depth(client, &depth);
+    if (status != HONCH_OK) {
+        return status;
+    }
+    client->queued_event_count = depth;
+
+    while (depth >= client->max_queued_events) {
+        status = client->storage->queue_drop_oldest(client->storage->ctx);
+        if (status != HONCH_OK) {
+            return status;
+        }
+
+        if (depth > 0u) {
+            depth--;
+        }
+        size_t refreshed_depth = 0u;
+        if (honch_client_queue_depth(client, &refreshed_depth) == HONCH_OK && refreshed_depth < depth) {
+            depth = refreshed_depth;
+        }
+        client->queued_event_count = depth;
+    }
+
+    return HONCH_OK;
+}
+
 static honch_status_t honch_build_event(
     honch_client_t *client,
     const char *event_name,
@@ -541,8 +574,13 @@ static honch_status_t honch_client_queue_push_recorded(
     }
 
     if (client != NULL && client->storage != NULL && client->storage->queue_push != NULL) {
+        honch_status_t status = honch_client_enforce_custom_queue_limit(client);
+        if (status != HONCH_OK) {
+            return status;
+        }
+
         uint64_t sequence = client->sequence;
-        honch_status_t status = client->storage->queue_push(client->storage->ctx, event, event_size, sequence);
+        status = client->storage->queue_push(client->storage->ctx, event, event_size, sequence);
         if (status == HONCH_OK) {
             client->sequence++;
             if (sequence_out != NULL) {
