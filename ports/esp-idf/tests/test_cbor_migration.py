@@ -135,6 +135,35 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn('version: "0.2.0"', component_manifest)
         self.assertIn('idf.py add-dependency "honch-io/honch^0.2.0"', readme)
 
+    def test_esp_component_dependencies_match_port_sources(self) -> None:
+        cmake = read("ports/esp-idf/honch/CMakeLists.txt")
+        root_manifest = read("idf_component.yml")
+        component_manifest = read("ports/esp-idf/honch/idf_component.yml")
+
+        for dependency in (
+            "nvs_flash",
+            "esp_http_client",
+            "esp-tls",
+            "esp_timer",
+            "pthread",
+            "esp_driver_gpio",
+            "driver",
+        ):
+            self.assertIn(f"        {dependency}", cmake)
+
+        for unused_dependency in (
+            "        esp_wifi",
+            "        esp_event",
+            "        cbor",
+            "        espressif__cjson",
+            "        efuse",
+        ):
+            self.assertNotIn(unused_dependency, cmake)
+
+        for manifest in (root_manifest, component_manifest):
+            self.assertNotIn("espressif/cbor", manifest)
+            self.assertNotIn("espressif/cjson", manifest)
+
     def test_ci_triggers_when_shared_core_changes(self) -> None:
         esp_workflow = read(".github/workflows/esp-idf.yml")
         micropython_workflow = read(".github/workflows/micropython.yml")
