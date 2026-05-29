@@ -33,8 +33,21 @@ static int s_mapping_count = 0;
 static QueueHandle_t s_gpio_queue = NULL;
 static TaskHandle_t s_gpio_task = NULL;
 static SemaphoreHandle_t s_gpio_exit_sem = NULL;
+static SemaphoreHandle_t s_mapping_mutex = NULL;
 static volatile bool s_running = false;
 static bool s_isr_service_installed = false;
+
+static bool honch_gpio_mapping_lock(TickType_t timeout)
+{
+    return s_mapping_mutex != NULL && xSemaphoreTake(s_mapping_mutex, timeout) == pdTRUE;
+}
+
+static void honch_gpio_mapping_unlock(void)
+{
+    if (s_mapping_mutex != NULL) {
+        xSemaphoreGive(s_mapping_mutex);
+    }
+}
 
 static void IRAM_ATTR gpio_isr_handler(void *arg)
 {
@@ -75,22 +88,32 @@ static void gpio_worker_task(void *arg)
                 break;
             }
 
+            bool should_track = false;
+            char event_name[sizeof(s_mappings[0].event_name)] = {0};
+
             // Find the mapping
-            for (int i = 0; i < s_mapping_count; i++) {
-                if (s_mappings[i].pin == (gpio_num_t)pin) {
-                    // Debounce check
-                    int64_t now = esp_timer_get_time();
-                    if ((now - s_mappings[i].last_trigger_us) < (DEBOUNCE_MS * 1000)) {
+            if (honch_gpio_mapping_lock(pdMS_TO_TICKS(1000))) {
+                for (int i = 0; i < s_mapping_count; i++) {
+                    if (s_mappings[i].pin == (gpio_num_t)pin) {
+                        // Debounce check
+                        int64_t now = esp_timer_get_time();
+                        if ((now - s_mappings[i].last_trigger_us) < (DEBOUNCE_MS * 1000)) {
+                            break;
+                        }
+                        s_mappings[i].last_trigger_us = now;
+                        strncpy(event_name, s_mappings[i].event_name, sizeof(event_name) - 1);
+                        event_name[sizeof(event_name) - 1] = '\0';
+                        should_track = true;
                         break;
                     }
-                    s_mappings[i].last_trigger_us = now;
-
-                    // Track the event
-                    char props[32];
-                    snprintf(props, sizeof(props), "{\"pin\":%d}", (int)pin);
-                    honch_track(s_mappings[i].event_name, props);
-                    break;
                 }
+                honch_gpio_mapping_unlock();
+            }
+
+            if (should_track) {
+                char props[32];
+                snprintf(props, sizeof(props), "{\"pin\":%d}", (int)pin);
+                honch_track(event_name, props);
             }
         }
     }
@@ -106,13 +129,22 @@ honch_err_t honch_gpio_init(void)
     s_mapping_count = 0;
     memset(s_mappings, 0, sizeof(s_mappings));
 
+    s_mapping_mutex = xSemaphoreCreateMutex();
+    if (!s_mapping_mutex) {
+        return HONCH_ERR_NO_MEM;
+    }
+
     s_gpio_queue = xQueueCreate(16, sizeof(uint32_t));
     if (!s_gpio_queue) {
+        vSemaphoreDelete(s_mapping_mutex);
+        s_mapping_mutex = NULL;
         return HONCH_ERR_NO_MEM;
     }
 
     s_gpio_exit_sem = xSemaphoreCreateBinary();
     if (!s_gpio_exit_sem) {
+        vSemaphoreDelete(s_mapping_mutex);
+        s_mapping_mutex = NULL;
         vQueueDelete(s_gpio_queue);
         s_gpio_queue = NULL;
         return HONCH_ERR_NO_MEM;
@@ -122,6 +154,8 @@ honch_err_t honch_gpio_init(void)
 
     BaseType_t ret = xTaskCreate(gpio_worker_task, "honch_gpio", 4096, NULL, 4, &s_gpio_task);
     if (ret != pdPASS) {
+        vSemaphoreDelete(s_mapping_mutex);
+        s_mapping_mutex = NULL;
         vSemaphoreDelete(s_gpio_exit_sem);
         s_gpio_exit_sem = NULL;
         vQueueDelete(s_gpio_queue);
@@ -137,8 +171,11 @@ void honch_gpio_deinit(void)
     s_running = false;
 
     // Remove ISR handlers
-    for (int i = 0; i < s_mapping_count; i++) {
-        gpio_isr_handler_remove(s_mappings[i].pin);
+    if (honch_gpio_mapping_lock(portMAX_DELAY)) {
+        for (int i = 0; i < s_mapping_count; i++) {
+            gpio_isr_handler_remove(s_mappings[i].pin);
+        }
+        honch_gpio_mapping_unlock();
     }
 
     TaskHandle_t gpio_task = s_gpio_task;
@@ -162,7 +199,16 @@ void honch_gpio_deinit(void)
         s_gpio_exit_sem = NULL;
     }
 
-    s_mapping_count = 0;
+    if (honch_gpio_mapping_lock(portMAX_DELAY)) {
+        s_mapping_count = 0;
+        memset(s_mappings, 0, sizeof(s_mappings));
+        honch_gpio_mapping_unlock();
+    }
+
+    if (s_mapping_mutex) {
+        vSemaphoreDelete(s_mapping_mutex);
+        s_mapping_mutex = NULL;
+    }
 }
 
 honch_err_t honch_gpio_register(gpio_num_t pin, const char *event_name,
@@ -204,6 +250,10 @@ honch_err_t honch_gpio_register(gpio_num_t pin, const char *event_name,
     strncpy(next_mapping.event_name, event_name, sizeof(next_mapping.event_name) - 1);
     next_mapping.event_name[sizeof(next_mapping.event_name) - 1] = '\0';
 
+    if (!honch_gpio_mapping_lock(portMAX_DELAY)) {
+        return HONCH_ERR_INTERNAL;
+    }
+
     // Check if pin is already registered, replace if so
     int idx = -1;
     for (int i = 0; i < s_mapping_count; i++) {
@@ -217,6 +267,7 @@ honch_err_t honch_gpio_register(gpio_num_t pin, const char *event_name,
     if (idx < 0) {
         if (s_mapping_count >= MAX_GPIO_PINS) {
             ESP_LOGE(TAG, "Maximum GPIO pins (%d) already registered", MAX_GPIO_PINS);
+            honch_gpio_mapping_unlock();
             return HONCH_ERR_NO_MEM;
         }
         idx = s_mapping_count;
@@ -227,6 +278,7 @@ honch_err_t honch_gpio_register(gpio_num_t pin, const char *event_name,
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to configure GPIO %d: %s", pin, esp_err_to_name(err));
         honch_gpio_rollback_mapping(added_mapping, idx);
+        honch_gpio_mapping_unlock();
         return HONCH_ERR_INTERNAL;
     }
 
@@ -239,6 +291,7 @@ honch_err_t honch_gpio_register(gpio_num_t pin, const char *event_name,
         } else {
             ESP_LOGE(TAG, "Failed to install GPIO ISR service: %s", esp_err_to_name(err));
             honch_gpio_rollback_mapping(added_mapping, idx);
+            honch_gpio_mapping_unlock();
             return HONCH_ERR_INTERNAL;
         }
     }
@@ -251,6 +304,7 @@ honch_err_t honch_gpio_register(gpio_num_t pin, const char *event_name,
         ESP_LOGE(TAG, "Failed to add ISR handler for GPIO %d: %s", pin, esp_err_to_name(err));
         honch_gpio_restore_replaced_handler(added_mapping, pin);
         honch_gpio_rollback_mapping(added_mapping, idx);
+        honch_gpio_mapping_unlock();
         return HONCH_ERR_INTERNAL;
     }
 
@@ -261,6 +315,7 @@ honch_err_t honch_gpio_register(gpio_num_t pin, const char *event_name,
     if (added_mapping) {
         s_mapping_count++;
     }
+    honch_gpio_mapping_unlock();
     ESP_LOGI(TAG, "GPIO %d registered for event '%s'", pin, event_name);
     return HONCH_OK;
 }
