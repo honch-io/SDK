@@ -120,6 +120,9 @@ static honch_status_t honch_wire_v2_append_bytes(
     if (value_size > out_size - *offset) {
         return HONCH_ERROR_OUT_OF_MEMORY;
     }
+    if (value_size == 0u) {
+        return HONCH_OK;
+    }
 
     memcpy(out + *offset, value, value_size);
     *offset += value_size;
