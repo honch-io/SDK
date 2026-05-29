@@ -94,7 +94,7 @@ idf.py flash monitor
 - `$battery_level` — only if you provide a `battery_callback`
 
 **Lifecycle events** (emitted automatically):
-- `$device_boot` — on init
+- `$device_boot` — on init, with `reset_reason` property
 - `$device_shutdown` — on `honch_shutdown()`, followed by a synchronous flush
 - `$firmware_update` — on boot if firmware version changed, with `previous_version` and `new_version`
 - `$battery_low` — when battery drops below threshold (default 15%), emitted once until recovery

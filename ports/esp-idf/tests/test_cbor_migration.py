@@ -121,7 +121,7 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("$device_id` — stable generated identifier persisted by the SDK", automatic)
         self.assertNotIn("derived from MAC", automatic)
         self.assertNotIn("$wifi_rssi", automatic)
-        self.assertNotIn("reset_reason", automatic)
+        self.assertIn("$device_boot` — on init, with `reset_reason` property", automatic)
         self.assertNotIn("$connectivity_change", automatic)
 
     def test_esp_package_metadata_matches_runtime_sdk_version(self) -> None:
