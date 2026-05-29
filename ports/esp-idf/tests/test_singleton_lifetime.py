@@ -78,6 +78,28 @@ class EspIdfSingletonLifetimeTests(unittest.TestCase):
 
         self.assertEqual([], present)
 
+    def test_init_is_blocked_until_detached_client_shutdown_finishes(self) -> None:
+        compat = read("ports/esp-idf/honch/src/esp_compat.c")
+        init_begin = c_function_body(compat, "honch_esp_init_begin")
+        detach = c_function_body(compat, "honch_esp_client_detach")
+        shutdown = c_function_body(compat, "honch_shutdown")
+        shutdown_finish = c_function_body(compat, "honch_esp_shutdown_finish")
+
+        self.assertIn("static bool s_client_shutting_down", compat)
+        self.assertIn("s_client_shutting_down", init_begin)
+        self.assertRegex(
+            init_begin,
+            r"if\s*\([^)]*s_client\s*!=\s*NULL[^)]*s_client_initializing[^)]*s_client_shutting_down",
+        )
+        self.assertIn("s_client_shutting_down = true;", detach)
+        self.assertIn("s_client = NULL;", detach)
+        self.assertIn("s_client_shutting_down = false;", shutdown_finish)
+
+        core_shutdown_index = shutdown.find("honch_core_shutdown(client)")
+        finish_index = shutdown.find("honch_esp_shutdown_finish()")
+        self.assertGreaterEqual(core_shutdown_index, 0)
+        self.assertGreater(finish_index, core_shutdown_index)
+
     def test_state_reset_errors_after_identity_snapshot_use_cleanup_path(self) -> None:
         shims = read("ports/esp-idf/honch/src/esp_core_shims.c")
         reset = c_function_body(shims, "honch_state_reset")
