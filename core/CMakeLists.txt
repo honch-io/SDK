@@ -1,33 +1,43 @@
 set(HONCH_CORE_SOURCES
-    src/honch_core.c
-    src/honch_cbor.c
-    src/honch_json.c
-    src/honch_lifecycle.c
-    src/honch_packetizer.c
-    src/honch_queue_policy.c
-    src/honch_support.c
-    src/honch_wire_v2.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_core.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_cbor.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_json.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_lifecycle.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_packetizer.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_queue_policy.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_support.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_wire_v2.c
 )
+set_property(GLOBAL PROPERTY HONCH_CORE_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+set_property(GLOBAL PROPERTY HONCH_CORE_SOURCES "${HONCH_CORE_SOURCES}")
 
-add_library(honch_core_objects OBJECT
-    ${HONCH_CORE_SOURCES}
-)
+function(honch_configure_core_objects target)
+    get_property(HONCH_CORE_SOURCE_DIR GLOBAL PROPERTY HONCH_CORE_SOURCE_DIR)
+    get_property(HONCH_CORE_SOURCES GLOBAL PROPERTY HONCH_CORE_SOURCES)
 
-target_include_directories(honch_core_objects
-    PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-    PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
+    add_library(${target} OBJECT
+        ${HONCH_CORE_SOURCES}
+    )
 
-target_compile_features(honch_core_objects PUBLIC c_std_11)
+    target_include_directories(${target}
+        PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
 
-target_compile_options(honch_core_objects PRIVATE
-    $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
-)
+    target_compile_features(${target} PUBLIC c_std_11)
 
-if(HONCH_BUILD_BENCHMARKS)
-    target_compile_options(honch_core_objects PRIVATE
+    target_compile_options(${target} PRIVATE
+        $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
+    )
+endfunction()
+
+honch_configure_core_objects(honch_core_objects)
+
+if(HONCH_BUILD_BENCHMARKS AND NOT TARGET honch_core_bench_objects)
+    honch_configure_core_objects(honch_core_bench_objects)
+    target_compile_options(honch_core_bench_objects PRIVATE
         -include
         ${CMAKE_CURRENT_SOURCE_DIR}/../ports/posix/bench/honch_bench_alloc.h
     )
