@@ -17,6 +17,28 @@ def read_sdk(relative_path: str) -> str:
     return (SDK_ROOT / relative_path).read_text()
 
 
+def c_function_body(source: str, name: str) -> str:
+    marker = f"{name}("
+    signature_start = source.find(marker)
+    if signature_start < 0:
+        raise AssertionError(f"function {name} not found")
+
+    open_brace = source.find("{", signature_start)
+    if open_brace < 0:
+        raise AssertionError(f"function {name} body not found")
+
+    depth = 0
+    for index in range(open_brace, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[open_brace + 1:index]
+
+    raise AssertionError(f"function {name} body is not closed")
+
+
 class PosixChunkWireTest(unittest.TestCase):
     def test_core_status_header_exposes_guarded_short_aliases(self) -> None:
         status = read_sdk("core/include/honch/core/status.h")
@@ -105,6 +127,14 @@ class PosixChunkWireTest(unittest.TestCase):
         self.assertIn("POST /capture", spec)
         self.assertNotIn("application/cbor", readme)
         self.assertNotIn("POST /batch", readme)
+
+    def test_generated_ids_fail_closed_when_secure_randomness_is_unavailable(self) -> None:
+        platform = read_sdk("ports/posix/src/posix_platform.c")
+        random_hex = c_function_body(platform, "honch_random_hex")
+
+        self.assertIn("honch_posix_random_bytes(NULL, bytes, sizeof(bytes))", random_hex)
+        self.assertNotIn("getpid()", random_hex)
+        self.assertNotIn("honch_now_millis()", random_hex)
 
 
 if __name__ == "__main__":

@@ -84,18 +84,9 @@ honch_status_t honch_posix_platform_ops_init(honch_platform_ops_t *ops, honch_po
 honch_status_t honch_random_hex(char out[33])
 {
     unsigned char bytes[16];
-    int fd = open("/dev/urandom", O_RDONLY);
-    if (fd >= 0) {
-        ssize_t read_count = read(fd, bytes, sizeof(bytes));
-        close(fd);
-        if (read_count != (ssize_t)sizeof(bytes)) {
-            return HONCH_ERROR_IO;
-        }
-    } else {
-        uint64_t now = honch_now_millis();
-        for (size_t i = 0u; i < sizeof(bytes); i++) {
-            bytes[i] = (unsigned char)((now >> ((i % 8u) * 8u)) ^ (uint64_t)i ^ (uint64_t)getpid());
-        }
+    honch_status_t status = honch_posix_random_bytes(NULL, bytes, sizeof(bytes));
+    if (status != HONCH_OK) {
+        return status;
     }
 
     static const char hex[] = "0123456789abcdef";
