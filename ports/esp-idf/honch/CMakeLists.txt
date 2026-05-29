@@ -36,14 +36,9 @@ idf_component_register(
     REQUIRES
         nvs_flash
         esp_http_client
-        esp_wifi
-        esp_event
         esp-tls
         esp_timer
         pthread
-        cbor
-        espressif__cjson
         esp_driver_gpio
         driver
-        efuse
 )
