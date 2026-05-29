@@ -118,18 +118,18 @@ PYTHONPATH=ports/micropython python3 -m unittest discover \
 
 The [`spec/`](spec/) directory defines the cross-platform contract that all SDKs implement:
 
-- [Wire Format](spec/wire-format.md) — compact binary chunk endpoint,
-  frame format, event message grammar, retry behavior, and conformance fixtures
-- [Compact Wire Format](spec/wire-format-v2.md) — implementation draft for the
-  current compact binary layout
+- [Compact Wire Format](spec/wire-format-v2.md) — active compact binary chunk
+  endpoint, frame format, event message grammar, retry behavior, and
+  conformance fixtures
 - [Auto Properties](spec/auto-properties.md) — required properties, lifecycle events
-- [Relay Envelope](spec/relay-envelope.md) — gateway forwarding and relay metadata
 - [Conformance Fixtures](spec/conformance/) — shared test data for cross-SDK validation
+- [Archived Specs](spec/archive/) — superseded wire-format overview and
+  historical relay envelope notes
 
 ## Adding a new SDK
 
 1. Create a directory under `ports/` (e.g. `ports/ios/`, `ports/android/`)
-2. Implement the compact wire format from `spec/wire-format.md`
+2. Implement the compact wire format from `spec/wire-format-v2.md`
 3. Stamp all properties from `spec/auto-properties.md`
 4. Validate against the conformance fixtures in `spec/conformance/`
 5. Add a CI workflow in `.github/workflows/<platform>.yml`

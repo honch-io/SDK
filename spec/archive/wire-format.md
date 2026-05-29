@@ -1,9 +1,11 @@
 # Wire Format
 
-Status: Draft for the compact binary upload contract.
+Status: Archived overview. The active compact binary upload contract is
+[`../wire-format-v2.md`](../wire-format-v2.md).
 
-Honch SDKs upload events with compact chunk frames. This is the active SDK and
-gateway ingest path.
+Honch SDKs upload events with compact chunk frames. This document is retained
+for historical context; new implementation work should use the active wire-v2
+spec.
 
 ## Endpoint
 
@@ -52,8 +54,8 @@ Capture must reject:
 
 ## Full Encoding
 
-The authoritative binary layout remains in [wire-format-v2.md](wire-format-v2.md)
-while implementation is in flight. That file describes the current compact
+The authoritative binary layout is [wire-format-v2.md](../wire-format-v2.md).
+That file describes the current compact
 chunk frame, compact message, string table, context, event, value, response,
 capture, SDK, relay, and fixture requirements.
 
