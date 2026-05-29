@@ -78,6 +78,31 @@ class EspIdfSingletonLifetimeTests(unittest.TestCase):
 
         self.assertEqual([], present)
 
+    def test_state_reset_errors_after_identity_snapshot_use_cleanup_path(self) -> None:
+        shims = read("ports/esp-idf/honch/src/esp_core_shims.c")
+        reset = c_function_body(shims, "honch_state_reset")
+
+        snapshot_index = reset.find("previous_distinct_id = honch_strdup")
+        cleanup_index = reset.find("cleanup:")
+        self.assertGreaterEqual(snapshot_index, 0)
+        self.assertGreater(
+            cleanup_index,
+            snapshot_index,
+            "reset must have a shared cleanup path after previous identities are copied",
+        )
+
+        post_snapshot = reset[snapshot_index:cleanup_index]
+        early_returns = [
+            line.strip()
+            for line in post_snapshot.splitlines()
+            if line.strip().startswith("return ")
+        ]
+        self.assertEqual(
+            [],
+            early_returns,
+            "post-snapshot reset failures must not return before freeing previous identities",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
