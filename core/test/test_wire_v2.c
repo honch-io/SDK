@@ -764,6 +764,42 @@ static void test_event_batch_encoder_writes_empty_bytes_values(void)
     assert(bytes_end_with(message, message_size, expected_suffix, sizeof(expected_suffix)));
 }
 
+static void test_byte_append_skips_memcpy_for_empty_values(void)
+{
+    uint8_t message[128] = {0};
+    size_t message_size = 0u;
+    honch_wire_v2_batch_context_t context = test_context();
+    honch_wire_v2_property_t properties[] = {
+        {
+            .key = "blob",
+            .value = {
+                .type = HONCH_WIRE_V2_VALUE_TYPE_BYTES,
+                .bytes = {
+                    .data = NULL,
+                    .size = 0u
+                }
+            }
+        }
+    };
+    honch_wire_v2_event_t event = {
+        .event_name = "binary",
+        .timestamp_ms = 1000u,
+        .properties = properties,
+        .property_count = 1u
+    };
+
+    assert(honch_wire_v2_encode_event_batch(
+        &context,
+        1000u,
+        &event,
+        1u,
+        message,
+        sizeof(message),
+        &message_size) == HONCH_OK);
+
+    assert(message_size > 0u);
+}
+
 static void test_event_batch_encoder_rejects_nan_float64(void)
 {
     uint8_t message[128] = {0};
@@ -1294,6 +1330,7 @@ int main(void)
     test_event_batch_encoder_writes_float64_little_endian();
     test_event_batch_encoder_writes_bytes_values();
     test_event_batch_encoder_writes_empty_bytes_values();
+    test_byte_append_skips_memcpy_for_empty_values();
     test_event_batch_encoder_rejects_nan_float64();
     test_event_batch_encoder_writes_nested_array_and_map_values();
     test_event_batch_encoder_allows_eight_nested_arrays();

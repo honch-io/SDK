@@ -284,33 +284,32 @@ honch_status_t honch_state_reset(honch_client_t *client)
     char *device_id = NULL;
     char *distinct_id = NULL;
     if (previous_device_id == NULL || previous_distinct_id == NULL) {
-        free(previous_device_id);
-        free(previous_distinct_id);
-        return HONCH_ERROR_OUT_OF_MEMORY;
+        status = HONCH_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
     }
 
     if (client->configured_device_id) {
         device_id = honch_strdup(client->device_id);
         distinct_id = honch_strdup(client->device_id);
         if (device_id == NULL || distinct_id == NULL) {
-            free(device_id);
-            free(distinct_id);
-            return HONCH_ERROR_OUT_OF_MEMORY;
+            status = HONCH_ERROR_OUT_OF_MEMORY;
+            goto cleanup;
         }
     } else {
         char next_device_id[33];
         status = honch_random_hex(next_device_id);
         if (status != HONCH_OK) {
-            return status;
+            goto cleanup;
         }
         device_id = honch_strdup(next_device_id);
         if (device_id == NULL) {
-            return HONCH_ERROR_OUT_OF_MEMORY;
+            status = HONCH_ERROR_OUT_OF_MEMORY;
+            goto cleanup;
         }
         distinct_id = honch_strdup(next_device_id);
         if (distinct_id == NULL) {
-            free(device_id);
-            return HONCH_ERROR_OUT_OF_MEMORY;
+            status = HONCH_ERROR_OUT_OF_MEMORY;
+            goto cleanup;
         }
     }
 
@@ -334,6 +333,7 @@ honch_status_t honch_state_reset(honch_client_t *client)
         distinct_id = NULL;
     }
 
+cleanup:
     free(previous_device_id);
     free(previous_distinct_id);
     free(device_id);

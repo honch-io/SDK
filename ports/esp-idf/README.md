@@ -18,7 +18,7 @@ instead of dead-lettered to protect the shared Wi-Fi/NVS partition.
 **Option A: ESP Component Manager**
 
 ```
-idf.py add-dependency "honch-io/honch^0.1.0"
+idf.py add-dependency "honch-io/honch^0.2.0"
 ```
 
 **Option B: Git submodule**

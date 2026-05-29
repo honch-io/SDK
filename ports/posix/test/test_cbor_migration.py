@@ -136,6 +136,40 @@ class PosixChunkWireTest(unittest.TestCase):
         self.assertNotIn("getpid()", random_hex)
         self.assertNotIn("honch_now_millis()", random_hex)
 
+    def test_posix_reset_errors_after_identity_snapshot_use_cleanup_path(self) -> None:
+        state = read_sdk("ports/posix/src/posix_state.c")
+        reset = c_function_body(state, "honch_state_reset")
+
+        snapshot_index = reset.find("previous_distinct_id = honch_strdup")
+        cleanup_index = reset.find("cleanup:")
+        self.assertGreaterEqual(snapshot_index, 0)
+        self.assertGreater(
+            cleanup_index,
+            snapshot_index,
+            "reset must have a shared cleanup path after previous identities are copied",
+        )
+
+        post_snapshot = reset[snapshot_index:cleanup_index]
+        early_returns = [
+            line.strip()
+            for line in post_snapshot.splitlines()
+            if line.strip().startswith("return ")
+        ]
+        self.assertEqual(
+            [],
+            early_returns,
+            "post-snapshot reset failures must not return before freeing previous identities",
+        )
+
+    def test_wire_v2_empty_byte_append_skips_memcpy(self) -> None:
+        wire = read_sdk("core/src/honch_wire_v2.c")
+        append_bytes = c_function_body(wire, "honch_wire_v2_append_bytes")
+
+        zero_guard_index = append_bytes.find("if (value_size == 0u)")
+        memcpy_index = append_bytes.find("memcpy(")
+        self.assertGreaterEqual(zero_guard_index, 0)
+        self.assertGreater(memcpy_index, zero_guard_index)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

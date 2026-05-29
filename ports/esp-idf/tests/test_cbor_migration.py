@@ -124,6 +124,17 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertNotIn("reset_reason", automatic)
         self.assertNotIn("$connectivity_change", automatic)
 
+    def test_esp_package_metadata_matches_runtime_sdk_version(self) -> None:
+        internal = read("core/src/honch_internal.h")
+        root_manifest = read("idf_component.yml")
+        component_manifest = read("ports/esp-idf/honch/idf_component.yml")
+        readme = read("ports/esp-idf/README.md")
+
+        self.assertIn('#define HONCH_SDK_VERSION "0.2.0"', internal)
+        self.assertIn('version: "0.2.0"', root_manifest)
+        self.assertIn('version: "0.2.0"', component_manifest)
+        self.assertIn('idf.py add-dependency "honch-io/honch^0.2.0"', readme)
+
     def test_ci_triggers_when_shared_core_changes(self) -> None:
         esp_workflow = read(".github/workflows/esp-idf.yml")
         micropython_workflow = read(".github/workflows/micropython.yml")
