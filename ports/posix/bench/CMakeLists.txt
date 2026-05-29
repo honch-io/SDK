@@ -15,3 +15,12 @@ target_compile_definitions(honch_posix_bench PRIVATE
 target_compile_options(honch_posix_bench PRIVATE
     $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
 )
+
+if(HONCH_BUILD_TESTS)
+    add_test(
+        NAME honch_posix_rate_sweep_bench
+        COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_rate_sweep_output.py
+            --binary $<TARGET_FILE:honch_posix_bench>
+    )
+endif()
