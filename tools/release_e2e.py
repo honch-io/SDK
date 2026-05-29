@@ -24,6 +24,9 @@ from typing import Iterable
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_LOG_ROOT = Path("/private/tmp")
+ESP_IDF_TOOLS = "/Volumes/X9 Pro/Espressif/tools"
+ESP_IDF_EXPORT = "/Volumes/X9 Pro/Espressif/esp-idf-v6.0.1/export.sh"
+ESP_IDF_SOURCE = f"export IDF_TOOLS_PATH='{ESP_IDF_TOOLS}' && source '{ESP_IDF_EXPORT}'"
 DEFAULT_E2E_ENV = {
     "HONCH_E2E": "1",
     "HONCH_E2E_ENDPOINT": "http://127.0.0.1:8001",
@@ -266,31 +269,31 @@ STEPS: tuple[Step, ...] = (
     step(
         "ESP-IDF",
         "build ESP example for esp32",
-        "source /Users/morgana/.espressif/v6.0.1/esp-idf/export.sh && "
-        "idf.py -C ports/esp-idf/example set-target esp32 && "
-        "idf.py -C ports/esp-idf/example build",
+        f"{ESP_IDF_SOURCE} && "
+        "idf.py -C ports/esp-idf/example -B $HONCH_E2E_BUILD_ROOT/esp-example set-target esp32 && "
+        "idf.py -C ports/esp-idf/example -B $HONCH_E2E_BUILD_ROOT/esp-example build",
         TOOLCHAINS,
         "31-esp-example-build.txt",
-        require_paths=("/Users/morgana/.espressif/v6.0.1/esp-idf/export.sh",),
+        require_paths=(ESP_IDF_TOOLS, ESP_IDF_EXPORT),
     ),
     step(
         "ESP-IDF",
         "build ESP benchtest for esp32",
-        "source /Users/morgana/.espressif/v6.0.1/esp-idf/export.sh && "
-        "idf.py -C ports/esp-idf/benchtest set-target esp32 && "
-        "idf.py -C ports/esp-idf/benchtest build",
+        f"{ESP_IDF_SOURCE} && "
+        "idf.py -C ports/esp-idf/benchtest -B $HONCH_E2E_BUILD_ROOT/esp-benchtest set-target esp32 && "
+        "idf.py -C ports/esp-idf/benchtest -B $HONCH_E2E_BUILD_ROOT/esp-benchtest build",
         TOOLCHAINS,
         "32-esp-benchtest-build.txt",
-        require_paths=("/Users/morgana/.espressif/v6.0.1/esp-idf/export.sh",),
+        require_paths=(ESP_IDF_TOOLS, ESP_IDF_EXPORT),
     ),
     step(
         "ESP-IDF",
         "build ESP footprint variants",
-        "source /Users/morgana/.espressif/v6.0.1/esp-idf/export.sh && "
+        f"{ESP_IDF_SOURCE} && "
         "./tools/measure_esp_idf_footprint.py --target esp32",
         TOOLCHAINS,
         "33-esp-footprint-build.txt",
-        require_paths=("/Users/morgana/.espressif/v6.0.1/esp-idf/export.sh",),
+        require_paths=(ESP_IDF_TOOLS, ESP_IDF_EXPORT),
     ),
     step(
         "Arduino ESP32",
