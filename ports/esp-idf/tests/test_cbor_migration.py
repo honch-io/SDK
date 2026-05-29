@@ -114,6 +114,16 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("core_config.flush_event_threshold = config->flush_event_threshold", compat)
         self.assertIn("core_config.disable_background_flush = 0", compat)
 
+    def test_readme_only_documents_implemented_automatic_esp_properties(self) -> None:
+        readme = read("ports/esp-idf/README.md")
+        automatic = readme.split("## What gets sent automatically", 1)[1].split("## Configuration options", 1)[0]
+
+        self.assertIn("$device_id` — stable generated identifier persisted by the SDK", automatic)
+        self.assertNotIn("derived from MAC", automatic)
+        self.assertNotIn("$wifi_rssi", automatic)
+        self.assertNotIn("reset_reason", automatic)
+        self.assertNotIn("$connectivity_change", automatic)
+
     def test_ci_triggers_when_shared_core_changes(self) -> None:
         esp_workflow = read(".github/workflows/esp-idf.yml")
         micropython_workflow = read(".github/workflows/micropython.yml")

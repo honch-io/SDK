@@ -84,7 +84,7 @@ idf.py flash monitor
 ## What gets sent automatically
 
 **Auto-stamped properties** (on every event):
-- `$device_id` — stable hardware identifier derived from MAC
+- `$device_id` — stable generated identifier persisted by the SDK
 - `$device_model` — from your config
 - `$firmware_version` — from your config
 - `$sdk_platform` — `"esp-idf"`
@@ -92,12 +92,10 @@ idf.py flash monitor
 - `$environment` — from your config (defaults to `"production"`)
 - `$session_id` — only when a session is active
 - `$battery_level` — only if you provide a `battery_callback`
-- `$wifi_rssi` — only when Wi-Fi is connected
 
 **Lifecycle events** (emitted automatically):
-- `$device_boot` — on init, with `reset_reason` property
+- `$device_boot` — on init
 - `$device_shutdown` — on `honch_shutdown()`, followed by a synchronous flush
-- `$connectivity_change` — on Wi-Fi connect/disconnect, with `state` property
 - `$firmware_update` — on boot if firmware version changed, with `previous_version` and `new_version`
 - `$battery_low` — when battery drops below threshold (default 15%), emitted once until recovery
 - `$session_start` / `$session_end` — when you call the session API
