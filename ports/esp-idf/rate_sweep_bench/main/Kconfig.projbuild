@@ -1,0 +1,84 @@
+menu "Honch Rate Sweep Benchmark Configuration"
+
+    config HONCH_API_KEY
+        string "Honch API Key"
+        default ""
+        help
+            Your Honch project API key.
+
+    config HONCH_HOST
+        string "Honch Host"
+        default "https://capture.honch.io"
+        help
+            The Honch capture endpoint URL.
+
+    config WIFI_SSID
+        string "Wi-Fi SSID"
+        default ""
+        help
+            SSID of the Wi-Fi network to connect to.
+
+    config WIFI_PASSWORD
+        string "Wi-Fi Password"
+        default ""
+        help
+            Password for the Wi-Fi network.
+
+    config RATE_SWEEP_RATES
+        string "Target events per second"
+        default "100,500,1000,3000"
+        help
+            Comma-separated target event rates. The benchmark reports actual
+            achieved EPS for each window, so saturated targets remain useful.
+
+    config RATE_SWEEP_DURATION_SECONDS
+        int "Measured duration per target"
+        default 20
+        range 1 300
+        help
+            Number of measured seconds to run for each target rate.
+
+    config RATE_SWEEP_WARMUP_SECONDS
+        int "Warmup seconds per target"
+        default 3
+        range 0 60
+        help
+            Warmup time before measured windows for each target rate.
+
+    config RATE_SWEEP_WINDOW_SECONDS
+        int "Metric window seconds"
+        default 1
+        range 1 10
+        help
+            Duration of each BENCH_WINDOW measurement bucket.
+
+    config RATE_SWEEP_FLUSH_EVERY
+        int "Flush cadence in accepted events"
+        default 100
+        range 1 1000
+        help
+            Calls honch_flush after this many accepted events.
+
+    config RATE_SWEEP_PAYLOAD_BYTES
+        int "Approximate custom property payload bytes"
+        default 64
+        range 0 512
+        help
+            Adds a string property with roughly this many bytes to each event.
+
+    config RATE_SWEEP_SETTLE_SECONDS
+        int "Seconds to wait after suite"
+        default 10
+        range 0 300
+        help
+            Time to wait after the final flush so async HTTP work can finish.
+
+    config RATE_SWEEP_MAX_WINDOW_SAMPLES
+        int "Max track samples per window"
+        default 4096
+        range 128 10000
+        help
+            Bounded static sample capacity used for per-window latency
+            percentiles. Keep above max EPS times window seconds.
+
+endmenu
