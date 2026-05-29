@@ -111,6 +111,38 @@ class EspGpioRegistrationTests(unittest.TestCase):
         self.assertLess(event_copy_index, unlock_index)
         self.assertLess(unlock_index, track_index)
 
+    def test_gpio_public_lifecycle_flag_is_synchronized(self) -> None:
+        public = read("ports/esp-idf/honch/src/esp_gpio_public.c")
+        track_gpio = c_function_body(public, "honch_track_gpio")
+        shutdown_hook = c_function_body(public, "honch_esp_gpio_shutdown_hook")
+
+        self.assertIn("#include <pthread.h>", public)
+        self.assertIn("static pthread_mutex_t s_gpio_lifecycle_mutex", public)
+        self.assertIn("honch_gpio_lifecycle_lock()", public)
+        self.assertIn("honch_gpio_lifecycle_unlock()", public)
+        self.assertIn("honch_gpio_lifecycle_lock()", track_gpio)
+        self.assertIn("honch_gpio_lifecycle_unlock()", track_gpio)
+        self.assertIn("honch_gpio_lifecycle_lock()", shutdown_hook)
+        self.assertIn("honch_gpio_lifecycle_unlock()", shutdown_hook)
+
+        track_lock_index = track_gpio.find("honch_gpio_lifecycle_lock()")
+        init_check_index = track_gpio.find("if (!s_gpio_initialized)")
+        register_index = track_gpio.find("honch_gpio_register")
+        track_unlock_index = track_gpio.rfind("honch_gpio_lifecycle_unlock()")
+
+        self.assertGreaterEqual(track_lock_index, 0)
+        self.assertGreater(init_check_index, track_lock_index)
+        self.assertGreater(register_index, init_check_index)
+        self.assertGreater(track_unlock_index, register_index)
+
+        shutdown_lock_index = shutdown_hook.find("honch_gpio_lifecycle_lock()")
+        deinit_index = shutdown_hook.find("honch_gpio_deinit()")
+        shutdown_unlock_index = shutdown_hook.rfind("honch_gpio_lifecycle_unlock()")
+
+        self.assertGreaterEqual(shutdown_lock_index, 0)
+        self.assertGreater(deinit_index, shutdown_lock_index)
+        self.assertGreater(shutdown_unlock_index, deinit_index)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
