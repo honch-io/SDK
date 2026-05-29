@@ -102,6 +102,7 @@ struct honch_client {
 
 bool honch_is_blank(const char *value);
 bool honch_property_key_is_reserved(const char *key);
+bool honch_utf8_is_valid(const char *value, size_t length);
 char *honch_strdup(const char *value);
 void honch_free_client_fields(honch_client_t *client);
 honch_status_t honch_size_add(size_t left, size_t right, size_t *out);

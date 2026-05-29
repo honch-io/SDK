@@ -86,6 +86,10 @@ honch_status_t honch_cbor_append_text(honch_buffer_t *buffer, const char *value)
 
 honch_status_t honch_cbor_append_text_n(honch_buffer_t *buffer, const char *value, size_t length)
 {
+    if (!honch_utf8_is_valid(value, length)) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
     honch_status_t status = honch_cbor_append_type(buffer, 0x60u, (uint64_t)length);
     if (status != HONCH_OK) {
         return status;
@@ -254,7 +258,11 @@ static honch_status_t honch_json_decode_string_to(
                 ch = (unsigned char)*parser->cursor;
             } while (ch != '\0' && ch != '"' && ch != '\\' && ch >= 0x20u);
 
-            honch_status_t status = append(append_ctx, start, (size_t)(parser->cursor - start));
+            size_t length = (size_t)(parser->cursor - start);
+            if (!honch_utf8_is_valid(start, length)) {
+                return HONCH_ERROR_INVALID_ARGUMENT;
+            }
+            honch_status_t status = append(append_ctx, start, length);
             if (status != HONCH_OK) {
                 return status;
             }

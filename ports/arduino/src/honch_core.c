@@ -352,6 +352,39 @@ static honch_status_t honch_client_queue_clear(honch_client_t *client);
 static honch_status_t honch_client_lock(honch_client_t *client);
 static void honch_client_unlock(honch_client_t *client);
 
+static honch_status_t honch_client_enforce_custom_queue_limit(honch_client_t *client)
+{
+    if (client == NULL || client->storage == NULL ||
+        client->storage->queue_depth == NULL || client->storage->queue_drop_oldest == NULL) {
+        return HONCH_OK;
+    }
+
+    size_t depth = 0u;
+    honch_status_t status = honch_client_queue_depth(client, &depth);
+    if (status != HONCH_OK) {
+        return status;
+    }
+    client->queued_event_count = depth;
+
+    while (depth >= client->max_queued_events) {
+        status = client->storage->queue_drop_oldest(client->storage->ctx);
+        if (status != HONCH_OK) {
+            return status;
+        }
+
+        if (depth > 0u) {
+            depth--;
+        }
+        size_t refreshed_depth = 0u;
+        if (honch_client_queue_depth(client, &refreshed_depth) == HONCH_OK && refreshed_depth < depth) {
+            depth = refreshed_depth;
+        }
+        client->queued_event_count = depth;
+    }
+
+    return HONCH_OK;
+}
+
 static honch_status_t honch_build_event(
     honch_client_t *client,
     const char *event_name,
@@ -541,12 +574,23 @@ static honch_status_t honch_client_queue_push_recorded(
     }
 
     if (client != NULL && client->storage != NULL && client->storage->queue_push != NULL) {
+        honch_status_t status = honch_client_enforce_custom_queue_limit(client);
+        if (status != HONCH_OK) {
+            return status;
+        }
+
         uint64_t sequence = client->sequence;
-        honch_status_t status = client->storage->queue_push(client->storage->ctx, event, event_size, sequence);
+        status = client->storage->queue_push(client->storage->ctx, event, event_size, sequence);
         if (status == HONCH_OK) {
             client->sequence++;
             if (sequence_out != NULL) {
                 *sequence_out = sequence;
+            }
+            size_t depth = 0u;
+            if (honch_client_queue_depth(client, &depth) == HONCH_OK) {
+                client->queued_event_count = depth;
+            } else if (client->queued_event_count < SIZE_MAX) {
+                client->queued_event_count++;
             }
         }
         return status;
@@ -1452,7 +1496,12 @@ honch_status_t honch_core_session_start(honch_client_t *client, const char *sess
         return status;
     }
 
-    if (client->session_id != NULL) {
+    honch_lifecycle_queue_tracker_t replacement_tracker;
+    honch_lifecycle_queue_tracker_begin(client, &replacement_tracker);
+    char *old_session_id = NULL;
+    bool replacing_session = client->session_id != NULL;
+
+    if (replacing_session) {
         status = honch_track_locked_internal(
             client,
             "$session_end",
@@ -1460,9 +1509,9 @@ honch_status_t honch_core_session_start(honch_client_t *client, const char *sess
             end_event_context.battery_level,
             true,
             &end_event_context.auto_properties,
-            NULL);
+            &replacement_tracker);
         if (status == HONCH_OK) {
-            free(client->session_id);
+            old_session_id = client->session_id;
             client->session_id = NULL;
         }
     }
@@ -1476,11 +1525,22 @@ honch_status_t honch_core_session_start(honch_client_t *client, const char *sess
             start_event_context.battery_level,
             true,
             &start_event_context.auto_properties,
-            NULL);
+            &replacement_tracker);
         if (status != HONCH_OK) {
             free(client->session_id);
-            client->session_id = NULL;
+            client->session_id = old_session_id;
+            old_session_id = NULL;
+            if (replacing_session) {
+                honch_status_t rollback_status =
+                    honch_lifecycle_queue_tracker_rollback(client, &replacement_tracker);
+                if (rollback_status != HONCH_OK) {
+                    status = rollback_status;
+                }
+            }
         }
+    }
+    if (status == HONCH_OK) {
+        free(old_session_id);
     }
 
     honch_client_unlock(client);
@@ -1488,6 +1548,7 @@ honch_status_t honch_core_session_start(honch_client_t *client, const char *sess
     honch_event_context_free(&start_event_context);
     free(properties_json);
     free(session_id);
+    free(old_session_id);
     honch_client_leave(client);
     return status;
 }
