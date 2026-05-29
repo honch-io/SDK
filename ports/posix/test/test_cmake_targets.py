@@ -66,11 +66,31 @@ class PosixCMakeTargetTests(unittest.TestCase):
                 command.append(f"-DCMAKE_OSX_SYSROOT={sdk}")
 
             result = subprocess.run(command, text=True, capture_output=True, check=False)
+            if result.returncode == 0:
+                build_result = subprocess.run(
+                    [
+                        "cmake",
+                        "--build",
+                        str(build_dir),
+                        "--target",
+                        "honch_posix_bench_instrumented",
+                    ],
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+            else:
+                build_result = result
 
         self.assertEqual(
             0,
             result.returncode,
             result.stdout + result.stderr,
+        )
+        self.assertEqual(
+            0,
+            build_result.returncode,
+            build_result.stdout + build_result.stderr,
         )
 
 

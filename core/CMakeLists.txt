@@ -21,9 +21,9 @@ function(honch_configure_core_objects target)
 
     target_include_directories(${target}
         PUBLIC
-            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${HONCH_CORE_SOURCE_DIR}/include
         PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/src
+            ${HONCH_CORE_SOURCE_DIR}/src
     )
 
     target_compile_features(${target} PUBLIC c_std_11)
