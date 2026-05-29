@@ -50,6 +50,60 @@ bool honch_is_blank(const char *value)
     return true;
 }
 
+bool honch_utf8_is_valid(const char *value, size_t length)
+{
+    if (value == NULL && length > 0u) {
+        return false;
+    }
+
+    const unsigned char *bytes = (const unsigned char *)value;
+    size_t i = 0u;
+    while (i < length) {
+        unsigned char byte = bytes[i];
+        if (byte <= 0x7fu) {
+            i++;
+            continue;
+        }
+
+        uint32_t codepoint = 0u;
+        size_t continuation_count = 0u;
+        if (byte >= 0xc2u && byte <= 0xdfu) {
+            codepoint = byte & 0x1fu;
+            continuation_count = 1u;
+        } else if (byte >= 0xe0u && byte <= 0xefu) {
+            codepoint = byte & 0x0fu;
+            continuation_count = 2u;
+        } else if (byte >= 0xf0u && byte <= 0xf4u) {
+            codepoint = byte & 0x07u;
+            continuation_count = 3u;
+        } else {
+            return false;
+        }
+
+        if (continuation_count > length - i - 1u) {
+            return false;
+        }
+        for (size_t j = 0u; j < continuation_count; j++) {
+            unsigned char continuation = bytes[i + 1u + j];
+            if ((continuation & 0xc0u) != 0x80u) {
+                return false;
+            }
+            codepoint = (codepoint << 6u) | (uint32_t)(continuation & 0x3fu);
+        }
+
+        if ((continuation_count == 1u && codepoint < 0x80u) ||
+            (continuation_count == 2u && codepoint < 0x800u) ||
+            (continuation_count == 3u && codepoint < 0x10000u) ||
+            (codepoint >= 0xd800u && codepoint <= 0xdfffu) ||
+            codepoint > 0x10ffffu) {
+            return false;
+        }
+
+        i += continuation_count + 1u;
+    }
+    return true;
+}
+
 char *honch_strdup(const char *value)
 {
     if (value == NULL) {
