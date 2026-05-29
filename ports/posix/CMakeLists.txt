@@ -39,6 +39,17 @@ if(HONCH_BUILD_BENCHMARKS AND NOT TARGET honch_bench_alloc_support)
     )
 endif()
 
+if(HONCH_BUILD_BENCHMARKS AND NOT TARGET honch_core_bench_objects)
+    if(NOT COMMAND honch_configure_core_objects)
+        message(FATAL_ERROR "HONCH_BUILD_BENCHMARKS requires honch_configure_core_objects from the core CMake target")
+    endif()
+    honch_configure_core_objects(honch_core_bench_objects)
+    target_compile_options(honch_core_bench_objects PRIVATE
+        -include
+        ${CMAKE_CURRENT_SOURCE_DIR}/bench/honch_bench_alloc.h
+    )
+endif()
+
 set(HONCH_POSIX_SOURCES
     src/posix_compat.c
     src/posix_platform.c
@@ -46,6 +57,15 @@ set(HONCH_POSIX_SOURCES
     src/posix_state.c
     src/posix_transport_curl.c
     $<TARGET_OBJECTS:honch_core_objects>
+)
+
+set(HONCH_POSIX_BENCH_SOURCES
+    src/posix_compat.c
+    src/posix_platform.c
+    src/posix_storage.c
+    src/posix_state.c
+    src/posix_transport_curl.c
+    $<TARGET_OBJECTS:honch_core_bench_objects>
 )
 
 function(honch_configure_posix_target target)
@@ -151,7 +171,7 @@ if(HONCH_BUILD_EXAMPLES)
 endif()
 
 if(HONCH_BUILD_BENCHMARKS)
-    add_library(honch_posix_bench_instrumented ${HONCH_POSIX_SOURCES})
+    add_library(honch_posix_bench_instrumented ${HONCH_POSIX_BENCH_SOURCES})
     honch_configure_posix_target(honch_posix_bench_instrumented)
     target_compile_definitions(honch_posix_bench_instrumented PRIVATE
         HONCH_TESTING
