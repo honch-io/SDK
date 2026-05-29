@@ -86,6 +86,31 @@ class EspGpioRegistrationTests(unittest.TestCase):
         self.assertLess(remove_index, add_index)
         self.assertGreater(restore_index, failure_index)
 
+    def test_gpio_mapping_state_is_synchronized_without_tracking_under_lock(self) -> None:
+        adapter = read("ports/esp-idf/honch/src/esp_gpio_adapter.c")
+        init = c_function_body(adapter, "honch_gpio_init")
+        deinit = c_function_body(adapter, "honch_gpio_deinit")
+        register = c_function_body(adapter, "honch_gpio_register")
+        worker = c_function_body(adapter, "gpio_worker_task")
+
+        self.assertIn("static SemaphoreHandle_t s_mapping_mutex", adapter)
+        self.assertIn("xSemaphoreCreateMutex()", init)
+        self.assertIn("vSemaphoreDelete(s_mapping_mutex)", deinit)
+        self.assertIn("honch_gpio_mapping_lock(portMAX_DELAY)", register)
+        self.assertIn("honch_gpio_mapping_unlock()", register)
+        self.assertIn("honch_gpio_mapping_lock(portMAX_DELAY)", deinit)
+        self.assertIn("honch_gpio_mapping_lock(pdMS_TO_TICKS(1000))", worker)
+
+        track_index = worker.find("honch_track(event_name, props)")
+        unlock_index = worker.rfind("honch_gpio_mapping_unlock()", 0, track_index)
+        event_copy_index = worker.find("strncpy(event_name, s_mappings[i].event_name")
+
+        self.assertGreaterEqual(track_index, 0)
+        self.assertGreaterEqual(unlock_index, 0)
+        self.assertGreaterEqual(event_copy_index, 0)
+        self.assertLess(event_copy_index, unlock_index)
+        self.assertLess(unlock_index, track_index)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
