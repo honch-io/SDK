@@ -175,7 +175,6 @@ static honch_status_t honch_append_auto_properties(
 }
 
 static honch_status_t honch_build_property_pairs(
-    honch_client_t *client,
     honch_wire_v2_property_t *out_properties,
     size_t *out_property_count,
     const honch_wire_v2_property_t *user_properties,
@@ -196,29 +195,8 @@ static honch_status_t honch_build_property_pairs(
     if (status == HONCH_OK) {
         status = honch_append_auto_properties(out_properties, out_property_count, auto_properties);
     }
-    if (status == HONCH_OK) {
-        status = honch_append_typed_property(out_properties, out_property_count, "$device_id", honch_str(client->device_id), true);
-    }
-    if (status == HONCH_OK && client->session_id != NULL) {
-        status = honch_append_typed_property(out_properties, out_property_count, "$session_id", honch_str(client->session_id), true);
-    }
-    if (status == HONCH_OK) {
-        status = honch_append_typed_property(out_properties, out_property_count, "$device_model", honch_str(client->device_model), true);
-    }
-    if (status == HONCH_OK) {
-        status = honch_append_typed_property(out_properties, out_property_count, "$firmware_version", honch_str(client->firmware_version), true);
-    }
-    if (status == HONCH_OK && client->environment != NULL) {
-        status = honch_append_typed_property(out_properties, out_property_count, "$environment", honch_str(client->environment), true);
-    }
     if (status == HONCH_OK && battery_level >= 0 && battery_level <= 100) {
         status = honch_append_typed_property(out_properties, out_property_count, "$battery_level", honch_i64(battery_level), true);
-    }
-    if (status == HONCH_OK) {
-        status = honch_append_typed_property(out_properties, out_property_count, "$sdk_version", honch_str(HONCH_SDK_VERSION), true);
-    }
-    if (status == HONCH_OK) {
-        status = honch_append_typed_property(out_properties, out_property_count, "$sdk_platform", honch_str(client->sdk_platform), true);
     }
 
     return status;
@@ -285,7 +263,6 @@ static honch_status_t honch_build_event(
 
     size_t property_count = 0u;
     honch_status_t status = honch_build_property_pairs(
-        client,
         client->build_properties,
         &property_count,
         user_properties,
