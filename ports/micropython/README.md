@@ -2,9 +2,9 @@
 
 MicroPython wrapper for the canonical Honch C core. The Python package keeps the
 small `honch.Honch` API, while SDK behavior comes from the same `core/` sources
-used by the ESP-IDF and POSIX ports: event semantics, CBOR, identity,
-lifecycle, compact wire encoding, queue policy, retry classification, and
-packetization.
+used by the ESP-IDF and POSIX ports: event semantics, identity, lifecycle,
+typed event values, HQR1 queue records, compact wire encoding, queue policy,
+retry classification, and packetization.
 
 ## Status
 
@@ -38,7 +38,8 @@ firmware that already contains `_honch_core`.
 The module reserves a 64 KiB C heap by default for ports such as `rp2`, where
 runtime `malloc`/`free` is unavailable unless firmware sets
 `MICROPY_C_HEAP_SIZE`. The shared Honch C core uses C allocation for client
-state, event buffers, CBOR packetization, and queue processing.
+state, typed event values, HQR1 queue records, compact wire-v2 packetization,
+and queue processing.
 
 ## Basic Usage
 
@@ -107,8 +108,9 @@ client.shutdown()
 client.get_device_id()
 ```
 
-`properties` and `traits` must be dictionaries containing JSON-compatible
-values. SDK-owned auto properties are stamped by the C core and win over
+`properties` and `traits` must be dictionaries containing typed wire-v2 values:
+`None`, `bool`, `int`, `float`, `str`, `bytes`, lists, and dictionaries with
+string keys. SDK-owned auto properties are stamped by the C core and win over
 user-supplied properties with the same key.
 
 Call `client.tick()` periodically from the device main loop to run scheduled

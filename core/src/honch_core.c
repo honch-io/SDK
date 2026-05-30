@@ -203,6 +203,7 @@ static honch_status_t honch_build_property_pairs(
 }
 
 static uint64_t honch_client_now_millis(honch_client_t *client);
+static uint64_t honch_client_event_timestamp_millis(honch_client_t *client);
 static honch_status_t honch_client_random_hex(honch_client_t *client, char out[33]);
 static honch_status_t honch_client_init_wire_v2_identity(honch_client_t *client);
 static honch_status_t honch_client_queue_push_recorded(
@@ -278,7 +279,7 @@ static honch_status_t honch_build_event(
             event_name,
             client->distinct_id,
             client->session_id,
-            honch_client_now_millis(client),
+            honch_client_event_timestamp_millis(client),
             client->build_properties,
             property_count,
             out);
@@ -337,6 +338,12 @@ static uint64_t honch_client_now_millis(honch_client_t *client)
     }
 
     return honch_now_millis();
+}
+
+static uint64_t honch_client_event_timestamp_millis(honch_client_t *client)
+{
+    uint64_t now_ms = honch_client_now_millis(client);
+    return now_ms == 0u ? 1u : now_ms;
 }
 
 static honch_status_t honch_client_random_hex(honch_client_t *client, char out[33])

@@ -11,8 +11,11 @@ typedef struct fake_state_storage {
     char distinct_id[64];
     char firmware_version[64];
     size_t queue_depth;
+    uint64_t now_ms;
+    int force_now_ms;
     honch_status_t queue_push_status;
     uint64_t queued_sequences[8];
+    uint8_t last_queued_data[256];
     uint8_t last_queued_prefix[4];
     size_t last_queued_size;
     size_t queued_sequence_count;
@@ -35,7 +38,10 @@ static honch_core_config_t fake_config(
 
 static uint64_t fake_now_ms(void *ctx)
 {
-    (void)ctx;
+    fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
+    if (storage != NULL && storage->force_now_ms) {
+        return storage->now_ms;
+    }
     return 1000u;
 }
 
@@ -142,8 +148,12 @@ static honch_status_t fake_queue_push(void *ctx, const uint8_t *event, size_t ev
     }
     storage->last_queued_size = event_size;
     memset(storage->last_queued_prefix, 0, sizeof(storage->last_queued_prefix));
+    memset(storage->last_queued_data, 0, sizeof(storage->last_queued_data));
     if (event != NULL && event_size >= sizeof(storage->last_queued_prefix)) {
         memcpy(storage->last_queued_prefix, event, sizeof(storage->last_queued_prefix));
+    }
+    if (event != NULL && event_size <= sizeof(storage->last_queued_data)) {
+        memcpy(storage->last_queued_data, event, event_size);
     }
     storage->queued_sequences[storage->queued_sequence_count++] = sequence;
     if (storage->track_queue_depth) {
@@ -165,6 +175,26 @@ static void test_queue_push_uses_honch_event_record_format(void)
     assert(storage.last_queued_size > 4u);
     assert(memcmp(storage.last_queued_prefix, "HQR1", 4u) == 0);
     assert(storage.last_queued_prefix[0] != 0xa4u);
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+static void test_zero_platform_time_queues_parseable_event_record(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK, .now_ms = 0u, .force_now_ms = 1};
+    honch_platform_ops_t platform;
+    honch_storage_ops_t storage_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(honch_core_track(client, "early_event", NULL, 0u) == HONCH_OK);
+
+    honch_event_record_t record;
+    assert(honch_event_record_parse(storage.last_queued_data, storage.last_queued_size, &record) == HONCH_OK);
+    assert(record.timestamp_ms > 0u);
+    honch_event_record_free(&record);
+
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
@@ -640,6 +670,7 @@ static void test_auto_properties_callback_runs_outside_client_mutex(void)
 int main(void)
 {
     test_queue_push_uses_honch_event_record_format();
+    test_zero_platform_time_queues_parseable_event_record();
     test_core_state_lock_works_without_platform_lock_callbacks();
     test_failed_firmware_update_queue_does_not_advance_persisted_version();
     test_failed_init_rolls_back_queued_lifecycle_events();

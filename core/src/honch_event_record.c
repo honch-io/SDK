@@ -639,7 +639,10 @@ static honch_status_t honch_record_read_value(honch_record_reader_t *reader, hon
             }
             uint64_t count = 0u;
             honch_status_t status = honch_record_read_uvarint(reader, &count);
-            if (status != HONCH_OK || count > SIZE_MAX / sizeof(honch_wire_v2_value_t)) {
+            size_t remaining = reader->length - reader->offset;
+            if (status != HONCH_OK ||
+                count > SIZE_MAX / sizeof(honch_wire_v2_value_t) ||
+                count > remaining) {
                 return HONCH_ERROR_INVALID_ARGUMENT;
             }
             honch_wire_v2_value_t *items = NULL;
@@ -671,7 +674,10 @@ static honch_status_t honch_record_read_value(honch_record_reader_t *reader, hon
             }
             uint64_t count = 0u;
             honch_status_t status = honch_record_read_uvarint(reader, &count);
-            if (status != HONCH_OK || count > SIZE_MAX / sizeof(honch_wire_v2_map_pair_t)) {
+            size_t remaining = reader->length - reader->offset;
+            if (status != HONCH_OK ||
+                count > SIZE_MAX / sizeof(honch_wire_v2_map_pair_t) ||
+                count > remaining / 3u) {
                 return HONCH_ERROR_INVALID_ARGUMENT;
             }
             honch_wire_v2_map_pair_t *entries = NULL;
