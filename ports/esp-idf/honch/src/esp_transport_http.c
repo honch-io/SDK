@@ -13,8 +13,10 @@
 #include <string.h>
 
 #include "esp_crt_bundle.h"
+#include "esp_event.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
+#include "esp_netif.h"
 #include "esp_timer.h"
 
 static const char *TAG = "honch";
@@ -46,6 +48,20 @@ static char *honch_esp_chunk_url(const char *endpoint_url)
     return honch_esp_endpoint_url(endpoint_url, "/capture");
 }
 
+static honch_status_t honch_esp_ensure_transport_ready(void)
+{
+    esp_err_t err = esp_netif_init();
+    if (err == ESP_OK || err == ESP_ERR_INVALID_STATE) {
+        err = esp_event_loop_create_default();
+    }
+    if (err == ESP_OK || err == ESP_ERR_INVALID_STATE) {
+        return HONCH_STATUS_OK;
+    }
+
+    ESP_LOGE(TAG, "ESP-IDF transport initialization failed: %s", esp_err_to_name(err));
+    return HONCH_STATUS_ERROR_TRANSPORT;
+}
+
 static honch_status_t honch_esp_post_chunk(
     void *ctx,
     const char *endpoint_url,
@@ -65,6 +81,11 @@ static honch_status_t honch_esp_post_chunk(
     }
 
     *result = HONCH_TRANSPORT_RETRY;
+    honch_status_t ready_status = honch_esp_ensure_transport_ready();
+    if (ready_status != HONCH_STATUS_OK) {
+        return ready_status;
+    }
+
 #ifdef HONCH_FLUSH_TIMING
     int64_t total_start_us = esp_timer_get_time();
 #endif

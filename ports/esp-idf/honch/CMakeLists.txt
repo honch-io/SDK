@@ -35,7 +35,9 @@ idf_component_register(
         "${HONCH_SDK_ROOT}/core/src"
     REQUIRES
         nvs_flash
+        esp_event
         esp_http_client
+        esp_netif
         esp-tls
         esp_timer
         esp_driver_gpio
