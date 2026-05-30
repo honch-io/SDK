@@ -494,6 +494,19 @@ static void test_hqr1_rejects_duplicate_nested_map_keys(void)
         HONCH_ERROR_INVALID_ARGUMENT);
 }
 
+static void test_hqr1_rejects_nested_promoted_context_keys_before_queueing(void)
+{
+    const honch_wire_v2_map_pair_t entries[] = {
+        honch_pair("distinct_id", honch_str("spoofed"))
+    };
+    const honch_wire_v2_property_t properties[] = {
+        honch_prop("nested", honch_map(entries, 1u))
+    };
+    honch_payload_t payload = {0};
+    assert(honch_event_record_build("promoted", "device-1", NULL, 1234u, properties, 1u, &payload) ==
+        HONCH_ERROR_INVALID_ARGUMENT);
+}
+
 static void test_hqr1_rejects_malformed_array_count_before_allocation(void)
 {
     uint8_t record[64];
@@ -1191,6 +1204,7 @@ int main(void)
     test_hqr1_rejects_values_deeper_than_wire_v2_limit();
     test_hqr1_rejects_duplicate_top_level_property_keys();
     test_hqr1_rejects_duplicate_nested_map_keys();
+    test_hqr1_rejects_nested_promoted_context_keys_before_queueing();
     test_hqr1_rejects_malformed_array_count_before_allocation();
     test_hqr1_rejects_malformed_map_count_before_allocation();
     test_hqr1_rejects_wrapping_string_length_without_oob_read();

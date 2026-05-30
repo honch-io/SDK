@@ -19,7 +19,9 @@
 
 #ifndef ARDUINO
 namespace {
-uint64_t g_hostNowMs = 1700000000000ULL;
+uint64_t g_hostUptimeMs = 1700000000000ULL;
+uint64_t g_hostEpochMs = 0ULL;
+bool g_hostEpochValid = false;
 }
 #endif
 
@@ -33,7 +35,16 @@ uint64_t honch_arduino_epoch_millis(void *ctx) {
   }
   return (uint64_t)millis();
 #else
-  return g_hostNowMs;
+  return g_hostEpochValid ? g_hostEpochMs : g_hostUptimeMs;
+#endif
+}
+
+uint64_t honch_arduino_uptime_millis(void *ctx) {
+  (void)ctx;
+#ifdef ARDUINO
+  return (uint64_t)millis();
+#else
+  return g_hostUptimeMs;
 #endif
 }
 
@@ -155,7 +166,7 @@ honch_status_t honch_arduino_platform_ops_init(
 
   *ops = honch_platform_ops_t{
       honch_arduino_epoch_millis,
-      honch_arduino_epoch_millis,
+      honch_arduino_uptime_millis,
       honch_arduino_random_bytes,
       honch_arduino_log,
       honch_arduino_mutex_create,
@@ -197,10 +208,23 @@ honch_status_t honch_random_hex(char out[33]) {
 
 #ifndef ARDUINO
 void honch_arduino_host_set_millis(uint64_t nowMs) {
-  g_hostNowMs = nowMs;
+  g_hostUptimeMs = nowMs;
+  g_hostEpochValid = false;
 }
 
 void honch_arduino_host_advance_millis(uint64_t deltaMs) {
-  g_hostNowMs += deltaMs;
+  g_hostUptimeMs += deltaMs;
+  if (g_hostEpochValid) {
+    g_hostEpochMs += deltaMs;
+  }
+}
+
+void honch_arduino_host_set_epoch_millis(uint64_t nowMs) {
+  g_hostEpochMs = nowMs;
+  g_hostEpochValid = true;
+}
+
+void honch_arduino_host_clear_epoch_millis(void) {
+  g_hostEpochValid = false;
 }
 #endif

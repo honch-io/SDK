@@ -596,6 +596,13 @@ static honch_status_t honch_esp_nvs_queue_push(void *ctx, const uint8_t *event, 
     if (status != HONCH_STATUS_OK) {
         return status;
     }
+    if (sequence < head && tail != head) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    if (sequence < head) {
+        head = sequence;
+        tail = sequence;
+    }
 
     for (size_t attempt = 0u; attempt <= HONCH_ESP_DEFAULT_MAX_QUEUE_DEPTH; attempt++) {
         nvs_handle_t handle = 0;
@@ -604,12 +611,11 @@ static honch_status_t honch_esp_nvs_queue_push(void *ctx, const uint8_t *event, 
             return honch_esp_nvs_status(err);
         }
 
-        uint64_t stored_sequence = sequence < head ? head : sequence;
         char key[HONCH_ESP_NVS_KEY_SIZE];
-        honch_esp_sequence_key(stored_sequence, key);
+        honch_esp_sequence_key(sequence, key);
         err = nvs_set_blob(handle, key, event, event_size);
         if (err == ESP_OK) {
-            head = stored_sequence + 1u;
+            head = sequence + 1u;
             status = honch_esp_advance_tail_locked(handle, head, &tail);
         } else {
             status = honch_esp_nvs_status(err);

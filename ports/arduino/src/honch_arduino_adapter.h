@@ -65,4 +65,6 @@ honch_status_t honch_arduino_host_classify_http_status(
     honch_transport_result_t *result);
 void honch_arduino_host_set_millis(uint64_t nowMs);
 void honch_arduino_host_advance_millis(uint64_t deltaMs);
+void honch_arduino_host_set_epoch_millis(uint64_t nowMs);
+void honch_arduino_host_clear_epoch_millis(void);
 #endif

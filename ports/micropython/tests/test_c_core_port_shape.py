@@ -126,11 +126,14 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
 
     def test_readme_documents_typed_hqr1_queue_records(self):
         readme = self.read("ports/micropython/README.md")
+        compact_readme = " ".join(readme.split())
 
         self.assertIn("typed event values", readme)
         self.assertIn("HQR1 queue records", readme)
         self.assertIn("compact wire-v2 packetization", readme)
         self.assertIn("`bytes`", readme)
+        self.assertIn("Capture may reject bytes unless the project enables binary properties", compact_readme)
+        self.assertIn("SDK-owned auto property keys supplied by users are rejected", compact_readme)
         self.assertNotIn("CBOR", readme)
         self.assertNotIn("JSON-compatible", readme)
 

@@ -1325,18 +1325,13 @@ static void test_conformance_auto_stamp_conflict_fixture(void)
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
     const honch_property_t properties[] = {
+        honch_prop("$device_model", honch_str("SHOULD_BE_OVERWRITTEN")),
+        honch_prop("$sdk_platform", honch_str("SHOULD_BE_OVERWRITTEN")),
         honch_prop("custom_key", honch_str("preserved"))
     };
     EXPECT_EQ_INT(
-        honch_track(client, "test_event", properties, 1u),
-        HONCH_OK);
-    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
-
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"test_event\"");
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"$device_model\":\"X3-Pro\"");
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"$sdk_platform\":\"c-posix\"");
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"custom_key\":\"preserved\"");
-    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "SHOULD_BE_OVERWRITTEN");
+        honch_track(client, "test_event", properties, sizeof(properties) / sizeof(properties[0])),
+        HONCH_ERROR_INVALID_ARGUMENT);
 
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);

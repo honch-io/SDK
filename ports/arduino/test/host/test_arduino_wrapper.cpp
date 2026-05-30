@@ -121,5 +121,16 @@ int main() {
   assert(Honch.tick());
   assert(honch_arduino_host_transport_call_count() > 0);
   assert(Honch.shutdown());
+
+  honch_platform_ops_t platformOps;
+  honch_arduino_platform_t platformCtx;
+  assert(honch_arduino_platform_ops_init(&platformOps, &platformCtx) == HONCH_OK);
+  honch_arduino_host_set_millis(12000);
+  assert(platformOps.now_ms(platformOps.ctx) == 12000);
+  assert(platformOps.uptime_ms(platformOps.ctx) == 12000);
+  honch_arduino_host_set_epoch_millis(1700000012000ULL);
+  assert(platformOps.now_ms(platformOps.ctx) == 1700000012000ULL);
+  assert(platformOps.uptime_ms(platformOps.ctx) == 12000);
+  honch_arduino_host_clear_epoch_millis();
   return 0;
 }

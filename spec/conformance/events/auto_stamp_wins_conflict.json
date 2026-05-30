@@ -1,5 +1,5 @@
 {
-  "description": "Auto-stamped properties overwrite user-supplied properties with the same key",
+  "description": "SDK rejects user-supplied SDK-owned properties before queueing",
   "input": {
     "event": "test_event",
     "config": {
@@ -14,11 +14,6 @@
     }
   },
   "expected": {
-    "event": "test_event",
-    "properties": {
-      "$device_model": "X3-Pro",
-      "$sdk_platform": "*",
-      "custom_key": "preserved"
-    }
+    "error": "invalid_argument"
   }
 }

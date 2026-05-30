@@ -213,6 +213,7 @@ static honch_status_t honch_client_queue_push_recorded(
     uint64_t *sequence_out);
 static honch_status_t honch_client_queue_consume(honch_client_t *client, uint64_t sequence);
 static honch_status_t honch_client_queue_depth(honch_client_t *client, size_t *depth);
+static honch_status_t honch_core_sync_sequence_from_storage(honch_client_t *client, size_t depth);
 static honch_status_t honch_client_queue_clear(honch_client_t *client);
 static honch_status_t honch_client_lock(honch_client_t *client);
 static void honch_client_unlock(honch_client_t *client);
@@ -513,6 +514,41 @@ static honch_status_t honch_client_queue_depth(honch_client_t *client, size_t *d
     }
 
     return honch_queue_count_pending(client, depth);
+}
+
+static honch_status_t honch_core_sync_sequence_from_storage(honch_client_t *client, size_t depth)
+{
+    if (client == NULL || depth == 0u || client->storage == NULL || client->storage->queue_peek == NULL) {
+        return HONCH_OK;
+    }
+
+    uint64_t max_sequence = 0u;
+    bool saw_sequence = false;
+    for (size_t i = 0u; i < depth; i++) {
+        honch_storage_reader_t reader = {0};
+        honch_status_t status = client->storage->queue_peek(client->storage->ctx, &reader);
+        if (status == HONCH_ERROR_NOT_INITIALIZED) {
+            break;
+        }
+        if (status != HONCH_OK) {
+            return status;
+        }
+        if (!saw_sequence || reader.sequence > max_sequence) {
+            max_sequence = reader.sequence;
+            saw_sequence = true;
+        }
+    }
+
+    if (!saw_sequence) {
+        return HONCH_OK;
+    }
+    if (max_sequence == UINT64_MAX) {
+        return HONCH_ERROR_QUEUE_FULL;
+    }
+    if (client->sequence <= max_sequence) {
+        client->sequence = max_sequence + 1u;
+    }
+    return HONCH_OK;
 }
 
 static honch_status_t honch_client_queue_clear(honch_client_t *client)
@@ -906,6 +942,9 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     }
     if (status == HONCH_OK) {
         status = honch_client_queue_depth(next, &next->queued_event_count);
+    }
+    if (status == HONCH_OK) {
+        status = honch_core_sync_sequence_from_storage(next, next->queued_event_count);
     }
     if (status == HONCH_OK) {
         honch_lifecycle_queue_tracker_begin(next, &lifecycle_tracker);
