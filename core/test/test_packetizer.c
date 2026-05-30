@@ -24,6 +24,21 @@ typedef struct fake_storage {
     bool peek_saw_client_lock;
 } fake_storage_t;
 
+typedef struct fake_clock {
+    uint64_t now_ms;
+    uint64_t uptime_ms;
+} fake_clock_t;
+
+static uint64_t fake_clock_now_ms(void *ctx)
+{
+    return ((const fake_clock_t *)ctx)->now_ms;
+}
+
+static uint64_t fake_clock_uptime_ms(void *ctx)
+{
+    return ((const fake_clock_t *)ctx)->uptime_ms;
+}
+
 static honch_status_t fake_reader_read(void *ctx, uint32_t offset, uint8_t *buffer, size_t buffer_size)
 {
     fake_storage_t *storage = (fake_storage_t *)ctx;
@@ -132,7 +147,39 @@ static uint16_t read_u16_be(const uint8_t *buffer)
     return (uint16_t)(((uint16_t)buffer[0] << 8u) | buffer[1]);
 }
 
-static honch_payload_t build_test_record(void)
+static bool read_test_uvarint(const uint8_t *bytes, size_t size, size_t *offset, uint64_t *out)
+{
+    uint64_t value = 0u;
+    unsigned int shift = 0u;
+    while (*offset < size && shift < 64u) {
+        uint8_t byte = bytes[(*offset)++];
+        value |= (uint64_t)(byte & 0x7fu) << shift;
+        if ((byte & 0x80u) == 0u) {
+            *out = value;
+            return true;
+        }
+        shift += 7u;
+    }
+    return false;
+}
+
+static uint64_t packetizer_base_time_ms(const uint8_t *buffer, size_t out_size)
+{
+    assert(out_size > HONCH_PACKET_HEADER_SIZE);
+    const uint8_t *message = buffer + HONCH_PACKET_HEADER_SIZE;
+    size_t message_size = out_size - HONCH_PACKET_HEADER_SIZE;
+    size_t offset = 0u;
+    uint64_t value = 0u;
+    assert(read_test_uvarint(message, message_size, &offset, &value));
+    assert(value == 2u);
+    assert(read_test_uvarint(message, message_size, &offset, &value));
+    assert(value == 1u);
+    assert(read_test_uvarint(message, message_size, &offset, &value));
+    assert(read_test_uvarint(message, message_size, &offset, &value));
+    return value;
+}
+
+static honch_payload_t build_test_record_at(uint64_t timestamp_ms)
 {
     honch_buffer_t properties;
     assert(honch_buffer_init(&properties, 16u) == HONCH_OK);
@@ -141,12 +188,17 @@ static honch_payload_t build_test_record(void)
         "boot",
         "user-1",
         NULL,
-        1700000000000ULL,
+        timestamp_ms,
         &properties,
         0u,
         &payload) == HONCH_OK);
     honch_buffer_free(&properties);
     return payload;
+}
+
+static honch_payload_t build_test_record(void)
+{
+    return build_test_record_at(1700000000000ULL);
 }
 
 static void test_tiny_buffer_rejected(void)
@@ -351,6 +403,47 @@ static void test_packetizer_peek_runs_under_client_lock(void)
     free(message.data);
 }
 
+static void test_packetizer_reconstructs_boot_relative_timestamps_when_wall_clock_is_valid(void)
+{
+    static const uint64_t queued_uptime_ms = 12000u;
+    static const uint64_t flush_wall_time_ms = 1700000600000ULL;
+    static const uint64_t flush_uptime_ms = 600000u;
+    static const uint64_t expected_event_time_ms = 1700000012000ULL;
+
+    honch_payload_t message = build_test_record_at(queued_uptime_ms);
+    fake_storage_t storage = {
+        .message = message.data,
+        .message_size = message.length,
+        .sequence = HONCH_TEST_SEQUENCE,
+        .has_message = true
+    };
+    honch_storage_ops_t ops = {0};
+    honch_client_t client = {0};
+    fake_client_with_storage(&client, &storage, &ops);
+    fake_clock_t clock = {
+        .now_ms = flush_wall_time_ms,
+        .uptime_ms = flush_uptime_ms
+    };
+    honch_platform_ops_t platform = {
+        .now_ms = fake_clock_now_ms,
+        .uptime_ms = fake_clock_uptime_ms,
+        .ctx = &clock
+    };
+    client.platform = &platform;
+    honch_packetizer_t packetizer = {0};
+    uint8_t buffer[256] = {0};
+    size_t out_size = 0u;
+    bool complete = false;
+
+    assert(honch_packetizer_begin(&client, &packetizer, HONCH_DATA_SOURCE_EVENTS) == HONCH_OK);
+    assert(honch_packetizer_next(&packetizer, buffer, sizeof(buffer), &out_size, &complete) == HONCH_OK);
+    assert(complete);
+    assert(packetizer_base_time_ms(buffer, out_size) == expected_event_time_ms);
+    assert(honch_packetizer_abort(&packetizer) == HONCH_OK);
+    fake_client_destroy(&client);
+    free(message.data);
+}
+
 int main(void)
 {
     test_tiny_buffer_rejected();
@@ -360,5 +453,6 @@ int main(void)
     test_confirm_consumes_storage();
     test_confirm_failure_invalidates_packetizer_after_releasing_client();
     test_packetizer_peek_runs_under_client_lock();
+    test_packetizer_reconstructs_boot_relative_timestamps_when_wall_clock_is_valid();
     return 0;
 }

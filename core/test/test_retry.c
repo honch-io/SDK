@@ -43,6 +43,21 @@ typedef struct fake_transport {
     size_t last_chunk_size;
 } fake_transport_t;
 
+typedef struct fake_clock {
+    uint64_t now_ms;
+    uint64_t uptime_ms;
+} fake_clock_t;
+
+static uint64_t fake_clock_now_ms(void *ctx)
+{
+    return ((const fake_clock_t *)ctx)->now_ms;
+}
+
+static uint64_t fake_clock_uptime_ms(void *ctx)
+{
+    return ((const fake_clock_t *)ctx)->uptime_ms;
+}
+
 static fake_event_t *find_event(fake_storage_t *storage, uint64_t sequence)
 {
     for (size_t i = 0u; i < storage->event_count; i++) {
@@ -271,9 +286,50 @@ static bool bytes_contains(const uint8_t *haystack, size_t haystack_size, const 
     return false;
 }
 
+static bool read_test_uvarint(const uint8_t *bytes, size_t size, size_t *offset, uint64_t *out)
+{
+    uint64_t value = 0u;
+    unsigned int shift = 0u;
+    while (*offset < size && shift < 64u) {
+        uint8_t byte = bytes[(*offset)++];
+        value |= (uint64_t)(byte & 0x7fu) << shift;
+        if ((byte & 0x80u) == 0u) {
+            *out = value;
+            return true;
+        }
+        shift += 7u;
+    }
+    return false;
+}
+
+static uint64_t last_chunk_base_time_ms(const fake_transport_t *transport)
+{
+    assert(transport->last_chunk_size > 4u);
+    size_t frame_offset = 1u;
+    uint64_t ignored = 0u;
+    assert((transport->last_chunk[0] & 0x03u) == 0x02u);
+    assert((transport->last_chunk[0] & 0x40u) == 0u);
+    assert((transport->last_chunk[0] & 0x20u) == 0u);
+    assert(read_test_uvarint(transport->last_chunk, transport->last_chunk_size, &frame_offset, &ignored));
+    assert(frame_offset <= transport->last_chunk_size - 2u);
+
+    const uint8_t *message = transport->last_chunk + frame_offset;
+    size_t message_size = transport->last_chunk_size - frame_offset - 2u;
+    size_t message_offset = 0u;
+    uint64_t value = 0u;
+    assert(read_test_uvarint(message, message_size, &message_offset, &value));
+    assert(value == 2u);
+    assert(read_test_uvarint(message, message_size, &message_offset, &value));
+    assert(value == 1u);
+    assert(read_test_uvarint(message, message_size, &message_offset, &value));
+    assert(read_test_uvarint(message, message_size, &message_offset, &value));
+    return value;
+}
+
 static honch_payload_t build_test_event_for_distinct(
     const char *event_name,
     const char *distinct_id,
+    uint64_t timestamp_ms,
     const char *properties_json)
 {
     honch_buffer_t properties = {0};
@@ -281,15 +337,23 @@ static honch_payload_t build_test_event_for_distinct(
     size_t property_count = 0u;
     assert(honch_event_record_append_json_object_members(&properties, properties_json, &property_count) == HONCH_OK);
     honch_payload_t payload = {0};
-    assert(honch_event_record_build(event_name, distinct_id, NULL, 1234u, &properties, property_count, &payload) ==
+    assert(honch_event_record_build(event_name, distinct_id, NULL, timestamp_ms, &properties, property_count, &payload) ==
         HONCH_OK);
     honch_buffer_free(&properties);
     return payload;
 }
 
+static honch_payload_t build_test_event_for_distinct_with_default_time(
+    const char *event_name,
+    const char *distinct_id,
+    const char *properties_json)
+{
+    return build_test_event_for_distinct(event_name, distinct_id, 1234u, properties_json);
+}
+
 static honch_payload_t build_test_event(const char *event_name, const char *properties_json)
 {
-    return build_test_event_for_distinct(event_name, "device-1", properties_json);
+    return build_test_event_for_distinct_with_default_time(event_name, "device-1", properties_json);
 }
 
 static uint8_t *find_payload_bytes(honch_payload_t *payload, const char *needle)
@@ -745,6 +809,44 @@ static void test_v2_chunk_transport_preserves_device_boot_event(void)
     assert(!storage.events[0].dead_lettered);
 }
 
+static void test_v2_flush_reconstructs_boot_relative_timestamps_when_wall_clock_is_valid(void)
+{
+    static const uint64_t queued_uptime_ms = 12000u;
+    static const uint64_t flush_wall_time_ms = 1700000600000ULL;
+    static const uint64_t flush_uptime_ms = 600000u;
+    static const uint64_t expected_event_time_ms = 1700000012000ULL;
+
+    fake_storage_t storage = {0};
+    honch_payload_t event = build_test_event_for_distinct("first", "device-1", queued_uptime_ms, "{}");
+    storage.event_count = 1u;
+    storage.events[0] = (fake_event_t) {
+        .data = event.data,
+        .size = event.length,
+        .sequence = 1u,
+        .pending = true
+    };
+
+    fake_clock_t clock = {
+        .now_ms = flush_wall_time_ms,
+        .uptime_ms = flush_uptime_ms
+    };
+    honch_platform_ops_t platform = {
+        .now_ms = fake_clock_now_ms,
+        .uptime_ms = fake_clock_uptime_ms,
+        .ctx = &clock
+    };
+    fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
+    honch_storage_ops_t storage_ops = {0};
+    honch_transport_ops_t transport_ops = {0};
+    honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
+    client.platform = &platform;
+
+    assert(honch_queue_flush_locked(&client) == HONCH_OK);
+    assert(transport.chunk_calls == 1u);
+    assert(last_chunk_base_time_ms(&transport) == expected_event_time_ms);
+    assert(storage.events[0].consumed);
+}
+
 static void test_v2_final_chunk_stored_response_preserves_event(void)
 {
     fake_storage_t storage;
@@ -836,7 +938,7 @@ static void test_v2_flush_splits_batches_by_distinct_id(void)
 {
     fake_storage_t storage;
     setup_storage(&storage);
-    honch_payload_t second_distinct_event = build_test_event_for_distinct("second", "device-2", "{}");
+    honch_payload_t second_distinct_event = build_test_event_for_distinct_with_default_time("second", "device-2", "{}");
     storage.events[1].data = second_distinct_event.data;
     storage.events[1].size = second_distinct_event.length;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
@@ -974,6 +1076,7 @@ int main(void)
     test_v2_chunk_transport_preserves_half_float_as_float32_property();
     test_v2_flush_rejects_non_record_payload();
     test_v2_chunk_transport_preserves_device_boot_event();
+    test_v2_flush_reconstructs_boot_relative_timestamps_when_wall_clock_is_valid();
     test_v2_final_chunk_stored_response_preserves_event();
     test_v2_multi_frame_flush_passes_stream_id_to_transport();
     test_flush_uses_storage_batch_read_when_available();

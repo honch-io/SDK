@@ -7,6 +7,7 @@
 #include <string.h>
 
 #define HONCH_WIRE_V2_MAX_FRAME_BYTES 4096u
+#define HONCH_MIN_UNIX_TIME_MS 1577836800000ULL
 
 typedef struct honch_flush_context {
     char *device_id;
@@ -17,6 +18,9 @@ typedef struct honch_flush_context {
     char *session_id;
     uint32_t message_id_seed;
     char stream_id[9];
+    bool has_boot_epoch_ms;
+    uint64_t boot_epoch_ms;
+    uint64_t flush_uptime_ms;
 } honch_flush_context_t;
 
 #ifdef HONCH_FLUSH_TIMING
@@ -51,6 +55,38 @@ size_t honch_test_max_wire_v2_encode_attempts(void)
 }
 
 #endif
+
+static void honch_snapshot_boot_epoch(honch_client_t *client, honch_flush_context_t *context)
+{
+    if (client == NULL || context == NULL || client->platform == NULL ||
+        client->platform->now_ms == NULL || client->platform->uptime_ms == NULL) {
+        return;
+    }
+
+    uint64_t now_ms = client->platform->now_ms(client->platform->ctx);
+    uint64_t uptime_ms = client->platform->uptime_ms(client->platform->ctx);
+    if (now_ms < HONCH_MIN_UNIX_TIME_MS || uptime_ms == 0u || now_ms <= uptime_ms) {
+        return;
+    }
+
+    context->has_boot_epoch_ms = true;
+    context->boot_epoch_ms = now_ms - uptime_ms;
+    context->flush_uptime_ms = uptime_ms;
+}
+
+static uint64_t honch_normalize_queued_timestamp(
+    const honch_flush_context_t *context,
+    uint64_t timestamp_ms)
+{
+    if (context == NULL || !context->has_boot_epoch_ms ||
+        timestamp_ms == 0u || timestamp_ms >= HONCH_MIN_UNIX_TIME_MS ||
+        timestamp_ms > context->flush_uptime_ms ||
+        UINT64_MAX - context->boot_epoch_ms < timestamp_ms) {
+        return timestamp_ms;
+    }
+
+    return context->boot_epoch_ms + timestamp_ms;
+}
 
 static honch_status_t honch_core_queue_depth(honch_client_t *client, size_t *depth)
 {
@@ -149,6 +185,7 @@ static honch_status_t honch_flush_context_snapshot(honch_client_t *client, honch
     context->session_id = client->session_id == NULL ? NULL : honch_strdup(client->session_id);
     context->message_id_seed = client->wire_v2_message_id_seed;
     memcpy(context->stream_id, client->wire_v2_stream_id, sizeof(context->stream_id));
+    honch_snapshot_boot_epoch(client, context);
 
     if (context->device_id == NULL || context->device_model == NULL ||
         context->firmware_version == NULL || context->sdk_platform == NULL ||
@@ -327,6 +364,7 @@ static honch_status_t honch_core_build_wire_v2_message(
             break;
         }
         if (status == HONCH_OK) {
+            parsed[i].timestamp_ms = honch_normalize_queued_timestamp(flush_context, parsed[i].timestamp_ms);
             compact_events[i] = (honch_wire_v2_event_t) {
                 .event_name = parsed[i].event_name,
                 .timestamp_ms = parsed[i].timestamp_ms,
