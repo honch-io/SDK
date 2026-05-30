@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import unittest
 
 
@@ -34,6 +35,23 @@ class MicroPythonAtomicStorageTests(unittest.TestCase):
         self.assertIn("status = honch_mp_cleanup_tmp_files(ctx->pending_directory);", storage)
         self.assertIn("status = honch_mp_cleanup_tmp_files(ctx->dead_directory);", storage)
         self.assertIn("status = honch_mp_cleanup_tmp_files(ctx->state_directory);", storage)
+
+    def test_queue_mutations_reset_peek_cursor(self) -> None:
+        storage = read("ports/micropython/usermod/honch/mpstorage_adapter.c")
+
+        for fn_name in (
+            "honch_mp_queue_consume",
+            "honch_mp_queue_dead_letter",
+            "honch_mp_queue_drop_oldest",
+            "honch_mp_queue_clear",
+        ):
+            match = re.search(
+                r"static honch_status_t " + fn_name + r"\([^)]*\)\n\{(?P<body>.*?)\n\}",
+                storage,
+                re.DOTALL,
+            )
+            self.assertIsNotNone(match, fn_name)
+            self.assertIn("active_sequence = UINT64_MAX", match.group("body"), fn_name)
 
 
 if __name__ == "__main__":
