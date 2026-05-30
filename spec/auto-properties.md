@@ -1,6 +1,8 @@
 # Auto-Stamped Properties
 
-Every event emitted by a Honch SDK must include these properties. They are set automatically by the SDK encoder — user-supplied properties with the same key are overwritten.
+Every event emitted by a Honch SDK must carry this context. The SDK encoder
+sets it automatically. User-supplied properties using SDK-owned keys are
+rejected instead of overwritten.
 
 ## Required (always present)
 
@@ -23,7 +25,11 @@ Every event emitted by a Honch SDK must include these properties. They are set a
 
 ## Server-Side Promotion
 
-Capture promotes these properties to top-level columns: `$device_id`, `$device_model`, `$firmware_version`, `$session_id`, `$sdk_platform`, `$environment`. The SDK does not need to do anything special — just put them in `properties`.
+Capture promotes these fields to top-level columns: `$device_id`,
+`$device_model`, `$firmware_version`, `$session_id`, `$sdk_platform`,
+`$environment`. In wire-v2, they are encoded in wire-v2 context and removed
+from the event properties before wire encoding. Port authors should not also
+write promoted context fields into event properties.
 
 ## Lifecycle Events
 

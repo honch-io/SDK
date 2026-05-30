@@ -68,18 +68,23 @@ static honch_status_t honch_mp_value_from_map(
     if (status != HONCH_STATUS_OK) {
         return status;
     }
-    for (size_t i = 0u; i < map->used; i++) {
+    size_t pair_count = 0u;
+    for (size_t i = 0u; i < map->alloc; i++) {
+        if (!mp_map_slot_is_filled(map, i)) {
+            continue;
+        }
         mp_map_elem_t *elem = &map->table[i];
         if (!mp_obj_is_str(elem->key)) {
             return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
         }
-        pairs[i].key = mp_obj_str_get_str(elem->key);
-        status = honch_mp_value_from_obj(elem->value, pool, &pairs[i].value, depth + 1u);
+        pairs[pair_count].key = mp_obj_str_get_str(elem->key);
+        status = honch_mp_value_from_obj(elem->value, pool, &pairs[pair_count].value, depth + 1u);
         if (status != HONCH_STATUS_OK) {
             return status;
         }
+        pair_count++;
     }
-    *out = honch_map(pairs, map->used);
+    *out = honch_map(pairs, pair_count);
     return HONCH_STATUS_OK;
 }
 
@@ -163,18 +168,23 @@ static honch_status_t honch_mp_properties_from_obj(
     if (map->used > HONCH_MP_MAX_PROPERTIES) {
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
-    for (size_t i = 0u; i < map->used; i++) {
+    size_t count = 0u;
+    for (size_t i = 0u; i < map->alloc; i++) {
+        if (!mp_map_slot_is_filled(map, i)) {
+            continue;
+        }
         mp_map_elem_t *elem = &map->table[i];
         if (!mp_obj_is_str(elem->key)) {
             return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
         }
-        properties[i].key = mp_obj_str_get_str(elem->key);
-        honch_status_t status = honch_mp_value_from_obj(elem->value, pool, &properties[i].value, 0u);
+        properties[count].key = mp_obj_str_get_str(elem->key);
+        honch_status_t status = honch_mp_value_from_obj(elem->value, pool, &properties[count].value, 0u);
         if (status != HONCH_STATUS_OK) {
             return status;
         }
+        count++;
     }
-    *property_count = map->used;
+    *property_count = count;
     return HONCH_STATUS_OK;
 }
 

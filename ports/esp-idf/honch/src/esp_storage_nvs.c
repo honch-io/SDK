@@ -542,7 +542,12 @@ static honch_status_t honch_esp_ram_queue_consume_batch(
 
 static honch_status_t honch_esp_queue_drop_oldest(void *ctx)
 {
-    (void)ctx;
+    honch_esp_storage_t *storage = (honch_esp_storage_t *)ctx;
+    if (honch_esp_ram_queue_has_events(storage)) {
+        honch_esp_ram_queue_remove_at(storage, 0u);
+        return HONCH_STATUS_OK;
+    }
+
     uint64_t head = 0u;
     uint64_t tail = 0u;
     honch_status_t status = honch_esp_get_head_tail(&head, &tail);

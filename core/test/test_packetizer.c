@@ -116,6 +116,7 @@ static void fake_client_with_storage(honch_client_t *client, fake_storage_t *sto
     client->firmware_version = "1.0.0";
     client->sdk_platform = "posix";
     client->environment = "production";
+    client->max_event_bytes = HONCH_DEFAULT_MAX_EVENT_BYTES;
     storage->client = client;
 }
 
@@ -221,6 +222,30 @@ static void test_tiny_buffer_rejected(void)
         HONCH_ERROR_INVALID_ARGUMENT);
     assert(!storage.consumed);
     assert(honch_packetizer_abort(&packetizer) == HONCH_OK);
+    fake_client_destroy(&client);
+    free(message.data);
+}
+
+static void test_begin_rejects_queued_record_larger_than_max_event_bytes(void)
+{
+    honch_payload_t message = build_test_record();
+    fake_storage_t storage = {
+        .message = message.data,
+        .message_size = message.length,
+        .sequence = HONCH_TEST_SEQUENCE,
+        .has_message = true
+    };
+    honch_storage_ops_t ops = {0};
+    honch_client_t client = {0};
+    fake_client_with_storage(&client, &storage, &ops);
+    client.max_event_bytes = message.length - 1u;
+    honch_packetizer_t packetizer = {0};
+
+    assert(honch_packetizer_begin(&client, &packetizer, HONCH_DATA_SOURCE_EVENTS) ==
+        HONCH_ERROR_INVALID_ARGUMENT);
+    assert(!packetizer.active);
+    assert(!storage.consumed);
+
     fake_client_destroy(&client);
     free(message.data);
 }
@@ -444,6 +469,7 @@ static void test_packetizer_reconstructs_boot_relative_timestamps_when_wall_cloc
 int main(void)
 {
     test_tiny_buffer_rejected();
+    test_begin_rejects_queued_record_larger_than_max_event_bytes();
     test_single_chunk_message_has_first_and_final_flags();
     test_multi_chunk_message_offsets_increase();
     test_abort_does_not_consume_storage();
