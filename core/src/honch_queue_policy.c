@@ -8,6 +8,24 @@
 
 #define HONCH_WIRE_V2_MAX_FRAME_BYTES 4096u
 
+#ifdef HONCH_FLUSH_TIMING
+static uint64_t honch_flush_timing_now_ms(honch_client_t *client)
+{
+    if (client == NULL || client->platform == NULL || client->platform->uptime_ms == NULL) {
+        return 0u;
+    }
+    return client->platform->uptime_ms(client->platform->ctx);
+}
+
+static void honch_flush_timing_log(honch_client_t *client, const char *message)
+{
+    if (client == NULL || client->platform == NULL || client->platform->log == NULL) {
+        return;
+    }
+    client->platform->log(client->platform->ctx, HONCH_LOG_INFO, message);
+}
+#endif
+
 #ifdef HONCH_TESTING
 static size_t s_honch_test_max_wire_v2_encode_attempts = 0u;
 
@@ -388,6 +406,9 @@ static honch_status_t honch_core_post_wire_v2_message(
 
     *result = HONCH_TRANSPORT_RETRY;
     bool complete = false;
+#ifdef HONCH_FLUSH_TIMING
+    size_t chunk_count = 0u;
+#endif
     while (!complete) {
         size_t frame_size = 0u;
         status = honch_wire_v2_chunker_next(
@@ -400,6 +421,9 @@ static honch_status_t honch_core_post_wire_v2_message(
             free(frame);
             return status;
         }
+#ifdef HONCH_FLUSH_TIMING
+        uint64_t post_start_ms = honch_flush_timing_now_ms(client);
+#endif
         status = client->transport->post_chunk(
             client->transport->ctx,
             client->endpoint_url,
@@ -408,6 +432,22 @@ static honch_status_t honch_core_post_wire_v2_message(
             frame,
             frame_size,
             result);
+#ifdef HONCH_FLUSH_TIMING
+        uint64_t post_elapsed_ms = honch_flush_timing_now_ms(client) - post_start_ms;
+        chunk_count++;
+        char timing_message[192];
+        snprintf(
+            timing_message,
+            sizeof(timing_message),
+            "HONCH_FLUSH_TIMING phase=post_chunk chunk=%u frame_bytes=%u complete=%u status=%d result=%d elapsed_ms=%llu",
+            (unsigned)chunk_count,
+            (unsigned)frame_size,
+            complete ? 1u : 0u,
+            (int)status,
+            (int)*result,
+            (unsigned long long)post_elapsed_ms);
+        honch_flush_timing_log(client, timing_message);
+#endif
         if (status != HONCH_OK) {
             free(frame);
             return status;
@@ -459,6 +499,9 @@ static honch_status_t honch_core_flush_one(honch_client_t *client, bool *progres
 
     honch_status_t status = HONCH_OK;
     bool use_reader_path = client->storage == NULL || client->storage->queue_read_batch == NULL;
+#ifdef HONCH_FLUSH_TIMING
+    uint64_t read_start_ms = honch_flush_timing_now_ms(client);
+#endif
     if (client->storage != NULL && client->storage->queue_read_batch != NULL) {
         status = honch_core_read_queue_batch(client, events, sequences, batch_size, &event_count);
         if (status == HONCH_ERROR_NOT_INITIALIZED) {
@@ -503,6 +546,20 @@ static honch_status_t honch_core_flush_one(honch_client_t *client, bool *progres
             event_count++;
         }
     }
+#ifdef HONCH_FLUSH_TIMING
+    uint64_t read_elapsed_ms = honch_flush_timing_now_ms(client) - read_start_ms;
+    char timing_message[224];
+    snprintf(
+        timing_message,
+        sizeof(timing_message),
+        "HONCH_FLUSH_TIMING phase=read_batch batch_size=%u events=%u status=%d reader_path=%u elapsed_ms=%llu",
+        (unsigned)batch_size,
+        (unsigned)event_count,
+        (int)status,
+        use_reader_path ? 1u : 0u,
+        (unsigned long long)read_elapsed_ms);
+    honch_flush_timing_log(client, timing_message);
+#endif
 
     if (status != HONCH_OK || event_count == 0u) {
         for (size_t i = 0u; i < event_count; i++) {
@@ -518,12 +575,28 @@ static honch_status_t honch_core_flush_one(honch_client_t *client, bool *progres
     if (client->transport == NULL || client->transport->post_chunk == NULL) {
         status = HONCH_ERROR_INVALID_ARGUMENT;
     } else {
+#ifdef HONCH_FLUSH_TIMING
+        uint64_t encode_start_ms = honch_flush_timing_now_ms(client);
+#endif
         status = honch_core_build_wire_v2_message(
             client,
             events,
             event_count,
             &compact_message,
             &encoded_event_count);
+#ifdef HONCH_FLUSH_TIMING
+        uint64_t encode_elapsed_ms = honch_flush_timing_now_ms(client) - encode_start_ms;
+        snprintf(
+            timing_message,
+            sizeof(timing_message),
+            "HONCH_FLUSH_TIMING phase=encode input_events=%u encoded_events=%u message_bytes=%u status=%d elapsed_ms=%llu",
+            (unsigned)event_count,
+            (unsigned)encoded_event_count,
+            (unsigned)compact_message.length,
+            (int)status,
+            (unsigned long long)encode_elapsed_ms);
+        honch_flush_timing_log(client, timing_message);
+#endif
     }
     for (size_t i = 0u; i < event_count; i++) {
         free(events[i].data);
@@ -549,16 +622,46 @@ static honch_status_t honch_core_flush_one(honch_client_t *client, bool *progres
 
     honch_transport_result_t result = HONCH_TRANSPORT_RETRY;
     uint32_t message_id = client->wire_v2_message_id_seed + (uint32_t)sequences[0];
+#ifdef HONCH_FLUSH_TIMING
+    uint64_t post_message_start_ms = honch_flush_timing_now_ms(client);
+#endif
     status = honch_core_post_wire_v2_message(
         client,
         &compact_message,
         message_id,
         client->wire_v2_stream_id,
         &result);
+#ifdef HONCH_FLUSH_TIMING
+    uint64_t post_message_elapsed_ms = honch_flush_timing_now_ms(client) - post_message_start_ms;
+    snprintf(
+        timing_message,
+        sizeof(timing_message),
+        "HONCH_FLUSH_TIMING phase=post_message events=%u message_bytes=%u status=%d result=%d elapsed_ms=%llu",
+        (unsigned)event_count,
+        (unsigned)compact_message.length,
+        (int)status,
+        (int)result,
+        (unsigned long long)post_message_elapsed_ms);
+    honch_flush_timing_log(client, timing_message);
+#endif
     free(compact_message.data);
 
     if (result == HONCH_TRANSPORT_ACCEPTED && status == HONCH_OK) {
+#ifdef HONCH_FLUSH_TIMING
+        uint64_t consume_start_ms = honch_flush_timing_now_ms(client);
+#endif
         status = honch_core_queue_consume_batch(client, sequences, event_count);
+#ifdef HONCH_FLUSH_TIMING
+        uint64_t consume_elapsed_ms = honch_flush_timing_now_ms(client) - consume_start_ms;
+        snprintf(
+            timing_message,
+            sizeof(timing_message),
+            "HONCH_FLUSH_TIMING phase=consume_batch events=%u status=%d elapsed_ms=%llu",
+            (unsigned)event_count,
+            (int)status,
+            (unsigned long long)consume_elapsed_ms);
+        honch_flush_timing_log(client, timing_message);
+#endif
         *progressed = status == HONCH_OK;
         free(events);
         free(sequences);
@@ -589,7 +692,22 @@ honch_status_t honch_queue_flush_locked(honch_client_t *client)
 
     for (;;) {
         size_t depth = 0u;
+#ifdef HONCH_FLUSH_TIMING
+        uint64_t depth_start_ms = honch_flush_timing_now_ms(client);
+#endif
         honch_status_t status = honch_core_queue_depth(client, &depth);
+#ifdef HONCH_FLUSH_TIMING
+        uint64_t depth_elapsed_ms = honch_flush_timing_now_ms(client) - depth_start_ms;
+        char timing_message[160];
+        snprintf(
+            timing_message,
+            sizeof(timing_message),
+            "HONCH_FLUSH_TIMING phase=queue_depth depth=%u status=%d elapsed_ms=%llu",
+            (unsigned)depth,
+            (int)status,
+            (unsigned long long)depth_elapsed_ms);
+        honch_flush_timing_log(client, timing_message);
+#endif
         if (status != HONCH_OK) {
             return status;
         }

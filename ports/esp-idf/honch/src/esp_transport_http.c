@@ -15,6 +15,7 @@
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 
 static const char *TAG = "honch";
 
@@ -64,6 +65,9 @@ static honch_status_t honch_esp_post_chunk(
     }
 
     *result = HONCH_TRANSPORT_RETRY;
+#ifdef HONCH_FLUSH_TIMING
+    int64_t total_start_us = esp_timer_get_time();
+#endif
     char *url = honch_esp_chunk_url(endpoint_url);
     if (url == NULL) {
         return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
@@ -80,12 +84,21 @@ static honch_status_t honch_esp_post_chunk(
         .crt_bundle_attach = esp_crt_bundle_attach,
     };
 
+#ifdef HONCH_FLUSH_TIMING
+    int64_t init_start_us = esp_timer_get_time();
+#endif
     esp_http_client_handle_t http_client = esp_http_client_init(&config);
+#ifdef HONCH_FLUSH_TIMING
+    int64_t init_us = esp_timer_get_time() - init_start_us;
+#endif
     if (http_client == NULL) {
         free(url);
         return HONCH_STATUS_ERROR_TRANSPORT;
     }
 
+#ifdef HONCH_FLUSH_TIMING
+    int64_t setup_start_us = esp_timer_get_time();
+#endif
     esp_err_t err = esp_http_client_set_header(http_client, "Content-Type", "application/vnd.honch.chunk");
     if (err == ESP_OK) {
         err = esp_http_client_set_header(http_client, "X-Honch-Project-Key", api_key);
@@ -96,6 +109,10 @@ static honch_status_t honch_esp_post_chunk(
     if (err == ESP_OK) {
         err = esp_http_client_set_post_field(http_client, (const char *)body, (int)body_size);
     }
+#ifdef HONCH_FLUSH_TIMING
+    int64_t setup_us = esp_timer_get_time() - setup_start_us;
+    int64_t perform_us = 0;
+#endif
     if (err == ESP_OK) {
         ESP_LOGI(
             TAG,
@@ -103,53 +120,74 @@ static honch_status_t honch_esp_post_chunk(
             (unsigned)body_size,
             url,
             stream_id == NULL || stream_id[0] == '\0' ? "<none>" : stream_id);
+#ifdef HONCH_FLUSH_TIMING
+        int64_t perform_start_us = esp_timer_get_time();
+#endif
         err = esp_http_client_perform(http_client);
+#ifdef HONCH_FLUSH_TIMING
+        perform_us = esp_timer_get_time() - perform_start_us;
+#endif
     }
 
     int status = err == ESP_OK ? esp_http_client_get_status_code(http_client) : 0;
+#ifdef HONCH_FLUSH_TIMING
+    int64_t cleanup_start_us = esp_timer_get_time();
+#endif
     esp_http_client_cleanup(http_client);
+#ifdef HONCH_FLUSH_TIMING
+    int64_t cleanup_us = esp_timer_get_time() - cleanup_start_us;
+#endif
     free(url);
+
+    honch_status_t return_status = HONCH_STATUS_OK;
+    if (err != ESP_OK) {
+        *result = HONCH_TRANSPORT_RETRY;
+        return_status = HONCH_STATUS_ERROR_TRANSPORT;
+    } else if (status == 0) {
+        *result = HONCH_TRANSPORT_RETRY;
+        return_status = HONCH_STATUS_ERROR_TRANSPORT;
+    } else if (status == 202) {
+        *result = HONCH_TRANSPORT_CHUNK_STORED;
+    } else if (status == 204) {
+        *result = HONCH_TRANSPORT_ACCEPTED;
+    } else if (status == 401) {
+        *result = HONCH_TRANSPORT_AUTH_ERROR;
+    } else if (status == 429) {
+        *result = HONCH_TRANSPORT_RETRY;
+        return_status = HONCH_STATUS_ERROR_RATE_LIMITED;
+    } else if (status == 408) {
+        *result = HONCH_TRANSPORT_RETRY;
+        return_status = HONCH_STATUS_ERROR_TIMEOUT;
+    } else if (status == 409) {
+        *result = HONCH_TRANSPORT_RETRY;
+        return_status = HONCH_STATUS_ERROR_TRANSPORT;
+    } else if (status >= 400 && status < 500) {
+        *result = HONCH_TRANSPORT_REJECTED;
+    } else {
+        *result = HONCH_TRANSPORT_RETRY;
+        return_status = HONCH_STATUS_ERROR_SERVER;
+    }
+
+#ifdef HONCH_FLUSH_TIMING
+    ESP_LOGI(
+        TAG,
+        "HONCH_HTTP_TIMING bytes=%u status=%d result=%d return_status=%d err=%s init_us=%lld setup_us=%lld perform_us=%lld cleanup_us=%lld total_us=%lld",
+        (unsigned)body_size,
+        status,
+        (int)*result,
+        (int)return_status,
+        err == ESP_OK ? "ESP_OK" : esp_err_to_name(err),
+        (long long)init_us,
+        (long long)setup_us,
+        (long long)perform_us,
+        (long long)cleanup_us,
+        (long long)(esp_timer_get_time() - total_start_us));
+#endif
 
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "HTTP chunk request failed: %s", esp_err_to_name(err));
-        *result = HONCH_TRANSPORT_RETRY;
-        return HONCH_STATUS_ERROR_TRANSPORT;
     }
-    if (status == 0) {
-        *result = HONCH_TRANSPORT_RETRY;
-        return HONCH_STATUS_ERROR_TRANSPORT;
-    }
-    if (status == 202) {
-        *result = HONCH_TRANSPORT_CHUNK_STORED;
-        return HONCH_STATUS_OK;
-    }
-    if (status == 204) {
-        *result = HONCH_TRANSPORT_ACCEPTED;
-        return HONCH_STATUS_OK;
-    }
-    if (status == 401) {
-        *result = HONCH_TRANSPORT_AUTH_ERROR;
-        return HONCH_STATUS_OK;
-    }
-    if (status == 429) {
-        *result = HONCH_TRANSPORT_RETRY;
-        return HONCH_STATUS_ERROR_RATE_LIMITED;
-    }
-    if (status == 408) {
-        *result = HONCH_TRANSPORT_RETRY;
-        return HONCH_STATUS_ERROR_TIMEOUT;
-    }
-    if (status == 409) {
-        *result = HONCH_TRANSPORT_RETRY;
-        return HONCH_STATUS_ERROR_TRANSPORT;
-    }
-    if (status >= 400 && status < 500) {
-        *result = HONCH_TRANSPORT_REJECTED;
-        return HONCH_STATUS_OK;
-    }
-
-    *result = HONCH_TRANSPORT_RETRY;
-    return HONCH_STATUS_ERROR_SERVER;
+    return return_status;
 }
 
 honch_status_t honch_esp_transport_ops_init(honch_transport_ops_t *ops, honch_esp_transport_t *ctx)

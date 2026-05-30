@@ -81,4 +81,11 @@ menu "Honch Rate Sweep Benchmark Configuration"
             Bounded static sample capacity used for per-window latency
             percentiles. Keep above max EPS times window seconds.
 
+    config RATE_SWEEP_FLUSH_TIMING
+        bool "Enable Honch flush timing logs"
+        default n
+        help
+            Enables HONCH_FLUSH_TIMING logs from the SDK flush path and HTTP
+            transport. This is intended for benchmark diagnosis only.
+
 endmenu
