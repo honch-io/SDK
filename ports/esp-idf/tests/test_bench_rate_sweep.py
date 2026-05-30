@@ -40,6 +40,13 @@ class EspIdfBenchRateSweepTests(unittest.TestCase):
         self.assertIn("RATE_SWEEP_WARMUP_SECONDS", kconfig)
         self.assertIn("RATE_SWEEP_WINDOW_SECONDS", kconfig)
 
+    def test_rate_sweep_flush_counter_spans_windows(self) -> None:
+        app = read("ports/esp-idf/rate_sweep_bench/main/app_main.c")
+
+        self.assertIn("static uint32_t s_accepted_since_flush", app)
+        self.assertNotIn("uint32_t accepted_since_flush = 0;", app)
+        self.assertIn("s_accepted_since_flush >= CONFIG_RATE_SWEEP_FLUSH_EVERY", app)
+
     def test_legacy_benchtest_is_not_the_rate_sweep_app(self) -> None:
         benchtest = read("ports/esp-idf/benchtest/main/app_main.c")
 

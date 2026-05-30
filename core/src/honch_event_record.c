@@ -630,7 +630,10 @@ honch_status_t honch_event_record_append_json_object_members(
     if (json == NULL) {
         return HONCH_OK;
     }
-    honch_buffer_t seen_keys[HONCH_EVENT_RECORD_MAX_PROPERTIES] = {0};
+    honch_buffer_t *seen_keys = (honch_buffer_t *)calloc(HONCH_EVENT_RECORD_MAX_PROPERTIES, sizeof(*seen_keys));
+    if (seen_keys == NULL) {
+        return HONCH_ERROR_OUT_OF_MEMORY;
+    }
     size_t seen_key_count = 0u;
     honch_status_t status = HONCH_OK;
     honch_record_json_parser_t parser = {.cursor = json};
@@ -710,6 +713,7 @@ honch_status_t honch_event_record_append_json_object_members(
     for (size_t i = 0u; i < seen_key_count; i++) {
         honch_buffer_free(&seen_keys[i]);
     }
+    free(seen_keys);
     if (status != HONCH_OK) {
         *member_count = 0u;
     }
@@ -1098,8 +1102,12 @@ void honch_event_record_prepare_wire_properties(honch_event_record_t *record)
 
 bool honch_event_record_validate(const uint8_t *data, size_t length)
 {
-    honch_event_record_t record;
-    honch_status_t status = honch_event_record_parse(data, length, &record);
-    honch_event_record_free(&record);
+    honch_event_record_t *record = (honch_event_record_t *)calloc(1u, sizeof(*record));
+    if (record == NULL) {
+        return false;
+    }
+    honch_status_t status = honch_event_record_parse(data, length, record);
+    honch_event_record_free(record);
+    free(record);
     return status == HONCH_OK;
 }
