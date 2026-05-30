@@ -48,7 +48,7 @@ typedef struct honch_auto_property_sink_context {
 } honch_auto_property_sink_context_t;
 
 typedef struct honch_auto_properties_snapshot {
-    honch_wire_v2_property_t properties[HONCH_MAX_EVENT_PROPERTIES];
+    honch_wire_v2_property_t *properties;
     size_t property_count;
 } honch_auto_properties_snapshot_t;
 
@@ -113,6 +113,7 @@ static void honch_auto_properties_snapshot_free(honch_auto_properties_snapshot_t
     if (snapshot == NULL) {
         return;
     }
+    free(snapshot->properties);
     memset(snapshot, 0, sizeof(*snapshot));
 }
 
@@ -127,6 +128,13 @@ static honch_status_t honch_collect_auto_properties(
     *snapshot = (honch_auto_properties_snapshot_t) {0};
     if (client->auto_properties_callback == NULL) {
         return HONCH_OK;
+    }
+
+    snapshot->properties = (honch_wire_v2_property_t *)calloc(
+        HONCH_MAX_EVENT_PROPERTIES,
+        sizeof(*snapshot->properties));
+    if (snapshot->properties == NULL) {
+        return HONCH_ERROR_OUT_OF_MEMORY;
     }
 
     honch_auto_property_sink_context_t sink_context = {
@@ -275,11 +283,10 @@ static honch_status_t honch_build_event(
     out->data = NULL;
     out->length = 0u;
 
-    honch_wire_v2_property_t properties[HONCH_MAX_EVENT_PROPERTIES];
     size_t property_count = 0u;
     honch_status_t status = honch_build_property_pairs(
         client,
-        properties,
+        client->build_properties,
         &property_count,
         user_properties,
         user_property_count,
@@ -291,7 +298,7 @@ static honch_status_t honch_build_event(
             client->distinct_id,
             client->session_id,
             honch_client_now_millis(client),
-            properties,
+            client->build_properties,
             property_count,
             out);
     }
