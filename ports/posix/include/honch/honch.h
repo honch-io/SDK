@@ -80,6 +80,8 @@ typedef honch_status_t (*honch_test_transport_fn)(
     long *http_status);
 
 void honch_test_set_transport(honch_test_transport_fn transport, void *userdata);
+void honch_test_reset_wire_v2_encode_attempts(void);
+size_t honch_test_max_wire_v2_encode_attempts(void);
 #endif
 
 #ifdef __cplusplus

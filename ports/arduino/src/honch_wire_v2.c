@@ -95,6 +95,11 @@ static honch_status_t honch_wire_v2_append_uvarint(
     uint8_t *out,
     size_t out_size,
     size_t *offset);
+static honch_status_t honch_wire_v2_append_svarint(
+    int64_t value,
+    uint8_t *out,
+    size_t out_size,
+    size_t *offset);
 static honch_status_t honch_wire_v2_reserved_property_id(const char *key, uint64_t *out);
 static bool honch_wire_v2_property_key_is_promoted_context(const char *key);
 static honch_status_t honch_wire_v2_append_key_value(
@@ -107,11 +112,15 @@ static honch_status_t honch_wire_v2_append_key_value(
 
 static honch_status_t honch_wire_v2_append_byte(uint8_t value, uint8_t *out, size_t out_size, size_t *offset)
 {
+    (void)value;
     if (*offset >= out_size) {
         return HONCH_ERROR_OUT_OF_MEMORY;
     }
 
-    out[(*offset)++] = value;
+    if (out != NULL) {
+        out[*offset] = value;
+    }
+    (*offset)++;
     return HONCH_OK;
 }
 
@@ -129,7 +138,9 @@ static honch_status_t honch_wire_v2_append_bytes(
         return HONCH_OK;
     }
 
-    memcpy(out + *offset, value, value_size);
+    if (out != NULL) {
+        memcpy(out + *offset, value, value_size);
+    }
     *offset += value_size;
     return HONCH_OK;
 }
@@ -575,13 +586,9 @@ static honch_status_t honch_wire_v2_append_value(
             return status;
         }
         case HONCH_WIRE_V2_VALUE_TYPE_INT: {
-            size_t used = 0u;
             honch_status_t status = honch_wire_v2_append_byte(HONCH_WIRE_V2_VALUE_INT, out, out_size, offset);
             if (status == HONCH_OK) {
-                status = honch_wire_v2_encode_svarint(value->int_value, out + *offset, out_size - *offset, &used);
-            }
-            if (status == HONCH_OK) {
-                *offset += used;
+                status = honch_wire_v2_append_svarint(value->int_value, out, out_size, offset);
             }
             return status;
         }
@@ -738,7 +745,7 @@ static honch_status_t honch_wire_v2_append_property(
     return honch_wire_v2_append_key_value(table, property->key, &property->value, out, out_size, offset);
 }
 
-honch_status_t honch_wire_v2_encode_event_batch(
+static honch_status_t honch_wire_v2_event_batch_impl(
     const honch_wire_v2_batch_context_t *context,
     uint64_t base_time_ms,
     const honch_wire_v2_event_t *events,
@@ -747,7 +754,7 @@ honch_status_t honch_wire_v2_encode_event_batch(
     size_t out_size,
     size_t *written)
 {
-    if (out == NULL || written == NULL || event_count == 0u || event_count > HONCH_WIRE_V2_MAX_SDK_EVENTS) {
+    if (written == NULL || event_count == 0u || event_count > HONCH_WIRE_V2_MAX_SDK_EVENTS) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
     *written = 0u;
@@ -864,10 +871,9 @@ honch_status_t honch_wire_v2_encode_event_batch(
             status = honch_wire_v2_append_uvarint((uint64_t)name_index, out, out_size, &offset);
         }
         if (status == HONCH_OK) {
-            status = honch_wire_v2_encode_svarint(delta, out + offset, out_size - offset, written);
+            status = honch_wire_v2_append_svarint(delta, out, out_size, &offset);
         }
         if (status == HONCH_OK) {
-            offset += *written;
             status = honch_wire_v2_append_uvarint((uint64_t)events[i].property_count, out, out_size, &offset);
         }
         for (size_t j = 0u; status == HONCH_OK && j < events[i].property_count; j++) {
@@ -885,6 +891,39 @@ honch_status_t honch_wire_v2_encode_event_batch(
 
     *written = offset;
     return HONCH_OK;
+}
+
+honch_status_t honch_wire_v2_encode_event_batch(
+    const honch_wire_v2_batch_context_t *context,
+    uint64_t base_time_ms,
+    const honch_wire_v2_event_t *events,
+    size_t event_count,
+    uint8_t *out,
+    size_t out_size,
+    size_t *written)
+{
+    if (out == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    return honch_wire_v2_event_batch_impl(context, base_time_ms, events, event_count, out, out_size, written);
+}
+
+honch_status_t honch_wire_v2_measure_event_batch(
+    const honch_wire_v2_batch_context_t *context,
+    uint64_t base_time_ms,
+    const honch_wire_v2_event_t *events,
+    size_t event_count,
+    size_t *written)
+{
+    return honch_wire_v2_event_batch_impl(
+        context,
+        base_time_ms,
+        events,
+        event_count,
+        NULL,
+        HONCH_WIRE_V2_MAX_SDK_MESSAGE_BYTES + 1u,
+        written);
 }
 
 honch_status_t honch_wire_v2_encode_svarint(int64_t value, uint8_t *out, size_t out_size, size_t *written)
@@ -905,12 +944,31 @@ static honch_status_t honch_wire_v2_append_uvarint(
     size_t *offset)
 {
     size_t used = 0u;
-    honch_status_t status = honch_wire_v2_encode_uvarint(value, out + *offset, out_size - *offset, &used);
-    if (status != HONCH_OK) {
-        return status;
+    if (out == NULL) {
+        honch_status_t status = honch_wire_v2_uvarint_size(value, &used);
+        if (status != HONCH_OK) {
+            return status;
+        }
+        if (used > out_size - *offset) {
+            return HONCH_ERROR_OUT_OF_MEMORY;
+        }
+    } else {
+        honch_status_t status = honch_wire_v2_encode_uvarint(value, out + *offset, out_size - *offset, &used);
+        if (status != HONCH_OK) {
+            return status;
+        }
     }
     *offset += used;
     return HONCH_OK;
+}
+
+static honch_status_t honch_wire_v2_append_svarint(
+    int64_t value,
+    uint8_t *out,
+    size_t out_size,
+    size_t *offset)
+{
+    return honch_wire_v2_append_uvarint(honch_wire_v2_zigzag_i64(value), out, out_size, offset);
 }
 
 static honch_status_t honch_wire_v2_check_frame_spec(const honch_wire_v2_frame_spec_t *spec)

@@ -82,6 +82,19 @@ static uint64_t honch_packetizer_normalize_timestamp(honch_client_t *client, uin
     return boot_epoch_ms + timestamp_ms;
 }
 
+static uint64_t honch_packetizer_device_time_source(uint64_t queued_timestamp_ms, uint64_t normalized_timestamp_ms)
+{
+    if (normalized_timestamp_ms < HONCH_MIN_UNIX_TIME_MS) {
+        return 0u;
+    }
+    if (queued_timestamp_ms > 0u &&
+        queued_timestamp_ms < HONCH_MIN_UNIX_TIME_MS &&
+        normalized_timestamp_ms >= HONCH_MIN_UNIX_TIME_MS) {
+        return 2u;
+    }
+    return 1u;
+}
+
 static honch_status_t honch_packetizer_peek(honch_client_t *client, honch_storage_reader_t *reader)
 {
     if (client == NULL || reader == NULL || client->storage == NULL || client->storage->queue_peek == NULL) {
@@ -162,6 +175,7 @@ static honch_status_t honch_packetizer_build_wire_v2_message(
         return status;
     }
     honch_event_record_prepare_wire_properties(record);
+    uint64_t queued_timestamp_ms = record->timestamp_ms;
     record->timestamp_ms = honch_packetizer_normalize_timestamp(client, record->timestamp_ms);
 
     honch_wire_v2_event_t compact_event = {
@@ -178,7 +192,9 @@ static honch_status_t honch_packetizer_build_wire_v2_message(
         .sdk_platform = client->sdk_platform,
         .sdk_version = HONCH_SDK_VERSION,
         .environment = client->environment,
-        .session_id = record->session_id != NULL ? record->session_id : client->session_id
+        .session_id = record->session_id != NULL ? record->session_id : client->session_id,
+        .has_device_time_source = true,
+        .device_time_source = honch_packetizer_device_time_source(queued_timestamp_ms, record->timestamp_ms)
     };
 
     uint8_t *buffer = (uint8_t *)malloc(HONCH_PACKETIZER_MAX_MESSAGE_BYTES);
