@@ -292,6 +292,75 @@ static honch_payload_t build_test_event(const char *event_name, const char *prop
     return build_test_event_for_distinct(event_name, "device-1", properties_json);
 }
 
+static uint8_t *find_payload_bytes(honch_payload_t *payload, const char *needle)
+{
+    size_t needle_length = strlen(needle);
+    for (size_t i = 0u; i + needle_length <= payload->length; i++) {
+        if (memcmp(payload->data + i, needle, needle_length) == 0) {
+            return payload->data + i;
+        }
+    }
+    return NULL;
+}
+
+static void test_hqr1_validate_rejects_embedded_nul_in_required_strings(void)
+{
+    honch_payload_t event = build_test_event("clickx", "{\"modex\":\"on\"}");
+
+    uint8_t *event_name = find_payload_bytes(&event, "clickx");
+    assert(event_name != NULL);
+    event_name[5] = '\0';
+    assert(!honch_event_record_validate(event.data, event.length));
+
+    event_name[5] = 'x';
+    uint8_t *property_key = find_payload_bytes(&event, "modex");
+    assert(property_key != NULL);
+    property_key[4] = '\0';
+    assert(!honch_event_record_validate(event.data, event.length));
+
+    free(event.data);
+}
+
+static void test_hqr1_rejects_values_deeper_than_wire_v2_limit(void)
+{
+    honch_buffer_t properties = {0};
+    assert(honch_buffer_init(&properties, 128u) == HONCH_OK);
+    size_t property_count = 0u;
+    assert(honch_event_record_append_property_json(&properties, &property_count, "allowed", "[[[[[[[[1]]]]]]]]") ==
+        HONCH_OK);
+    assert(property_count == 1u);
+    honch_buffer_free(&properties);
+
+    assert(honch_buffer_init(&properties, 128u) == HONCH_OK);
+    property_count = 0u;
+    assert(honch_event_record_append_property_json(&properties, &property_count, "nested", "[[[[[[[[[1]]]]]]]]]") ==
+        HONCH_ERROR_INVALID_ARGUMENT);
+    assert(property_count == 0u);
+    honch_buffer_free(&properties);
+}
+
+static void test_hqr1_rejects_duplicate_top_level_property_keys(void)
+{
+    honch_buffer_t properties = {0};
+    assert(honch_buffer_init(&properties, 128u) == HONCH_OK);
+    size_t property_count = 0u;
+    assert(honch_event_record_append_json_object_members(&properties, "{\"mode\":\"a\",\"mode\":\"b\"}", &property_count) ==
+        HONCH_ERROR_INVALID_ARGUMENT);
+    assert(property_count == 0u);
+    honch_buffer_free(&properties);
+}
+
+static void test_hqr1_rejects_duplicate_nested_map_keys(void)
+{
+    honch_buffer_t properties = {0};
+    assert(honch_buffer_init(&properties, 128u) == HONCH_OK);
+    size_t property_count = 0u;
+    assert(honch_event_record_append_property_json(&properties, &property_count, "nested", "{\"mode\":\"a\",\"mode\":\"b\"}") ==
+        HONCH_ERROR_INVALID_ARGUMENT);
+    assert(property_count == 0u);
+    honch_buffer_free(&properties);
+}
+
 static honch_client_t fake_client(fake_storage_t *storage, honch_storage_ops_t *storage_ops, fake_transport_t *transport, honch_transport_ops_t *transport_ops)
 {
     *storage_ops = (honch_storage_ops_t) {
@@ -888,6 +957,10 @@ static void test_network_error_preserves_events(void)
 
 int main(void)
 {
+    test_hqr1_validate_rejects_embedded_nul_in_required_strings();
+    test_hqr1_rejects_values_deeper_than_wire_v2_limit();
+    test_hqr1_rejects_duplicate_top_level_property_keys();
+    test_hqr1_rejects_duplicate_nested_map_keys();
     test_2xx_consumes_events();
     test_v2_chunk_transport_consumes_events_on_acceptance();
     test_v2_chunk_transport_splits_oversized_batch_without_dead_lettering_first_event();
