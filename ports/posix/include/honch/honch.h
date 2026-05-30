@@ -46,9 +46,17 @@ typedef struct honch_config {
 } honch_config_t;
 
 honch_status_t honch_init(honch_client_t **client, const honch_config_t *config);
-honch_status_t honch_track(honch_client_t *client, const char *event_name, const char *properties_json);
-honch_status_t honch_identify(honch_client_t *client, const char *distinct_id, const char *traits_json);
-honch_status_t honch_set_property(honch_client_t *client, const char *key, const char *value_json);
+honch_status_t honch_track(
+    honch_client_t *client,
+    const char *event_name,
+    const honch_property_t *properties,
+    size_t property_count);
+honch_status_t honch_identify(
+    honch_client_t *client,
+    const char *distinct_id,
+    const honch_property_t *traits,
+    size_t trait_count);
+honch_status_t honch_set_property(honch_client_t *client, const char *key, honch_value_t value);
 honch_status_t honch_session_start(honch_client_t *client, const char *session_name);
 honch_status_t honch_session_end(honch_client_t *client);
 honch_status_t honch_tick(honch_client_t *client);

@@ -32,9 +32,15 @@ int main() {
   assert(strcmp(Honch.lastError(), "not initialized") == 0);
 
   assert(Honch.begin(config));
-  assert(Honch.track("button_pressed", "{\"count\":1}"));
-  assert(Honch.identify("user-1", "{\"role\":\"tester\"}"));
-  assert(Honch.setProperty("mode", "\"host\""));
+  const honch_property_t buttonProps[] = {
+      honch_prop("count", honch_i64(1))
+  };
+  const honch_property_t traits[] = {
+      honch_prop("role", honch_str("tester"))
+  };
+  assert(Honch.track("button_pressed", buttonProps, 1u));
+  assert(Honch.identify("user-1", traits, 1u));
+  assert(Honch.setProperty("mode", honch_str("host")));
   assert(Honch.sessionStart("demo"));
   assert(Honch.sessionEnd());
   if (!Honch.flush()) {
@@ -48,7 +54,7 @@ int main() {
   honch_arduino_host_transport_reset();
   honch_arduino_host_transport_set_result(HONCH_ERROR_TRANSPORT, HONCH_TRANSPORT_RETRY);
   assert(Honch.begin(config));
-  assert(Honch.track("queued", "{}"));
+  assert(Honch.track("queued"));
   assert(!Honch.shutdown());
 
   honch_arduino_host_transport_set_result(HONCH_OK, HONCH_TRANSPORT_ACCEPTED);
@@ -81,10 +87,10 @@ int main() {
   honch_arduino_host_transport_reset();
   honch_arduino_host_set_millis(1000);
   assert(Honch.begin(scheduledConfig));
-  assert(Honch.track("scheduled_one", "{}"));
+  assert(Honch.track("scheduled_one"));
   assert(Honch.tick());
   assert(honch_arduino_host_transport_call_count() == 0);
-  assert(Honch.track("scheduled_two", "{}"));
+  assert(Honch.track("scheduled_two"));
   assert(Honch.tick());
   assert(honch_arduino_host_transport_call_count() > 0);
   assert(Honch.shutdown());
@@ -92,7 +98,7 @@ int main() {
   honch_arduino_host_transport_reset();
   honch_arduino_host_set_millis(5000);
   assert(Honch.begin(scheduledConfig));
-  assert(Honch.track("interval_one", "{}"));
+  assert(Honch.track("interval_one"));
   honch_arduino_host_advance_millis(1000);
   assert(Honch.loop());
   assert(honch_arduino_host_transport_call_count() == 0);
@@ -107,7 +113,7 @@ int main() {
   honch_arduino_host_transport_reset();
   honch_arduino_host_set_millis(10000);
   assert(Honch.begin(defaultScheduledConfig));
-  assert(Honch.track("default_interval", "{}"));
+  assert(Honch.track("default_interval"));
   honch_arduino_host_advance_millis(59000);
   assert(Honch.tick());
   assert(honch_arduino_host_transport_call_count() == 0);

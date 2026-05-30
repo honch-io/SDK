@@ -210,31 +210,30 @@ static void build_heavy_event(
     assert(out_data != NULL);
     assert(out_size != NULL);
 
-    honch_buffer_t properties = {0};
-    assert(honch_buffer_init(&properties, (property_count * array_length * 4u) + 256u) == HONCH_OK);
-    size_t member_count = 0u;
+    honch_wire_v2_property_t *properties = (honch_wire_v2_property_t *)calloc(property_count, sizeof(*properties));
+    assert(properties != NULL);
     for (size_t i = 0u; i < property_count; i++) {
         char key[8];
         int key_length = snprintf(key, sizeof(key), "p%02zu", i);
         assert(key_length > 0 && (size_t)key_length < sizeof(key));
-        honch_buffer_t array = {0};
-        assert(honch_buffer_init(&array, (array_length * 4u) + 8u) == HONCH_OK);
-        assert(honch_buffer_append(&array, "[") == HONCH_OK);
+        char *stored_key = honch_strdup(key);
+        honch_wire_v2_value_t *items = (honch_wire_v2_value_t *)calloc(array_length, sizeof(*items));
+        assert(stored_key != NULL);
+        assert(items != NULL);
         for (size_t j = 0u; j < array_length; j++) {
-            if (j > 0u) {
-                assert(honch_buffer_append(&array, ",") == HONCH_OK);
-            }
-            assert(honch_buffer_appendf(&array, "%zu", i + j) == HONCH_OK);
+            items[j] = honch_u64((uint64_t)(i + j));
         }
-        assert(honch_buffer_append(&array, "]") == HONCH_OK);
-        assert(honch_event_record_append_property_json(&properties, &member_count, key, array.data) == HONCH_OK);
-        honch_buffer_free(&array);
+        properties[i] = honch_prop(stored_key, honch_array(items, array_length));
     }
 
     honch_payload_t payload = {0};
-    assert(honch_event_record_build(event_name, "device-1", NULL, 1234u, &properties, member_count, &payload) ==
+    assert(honch_event_record_build(event_name, "device-1", NULL, 1234u, properties, property_count, &payload) ==
         HONCH_OK);
-    honch_buffer_free(&properties);
+    for (size_t i = 0u; i < property_count; i++) {
+        free((void *)properties[i].key);
+        free((void *)properties[i].value.array.items);
+    }
+    free(properties);
     *out_data = payload.data;
     *out_size = payload.length;
 }
@@ -330,30 +329,35 @@ static honch_payload_t build_test_event_for_distinct(
     const char *event_name,
     const char *distinct_id,
     uint64_t timestamp_ms,
-    const char *properties_json)
+    const honch_wire_v2_property_t *properties,
+    size_t property_count)
 {
-    honch_buffer_t properties = {0};
-    assert(honch_buffer_init(&properties, 128u) == HONCH_OK);
-    size_t property_count = 0u;
-    assert(honch_event_record_append_json_object_members(&properties, properties_json, &property_count) == HONCH_OK);
     honch_payload_t payload = {0};
-    assert(honch_event_record_build(event_name, distinct_id, NULL, timestamp_ms, &properties, property_count, &payload) ==
+    assert(honch_event_record_build(event_name, distinct_id, NULL, timestamp_ms, properties, property_count, &payload) ==
         HONCH_OK);
-    honch_buffer_free(&properties);
     return payload;
 }
 
 static honch_payload_t build_test_event_for_distinct_with_default_time(
     const char *event_name,
     const char *distinct_id,
-    const char *properties_json)
+    const honch_wire_v2_property_t *properties,
+    size_t property_count)
 {
-    return build_test_event_for_distinct(event_name, distinct_id, 1234u, properties_json);
+    return build_test_event_for_distinct(event_name, distinct_id, 1234u, properties, property_count);
 }
 
-static honch_payload_t build_test_event(const char *event_name, const char *properties_json)
+static honch_payload_t build_test_event(
+    const char *event_name,
+    const honch_wire_v2_property_t *properties,
+    size_t property_count)
 {
-    return build_test_event_for_distinct_with_default_time(event_name, "device-1", properties_json);
+    return build_test_event_for_distinct_with_default_time(event_name, "device-1", properties, property_count);
+}
+
+static honch_payload_t build_test_event_no_props(const char *event_name)
+{
+    return build_test_event(event_name, NULL, 0u);
 }
 
 static uint8_t *find_payload_bytes(honch_payload_t *payload, const char *needle)
@@ -369,7 +373,10 @@ static uint8_t *find_payload_bytes(honch_payload_t *payload, const char *needle)
 
 static void test_hqr1_validate_rejects_embedded_nul_in_required_strings(void)
 {
-    honch_payload_t event = build_test_event("clickx", "{\"modex\":\"on\"}");
+    const honch_wire_v2_property_t properties[] = {
+        honch_prop("modex", honch_str("on"))
+    };
+    honch_payload_t event = build_test_event("clickx", properties, 1u);
 
     uint8_t *event_name = find_payload_bytes(&event, "clickx");
     assert(event_name != NULL);
@@ -387,42 +394,53 @@ static void test_hqr1_validate_rejects_embedded_nul_in_required_strings(void)
 
 static void test_hqr1_rejects_values_deeper_than_wire_v2_limit(void)
 {
-    honch_buffer_t properties = {0};
-    assert(honch_buffer_init(&properties, 128u) == HONCH_OK);
-    size_t property_count = 0u;
-    assert(honch_event_record_append_property_json(&properties, &property_count, "allowed", "[[[[[[[[1]]]]]]]]") ==
-        HONCH_OK);
-    assert(property_count == 1u);
-    honch_buffer_free(&properties);
+    honch_wire_v2_value_t allowed_levels[9];
+    allowed_levels[0] = honch_i64(1);
+    for (size_t i = 1u; i < 9u; i++) {
+        allowed_levels[i] = honch_array(&allowed_levels[i - 1u], 1u);
+    }
+    const honch_wire_v2_property_t allowed_properties[] = {
+        honch_prop("allowed", allowed_levels[8])
+    };
+    honch_payload_t payload = {0};
+    assert(honch_event_record_build("depth", "device-1", NULL, 1234u, allowed_properties, 1u, &payload) == HONCH_OK);
+    free(payload.data);
 
-    assert(honch_buffer_init(&properties, 128u) == HONCH_OK);
-    property_count = 0u;
-    assert(honch_event_record_append_property_json(&properties, &property_count, "nested", "[[[[[[[[[1]]]]]]]]]") ==
+    honch_wire_v2_value_t nested_levels[10];
+    nested_levels[0] = honch_i64(1);
+    for (size_t i = 1u; i < 10u; i++) {
+        nested_levels[i] = honch_array(&nested_levels[i - 1u], 1u);
+    }
+    const honch_wire_v2_property_t nested_properties[] = {
+        honch_prop("nested", nested_levels[9])
+    };
+    assert(honch_event_record_build("depth", "device-1", NULL, 1234u, nested_properties, 1u, &payload) ==
         HONCH_ERROR_INVALID_ARGUMENT);
-    assert(property_count == 0u);
-    honch_buffer_free(&properties);
 }
 
 static void test_hqr1_rejects_duplicate_top_level_property_keys(void)
 {
-    honch_buffer_t properties = {0};
-    assert(honch_buffer_init(&properties, 128u) == HONCH_OK);
-    size_t property_count = 0u;
-    assert(honch_event_record_append_json_object_members(&properties, "{\"mode\":\"a\",\"mode\":\"b\"}", &property_count) ==
+    const honch_wire_v2_property_t properties[] = {
+        honch_prop("mode", honch_str("a")),
+        honch_prop("mode", honch_str("b"))
+    };
+    honch_payload_t payload = {0};
+    assert(honch_event_record_build("duplicate", "device-1", NULL, 1234u, properties, 2u, &payload) ==
         HONCH_ERROR_INVALID_ARGUMENT);
-    assert(property_count == 0u);
-    honch_buffer_free(&properties);
 }
 
 static void test_hqr1_rejects_duplicate_nested_map_keys(void)
 {
-    honch_buffer_t properties = {0};
-    assert(honch_buffer_init(&properties, 128u) == HONCH_OK);
-    size_t property_count = 0u;
-    assert(honch_event_record_append_property_json(&properties, &property_count, "nested", "{\"mode\":\"a\",\"mode\":\"b\"}") ==
+    const honch_wire_v2_map_pair_t entries[] = {
+        honch_pair("mode", honch_str("a")),
+        honch_pair("mode", honch_str("b"))
+    };
+    const honch_wire_v2_property_t properties[] = {
+        honch_prop("nested", honch_map(entries, 2u))
+    };
+    honch_payload_t payload = {0};
+    assert(honch_event_record_build("duplicate", "device-1", NULL, 1234u, properties, 1u, &payload) ==
         HONCH_ERROR_INVALID_ARGUMENT);
-    assert(property_count == 0u);
-    honch_buffer_free(&properties);
 }
 
 static honch_client_t fake_client(fake_storage_t *storage, honch_storage_ops_t *storage_ops, fake_transport_t *transport, honch_transport_ops_t *transport_ops)
@@ -460,8 +478,8 @@ static honch_client_t fake_client(fake_storage_t *storage, honch_storage_ops_t *
 
 static void setup_storage(fake_storage_t *storage)
 {
-    honch_payload_t first_event = build_test_event("first", "{}");
-    honch_payload_t second_event = build_test_event("second", "{}");
+    honch_payload_t first_event = build_test_event_no_props("first");
+    honch_payload_t second_event = build_test_event_no_props("second");
     memset(storage, 0, sizeof(*storage));
     storage->event_count = 2u;
     storage->events[0] = (fake_event_t) {
@@ -584,7 +602,10 @@ static void test_v2_chunk_transport_preserves_string_properties(void)
 {
     fake_storage_t storage;
     setup_storage(&storage);
-    honch_payload_t event_with_property = build_test_event("first", "{\"mode\":\"auto\"}");
+    const honch_wire_v2_property_t properties[] = {
+        honch_prop("mode", honch_str("auto"))
+    };
+    honch_payload_t event_with_property = build_test_event("first", properties, 1u);
     storage.events[0].data = event_with_property.data;
     storage.events[0].size = event_with_property.length;
     storage.events[1].pending = false;
@@ -607,7 +628,10 @@ static void test_v2_flush_borrows_string_property_values(void)
 {
     fake_storage_t storage;
     setup_storage(&storage);
-    honch_payload_t event_with_property = build_test_event("event", "{\"mode\":\"hdr\"}");
+    const honch_wire_v2_property_t properties[] = {
+        honch_prop("mode", honch_str("hdr"))
+    };
+    honch_payload_t event_with_property = build_test_event("event", properties, 1u);
     storage.events[0].data = event_with_property.data;
     storage.events[0].size = event_with_property.length;
     storage.events[1].pending = false;
@@ -625,7 +649,11 @@ static void test_v2_flush_accepts_queued_empty_string_property_value(void)
 {
     fake_storage_t storage;
     setup_storage(&storage);
-    honch_payload_t event_with_empty_string_property = build_test_event("event", "{\"empty\":\"\",\"x\":null}");
+    const honch_wire_v2_property_t properties[] = {
+        honch_prop("empty", honch_str("")),
+        honch_prop("x", honch_null())
+    };
+    honch_payload_t event_with_empty_string_property = build_test_event("event", properties, 2u);
     storage.events[0].data = event_with_empty_string_property.data;
     storage.events[0].size = event_with_empty_string_property.length;
     storage.events[1].pending = false;
@@ -646,8 +674,18 @@ static void test_v2_chunk_transport_preserves_nested_properties(void)
 {
     fake_storage_t storage;
     setup_storage(&storage);
-    honch_payload_t event_with_nested_properties =
-        build_test_event("first", "{\"tags\":[\"red\",\"blue\"],\"traits\":{\"tier\":\"gold\"}}");
+    const honch_wire_v2_value_t tags[] = {
+        honch_str("red"),
+        honch_str("blue")
+    };
+    const honch_wire_v2_map_pair_t traits[] = {
+        honch_pair("tier", honch_str("gold"))
+    };
+    const honch_wire_v2_property_t properties[] = {
+        honch_prop("tags", honch_array(tags, 2u)),
+        honch_prop("traits", honch_map(traits, 1u))
+    };
+    honch_payload_t event_with_nested_properties = build_test_event("first", properties, 2u);
     storage.events[0].data = event_with_nested_properties.data;
     storage.events[0].size = event_with_nested_properties.length;
     storage.events[1].pending = false;
@@ -678,7 +716,10 @@ static void test_v2_chunk_transport_preserves_float64_properties(void)
 
     fake_storage_t storage;
     setup_storage(&storage);
-    honch_payload_t event_with_float_property = build_test_event("first", "{\"temp\":36.5}");
+    const honch_wire_v2_property_t properties[] = {
+        honch_prop("temp", honch_f64(36.5))
+    };
+    honch_payload_t event_with_float_property = build_test_event("first", properties, 1u);
     storage.events[0].data = event_with_float_property.data;
     storage.events[0].size = event_with_float_property.length;
     storage.events[1].pending = false;
@@ -712,8 +753,12 @@ static void test_v2_chunk_transport_preserves_float32_bool_and_null_properties(v
 
     fake_storage_t storage;
     setup_storage(&storage);
-    honch_payload_t event_with_scalar_properties =
-        build_test_event("first", "{\"temp\":36.5,\"active\":true,\"empty\":null}");
+    const honch_wire_v2_property_t properties[] = {
+        honch_prop("temp", honch_f64(36.5)),
+        honch_prop("active", honch_bool(true)),
+        honch_prop("empty", honch_null())
+    };
+    honch_payload_t event_with_scalar_properties = build_test_event("first", properties, 3u);
     storage.events[0].data = event_with_scalar_properties.data;
     storage.events[0].size = event_with_scalar_properties.length;
     storage.events[1].pending = false;
@@ -746,7 +791,10 @@ static void test_v2_chunk_transport_preserves_half_float_as_float32_property(voi
 {
     fake_storage_t storage;
     setup_storage(&storage);
-    honch_payload_t event_with_float_property = build_test_event("first", "{\"temp\":1.5}");
+    const honch_wire_v2_property_t properties[] = {
+        honch_prop("temp", honch_f64(1.5))
+    };
+    honch_payload_t event_with_float_property = build_test_event("first", properties, 1u);
     storage.events[0].data = event_with_float_property.data;
     storage.events[0].size = event_with_float_property.length;
     storage.events[1].pending = false;
@@ -790,7 +838,10 @@ static void test_v2_chunk_transport_preserves_device_boot_event(void)
 {
     fake_storage_t storage;
     setup_storage(&storage);
-    honch_payload_t boot_event = build_test_event("$device_boot", "{\"reset_reason\":\"unknown\"}");
+    const honch_wire_v2_property_t properties[] = {
+        honch_prop("reset_reason", honch_str("unknown"))
+    };
+    honch_payload_t boot_event = build_test_event("$device_boot", properties, 1u);
     storage.events[0].data = boot_event.data;
     storage.events[0].size = boot_event.length;
     storage.events[1].pending = false;
@@ -817,7 +868,7 @@ static void test_v2_flush_reconstructs_boot_relative_timestamps_when_wall_clock_
     static const uint64_t expected_event_time_ms = 1700000012000ULL;
 
     fake_storage_t storage = {0};
-    honch_payload_t event = build_test_event_for_distinct("first", "device-1", queued_uptime_ms, "{}");
+    honch_payload_t event = build_test_event_for_distinct("first", "device-1", queued_uptime_ms, NULL, 0u);
     storage.event_count = 1u;
     storage.events[0] = (fake_event_t) {
         .data = event.data,
@@ -938,7 +989,8 @@ static void test_v2_flush_splits_batches_by_distinct_id(void)
 {
     fake_storage_t storage;
     setup_storage(&storage);
-    honch_payload_t second_distinct_event = build_test_event_for_distinct_with_default_time("second", "device-2", "{}");
+    honch_payload_t second_distinct_event =
+        build_test_event_for_distinct_with_default_time("second", "device-2", NULL, 0u);
     storage.events[1].data = second_distinct_event.data;
     storage.events[1].size = second_distinct_event.length;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};

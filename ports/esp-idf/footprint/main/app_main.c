@@ -123,8 +123,11 @@ static void run_representative_api_sample(void)
     const char *device_id = honch_get_device_id();
     ESP_LOGI(TAG, "HONCH_FOOTPRINT_DEVICE_ID value=%s", device_id ? device_id : "null");
 
-    (void)honch_identify("footprint-user", "{\"plan\":\"landing-footprint\"}");
-    (void)honch_set_property("firmware_channel", "\"footprint\"");
+    const honch_property_t traits[] = {
+        honch_prop("plan", honch_str("landing-footprint"))
+    };
+    (void)honch_identify("footprint-user", traits, 1u);
+    (void)honch_set_property("firmware_channel", honch_str("footprint"));
     (void)honch_session_start("footprint-session");
     (void)honch_session_end();
 #if FOOTPRINT_INCLUDE_GPIO
@@ -137,11 +140,13 @@ static void run_honch_cpu_sample(void)
     timing_t timing = {0};
 
     for (int i = 0; i < FOOTPRINT_CPU_SAMPLES; i++) {
-        char properties[96];
-        snprintf(properties, sizeof(properties), "{\"seq\":%d,\"kind\":\"footprint\"}", i);
+        const honch_property_t properties[] = {
+            honch_prop("seq", honch_i64(i)),
+            honch_prop("kind", honch_str("footprint"))
+        };
 
         int64_t start_us = esp_timer_get_time();
-        honch_err_t err = honch_track("footprint_event", properties);
+        honch_err_t err = honch_track("footprint_event", properties, 2u);
         int64_t elapsed_us = esp_timer_get_time() - start_us;
         timing_add(&timing, elapsed_us, err == HONCH_OK);
     }

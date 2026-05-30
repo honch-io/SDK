@@ -21,10 +21,14 @@ static const char *required_env(const char *name)
     return value;
 }
 
-static int send_event(honch_client_t *client, const char *name, const char *properties_json)
+static int send_event(
+    honch_client_t *client,
+    const char *name,
+    const honch_property_t *properties,
+    size_t property_count)
 {
     printf("camera: %s\n", name);
-    honch_status_t status = honch_track(client, name, properties_json);
+    honch_status_t status = honch_track(client, name, properties, property_count);
     if (status != HONCH_OK) {
         fprintf(stderr, "honch_track(%s) failed: %s\n", name, honch_status_string(status));
         return 1;
@@ -65,12 +69,15 @@ int main(void)
 
     printf("camera: boot\n");
 
-    status = honch_identify(client, "user-camera-demo-001", "{\"plan\":\"field_trial\"}");
+    const honch_property_t traits[] = {
+        honch_prop("plan", honch_str("field_trial"))
+    };
+    status = honch_identify(client, "user-camera-demo-001", traits, 1u);
     if (status == HONCH_OK) {
         status = honch_session_start(client, "recording");
     }
     if (status == HONCH_OK) {
-        status = honch_set_property(client, "$firmware_channel", "\"beta\"");
+        status = honch_set_property(client, "firmware_channel", honch_str("beta"));
     }
     if (status != HONCH_OK) {
         fprintf(stderr, "camera setup failed: %s\n", honch_status_string(status));
@@ -78,10 +85,25 @@ int main(void)
         return 1;
     }
 
-    if (send_event(client, "device_powered_on", "{\"battery_level\":87}") != 0 ||
-        send_event(client, "recording_started", "{\"mode\":\"hdr\",\"resolution\":\"4k\",\"fps\":60}") != 0 ||
-        send_event(client, "recording_stopped", "{\"duration_seconds\":42,\"storage_used_mb\":512}") != 0 ||
-        send_event(client, "battery_warning", "{\"battery_level\":12}") != 0) {
+    const honch_property_t powered_on[] = {
+        honch_prop("battery_level", honch_i64(87))
+    };
+    const honch_property_t recording_started[] = {
+        honch_prop("mode", honch_str("hdr")),
+        honch_prop("resolution", honch_str("4k")),
+        honch_prop("fps", honch_i64(60))
+    };
+    const honch_property_t recording_stopped[] = {
+        honch_prop("duration_seconds", honch_i64(42)),
+        honch_prop("storage_used_mb", honch_i64(512))
+    };
+    const honch_property_t battery_warning[] = {
+        honch_prop("battery_level", honch_i64(12))
+    };
+    if (send_event(client, "device_powered_on", powered_on, 1u) != 0 ||
+        send_event(client, "recording_started", recording_started, 3u) != 0 ||
+        send_event(client, "recording_stopped", recording_stopped, 2u) != 0 ||
+        send_event(client, "battery_warning", battery_warning, 1u) != 0) {
         honch_shutdown(client);
         return 1;
     }

@@ -32,11 +32,11 @@ class FakeCoreClient:
         self.config = dict(config)
         self.calls = []
 
-    def track(self, event_name, properties_json):
-        self.calls.append(("track", event_name, json.loads(properties_json)))
+    def track(self, event_name, properties):
+        self.calls.append(("track", event_name, properties))
 
-    def identify(self, distinct_id, traits_json):
-        self.calls.append(("identify", distinct_id, json.loads(traits_json)))
+    def identify(self, distinct_id, traits):
+        self.calls.append(("identify", distinct_id, traits))
 
     def session_start(self, session_name):
         self.calls.append(("session_start", session_name))

@@ -75,16 +75,16 @@ bool HonchClass::begin(const HonchConfig &config) {
   return setLastStatus(status);
 }
 
-bool HonchClass::track(const char *eventName, const char *propertiesJson) {
-  return recordQueuedStatus(honch_core_track(_client, eventName, propertiesJson == nullptr ? "{}" : propertiesJson));
+bool HonchClass::track(const char *eventName, const honch_property_t *properties, size_t propertyCount) {
+  return recordQueuedStatus(honch_core_track(_client, eventName, properties, propertyCount));
 }
 
-bool HonchClass::identify(const char *distinctId, const char *traitsJson) {
-  return recordQueuedStatus(honch_core_identify(_client, distinctId, traitsJson == nullptr ? "{}" : traitsJson));
+bool HonchClass::identify(const char *distinctId, const honch_property_t *traits, size_t traitCount) {
+  return recordQueuedStatus(honch_core_identify(_client, distinctId, traits, traitCount));
 }
 
-bool HonchClass::setProperty(const char *key, const char *valueJson) {
-  return recordQueuedStatus(honch_core_set_property(_client, key, valueJson == nullptr ? "null" : valueJson));
+bool HonchClass::setProperty(const char *key, honch_value_t value) {
+  return recordQueuedStatus(honch_core_set_property(_client, key, value));
 }
 
 bool HonchClass::sessionStart(const char *sessionName) {

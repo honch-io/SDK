@@ -715,13 +715,11 @@ static honch_status_t test_auto_properties_success(
     void *sink_ctx)
 {
     int *rssi = (int *)userdata;
-    char rssi_json[16];
-    snprintf(rssi_json, sizeof(rssi_json), "%d", *rssi);
     test_auto_properties_calls++;
 
-    honch_status_t status = sink(sink_ctx, "$wifi_rssi", rssi_json);
+    honch_status_t status = sink(sink_ctx, "$wifi_rssi", honch_i64(*rssi));
     if (status == HONCH_OK) {
-        status = sink(sink_ctx, "adapter_property", "\"adapter-value\"");
+        status = sink(sink_ctx, "adapter_property", honch_str("adapter-value"));
     }
     return status;
 }
@@ -733,7 +731,7 @@ static honch_status_t test_auto_properties_invalid(
 {
     (void)userdata;
     test_auto_properties_calls++;
-    return sink(sink_ctx, "$wifi_rssi", "\"unterminated");
+    return sink(sink_ctx, "$wifi_rssi", honch_str(NULL));
 }
 
 static honch_status_t test_auto_properties_spoof_reserved(
@@ -744,12 +742,12 @@ static honch_status_t test_auto_properties_spoof_reserved(
     (void)userdata;
     test_auto_properties_calls++;
 
-    honch_status_t status = sink(sink_ctx, "$device_id", "\"spoofed-device\"");
+    honch_status_t status = sink(sink_ctx, "$device_id", honch_str("spoofed-device"));
     if (status == HONCH_OK) {
-        status = sink(sink_ctx, "$sdk_platform", "\"spoofed-platform\"");
+        status = sink(sink_ctx, "$sdk_platform", honch_str("spoofed-platform"));
     }
     if (status == HONCH_OK) {
-        status = sink(sink_ctx, "$wifi_rssi", "-67");
+        status = sink(sink_ctx, "$wifi_rssi", honch_i64(-67));
     }
     return status;
 }
@@ -854,7 +852,10 @@ static void test_track_persists_event(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "button_pressed", "{\"button\":\"power\"}"), HONCH_OK);
+    const honch_property_t properties[] = {
+        honch_prop("button", honch_str("power"))
+    };
+    EXPECT_EQ_INT(honch_track(client, "button_pressed", properties, 1u), HONCH_OK);
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
@@ -908,7 +909,10 @@ static void test_os_buffered_durability_tracks_and_flushes_event(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "fast_event", "{\"button\":\"power\"}"), HONCH_OK);
+    const honch_property_t properties[] = {
+        honch_prop("button", honch_str("power"))
+    };
+    EXPECT_EQ_INT(honch_track(client, "fast_event", properties, 1u), HONCH_OK);
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
@@ -921,7 +925,7 @@ static void test_os_buffered_durability_tracks_and_flushes_event(void)
     honch_test_set_transport(NULL, NULL);
 }
 
-static void test_strict_json_validation(void)
+static void test_typed_value_validation(void)
 {
     char queue_dir[128];
     make_temp_dir(queue_dir, sizeof(queue_dir));
@@ -930,44 +934,52 @@ static void test_strict_json_validation(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "bad_event", "[]"), HONCH_ERROR_INVALID_ARGUMENT);
-    EXPECT_EQ_INT(honch_track(client, "bad_event", "{\"unterminated\""), HONCH_ERROR_INVALID_ARGUMENT);
-    EXPECT_EQ_INT(honch_track(client, "overflow_integer", "{\"n\":9223372036854775808}"), HONCH_ERROR_INVALID_ARGUMENT);
     const char invalid_event_name[] = {'b', 'a', 'd', (char)0xff, '\0'};
-    const char invalid_json_value[] = {'{', '"', 'b', 'a', 'd', '"', ':', '"', (char)0xff, '"', '}', '\0'};
-    const char invalid_json_key[] = {'{', '"', (char)0xff, '"', ':', '"', 'v', 'a', 'l', 'u', 'e', '"', '}', '\0'};
-    EXPECT_EQ_INT(honch_track(client, invalid_event_name, "{}"), HONCH_ERROR_INVALID_ARGUMENT);
-    EXPECT_EQ_INT(honch_track(client, "bad_value", invalid_json_value), HONCH_ERROR_INVALID_ARGUMENT);
-    EXPECT_EQ_INT(honch_track(client, "bad_key", invalid_json_key), HONCH_ERROR_INVALID_ARGUMENT);
-    EXPECT_EQ_INT(honch_track(client, "max_integer", "{\"n\":9223372036854775807}"), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "min_integer", "{\"n\":-9223372036854775808}"), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "float_number", "{\"n\":1.5}"), HONCH_OK);
-
-    char deep_json[256];
-    size_t pos = 0u;
-    memcpy(deep_json + pos, "{\"x\":", 5u);
-    pos += 5u;
-    for (size_t i = 0u; i < 80u; i++) {
-        deep_json[pos++] = '[';
+    const char invalid_key[] = {(char)0xff, '\0'};
+    const char invalid_value[] = {(char)0xff, '\0'};
+    const honch_property_t invalid_value_properties[] = {
+        honch_prop("bad", honch_str(invalid_value))
+    };
+    const honch_property_t invalid_key_properties[] = {
+        honch_prop(invalid_key, honch_str("value"))
+    };
+    const honch_property_t max_integer_properties[] = {
+        honch_prop("n", honch_i64(INT64_MAX))
+    };
+    const honch_property_t min_integer_properties[] = {
+        honch_prop("n", honch_i64(INT64_MIN))
+    };
+    const honch_property_t float_properties[] = {
+        honch_prop("n", honch_f64(1.5))
+    };
+    honch_value_t nested_levels[10];
+    nested_levels[0] = honch_i64(0);
+    for (size_t i = 1u; i < 10u; i++) {
+        nested_levels[i] = honch_array(&nested_levels[i - 1u], 1u);
     }
-    deep_json[pos++] = '0';
-    for (size_t i = 0u; i < 80u; i++) {
-        deep_json[pos++] = ']';
-    }
-    deep_json[pos++] = '}';
-    deep_json[pos] = '\0';
-    EXPECT_EQ_INT(honch_track(client, "deep_event", deep_json), HONCH_ERROR_INVALID_ARGUMENT);
+    const honch_property_t deep_properties[] = {
+        honch_prop("x", nested_levels[9])
+    };
+    char oversized_value[600];
+    memset(oversized_value, 'a', sizeof(oversized_value));
+    const honch_property_t oversized_properties[] = {
+        honch_prop("x", honch_strn(oversized_value, sizeof(oversized_value)))
+    };
+    const honch_value_t modes[] = {
+        honch_str("hdr"),
+        honch_str("night")
+    };
+    EXPECT_EQ_INT(honch_track(client, invalid_event_name, NULL, 0u), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ_INT(honch_track(client, "bad_value", invalid_value_properties, 1u), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ_INT(honch_track(client, "bad_key", invalid_key_properties, 1u), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ_INT(honch_track(client, "max_integer", max_integer_properties, 1u), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "min_integer", min_integer_properties, 1u), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "float_number", float_properties, 1u), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "deep_event", deep_properties, 1u), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ_INT(honch_track(client, "large_event", oversized_properties, 1u), HONCH_ERROR_INVALID_ARGUMENT);
 
-    char oversized_json[640];
-    memcpy(oversized_json, "{\"x\":\"", 6u);
-    memset(oversized_json + 6u, 'a', 600u);
-    oversized_json[606] = '"';
-    oversized_json[607] = '}';
-    oversized_json[608] = '\0';
-    EXPECT_EQ_INT(honch_track(client, "large_event", oversized_json), HONCH_ERROR_INVALID_ARGUMENT);
-
-    EXPECT_EQ_INT(honch_set_property(client, "modes", "[\"hdr\",\"night\"]"), HONCH_OK);
-    EXPECT_EQ_INT(honch_set_property(client, "bad", "\"unterminated"), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ_INT(honch_set_property(client, "modes", honch_array(modes, 2u)), HONCH_OK);
+    EXPECT_EQ_INT(honch_set_property(client, "bad", honch_str(NULL)), HONCH_ERROR_INVALID_ARGUMENT);
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
@@ -1057,8 +1069,8 @@ static void test_set_property_emits_event_and_autostamp_conflicts_win(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_set_property(client, "screen_group", "\"diagnostics\""), HONCH_OK);
-    EXPECT_EQ_INT(honch_set_property(client, "nullable", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_set_property(client, "screen_group", honch_str("diagnostics")), HONCH_OK);
+    EXPECT_EQ_INT(honch_set_property(client, "nullable", honch_null()), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$set_property\"");
@@ -1066,8 +1078,11 @@ static void test_set_property_emits_event_and_autostamp_conflicts_win(void)
     EXPECT_STR_CONTAINS(transport.last_payload, "\"nullable\":null");
 
     transport.last_payload[0] = '\0';
+    const honch_property_t screen_properties[] = {
+        honch_prop("screen", honch_str("diagnostics"))
+    };
     EXPECT_EQ_INT(
-        honch_track(client, "screen_viewed", "{\"screen\":\"diagnostics\",\"$device_id\":\"spoofed\",\"\\u0024sdk_platform\":\"spoofed\"}"),
+        honch_track(client, "screen_viewed", screen_properties, 1u),
         HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 
@@ -1102,7 +1117,10 @@ static void test_conformance_basic_track_fixture(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "button_pressed", "{\"pin\":0,\"$device_id\":\"spoofed\"}"), HONCH_OK);
+    const honch_property_t properties[] = {
+        honch_prop("pin", honch_i64(0))
+    };
+    EXPECT_EQ_INT(honch_track(client, "button_pressed", properties, 1u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"button_pressed\"");
@@ -1133,11 +1151,11 @@ static void test_conformance_auto_stamp_conflict_fixture(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    const honch_property_t properties[] = {
+        honch_prop("custom_key", honch_str("preserved"))
+    };
     EXPECT_EQ_INT(
-        honch_track(
-            client,
-            "test_event",
-            "{\"$device_model\":\"SHOULD_BE_OVERWRITTEN\",\"$sdk_platform\":\"SHOULD_BE_OVERWRITTEN\",\"custom_key\":\"preserved\"}"),
+        honch_track(client, "test_event", properties, 1u),
         HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 
@@ -1167,7 +1185,10 @@ static void test_conformance_boot_event_fixture(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "$device_boot", "{\"reset_reason\":\"power_on\"}"), HONCH_OK);
+    const honch_property_t properties[] = {
+        honch_prop("reset_reason", honch_str("power_on"))
+    };
+    EXPECT_EQ_INT(honch_track(client, "$device_boot", properties, 1u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$device_boot\"");
@@ -1199,7 +1220,11 @@ static void test_conformance_custom_session_event_fixture(void)
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
     EXPECT_EQ_INT(honch_session_start(client, NULL), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "hdr_burst_used", "{\"duration\":3.2,\"mode\":\"auto\"}"), HONCH_OK);
+    const honch_property_t properties[] = {
+        honch_prop("duration", honch_f64(3.2)),
+        honch_prop("mode", honch_str("auto"))
+    };
+    EXPECT_EQ_INT(honch_track(client, "hdr_burst_used", properties, 2u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"hdr_burst_used\"");
@@ -1227,7 +1252,10 @@ static void test_conformance_session_track_fixture(void)
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
     EXPECT_EQ_INT(honch_session_start(client, "recording"), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "recording_started", "{\"mode\":\"hdr\"}"), HONCH_OK);
+    const honch_property_t properties[] = {
+        honch_prop("mode", honch_str("hdr"))
+    };
+    EXPECT_EQ_INT(honch_track(client, "recording_started", properties, 1u), HONCH_OK);
     EXPECT_EQ_INT(honch_session_end(client), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 
@@ -1256,9 +1284,12 @@ static void test_conformance_identity_reset_fixture(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_identify(client, "user_123", "{\"plan\":\"beta\"}"), HONCH_OK);
+    const honch_property_t traits[] = {
+        honch_prop("plan", honch_str("beta"))
+    };
+    EXPECT_EQ_INT(honch_identify(client, "user_123", traits, 1u), HONCH_OK);
     EXPECT_EQ_INT(honch_reset(client), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "after_reset", "{}"), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "after_reset", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"after_reset\"");
@@ -1286,7 +1317,7 @@ static void test_auto_properties_callback_adds_platform_properties(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "platform_event", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "platform_event", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
     EXPECT_TRUE(test_auto_properties_calls >= 2);
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"platform_event\"");
@@ -1297,7 +1328,7 @@ static void test_auto_properties_callback_adds_platform_properties(void)
     honch_test_set_transport(NULL, NULL);
 }
 
-static void test_auto_properties_callback_rejects_invalid_json_value(void)
+static void test_auto_properties_callback_rejects_invalid_typed_value(void)
 {
     char queue_dir[128];
     make_temp_dir(queue_dir, sizeof(queue_dir));
@@ -1326,7 +1357,7 @@ static void test_auto_properties_callback_cannot_override_sdk_owned_properties(v
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "reserved_spoof_attempt", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "reserved_spoof_attempt", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"reserved_spoof_attempt\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$wifi_rssi\":-67");
@@ -1355,7 +1386,10 @@ static void test_session_events_and_context(void)
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
     EXPECT_EQ_INT(honch_session_end(client), HONCH_OK);
     EXPECT_EQ_INT(honch_session_start(client, "recording"), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "recording_started", "{\"mode\":\"hdr\"}"), HONCH_OK);
+    const honch_property_t properties[] = {
+        honch_prop("mode", honch_str("hdr"))
+    };
+    EXPECT_EQ_INT(honch_track(client, "recording_started", properties, 1u), HONCH_OK);
     EXPECT_EQ_INT(honch_session_end(client), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 
@@ -1414,7 +1448,7 @@ static void test_shutdown_flush_reports_transport_error(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "queued_before_shutdown", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "queued_before_shutdown", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_shutdown(client), HONCH_ERROR_SERVER);
     EXPECT_TRUE(transport.calls > 0);
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"queued_before_shutdown\"");
@@ -1457,7 +1491,7 @@ static void test_core_state_lock_works_without_platform_lock_callbacks(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_core_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_core_track(client, "state_lock_contract", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_core_track(client, "state_lock_contract", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_core_shutdown(client), HONCH_OK);
 }
 
@@ -1506,13 +1540,13 @@ static void test_battery_callback_stamps_level_and_emits_low_event(void)
     test_battery_level = 87;
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "battery_nominal", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "battery_nominal", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$battery_level\":87");
     EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"event\":\"$battery_low\"");
 
     test_battery_level = 12;
-    EXPECT_EQ_INT(honch_track(client, "battery_sample", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "battery_sample", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$battery_low\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"level\":12");
@@ -1520,17 +1554,17 @@ static void test_battery_callback_stamps_level_and_emits_low_event(void)
     EXPECT_EQ_INT(count_substring(transport.last_payload, "\"event\":\"$battery_low\""), 1);
 
     test_battery_level = 10;
-    EXPECT_EQ_INT(honch_track(client, "battery_still_low", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "battery_still_low", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
     EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"event\":\"$battery_low\"");
 
     test_battery_level = 55;
-    EXPECT_EQ_INT(honch_track(client, "battery_recovered", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "battery_recovered", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
     EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"event\":\"$battery_low\"");
 
     test_battery_level = 9;
-    EXPECT_EQ_INT(honch_track(client, "battery_low_again", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "battery_low_again", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$battery_low\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"level\":9");
@@ -1560,7 +1594,7 @@ static void test_battery_low_uses_same_sample_for_event_properties(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "battery_sample", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "battery_sample", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 
     const char *low_event = strstr(transport.last_payload, "\"event\":\"$battery_low\"");
@@ -1591,7 +1625,10 @@ static void test_identify_payload_and_persistence(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_identify(client, "user-1", "{\"plan\":\"beta\"}"), HONCH_OK);
+    const honch_property_t traits[] = {
+        honch_prop("plan", honch_str("beta"))
+    };
+    EXPECT_EQ_INT(honch_identify(client, "user-1", traits, 1u), HONCH_OK);
     EXPECT_TRUE(read_text_file(distinct_file, distinct_id, sizeof(distinct_id)) != 0);
     EXPECT_TRUE(strcmp(distinct_id, "user-1") == 0);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
@@ -1621,7 +1658,10 @@ static void test_identify_does_not_queue_event_when_persistence_fails(void)
     EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 1);
     EXPECT_EQ_INT(chmod(state_dir, 0500), 0);
 
-    EXPECT_EQ_INT(honch_identify(client, "user-1", "{\"plan\":\"beta\"}"), HONCH_ERROR_IO);
+    const honch_property_t traits[] = {
+        honch_prop("plan", honch_str("beta"))
+    };
+    EXPECT_EQ_INT(honch_identify(client, "user-1", traits, 1u), HONCH_ERROR_IO);
     EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 1);
 
     EXPECT_EQ_INT(chmod(state_dir, 0700), 0);
@@ -1640,8 +1680,8 @@ static void test_queue_limit_drops_oldest(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "first", NULL), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "second", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "first", NULL, 0u), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "second", NULL, 0u), HONCH_OK);
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
@@ -1663,7 +1703,7 @@ static void test_flush_retry_keeps_events(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "first", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "first", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_ERROR_TRANSPORT);
 
     char pending_dir[160];
@@ -1685,7 +1725,7 @@ static void test_flush_retryable_http_status_keeps_events_until_success(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "retryable_status", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "retryable_status", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_ERROR_RATE_LIMITED);
 
     char pending_dir[160];
@@ -1718,7 +1758,7 @@ static void test_flush_http_timeout_keeps_events_until_success(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "timeout_status", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "timeout_status", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_ERROR_TIMEOUT);
 
     char pending_dir[160];
@@ -1752,7 +1792,7 @@ static void test_flush_dead_letters_invalid_persisted_queue_files(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "valid_after_corrupt", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "valid_after_corrupt", NULL, 0u), HONCH_OK);
 
     char pending_dir[160];
     char dead_dir[160];
@@ -1808,7 +1848,7 @@ static void test_flush_ignores_malformed_queue_filenames(void)
     snprintf(malformed_path, sizeof(malformed_path), "%s/00000000000000000000-malformed.hqe", pending_dir);
     EXPECT_TRUE(write_text_file(malformed_path, "{\"event\":") != 0);
 
-    EXPECT_EQ_INT(honch_track(client, "valid_with_malformed_neighbor", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "valid_with_malformed_neighbor", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
     EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".hqe"), 0);
     EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 1);
@@ -1839,7 +1879,10 @@ static void test_flush_dead_letters_semantically_invalid_queue_record(void)
 
     const unsigned char valid_but_not_event[] = {0xf6};
     EXPECT_TRUE(write_bytes_file(invalid_path, valid_but_not_event, sizeof(valid_but_not_event)) != 0);
-    EXPECT_EQ_INT(honch_track(client, "valid_after_invalid", "{\"ok\":true}"), HONCH_OK);
+    const honch_property_t properties[] = {
+        honch_prop("ok", honch_bool(true))
+    };
+    EXPECT_EQ_INT(honch_track(client, "valid_after_invalid", properties, 1u), HONCH_OK);
 
     EXPECT_EQ_INT(honch_flush(client), HONCH_ERROR_REJECTED);
     EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 0);
@@ -1850,7 +1893,7 @@ static void test_flush_dead_letters_semantically_invalid_queue_record(void)
     honch_test_set_transport(NULL, NULL);
 }
 
-static void test_event_record_preserves_json_string_escapes(void)
+static void test_event_record_preserves_typed_string_values(void)
 {
     char queue_dir[128];
     make_temp_dir(queue_dir, sizeof(queue_dir));
@@ -1861,7 +1904,12 @@ static void test_event_record_preserves_json_string_escapes(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "string_escape_event", "{\"accent\":\"\\u00e9\",\"raw\":\"\xc3\xa9\",\"nul\":\"a\\u0000b\"}"), HONCH_OK);
+    const honch_property_t properties[] = {
+        honch_prop("accent", honch_str("\xc3\xa9")),
+        honch_prop("raw", honch_str("\xc3\xa9")),
+        honch_prop("nul", honch_strn("a\0b", 3u))
+    };
+    EXPECT_EQ_INT(honch_track(client, "string_escape_event", properties, 3u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 
     EXPECT_STR_CONTAINS(transport.last_payload, "\"accent\":\"\xc3\xa9\"");
@@ -1873,7 +1921,7 @@ static void test_event_record_preserves_json_string_escapes(void)
     honch_test_set_transport(NULL, NULL);
 }
 
-static void test_event_record_handles_escaped_and_long_object_keys(void)
+static void test_event_record_handles_long_object_keys(void)
 {
     char queue_dir[128];
     make_temp_dir(queue_dir, sizeof(queue_dir));
@@ -1884,19 +1932,15 @@ static void test_event_record_handles_escaped_and_long_object_keys(void)
     memset(long_key, 'k', sizeof(long_key));
     long_key[sizeof(long_key) - 1u] = '\0';
 
-    char properties[420];
-    snprintf(
-        properties,
-        sizeof(properties),
-        "{\"\\u0024device_id\":\"spoofed-device\",\"%s\":\"long-value\"}",
-        long_key);
-
     fake_transport_context_t transport = {.response_code = 204L};
     honch_test_set_transport(fake_transport, &transport);
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "key_regression_event", properties), HONCH_OK);
+    const honch_property_t properties[] = {
+        honch_prop(long_key, honch_str("long-value"))
+    };
+    EXPECT_EQ_INT(honch_track(client, "key_regression_event", properties, 1u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 
     char expected_long_property[180];
@@ -1917,29 +1961,20 @@ static void test_event_record_handles_large_property_maps(void)
     honch_config_t config = test_config(queue_dir);
     config.batch_size = 10u;
 
-    char properties[1024];
-    size_t used = 0u;
-    properties[used++] = '{';
+    honch_property_t properties[30];
+    char keys[30][8];
     for (int i = 0; i < 30; i++) {
-        int written = snprintf(
-            properties + used,
-            sizeof(properties) - used,
-            "%s\"k%d\":%d",
-            i == 0 ? "" : ",",
-            i,
-            i);
-        EXPECT_TRUE(written > 0);
-        used += (size_t)written;
+        int written = snprintf(keys[i], sizeof(keys[i]), "k%d", i);
+        EXPECT_TRUE(written > 0 && (size_t)written < sizeof(keys[i]));
+        properties[i] = honch_prop(keys[i], honch_i64(i));
     }
-    properties[used++] = '}';
-    properties[used] = '\0';
 
     fake_transport_context_t transport = {.response_code = 204L};
     honch_test_set_transport(fake_transport, &transport);
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "large_property_map", properties), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "large_property_map", properties, 30u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"large_property_map\"");
@@ -1966,7 +2001,7 @@ static void test_tick_threshold_drains_one_due_batch(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "threshold_event", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "threshold_event", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(transport.calls, 0);
     EXPECT_EQ_INT(honch_tick(client), HONCH_OK);
     EXPECT_EQ_INT(transport.calls, 1);
@@ -1996,9 +2031,9 @@ static void test_tick_keeps_threshold_due_when_more_batches_remain(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "first", NULL), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "second", NULL), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "third", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "first", NULL, 0u), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "second", NULL, 0u), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "third", NULL, 0u), HONCH_OK);
 
     EXPECT_EQ_INT(honch_tick(client), HONCH_OK);
     EXPECT_EQ_INT(transport.calls, 1);
@@ -2032,7 +2067,7 @@ static void test_tick_retries_with_backoff(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "retry_event", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "retry_event", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_tick(client), HONCH_ERROR_SERVER);
     EXPECT_EQ_INT(honch_tick(client), HONCH_OK);
     EXPECT_EQ_INT(transport.calls, 1);
@@ -2068,7 +2103,7 @@ static void test_tick_retries_http_timeout(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "timeout_retry_event", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "timeout_retry_event", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_tick(client), HONCH_ERROR_TIMEOUT);
     EXPECT_EQ_INT(honch_tick(client), HONCH_OK);
     EXPECT_EQ_INT(transport.calls, 1);
@@ -2101,7 +2136,7 @@ static void test_tick_uses_default_threshold(void)
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
     for (int i = 0; i < 29; i++) {
-        EXPECT_EQ_INT(honch_track(client, "default_threshold_event", NULL), HONCH_OK);
+        EXPECT_EQ_INT(honch_track(client, "default_threshold_event", NULL, 0u), HONCH_OK);
     }
 
     EXPECT_EQ_INT(transport.calls, 0);
@@ -2131,7 +2166,7 @@ static void test_tick_is_required_for_scheduled_work(void)
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
     for (int i = 0; i < 35; i++) {
-        EXPECT_EQ_INT(honch_track(client, "cooperative_tick_event", NULL), HONCH_OK);
+        EXPECT_EQ_INT(honch_track(client, "cooperative_tick_event", NULL, 0u), HONCH_OK);
     }
 
     usleep(50000u);
@@ -2161,9 +2196,9 @@ static void test_flush_drains_multiple_batches(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "first", NULL), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "second", NULL), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "third", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "first", NULL, 0u), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "second", NULL, 0u), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "third", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 
     char pending_dir[160];
@@ -2196,7 +2231,10 @@ static void test_conformance_compact_wire_fixture(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "button_pressed", "{\"pin\":0}"), HONCH_OK);
+    const honch_property_t properties[] = {
+        honch_prop("pin", honch_i64(0))
+    };
+    EXPECT_EQ_INT(honch_track(client, "button_pressed", properties, 1u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 
     EXPECT_TRUE(strcmp(transport.last_api_key, "test_key_123") == 0);
@@ -2226,7 +2264,7 @@ static void expect_conformance_response_policy_case(long response_code, int shou
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "response_policy_event", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "response_policy_event", NULL, 0u), HONCH_OK);
     (void)honch_flush(client);
 
     char pending_dir[160];
@@ -2275,7 +2313,7 @@ static void test_batch_size_is_capped_to_esp_limit(void)
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
     for (int i = 0; i < 60; i++) {
-        EXPECT_EQ_INT(honch_track(client, "cap_event", NULL), HONCH_OK);
+        EXPECT_EQ_INT(honch_track(client, "cap_event", NULL, 0u), HONCH_OK);
     }
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 
@@ -2407,7 +2445,10 @@ static void test_flush_v2_uses_boot_stream_id(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "sample", "{\"count\":1}"), HONCH_OK);
+    const honch_property_t properties[] = {
+        honch_prop("count", honch_i64(1))
+    };
+    EXPECT_EQ_INT(honch_track(client, "sample", properties, 1u), HONCH_OK);
     transport.calls = 0;
     transport.last_stream_id[0] = '\0';
 
@@ -2434,7 +2475,7 @@ static void test_flush_rejected_moves_events_to_dead_letter(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "rejected", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "rejected", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_ERROR_REJECTED);
 
     char pending_dir[160];
@@ -2460,7 +2501,7 @@ static void test_reset_clears_queued_events(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(honch_track(client, "stale_event", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "stale_event", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_ERROR_REJECTED);
 
     char pending_dir[160];
@@ -2524,7 +2565,7 @@ static void test_reset_generates_new_identity_and_clears_properties(void)
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
     EXPECT_TRUE(read_text_file(device_file, old_id, sizeof(old_id)) != 0);
-    EXPECT_EQ_INT(honch_set_property(client, "legacy_context", "\"session-1\""), HONCH_OK);
+    EXPECT_EQ_INT(honch_set_property(client, "legacy_context", honch_str("session-1")), HONCH_OK);
     EXPECT_EQ_INT(honch_reset(client), HONCH_OK);
     EXPECT_TRUE(read_text_file(device_file, new_id, sizeof(new_id)) != 0);
     EXPECT_TRUE(strcmp(old_id, new_id) != 0);
@@ -2535,7 +2576,7 @@ static void test_reset_generates_new_identity_and_clears_properties(void)
     EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"event\":\"$device_reset\"");
 
     transport.last_payload[0] = '\0';
-    EXPECT_EQ_INT(honch_track(client, "after_reset", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "after_reset", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
     EXPECT_STR_NOT_CONTAINS(transport.last_payload, "session-1");
     EXPECT_STR_CONTAINS(transport.last_payload, new_id);
@@ -2552,7 +2593,7 @@ int main(void)
     test_track_persists_event();
     test_packetizer_reads_posix_storage_event();
     test_os_buffered_durability_tracks_and_flushes_event();
-    test_strict_json_validation();
+    test_typed_value_validation();
     test_generated_device_id_persists();
     test_existing_invalid_state_path_fails_init();
     test_configured_device_id_accessor();
@@ -2564,7 +2605,7 @@ int main(void)
     test_conformance_session_track_fixture();
     test_conformance_identity_reset_fixture();
     test_auto_properties_callback_adds_platform_properties();
-    test_auto_properties_callback_rejects_invalid_json_value();
+    test_auto_properties_callback_rejects_invalid_typed_value();
     test_auto_properties_callback_cannot_override_sdk_owned_properties();
     test_session_events_and_context();
     test_lifecycle_events_are_queued();
@@ -2582,8 +2623,8 @@ int main(void)
     test_flush_dead_letters_invalid_persisted_queue_files();
     test_flush_ignores_malformed_queue_filenames();
     test_flush_dead_letters_semantically_invalid_queue_record();
-    test_event_record_preserves_json_string_escapes();
-    test_event_record_handles_escaped_and_long_object_keys();
+    test_event_record_preserves_typed_string_values();
+    test_event_record_handles_long_object_keys();
     test_event_record_handles_large_property_maps();
     test_tick_threshold_drains_one_due_batch();
     test_tick_keeps_threshold_due_when_more_batches_remain();

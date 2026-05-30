@@ -145,9 +145,9 @@ API:
 
 ```c
 honch_status_t honch_init(honch_client_t **client, const honch_config_t *config);
-honch_status_t honch_track(honch_client_t *client, const char *event_name, const char *properties_json);
-honch_status_t honch_identify(honch_client_t *client, const char *distinct_id, const char *traits_json);
-honch_status_t honch_set_property(honch_client_t *client, const char *key, const char *value_json);
+honch_status_t honch_track(honch_client_t *client, const char *event_name, const honch_property_t *properties, size_t property_count);
+honch_status_t honch_identify(honch_client_t *client, const char *distinct_id, const honch_property_t *traits, size_t trait_count);
+honch_status_t honch_set_property(honch_client_t *client, const char *key, honch_value_t value);
 honch_status_t honch_session_start(honch_client_t *client, const char *session_name);
 honch_status_t honch_session_end(honch_client_t *client);
 honch_status_t honch_flush(honch_client_t *client);
@@ -214,10 +214,11 @@ ignored so the SDK-stamped values win.
 `honch_set_property` queues a `$set_property` event whose properties contain the
 provided key/value pair. It does not persist context onto future events.
 
-JSON-shaped public inputs are validated at the API boundary. `properties_json`
-and `traits_json` must be valid JSON objects, and `value_json` must be a valid
-JSON value. Malformed JSON returns `HONCH_ERROR_INVALID_ARGUMENT`; C/POSIX
-intentionally fails closed instead of silently dropping invalid user properties.
+Public property inputs use typed `honch_value_t` values that map directly onto
+wire-format-v2 tags. Strings and keys are validated as UTF-8, object/map keys
+must be unique, numeric values must fit their target wire type, and non-finite
+floating point values return `HONCH_ERROR_INVALID_ARGUMENT`. C/POSIX fails
+closed instead of silently dropping invalid user properties.
 
 When `battery_callback` is configured, valid readings are stamped as
 `$battery_level`. The SDK queues `$battery_low` once when the level drops below
@@ -225,7 +226,7 @@ When `battery_callback` is configured, valid readings are stamped as
 
 `auto_properties_callback` lets platform adapters add automatic event
 properties without putting platform-specific code in the reusable core. The
-callback receives a typed sink and can add raw JSON values:
+callback receives a typed sink and can add typed values:
 
 ```c
 static honch_status_t add_platform_properties(
@@ -234,13 +235,11 @@ static honch_status_t add_platform_properties(
     void *sink_ctx)
 {
     int rssi = *(int *)userdata;
-    char value[16];
-    snprintf(value, sizeof(value), "%d", rssi);
-    return sink(sink_ctx, "$wifi_rssi", value);
+    return sink(sink_ctx, "$wifi_rssi", honch_i64(rssi));
 }
 ```
 
-The SDK validates each key and JSON value before appending it. Adapter
+The SDK validates each key and typed value before appending it. Adapter
 properties are added after user properties and before SDK-owned properties, so
 core-owned values such as `$device_id`, `$sdk_platform`, and `$firmware_version`
 cannot be overridden by either user input or an adapter. The callback should
@@ -296,9 +295,18 @@ int main(void)
         return 1;
     }
 
-    honch_identify(client, "user-123", "{\"plan\":\"beta\"}");
+    const honch_property_t traits[] = {
+        honch_prop("plan", honch_str("beta"))
+    };
+    honch_identify(client, "user-123", traits, 1);
+
     honch_session_start(client, "recording");
-    honch_track(client, "recording_started", "{\"mode\":\"hdr\",\"resolution\":\"4k\"}");
+
+    const honch_property_t properties[] = {
+        honch_prop("mode", honch_str("hdr")),
+        honch_prop("resolution", honch_str("4k"))
+    };
+    honch_track(client, "recording_started", properties, 2);
     honch_session_end(client);
     honch_flush(client);
 
@@ -353,7 +361,7 @@ Current C tests cover:
 - epoch milliseconds timestamp encoding
 - compact chunk wire transport and response handling
 - chunk wire transport and response handling
-- strict JSON validation for public property input
+- strict typed-value validation for public property input
 - generated `device_id` persistence
 - configured and generated device ID access
 - `$set_property` event emission

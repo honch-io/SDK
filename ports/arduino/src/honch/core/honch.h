@@ -3,17 +3,29 @@
 
 #include "honch/core/config.h"
 #include "honch/core/status.h"
+#include "honch/core/wire_v2.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct honch_client honch_client_t;
+typedef honch_wire_v2_value_t honch_value_t;
+typedef honch_wire_v2_property_t honch_property_t;
+typedef honch_wire_v2_map_pair_t honch_map_pair_t;
 
 honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_t *config);
-honch_status_t honch_core_track(honch_client_t *client, const char *event_name, const char *properties_json);
-honch_status_t honch_core_identify(honch_client_t *client, const char *distinct_id, const char *traits_json);
-honch_status_t honch_core_set_property(honch_client_t *client, const char *key, const char *value_json);
+honch_status_t honch_core_track(
+    honch_client_t *client,
+    const char *event_name,
+    const honch_property_t *properties,
+    size_t property_count);
+honch_status_t honch_core_identify(
+    honch_client_t *client,
+    const char *distinct_id,
+    const honch_property_t *traits,
+    size_t trait_count);
+honch_status_t honch_core_set_property(honch_client_t *client, const char *key, honch_value_t value);
 honch_status_t honch_core_session_start(honch_client_t *client, const char *session_name);
 honch_status_t honch_core_session_end(honch_client_t *client);
 honch_status_t honch_core_tick(honch_client_t *client);

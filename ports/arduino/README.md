@@ -45,7 +45,11 @@ void setup() {
   };
 
   Honch.begin(config);
-  Honch.track("boot", "{}");
+
+  const honch_property_t properties[] = {
+    honch_prop("source", honch_str("setup")),
+  };
+  Honch.track("boot", properties, 1);
 }
 
 void loop() {
@@ -97,7 +101,8 @@ HONCH_ARDUINO_HOME="/Volumes/X9 Pro/honch-arduino-verify" \
 
 - ESP32 Arduino is the only supported Arduino board family.
 - BLE relay, OTA integration, and non-ESP32 boards are not part of this milestone.
-- JSON strings are the v0 property interface; no Arduino property-builder DSL is included.
+- Event properties use the typed `honch_value_t`/`honch_property_t` API shared
+  with the portable C core.
 - TLS root CA PEM configuration is application-owned via `rootCaPem`.
   `insecureSkipTlsVerify` exists for local testing only.
 - Scheduled flushing is cooperative. It runs only when the sketch calls

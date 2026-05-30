@@ -34,7 +34,7 @@ void setup() {
   config.insecureSkipTlsVerify = false;
 
   Honch.begin(config);
-  Honch.track("boot", "{}");
+  Honch.track("boot");
 }
 
 void loop() {

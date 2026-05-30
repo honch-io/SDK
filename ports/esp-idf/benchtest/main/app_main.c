@@ -234,7 +234,6 @@ static void run_benchmark_once(uint32_t run_id)
     bench_timer_t track_timer = {0};
     bench_timer_t flush_timer = {0};
     char pad[CONFIG_BENCH_PAYLOAD_BYTES + 1];
-    char properties[768];
 
     fill_pad(pad, sizeof(pad));
 
@@ -254,18 +253,17 @@ static void run_benchmark_once(uint32_t run_id)
 
     int64_t run_start_us = esp_timer_get_time();
     for (int i = 0; i < CONFIG_BENCH_EVENT_COUNT; i++) {
-        snprintf(properties, sizeof(properties),
-                 "{\"run\":%" PRIu32 ",\"seq\":%d,\"heap\":%" PRIu32
-                 ",\"heap_min\":%" PRIu32 ",\"rssi\":%d,\"pad\":\"%s\"}",
-                 run_id,
-                 i,
-                 (uint32_t)esp_get_free_heap_size(),
-                 (uint32_t)esp_get_minimum_free_heap_size(),
-                 current_rssi(),
-                 pad);
+        const honch_property_t properties[] = {
+            honch_prop("run", honch_u64(run_id)),
+            honch_prop("seq", honch_i64(i)),
+            honch_prop("heap", honch_u64((uint32_t)esp_get_free_heap_size())),
+            honch_prop("heap_min", honch_u64((uint32_t)esp_get_minimum_free_heap_size())),
+            honch_prop("rssi", honch_i64(current_rssi())),
+            honch_prop("pad", honch_str(pad))
+        };
 
         int64_t start_us = esp_timer_get_time();
-        honch_err_t track_err = honch_track("bench_event", properties);
+        honch_err_t track_err = honch_track("bench_event", properties, 6u);
         int64_t elapsed_us = esp_timer_get_time() - start_us;
         timer_add(&track_timer, elapsed_us, track_err == HONCH_OK);
         if (track_err == HONCH_OK) {
@@ -345,7 +343,6 @@ static void run_benchmark_once(uint32_t run_id)
 static void run_offline_queue_proof(void)
 {
     char pad[CONFIG_BENCH_PAYLOAD_BYTES + 1];
-    char properties[768];
     uint32_t proof_id = (uint32_t)(esp_timer_get_time() / 1000);
 
     fill_pad(pad, sizeof(pad));
@@ -363,16 +360,16 @@ static void run_offline_queue_proof(void)
              proof_id);
 
     for (int i = 0; i < CONFIG_BENCH_OFFLINE_QUEUE_PROOF_EVENTS; i++) {
-        snprintf(properties, sizeof(properties),
-                 "{\"proof_id\":%" PRIu32 ",\"seq\":%d,\"phase\":\"offline\","
-                 "\"heap\":%" PRIu32 ",\"rssi\":%d,\"pad\":\"%s\"}",
-                 proof_id,
-                 i,
-                 (uint32_t)esp_get_free_heap_size(),
-                 current_rssi(),
-                 pad);
+        const honch_property_t properties[] = {
+            honch_prop("proof_id", honch_u64(proof_id)),
+            honch_prop("seq", honch_i64(i)),
+            honch_prop("phase", honch_str("offline")),
+            honch_prop("heap", honch_u64((uint32_t)esp_get_free_heap_size())),
+            honch_prop("rssi", honch_i64(current_rssi())),
+            honch_prop("pad", honch_str(pad))
+        };
 
-        honch_err_t track_err = honch_track("bench_offline_queue_proof", properties);
+        honch_err_t track_err = honch_track("bench_offline_queue_proof", properties, 6u);
         if (track_err == HONCH_OK) {
             s_queued_estimate++;
         } else {

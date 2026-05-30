@@ -181,18 +181,15 @@ static uint64_t packetizer_base_time_ms(const uint8_t *buffer, size_t out_size)
 
 static honch_payload_t build_test_record_at(uint64_t timestamp_ms)
 {
-    honch_buffer_t properties;
-    assert(honch_buffer_init(&properties, 16u) == HONCH_OK);
     honch_payload_t payload = {0};
     assert(honch_event_record_build(
         "boot",
         "user-1",
         NULL,
         timestamp_ms,
-        &properties,
+        NULL,
         0u,
         &payload) == HONCH_OK);
-    honch_buffer_free(&properties);
     return payload;
 }
 

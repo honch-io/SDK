@@ -12,7 +12,7 @@
 #define HONCH_CORE_NO_SHORT_STATUS_NAMES
 #define HONCH_ESP_UNDEFINE_CORE_NO_SHORT_STATUS_NAMES
 #endif
-#include "honch/core/config.h"
+#include "honch/core/honch.h"
 #ifdef HONCH_ESP_UNDEFINE_CORE_NO_SHORT_STATUS_NAMES
 #undef HONCH_CORE_NO_SHORT_STATUS_NAMES
 #undef HONCH_ESP_UNDEFINE_CORE_NO_SHORT_STATUS_NAMES
@@ -61,9 +61,9 @@ typedef struct {
 honch_err_t honch_init(const honch_config_t *config);
 honch_err_t honch_shutdown(void);
 
-honch_err_t honch_track(const char *event, const char *properties_json);
-honch_err_t honch_identify(const char *distinct_id, const char *properties_json);
-honch_err_t honch_set_property(const char *key, const char *value_json);
+honch_err_t honch_track(const char *event, const honch_property_t *properties, size_t property_count);
+honch_err_t honch_identify(const char *distinct_id, const honch_property_t *properties, size_t property_count);
+honch_err_t honch_set_property(const char *key, honch_value_t value);
 
 honch_err_t honch_session_start(const char *session_name);
 honch_err_t honch_session_end(void);

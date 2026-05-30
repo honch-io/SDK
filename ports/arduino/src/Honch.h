@@ -23,9 +23,9 @@ class HonchClass {
 public:
   HonchClass();
   bool begin(const HonchConfig &config);
-  bool track(const char *eventName, const char *propertiesJson = "{}");
-  bool identify(const char *distinctId, const char *traitsJson = "{}");
-  bool setProperty(const char *key, const char *valueJson);
+  bool track(const char *eventName, const honch_property_t *properties = nullptr, size_t propertyCount = 0);
+  bool identify(const char *distinctId, const honch_property_t *traits = nullptr, size_t traitCount = 0);
+  bool setProperty(const char *key, honch_value_t value);
   bool sessionStart(const char *sessionName);
   bool sessionEnd();
   bool flush();

@@ -13,8 +13,8 @@
 #include "driver/gpio.h"
 #include "esp_timer.h"
 
-// Forward declaration — implemented in honch.c
-extern honch_err_t honch_track(const char *event, const char *properties_json);
+// Forward declaration implemented by the ESP-IDF public API.
+extern honch_err_t honch_track(const char *event, const honch_property_t *properties, size_t property_count);
 
 static const char *TAG = "honch";
 
@@ -111,9 +111,10 @@ static void gpio_worker_task(void *arg)
             }
 
             if (should_track) {
-                char props[32];
-                snprintf(props, sizeof(props), "{\"pin\":%d}", (int)pin);
-                honch_track(event_name, props);
+                const honch_property_t properties[] = {
+                    honch_prop("pin", honch_i64((int64_t)pin))
+                };
+                honch_track(event_name, properties, 1u);
             }
         }
     }
