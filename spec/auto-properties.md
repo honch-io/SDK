@@ -27,9 +27,9 @@ rejected instead of overwritten.
 
 Capture promotes these fields to top-level columns: `$device_id`,
 `$device_model`, `$firmware_version`, `$session_id`, `$sdk_platform`,
-`$environment`. In wire-v2, they are encoded in wire-v2 context and removed
-from the event properties before wire encoding. Port authors should not also
-write promoted context fields into event properties.
+`$environment`. Promoted context properties are encoded once in wire-v2 message
+context and removed from the event properties before wire encoding. Port
+authors should not also write promoted context fields into event properties.
 
 ## Lifecycle Events
 

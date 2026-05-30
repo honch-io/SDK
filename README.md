@@ -15,9 +15,9 @@ SDK contract plus platform SDKs for embedded and connected-device targets.
 
 ## Repository layout
 
-- [`core/`](core/) — canonical portable C SDK behavior: event semantics,
-  compact wire encoding, identity, lifecycle, queue policy, retry
-  classification, and packetization.
+- [`core/`](core/) — canonical portable C SDK behavior: typed event
+  properties, HQR1 queue records, compact wire encoding, identity, lifecycle,
+  queue policy, retry classification, and packetization.
 - [`ports/arduino/`](ports/arduino/) — Arduino ESP32 SDK wrapper around the
   canonical core.
 - [`ports/posix/`](ports/posix/) — C/POSIX SDK and local development port for
