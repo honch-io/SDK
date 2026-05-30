@@ -68,6 +68,152 @@ static honch_status_t honch_record_append_value(
     honch_buffer_t *buffer,
     const honch_wire_v2_value_t *value,
     size_t depth);
+static honch_status_t honch_record_validate_unique_keys(
+    const honch_wire_v2_map_pair_t *entries,
+    size_t count);
+
+static size_t honch_record_uvarint_size(uint64_t value)
+{
+    size_t used = 1u;
+    while (value >= 0x80u) {
+        value >>= 7u;
+        used++;
+    }
+    return used;
+}
+
+static honch_status_t honch_record_measure_add(size_t *size, size_t amount)
+{
+    return honch_size_add(*size, amount, size);
+}
+
+static honch_status_t honch_record_measure_string_n(
+    const char *value,
+    size_t length,
+    bool allow_empty,
+    size_t *size)
+{
+    if (value == NULL || (!allow_empty && length == 0u) || !honch_utf8_is_valid(value, length)) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    size_t encoded_length = 0u;
+    honch_status_t status = honch_size_add(honch_record_uvarint_size((uint64_t)length), length, &encoded_length);
+    if (status == HONCH_OK) {
+        status = honch_size_add(encoded_length, 1u, &encoded_length);
+    }
+    if (status == HONCH_OK) {
+        status = honch_record_measure_add(size, encoded_length);
+    }
+    return status;
+}
+
+static honch_status_t honch_record_measure_string(const char *value, bool allow_empty, size_t *size)
+{
+    return honch_record_measure_string_n(value, strlen(value), allow_empty, size);
+}
+
+static honch_status_t honch_record_measure_value(
+    const honch_wire_v2_value_t *value,
+    size_t depth,
+    size_t *size);
+
+static honch_status_t honch_record_measure_key_value(
+    const char *key,
+    const honch_wire_v2_value_t *value,
+    size_t depth,
+    size_t *size)
+{
+    if (honch_is_blank(key)) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    honch_status_t status = honch_record_measure_string(key, false, size);
+    if (status == HONCH_OK) {
+        status = honch_record_measure_value(value, depth, size);
+    }
+    return status;
+}
+
+static honch_status_t honch_record_measure_value(
+    const honch_wire_v2_value_t *value,
+    size_t depth,
+    size_t *size)
+{
+    if (value == NULL || size == NULL || depth > HONCH_EVENT_RECORD_MAX_DEPTH) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    honch_status_t status = HONCH_OK;
+    switch (value->type) {
+        case HONCH_WIRE_V2_VALUE_TYPE_NULL:
+        case HONCH_WIRE_V2_VALUE_TYPE_BOOL:
+            return honch_record_measure_add(size, 1u);
+        case HONCH_WIRE_V2_VALUE_TYPE_UINT:
+            return honch_record_measure_add(size, 1u + honch_record_uvarint_size(value->uint_value));
+        case HONCH_WIRE_V2_VALUE_TYPE_INT:
+            return honch_record_measure_add(
+                size,
+                1u + honch_record_uvarint_size(honch_wire_v2_zigzag_i64(value->int_value)));
+        case HONCH_WIRE_V2_VALUE_TYPE_FLOAT32:
+            if (!isfinite(value->float32_value)) {
+                return HONCH_ERROR_INVALID_ARGUMENT;
+            }
+            return honch_record_measure_add(size, 1u + sizeof(uint32_t));
+        case HONCH_WIRE_V2_VALUE_TYPE_FLOAT64:
+            if (!isfinite(value->float64_value)) {
+                return HONCH_ERROR_INVALID_ARGUMENT;
+            }
+            return honch_record_measure_add(size, 1u + sizeof(uint64_t));
+        case HONCH_WIRE_V2_VALUE_TYPE_STRING: {
+            if (value->string_value == NULL) {
+                return HONCH_ERROR_INVALID_ARGUMENT;
+            }
+            size_t string_size = value->string_size == SIZE_MAX ? strlen(value->string_value) : value->string_size;
+            status = honch_record_measure_add(size, 1u);
+            if (status == HONCH_OK) {
+                status = honch_record_measure_string_n(value->string_value, string_size, true, size);
+            }
+            return status;
+        }
+        case HONCH_WIRE_V2_VALUE_TYPE_BYTES:
+            if (value->bytes.size > 0u && value->bytes.data == NULL) {
+                return HONCH_ERROR_INVALID_ARGUMENT;
+            }
+            status = honch_record_measure_add(size, 1u + honch_record_uvarint_size((uint64_t)value->bytes.size));
+            if (status == HONCH_OK) {
+                status = honch_record_measure_add(size, value->bytes.size);
+            }
+            return status;
+        case HONCH_WIRE_V2_VALUE_TYPE_ARRAY:
+            if (depth >= HONCH_EVENT_RECORD_MAX_DEPTH ||
+                (value->array.count > 0u && value->array.items == NULL)) {
+                return HONCH_ERROR_INVALID_ARGUMENT;
+            }
+            status = honch_record_measure_add(size, 1u + honch_record_uvarint_size((uint64_t)value->array.count));
+            for (size_t i = 0u; status == HONCH_OK && i < value->array.count; i++) {
+                status = honch_record_measure_value(&value->array.items[i], depth + 1u, size);
+            }
+            return status;
+        case HONCH_WIRE_V2_VALUE_TYPE_MAP:
+            if (depth >= HONCH_EVENT_RECORD_MAX_DEPTH ||
+                (value->map.count > 0u && value->map.entries == NULL)) {
+                return HONCH_ERROR_INVALID_ARGUMENT;
+            }
+            status = honch_record_validate_unique_keys(value->map.entries, value->map.count);
+            if (status == HONCH_OK) {
+                status = honch_record_measure_add(size, 1u + honch_record_uvarint_size((uint64_t)value->map.count));
+            }
+            for (size_t i = 0u; status == HONCH_OK && i < value->map.count; i++) {
+                status = honch_record_measure_key_value(
+                    value->map.entries[i].key,
+                    &value->map.entries[i].value,
+                    depth + 1u,
+                    size);
+            }
+            return status;
+        default:
+            return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+}
 
 static honch_status_t honch_record_append_key_value(
     honch_buffer_t *buffer,
@@ -234,10 +380,22 @@ honch_status_t honch_event_record_build(
     }
     out->data = NULL;
     out->length = 0u;
-    honch_buffer_t buffer;
-    honch_status_t status = honch_buffer_init(&buffer, 128u);
-    if (status != HONCH_OK) {
-        return status;
+    size_t measured_size = sizeof(HONCH_EVENT_RECORD_MAGIC);
+    honch_status_t status = honch_record_measure_add(&measured_size, honch_record_uvarint_size(timestamp_ms));
+    if (status == HONCH_OK) {
+        status = honch_record_measure_string(distinct_id, false, &measured_size);
+    }
+    if (status == HONCH_OK) {
+        status = honch_record_measure_add(&measured_size, 1u);
+    }
+    if (status == HONCH_OK && session_id != NULL) {
+        status = honch_record_measure_string(session_id, false, &measured_size);
+    }
+    if (status == HONCH_OK) {
+        status = honch_record_measure_string(event_name, false, &measured_size);
+    }
+    if (status == HONCH_OK) {
+        status = honch_record_measure_add(&measured_size, honch_record_uvarint_size((uint64_t)property_count));
     }
     for (size_t i = 0u; status == HONCH_OK && i < property_count; i++) {
         if (honch_is_blank(properties[i].key)) {
@@ -250,6 +408,28 @@ honch_status_t honch_event_record_build(
                 break;
             }
         }
+        if (status == HONCH_OK) {
+            status = honch_record_measure_key_value(
+                properties[i].key,
+                &properties[i].value,
+                0u,
+                &measured_size);
+        }
+    }
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    size_t initial_capacity = 0u;
+    status = honch_size_add(measured_size, 1u, &initial_capacity);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    honch_buffer_t buffer;
+    status = honch_buffer_init(&buffer, initial_capacity);
+    if (status != HONCH_OK) {
+        return status;
     }
     if (status == HONCH_OK) {
         status = honch_buffer_append_n(&buffer, (const char *)HONCH_EVENT_RECORD_MAGIC, sizeof(HONCH_EVENT_RECORD_MAGIC));
