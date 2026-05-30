@@ -11,6 +11,7 @@
 #define HONCH_PACKETIZER_HEADER_SIZE 20u
 #define HONCH_PACKETIZER_MAX_CHUNK_PAYLOAD UINT16_MAX
 #define HONCH_PACKETIZER_MAX_MESSAGE_BYTES 4096u
+#define HONCH_MIN_UNIX_TIME_MS 1577836800000ULL
 
 static void honch_packetizer_write_u16(uint8_t *out, uint16_t value)
 {
@@ -57,6 +58,28 @@ static uint16_t honch_packetizer_frame_crc16(const uint8_t *header, const uint8_
 static bool honch_packetizer_source_supported(uint32_t source_mask)
 {
     return (source_mask & HONCH_DATA_SOURCE_EVENTS) != 0u;
+}
+
+static uint64_t honch_packetizer_normalize_timestamp(honch_client_t *client, uint64_t timestamp_ms)
+{
+    if (client == NULL || client->platform == NULL ||
+        client->platform->now_ms == NULL || client->platform->uptime_ms == NULL ||
+        timestamp_ms == 0u || timestamp_ms >= HONCH_MIN_UNIX_TIME_MS) {
+        return timestamp_ms;
+    }
+
+    uint64_t now_ms = client->platform->now_ms(client->platform->ctx);
+    uint64_t uptime_ms = client->platform->uptime_ms(client->platform->ctx);
+    if (now_ms < HONCH_MIN_UNIX_TIME_MS || uptime_ms == 0u ||
+        now_ms <= uptime_ms || timestamp_ms > uptime_ms) {
+        return timestamp_ms;
+    }
+
+    uint64_t boot_epoch_ms = now_ms - uptime_ms;
+    if (UINT64_MAX - boot_epoch_ms < timestamp_ms) {
+        return timestamp_ms;
+    }
+    return boot_epoch_ms + timestamp_ms;
 }
 
 static honch_status_t honch_packetizer_peek(honch_client_t *client, honch_storage_reader_t *reader)
@@ -139,6 +162,7 @@ static honch_status_t honch_packetizer_build_wire_v2_message(
         return status;
     }
     honch_event_record_prepare_wire_properties(record);
+    record->timestamp_ms = honch_packetizer_normalize_timestamp(client, record->timestamp_ms);
 
     honch_wire_v2_event_t compact_event = {
         .event_name = record->event_name,
