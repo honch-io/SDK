@@ -420,7 +420,13 @@ static honch_status_t honch_mp_remove_pending(honch_micropython_storage_t *stora
 
 static honch_status_t honch_mp_queue_consume(void *ctx, uint64_t sequence)
 {
-    return honch_mp_remove_pending((honch_micropython_storage_t *)ctx, sequence);
+    honch_micropython_storage_t *storage = (honch_micropython_storage_t *)ctx;
+    if (storage == NULL) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    honch_status_t status = honch_mp_remove_pending(storage, sequence);
+    storage->active_sequence = UINT64_MAX;
+    return status;
 }
 
 static honch_status_t honch_mp_queue_dead_letter(void *ctx, uint64_t sequence)
@@ -440,6 +446,7 @@ static honch_status_t honch_mp_queue_dead_letter(void *ctx, uint64_t sequence)
     if (status == HONCH_STATUS_OK) {
         status = honch_mp_call_os2(MP_QSTR_rename, src, dst);
     }
+    storage->active_sequence = UINT64_MAX;
     free(src);
     free(dst);
     return status;
@@ -455,7 +462,11 @@ static honch_status_t honch_mp_queue_drop_oldest(void *ctx)
     if (status == HONCH_STATUS_ERROR_NOT_INITIALIZED) {
         return HONCH_STATUS_OK;
     }
-    return status == HONCH_STATUS_OK ? honch_mp_remove_pending(storage, sequence) : status;
+    if (status == HONCH_STATUS_OK) {
+        status = honch_mp_remove_pending(storage, sequence);
+    }
+    storage->active_sequence = UINT64_MAX;
+    return status;
 }
 
 static honch_status_t honch_mp_clear_dir(const char *directory)
