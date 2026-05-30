@@ -81,6 +81,9 @@ class Honch:
     def flush(self):
         self._call("flush")
 
+    def tick(self):
+        self._call("tick")
+
     def reset(self):
         self._call("reset")
         self._connectivity_connected = None
@@ -112,7 +115,6 @@ def _config_to_dict(config):
         "flush_event_threshold": config.flush_event_threshold,
         "flush_retry_initial_ms": config.flush_retry_initial_ms,
         "flush_retry_max_ms": config.flush_retry_max_ms,
-        "disable_background_flush": config.disable_background_flush,
         "battery_low_threshold": config.battery_low_threshold,
     }
 
@@ -159,6 +161,8 @@ def _raise_mapped(exc):
         raise TransportError(str(exc))
     if status == getattr(_honch_core, "ERROR_QUEUE_FULL", None):
         raise StorageError(str(exc))
+    if status == getattr(_honch_core, "ERROR_BUSY", None):
+        raise HonchError(str(exc))
     raise HonchError(str(exc))
 
 
@@ -172,4 +176,5 @@ _STATUS_BY_MESSAGE = {
     "not initialized": getattr(_honch_core, "ERROR_NOT_INITIALIZED", None),
     "queue full": getattr(_honch_core, "ERROR_QUEUE_FULL", None),
     "timeout": getattr(_honch_core, "ERROR_TIMEOUT", None),
+    "busy": getattr(_honch_core, "ERROR_BUSY", None),
 } if _honch_core is not None else {}

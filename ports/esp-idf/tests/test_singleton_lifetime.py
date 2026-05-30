@@ -54,7 +54,7 @@ class EspIdfSingletonLifetimeTests(unittest.TestCase):
     def test_esp_singleton_uses_port_lifetime_gate(self) -> None:
         compat = read("ports/esp-idf/honch/src/esp_compat.c")
 
-        self.assertIn("static pthread_mutex_t s_client_mutex", compat)
+        self.assertIn("static SemaphoreHandle_t s_client_mutex", compat)
         self.assertIn("honch_esp_client_acquire", compat)
         self.assertIn("honch_client_enter(client)", compat)
         self.assertIn("honch_esp_client_release", compat)

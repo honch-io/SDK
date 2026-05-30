@@ -109,12 +109,15 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertNotIn("disable_gzip", combined)
         self.assertNotIn("gzip_min_bytes", combined)
 
-    def test_esp_idf_background_flush_config_is_honored(self) -> None:
+    def test_esp_idf_uses_cooperative_tick_config(self) -> None:
         compat = read("ports/esp-idf/honch/src/esp_compat.c")
         public_header = read("ports/esp-idf/honch/include/honch.h")
+        readme = read("ports/esp-idf/README.md")
 
         self.assertIn("flush_interval_seconds", public_header)
         self.assertIn("flush_event_threshold", public_header)
+        self.assertIn("honch_tick", public_header)
+        self.assertIn("honch_core_tick(client)", compat)
         self.assertIn("if (config->flush_event_threshold > 0u)", compat)
         self.assertIn(
             "core_config.batch_size = config->flush_event_threshold > HONCH_MAX_BATCH_SIZE",
@@ -122,7 +125,8 @@ class EspIdfChunkWireTest(unittest.TestCase):
         )
         self.assertIn("core_config.flush_interval_seconds = config->flush_interval_seconds", compat)
         self.assertIn("core_config.flush_event_threshold = config->flush_event_threshold", compat)
-        self.assertIn("core_config.disable_background_flush = 0", compat)
+        self.assertNotIn("disable_background_flush", compat + public_header + readme)
+        self.assertNotIn("flush worker", readme)
 
     def test_readme_only_documents_implemented_automatic_esp_properties(self) -> None:
         readme = read("ports/esp-idf/README.md")
@@ -155,9 +159,9 @@ class EspIdfChunkWireTest(unittest.TestCase):
             "esp_http_client",
             "esp-tls",
             "esp_timer",
-            "pthread",
             "esp_driver_gpio",
             "driver",
+            "freertos",
         ):
             self.assertIn(f"        {dependency}", cmake)
 

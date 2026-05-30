@@ -77,7 +77,7 @@ int main() {
 
   HonchConfig scheduledConfig = config;
   scheduledConfig.flushIntervalSeconds = 2;
-  scheduledConfig.flushEventThreshold = 2;
+  scheduledConfig.flushEventThreshold = 3;
   honch_arduino_host_transport_reset();
   honch_arduino_host_set_millis(1000);
   assert(Honch.begin(scheduledConfig));

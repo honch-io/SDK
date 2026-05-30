@@ -334,7 +334,6 @@ int main(void)
         .max_queued_events = 100u,
         .max_event_bytes = 8192u,
         .transport_timeout_ms = 15000u,
-        .disable_background_flush = 1,
         .battery_callback = e2e_battery_callback,
         .battery_low_threshold = 20,
         .auto_properties_callback = e2e_auto_properties

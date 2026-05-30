@@ -37,6 +37,7 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertIn("honch_core_init(&self->client", module)
         self.assertIn("honch_core_track(self->client", module)
         self.assertIn("honch_core_identify(self->client", module)
+        self.assertIn("honch_core_tick(self->client", module)
         self.assertIn("honch_core_flush(self->client", module)
         self.assertIn("honch_core_shutdown(self->client", module)
 

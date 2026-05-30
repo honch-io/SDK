@@ -117,8 +117,8 @@ idf.py flash monitor
 | `battery_low_threshold`  | No       | 15             | Battery level that triggers `$battery_low` |
 | `durability_mode`        | No       | `HONCH_DURABILITY_OS_BUFFERED` | Queue write durability mode |
 
-Background flush is enabled by default. The SDK flushes after
-`flush_interval_seconds` and also wakes the flush worker when the queue reaches
+Call `honch_tick()` periodically from your main loop or scheduler. The SDK
+flushes after `flush_interval_seconds` or when the queue reaches
 `flush_event_threshold`.
 
 Flush sends compact chunk wire frames to `POST /capture` with

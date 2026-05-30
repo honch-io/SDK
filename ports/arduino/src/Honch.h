@@ -39,18 +39,9 @@ public:
 private:
   bool setLastStatus(honch_status_t status);
   bool recordQueuedStatus(honch_status_t status);
-  void resetScheduler(uint64_t nowMs);
-  bool schedulerDue(uint64_t nowMs) const;
-  void recordSchedulerFlushResult(honch_status_t status, uint64_t nowMs);
 
   honch_client_t *_client;
   honch_status_t _lastStatus;
-  uint32_t _flushIntervalSeconds;
-  uint32_t _flushEventThreshold;
-  uint32_t _queuedSinceFlush;
-  uint64_t _nextIntervalFlushMs;
-  uint64_t _nextRetryFlushMs;
-  uint32_t _retryDelayMs;
 };
 
 extern HonchClass Honch;

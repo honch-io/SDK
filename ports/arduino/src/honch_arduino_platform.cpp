@@ -9,7 +9,12 @@
 #include <Arduino.h>
 #include <Esp.h>
 #include <esp_system.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <time.h>
+#else
+#include <mutex>
+#include <new>
 #endif
 
 #ifndef ARDUINO
@@ -83,6 +88,64 @@ void honch_arduino_log(void *ctx, honch_log_level_t level, const char *message) 
 #endif
 }
 
+honch_status_t honch_arduino_mutex_create(void *ctx, void **mutex) {
+  (void)ctx;
+  if (mutex == nullptr) {
+    return HONCH_ERROR_INVALID_ARGUMENT;
+  }
+#ifdef ARDUINO
+  SemaphoreHandle_t handle = xSemaphoreCreateMutex();
+  if (handle == nullptr) {
+    return HONCH_ERROR_OUT_OF_MEMORY;
+  }
+  *mutex = handle;
+#else
+  std::mutex *handle = new (std::nothrow) std::mutex();
+  if (handle == nullptr) {
+    return HONCH_ERROR_OUT_OF_MEMORY;
+  }
+  *mutex = handle;
+#endif
+  return HONCH_OK;
+}
+
+void honch_arduino_mutex_destroy(void *ctx, void *mutex) {
+  (void)ctx;
+  if (mutex == nullptr) {
+    return;
+  }
+#ifdef ARDUINO
+  vSemaphoreDelete((SemaphoreHandle_t)mutex);
+#else
+  delete static_cast<std::mutex *>(mutex);
+#endif
+}
+
+honch_status_t honch_arduino_mutex_lock(void *ctx, void *mutex) {
+  (void)ctx;
+  if (mutex == nullptr) {
+    return HONCH_ERROR_INVALID_ARGUMENT;
+  }
+#ifdef ARDUINO
+  return xSemaphoreTake((SemaphoreHandle_t)mutex, portMAX_DELAY) == pdTRUE ? HONCH_OK : HONCH_ERROR_IO;
+#else
+  static_cast<std::mutex *>(mutex)->lock();
+  return HONCH_OK;
+#endif
+}
+
+void honch_arduino_mutex_unlock(void *ctx, void *mutex) {
+  (void)ctx;
+  if (mutex == nullptr) {
+    return;
+  }
+#ifdef ARDUINO
+  (void)xSemaphoreGive((SemaphoreHandle_t)mutex);
+#else
+  static_cast<std::mutex *>(mutex)->unlock();
+#endif
+}
+
 honch_status_t honch_arduino_platform_ops_init(
     honch_platform_ops_t *ops,
     honch_arduino_platform_t *ctx) {
@@ -95,6 +158,10 @@ honch_status_t honch_arduino_platform_ops_init(
       honch_arduino_epoch_millis,
       honch_arduino_random_bytes,
       honch_arduino_log,
+      honch_arduino_mutex_create,
+      honch_arduino_mutex_destroy,
+      honch_arduino_mutex_lock,
+      honch_arduino_mutex_unlock,
       ctx,
   };
   return HONCH_OK;

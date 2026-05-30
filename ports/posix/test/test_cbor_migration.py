@@ -45,8 +45,29 @@ class PosixChunkWireTest(unittest.TestCase):
 
         self.assertIn("HONCH_STATUS_OK = 0", status)
         self.assertIn("HONCH_STATUS_ERROR_INVALID_ARGUMENT = 1", status)
+        self.assertIn("HONCH_STATUS_ERROR_BUSY", status)
         self.assertIn("#ifndef HONCH_CORE_NO_SHORT_STATUS_NAMES", status)
         self.assertIn("#define HONCH_OK HONCH_STATUS_OK", status)
+
+    def test_core_is_pthread_free_and_exposes_cooperative_tick(self) -> None:
+        core_header = read_sdk("core/include/honch/core/honch.h")
+        platform_header = read_sdk("core/include/honch/core/platform.h")
+        config_header = read_sdk("core/include/honch/core/config.h")
+        internal = read_sdk("core/src/honch_internal.h")
+        core = read_sdk("core/src/honch_core.c")
+        lifecycle = read_sdk("core/src/honch_lifecycle.c")
+
+        self.assertIn("honch_core_tick", core_header)
+        self.assertIn("mutex_create", platform_header)
+        self.assertIn("mutex_lock", platform_header)
+        self.assertNotIn("disable_background_flush", config_header)
+
+        portable_core = "\n".join([internal, core, lifecycle])
+        self.assertNotIn("#include <pthread.h>", portable_core)
+        self.assertNotIn("pthread_", portable_core)
+        self.assertNotIn("pthread_t", portable_core)
+        self.assertNotIn("CLOCK_REALTIME", portable_core)
+        self.assertNotIn("pthread_create", portable_core)
 
     def test_transport_posts_chunk_wire_to_capture_endpoint(self) -> None:
         transport = read_sdk("ports/posix/src/posix_transport_curl.c")

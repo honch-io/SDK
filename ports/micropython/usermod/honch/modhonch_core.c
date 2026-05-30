@@ -104,7 +104,6 @@ static mp_obj_t honch_client_make_new(
         .flush_event_threshold = honch_mp_map_get_size(args[0], MP_QSTR_flush_event_threshold, 0),
         .flush_retry_initial_ms = honch_mp_map_get_uint(args[0], MP_QSTR_flush_retry_initial_ms, 0),
         .flush_retry_max_ms = honch_mp_map_get_uint(args[0], MP_QSTR_flush_retry_max_ms, 0),
-        .disable_background_flush = 1,
         .battery_callback = NULL,
         .battery_low_threshold = honch_mp_map_get_uint(args[0], MP_QSTR_battery_low_threshold, 0),
         .durability_mode = HONCH_DURABILITY_OS_BUFFERED,
@@ -207,6 +206,17 @@ static mp_obj_t honch_client_connectivity_changed(mp_obj_t self_in, mp_obj_t con
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(honch_client_connectivity_changed_obj, honch_client_connectivity_changed);
 
+static mp_obj_t honch_client_tick(mp_obj_t self_in)
+{
+    honch_micropython_client_t *self = honch_get_self(self_in);
+    honch_status_t status = honch_core_tick(self->client);
+    if (status != HONCH_STATUS_OK) {
+        honch_micropython_raise_status(status);
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(honch_client_tick_obj, honch_client_tick);
+
 static mp_obj_t honch_client_flush(mp_obj_t self_in)
 {
     honch_micropython_client_t *self = honch_get_self(self_in);
@@ -234,6 +244,9 @@ static mp_obj_t honch_client_shutdown(mp_obj_t self_in)
     honch_micropython_client_t *self = honch_get_self(self_in);
     if (self->client != NULL) {
         honch_status_t status = honch_core_shutdown(self->client);
+        if (status == HONCH_STATUS_ERROR_BUSY) {
+            honch_micropython_raise_status(status);
+        }
         self->client = NULL;
         honch_micropython_storage_ops_deinit(&self->storage_ctx);
         if (status != HONCH_STATUS_OK) {
@@ -262,6 +275,7 @@ static const mp_rom_map_elem_t honch_client_locals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_session_start), MP_ROM_PTR(&honch_client_session_start_obj) },
     { MP_ROM_QSTR(MP_QSTR_session_end), MP_ROM_PTR(&honch_client_session_end_obj) },
     { MP_ROM_QSTR(MP_QSTR_connectivity_changed), MP_ROM_PTR(&honch_client_connectivity_changed_obj) },
+    { MP_ROM_QSTR(MP_QSTR_tick), MP_ROM_PTR(&honch_client_tick_obj) },
     { MP_ROM_QSTR(MP_QSTR_flush), MP_ROM_PTR(&honch_client_flush_obj) },
     { MP_ROM_QSTR(MP_QSTR_reset), MP_ROM_PTR(&honch_client_reset_obj) },
     { MP_ROM_QSTR(MP_QSTR_shutdown), MP_ROM_PTR(&honch_client_shutdown_obj) },
@@ -289,6 +303,7 @@ static const mp_rom_map_elem_t honch_core_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_ERROR_NOT_INITIALIZED), MP_ROM_INT(HONCH_STATUS_ERROR_NOT_INITIALIZED) },
     { MP_ROM_QSTR(MP_QSTR_ERROR_QUEUE_FULL), MP_ROM_INT(HONCH_STATUS_ERROR_QUEUE_FULL) },
     { MP_ROM_QSTR(MP_QSTR_ERROR_TIMEOUT), MP_ROM_INT(HONCH_STATUS_ERROR_TIMEOUT) },
+    { MP_ROM_QSTR(MP_QSTR_ERROR_BUSY), MP_ROM_INT(HONCH_STATUS_ERROR_BUSY) },
 };
 static MP_DEFINE_CONST_DICT(honch_core_module_globals, honch_core_module_globals_table);
 

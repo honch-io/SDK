@@ -8,6 +8,17 @@
 
 #define HONCH_WIRE_V2_MAX_FRAME_BYTES 4096u
 
+typedef struct honch_flush_context {
+    char *device_id;
+    char *device_model;
+    char *firmware_version;
+    char *sdk_platform;
+    char *environment;
+    char *session_id;
+    uint32_t message_id_seed;
+    char stream_id[9];
+} honch_flush_context_t;
+
 #ifdef HONCH_FLUSH_TIMING
 static uint64_t honch_flush_timing_now_ms(honch_client_t *client)
 {
@@ -121,6 +132,53 @@ static honch_status_t honch_core_queue_dead_letter_batch(
     return status;
 }
 
+static honch_status_t honch_flush_context_snapshot(honch_client_t *client, honch_flush_context_t *context)
+{
+    if (client == NULL || context == NULL ||
+        client->device_id == NULL || client->device_model == NULL ||
+        client->firmware_version == NULL || client->sdk_platform == NULL || client->environment == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    *context = (honch_flush_context_t){0};
+    context->device_id = honch_strdup(client->device_id);
+    context->device_model = honch_strdup(client->device_model);
+    context->firmware_version = honch_strdup(client->firmware_version);
+    context->sdk_platform = honch_strdup(client->sdk_platform);
+    context->environment = honch_strdup(client->environment);
+    context->session_id = client->session_id == NULL ? NULL : honch_strdup(client->session_id);
+    context->message_id_seed = client->wire_v2_message_id_seed;
+    memcpy(context->stream_id, client->wire_v2_stream_id, sizeof(context->stream_id));
+
+    if (context->device_id == NULL || context->device_model == NULL ||
+        context->firmware_version == NULL || context->sdk_platform == NULL ||
+        context->environment == NULL || (client->session_id != NULL && context->session_id == NULL)) {
+        free(context->device_id);
+        free(context->device_model);
+        free(context->firmware_version);
+        free(context->sdk_platform);
+        free(context->environment);
+        free(context->session_id);
+        *context = (honch_flush_context_t){0};
+        return HONCH_ERROR_OUT_OF_MEMORY;
+    }
+    return HONCH_OK;
+}
+
+static void honch_flush_context_free(honch_flush_context_t *context)
+{
+    if (context == NULL) {
+        return;
+    }
+    free(context->device_id);
+    free(context->device_model);
+    free(context->firmware_version);
+    free(context->sdk_platform);
+    free(context->environment);
+    free(context->session_id);
+    *context = (honch_flush_context_t){0};
+}
+
 static honch_status_t honch_core_read_queue_event(
     honch_client_t *client,
     const honch_storage_reader_t *reader,
@@ -223,7 +281,7 @@ static honch_status_t honch_core_read_queue_batch(
 }
 
 static honch_status_t honch_core_build_wire_v2_message(
-    honch_client_t *client,
+    const honch_flush_context_t *flush_context,
     const honch_payload_t *events,
     size_t event_count,
     honch_payload_t *message,
@@ -233,8 +291,9 @@ static honch_status_t honch_core_build_wire_v2_message(
     message->length = 0u;
 
     if (event_count == 0u || encoded_event_count == NULL ||
-        client->device_id == NULL || client->device_model == NULL ||
-        client->firmware_version == NULL || client->sdk_platform == NULL || client->environment == NULL) {
+        flush_context == NULL || flush_context->device_id == NULL || flush_context->device_model == NULL ||
+        flush_context->firmware_version == NULL || flush_context->sdk_platform == NULL ||
+        flush_context->environment == NULL) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
     *encoded_event_count = 0u;
@@ -288,13 +347,13 @@ static honch_status_t honch_core_build_wire_v2_message(
 
     honch_wire_v2_batch_context_t context = {
         .distinct_id = parsed[0].distinct_id,
-        .device_id = client->device_id,
-        .device_model = client->device_model,
-        .firmware_version = client->firmware_version,
-        .sdk_platform = client->sdk_platform,
+        .device_id = flush_context->device_id,
+        .device_model = flush_context->device_model,
+        .firmware_version = flush_context->firmware_version,
+        .sdk_platform = flush_context->sdk_platform,
         .sdk_version = HONCH_SDK_VERSION,
-        .environment = client->environment,
-        .session_id = parsed[0].session_id != NULL ? parsed[0].session_id : client->session_id
+        .environment = flush_context->environment,
+        .session_id = parsed[0].session_id != NULL ? parsed[0].session_id : flush_context->session_id
     };
 
     uint8_t *buffer = (uint8_t *)malloc(HONCH_WIRE_V2_MAX_FRAME_BYTES);
@@ -480,7 +539,7 @@ static honch_status_t honch_core_post_wire_v2_message(
     return HONCH_OK;
 }
 
-static honch_status_t honch_core_flush_one(honch_client_t *client, bool *progressed)
+honch_status_t honch_queue_flush_one_locked(honch_client_t *client, bool *progressed)
 {
     *progressed = false;
 
@@ -570,6 +629,18 @@ static honch_status_t honch_core_flush_one(honch_client_t *client, bool *progres
         return status;
     }
 
+    honch_flush_context_t flush_context = {0};
+    status = honch_flush_context_snapshot(client, &flush_context);
+    if (status != HONCH_OK) {
+        for (size_t i = 0u; i < event_count; i++) {
+            free(events[i].data);
+        }
+        free(events);
+        free(sequences);
+        return status;
+    }
+
+    honch_client_state_unlock(client);
     honch_payload_t compact_message = {0};
     size_t encoded_event_count = event_count;
     if (client->transport == NULL || client->transport->post_chunk == NULL) {
@@ -579,7 +650,7 @@ static honch_status_t honch_core_flush_one(honch_client_t *client, bool *progres
         uint64_t encode_start_ms = honch_flush_timing_now_ms(client);
 #endif
         status = honch_core_build_wire_v2_message(
-            client,
+            &flush_context,
             events,
             event_count,
             &compact_message,
@@ -602,6 +673,14 @@ static honch_status_t honch_core_flush_one(honch_client_t *client, bool *progres
         free(events[i].data);
     }
     if (status != HONCH_OK) {
+        honch_status_t relock_status = honch_client_state_lock(client);
+        honch_flush_context_free(&flush_context);
+        if (relock_status != HONCH_OK) {
+            free(compact_message.data);
+            free(events);
+            free(sequences);
+            return relock_status;
+        }
         if (status == HONCH_ERROR_INVALID_ARGUMENT && encoded_event_count < event_count) {
             honch_status_t dead_status = honch_core_queue_dead_letter(client, sequences[encoded_event_count]);
             if (dead_status == HONCH_OK) {
@@ -621,7 +700,7 @@ static honch_status_t honch_core_flush_one(honch_client_t *client, bool *progres
     event_count = encoded_event_count;
 
     honch_transport_result_t result = HONCH_TRANSPORT_RETRY;
-    uint32_t message_id = client->wire_v2_message_id_seed + (uint32_t)sequences[0];
+    uint32_t message_id = flush_context.message_id_seed + (uint32_t)sequences[0];
 #ifdef HONCH_FLUSH_TIMING
     uint64_t post_message_start_ms = honch_flush_timing_now_ms(client);
 #endif
@@ -629,7 +708,7 @@ static honch_status_t honch_core_flush_one(honch_client_t *client, bool *progres
         client,
         &compact_message,
         message_id,
-        client->wire_v2_stream_id,
+        flush_context.stream_id,
         &result);
 #ifdef HONCH_FLUSH_TIMING
     uint64_t post_message_elapsed_ms = honch_flush_timing_now_ms(client) - post_message_start_ms;
@@ -645,6 +724,13 @@ static honch_status_t honch_core_flush_one(honch_client_t *client, bool *progres
     honch_flush_timing_log(client, timing_message);
 #endif
     free(compact_message.data);
+    honch_status_t relock_status = honch_client_state_lock(client);
+    honch_flush_context_free(&flush_context);
+    if (relock_status != HONCH_OK) {
+        free(events);
+        free(sequences);
+        return relock_status;
+    }
 
     if (result == HONCH_TRANSPORT_ACCEPTED && status == HONCH_OK) {
 #ifdef HONCH_FLUSH_TIMING
@@ -717,7 +803,7 @@ honch_status_t honch_queue_flush_locked(honch_client_t *client)
         }
 
         bool progressed = false;
-        status = honch_core_flush_one(client, &progressed);
+        status = honch_queue_flush_one_locked(client, &progressed);
         if (status == HONCH_ERROR_REJECTED && progressed) {
             final_status = HONCH_ERROR_REJECTED;
             continue;

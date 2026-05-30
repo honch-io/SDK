@@ -38,9 +38,9 @@ idf_component_register(
         esp_http_client
         esp-tls
         esp_timer
-        pthread
         esp_driver_gpio
         driver
+        freertos
 )
 
 if(CONFIG_RATE_SWEEP_FLUSH_TIMING)

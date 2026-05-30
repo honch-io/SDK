@@ -25,7 +25,6 @@ client = honch.Honch(
     batch_size=2,
     max_queued_events=8,
     max_event_bytes=4096,
-    disable_background_flush=True,
 )
 
 device_id = client.get_device_id()

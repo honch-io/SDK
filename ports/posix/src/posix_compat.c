@@ -20,7 +20,6 @@ static void honch_posix_config_to_core(const honch_config_t *config, honch_core_
         .flush_event_threshold = config->flush_event_threshold,
         .flush_retry_initial_ms = config->flush_retry_initial_ms,
         .flush_retry_max_ms = config->flush_retry_max_ms,
-        .disable_background_flush = config->disable_background_flush,
         .battery_callback = config->battery_callback,
         .battery_low_threshold = config->battery_low_threshold,
         .auto_properties_callback = config->auto_properties_callback,
@@ -84,6 +83,11 @@ honch_status_t honch_session_start(honch_client_t *client, const char *session_n
 honch_status_t honch_session_end(honch_client_t *client)
 {
     return honch_core_session_end(client);
+}
+
+honch_status_t honch_tick(honch_client_t *client)
+{
+    return honch_core_tick(client);
 }
 
 honch_status_t honch_flush(honch_client_t *client)

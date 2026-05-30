@@ -7,7 +7,6 @@ client = honch.Honch(
     device_model="dev-board",
     firmware_version="1.0.0",
     queue_directory="/honch",
-    disable_background_flush=True,
 )
 
 client.track("queued_before_network", {"source": "boot"})

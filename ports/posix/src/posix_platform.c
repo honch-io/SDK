@@ -4,6 +4,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -65,6 +66,54 @@ static void honch_posix_log_noop(void *ctx, honch_log_level_t level, const char 
     (void)message;
 }
 
+static honch_status_t honch_posix_mutex_create(void *ctx, void **mutex)
+{
+    (void)ctx;
+    if (mutex == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    pthread_mutex_t *created = (pthread_mutex_t *)malloc(sizeof(*created));
+    if (created == NULL) {
+        return HONCH_ERROR_OUT_OF_MEMORY;
+    }
+    if (pthread_mutex_init(created, NULL) != 0) {
+        free(created);
+        return HONCH_ERROR_IO;
+    }
+
+    *mutex = created;
+    return HONCH_OK;
+}
+
+static void honch_posix_mutex_destroy(void *ctx, void *mutex)
+{
+    (void)ctx;
+    if (mutex == NULL) {
+        return;
+    }
+    pthread_mutex_destroy((pthread_mutex_t *)mutex);
+    free(mutex);
+}
+
+static honch_status_t honch_posix_mutex_lock(void *ctx, void *mutex)
+{
+    (void)ctx;
+    if (mutex == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    return pthread_mutex_lock((pthread_mutex_t *)mutex) == 0 ? HONCH_OK : HONCH_ERROR_IO;
+}
+
+static void honch_posix_mutex_unlock(void *ctx, void *mutex)
+{
+    (void)ctx;
+    if (mutex == NULL) {
+        return;
+    }
+    pthread_mutex_unlock((pthread_mutex_t *)mutex);
+}
+
 honch_status_t honch_posix_platform_ops_init(honch_platform_ops_t *ops, honch_posix_platform_t *ctx)
 {
     if (ops == NULL || ctx == NULL) {
@@ -76,6 +125,10 @@ honch_status_t honch_posix_platform_ops_init(honch_platform_ops_t *ops, honch_po
         .uptime_ms = honch_posix_uptime_ms,
         .random_bytes = honch_posix_random_bytes,
         .log = honch_posix_log_noop,
+        .mutex_create = honch_posix_mutex_create,
+        .mutex_destroy = honch_posix_mutex_destroy,
+        .mutex_lock = honch_posix_mutex_lock,
+        .mutex_unlock = honch_posix_mutex_unlock,
         .ctx = NULL
     };
     return HONCH_OK;

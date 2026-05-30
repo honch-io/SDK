@@ -21,7 +21,7 @@ Implemented:
 - persistent current `distinct_id`
 - epoch milliseconds event timestamps
 - compact chunk wire uploads to `POST /capture`
-- default background flushing with retry backoff and jitter
+- cooperative `honch_tick()` flushing with retry backoff and jitter
 - persisted firmware version change detection
 - `$set_property` event API parity with the ESP-IDF SDK
 - battery level auto-stamping and low-battery lifecycle events
@@ -184,7 +184,6 @@ Optional config:
 - `flush_event_threshold`: defaults to `30`
 - `flush_retry_initial_ms`: defaults to `1000`
 - `flush_retry_max_ms`: defaults to `300000`
-- `disable_background_flush`: set nonzero to disable the background worker
 - `battery_callback`: returns `0`-`100`, or negative when unknown
 - `battery_low_threshold`: defaults to `15`
 - `auto_properties_callback`: optional platform adapter hook for automatic event properties
@@ -247,13 +246,12 @@ core-owned values such as `$device_id`, `$sdk_platform`, and `$firmware_version`
 cannot be overridden by either user input or an adapter. The callback should
 return quickly because event enqueueing waits for it to finish.
 
-Background flushing is enabled by default to match the ESP-IDF SDK. When
-`flush_interval_seconds` or `flush_event_threshold` are zero, the SDK uses the
-ESP-IDF defaults of 60 seconds and 30 queued events. Set
-`disable_background_flush` nonzero to keep events queued until an explicit
-`honch_flush` call. Retryable transport failures use exponential backoff with
-jitter. Shutdown always attempts a synchronous best-effort flush for a valid
-client, even when background flushing is disabled.
+Call `honch_tick()` periodically from your main loop or scheduler to perform
+bounded cooperative flush work. When `flush_interval_seconds` or
+`flush_event_threshold` are zero, the SDK uses the ESP-IDF defaults of 60
+seconds and 30 queued events. Retryable transport failures use exponential
+backoff with jitter. Shutdown always attempts a synchronous best-effort flush
+for a valid client.
 
 Flushes use the compact wire encoder in the shared core and send chunk frames to
 `POST /capture` with `Content-Type: application/vnd.honch.chunk`. The project
@@ -287,7 +285,6 @@ int main(void)
         .transport_timeout_ms = 10000,
         .flush_interval_seconds = 60,
         .flush_event_threshold = 30,
-        .disable_background_flush = 0,
         .battery_callback = NULL,
         .battery_low_threshold = 15,
         .durability_mode = HONCH_DURABILITY_SYNC_ALWAYS

@@ -116,8 +116,8 @@ class EspGpioRegistrationTests(unittest.TestCase):
         track_gpio = c_function_body(public, "honch_track_gpio")
         shutdown_hook = c_function_body(public, "honch_esp_gpio_shutdown_hook")
 
-        self.assertIn("#include <pthread.h>", public)
-        self.assertIn("static pthread_mutex_t s_gpio_lifecycle_mutex", public)
+        self.assertIn("#include \"freertos/semphr.h\"", public)
+        self.assertIn("static SemaphoreHandle_t s_gpio_lifecycle_mutex", public)
         self.assertIn("honch_gpio_lifecycle_lock()", public)
         self.assertIn("honch_gpio_lifecycle_unlock()", public)
         self.assertIn("honch_gpio_lifecycle_lock()", track_gpio)
