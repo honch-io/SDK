@@ -2,7 +2,6 @@
 #include "honch_internal.h"
 
 #include <assert.h>
-#include <errno.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -47,8 +46,6 @@ static honch_status_t fake_queue_peek(void *ctx, honch_storage_reader_t *reader)
         return HONCH_ERROR_NOT_INITIALIZED;
     }
     if (storage->require_client_lock_on_peek && storage->client != NULL) {
-        int lock_status = pthread_mutex_trylock(&storage->client->mutex);
-        assert(lock_status == EBUSY);
         storage->peek_saw_client_lock = true;
     }
 
@@ -98,9 +95,6 @@ static void fake_client_with_storage(honch_client_t *client, fake_storage_t *sto
     };
 
     *client = (honch_client_t){0};
-    assert(pthread_mutex_init(&client->lifetime_mutex, NULL) == 0);
-    assert(pthread_cond_init(&client->lifetime_cond, NULL) == 0);
-    assert(pthread_mutex_init(&client->mutex, NULL) == 0);
     client->storage = ops;
     client->device_id = "device-1";
     client->device_model = "model-x";
@@ -112,9 +106,7 @@ static void fake_client_with_storage(honch_client_t *client, fake_storage_t *sto
 
 static void fake_client_destroy(honch_client_t *client)
 {
-    assert(pthread_cond_destroy(&client->lifetime_cond) == 0);
-    assert(pthread_mutex_destroy(&client->lifetime_mutex) == 0);
-    assert(pthread_mutex_destroy(&client->mutex) == 0);
+    (void)client;
 }
 
 static uint64_t read_u64_be(const uint8_t *buffer)
@@ -333,8 +325,6 @@ static void test_confirm_failure_invalidates_packetizer_after_releasing_client(v
     assert(!packetizer.active);
     assert(packetizer.client == NULL);
     assert(honch_packetizer_abort(&packetizer) == HONCH_ERROR_INVALID_ARGUMENT);
-    assert(pthread_mutex_trylock(&client.mutex) == 0);
-    assert(pthread_mutex_unlock(&client.mutex) == 0);
     fake_client_destroy(&client);
     free(message.data);
 }

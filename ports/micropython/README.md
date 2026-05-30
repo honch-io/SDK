@@ -83,7 +83,6 @@ Optional:
 - `flush_event_threshold`
 - `flush_retry_initial_ms`
 - `flush_retry_max_ms`
-- `disable_background_flush`
 - `battery_low_threshold`
 
 Python `platform=`, `transport=`, `battery_callback=`, and
@@ -101,6 +100,7 @@ client.session_end()
 client.connectivity_changed(connected)
 client.connected()
 client.disconnected()
+client.tick()
 client.flush()
 client.reset()
 client.shutdown()
@@ -110,6 +110,10 @@ client.get_device_id()
 `properties` and `traits` must be dictionaries containing JSON-compatible
 values. SDK-owned auto properties are stamped by the C core and win over
 user-supplied properties with the same key.
+
+Call `client.tick()` periodically from the device main loop to run scheduled
+flush work for `flush_interval_seconds` and `flush_event_threshold`.
+`client.flush()` remains the explicit drain-the-queue call.
 
 ## Storage And Transport
 

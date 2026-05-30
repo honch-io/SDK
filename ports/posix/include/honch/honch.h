@@ -19,6 +19,7 @@ typedef honch_status_t honch_err_t;
 #define HONCH_ERR_NVS HONCH_ERROR_IO
 #define HONCH_ERR_TRANSPORT HONCH_ERROR_TRANSPORT
 #define HONCH_ERR_TIMEOUT HONCH_ERROR_TIMEOUT
+#define HONCH_ERR_BUSY HONCH_ERROR_BUSY
 #define HONCH_ERR_INTERNAL HONCH_ERROR_INTERNAL
 
 typedef struct honch_config {
@@ -37,7 +38,6 @@ typedef struct honch_config {
     size_t flush_event_threshold;
     unsigned int flush_retry_initial_ms;
     unsigned int flush_retry_max_ms;
-    int disable_background_flush;
     int (*battery_callback)(void);
     int battery_low_threshold;
     honch_auto_properties_fn auto_properties_callback;
@@ -51,6 +51,7 @@ honch_status_t honch_identify(honch_client_t *client, const char *distinct_id, c
 honch_status_t honch_set_property(honch_client_t *client, const char *key, const char *value_json);
 honch_status_t honch_session_start(honch_client_t *client, const char *session_name);
 honch_status_t honch_session_end(honch_client_t *client);
+honch_status_t honch_tick(honch_client_t *client);
 honch_status_t honch_flush(honch_client_t *client);
 honch_status_t honch_reset(honch_client_t *client);
 honch_status_t honch_shutdown(honch_client_t *client);

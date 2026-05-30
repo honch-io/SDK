@@ -643,17 +643,6 @@ static honch_status_t fake_transport(
     return HONCH_OK;
 }
 
-static int wait_for_transport_calls(fake_transport_context_t *context, int calls)
-{
-    for (int attempt = 0; attempt < 200; attempt++) {
-        if (context->calls >= calls) {
-            return 1;
-        }
-        usleep(10000u);
-    }
-    return 0;
-}
-
 static int wait_for_file_count(const char *directory, const char *suffix, size_t count)
 {
     for (int attempt = 0; attempt < 200; attempt++) {
@@ -778,8 +767,7 @@ static honch_config_t test_config(const char *queue_dir)
         .batch_size = 2u,
         .max_queued_events = 10u,
         .max_event_bytes = 8192u,
-        .transport_timeout_ms = 1000u,
-        .disable_background_flush = 1
+        .transport_timeout_ms = 1000u
     };
     return config;
 }
@@ -1462,7 +1450,6 @@ static void test_core_state_lock_works_without_platform_lock_callbacks(void)
         .batch_size = 10u,
         .max_queued_events = 10u,
         .max_event_bytes = 8192u,
-        .disable_background_flush = 1,
         .platform = &platform,
         .storage = &storage,
         .transport = &transport
@@ -1964,13 +1951,12 @@ static void test_event_record_handles_large_property_maps(void)
     honch_test_set_transport(NULL, NULL);
 }
 
-static void test_background_flush_threshold_drains_queue(void)
+static void test_tick_threshold_drains_one_due_batch(void)
 {
     char queue_dir[128];
     make_temp_dir(queue_dir, sizeof(queue_dir));
     honch_config_t config = test_config(queue_dir);
     config.batch_size = 10u;
-    config.disable_background_flush = 0;
     config.flush_event_threshold = 2u;
     config.flush_retry_initial_ms = 10u;
     config.flush_retry_max_ms = 20u;
@@ -1981,7 +1967,9 @@ static void test_background_flush_threshold_drains_queue(void)
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
     EXPECT_EQ_INT(honch_track(client, "threshold_event", NULL), HONCH_OK);
-    EXPECT_TRUE(wait_for_transport_calls(&transport, 1) != 0);
+    EXPECT_EQ_INT(transport.calls, 0);
+    EXPECT_EQ_INT(honch_tick(client), HONCH_OK);
+    EXPECT_EQ_INT(transport.calls, 1);
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$device_boot\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"threshold_event\"");
 
@@ -1993,13 +1981,44 @@ static void test_background_flush_threshold_drains_queue(void)
     honch_test_set_transport(NULL, NULL);
 }
 
-static void test_background_flush_retries_with_backoff(void)
+static void test_tick_keeps_threshold_due_when_more_batches_remain(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 2u;
+    config.flush_event_threshold = 2u;
+    config.flush_retry_initial_ms = 10u;
+    config.flush_retry_max_ms = 20u;
+
+    fake_transport_context_t transport = {.response_code = 204L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "first", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "second", NULL), HONCH_OK);
+    EXPECT_EQ_INT(honch_track(client, "third", NULL), HONCH_OK);
+
+    EXPECT_EQ_INT(honch_tick(client), HONCH_OK);
+    EXPECT_EQ_INT(transport.calls, 1);
+    EXPECT_EQ_INT(honch_tick(client), HONCH_OK);
+    EXPECT_EQ_INT(transport.calls, 2);
+
+    char pending_dir[160];
+    snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
+    EXPECT_TRUE(wait_for_file_count(pending_dir, ".hqe", 0u) != 0);
+
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
+static void test_tick_retries_with_backoff(void)
 {
     char queue_dir[128];
     make_temp_dir(queue_dir, sizeof(queue_dir));
     honch_config_t config = test_config(queue_dir);
     config.batch_size = 10u;
-    config.disable_background_flush = 0;
     config.flush_event_threshold = 2u;
     config.flush_retry_initial_ms = 10u;
     config.flush_retry_max_ms = 20u;
@@ -2014,7 +2033,12 @@ static void test_background_flush_retries_with_backoff(void)
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
     EXPECT_EQ_INT(honch_track(client, "retry_event", NULL), HONCH_OK);
-    EXPECT_TRUE(wait_for_transport_calls(&transport, 2) != 0);
+    EXPECT_EQ_INT(honch_tick(client), HONCH_ERROR_SERVER);
+    EXPECT_EQ_INT(honch_tick(client), HONCH_OK);
+    EXPECT_EQ_INT(transport.calls, 1);
+    usleep(30000u);
+    EXPECT_EQ_INT(honch_tick(client), HONCH_OK);
+    EXPECT_EQ_INT(transport.calls, 2);
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"retry_event\"");
 
     char pending_dir[160];
@@ -2025,13 +2049,12 @@ static void test_background_flush_retries_with_backoff(void)
     honch_test_set_transport(NULL, NULL);
 }
 
-static void test_background_flush_retries_http_timeout(void)
+static void test_tick_retries_http_timeout(void)
 {
     char queue_dir[128];
     make_temp_dir(queue_dir, sizeof(queue_dir));
     honch_config_t config = test_config(queue_dir);
     config.batch_size = 10u;
-    config.disable_background_flush = 0;
     config.flush_event_threshold = 2u;
     config.flush_retry_initial_ms = 10u;
     config.flush_retry_max_ms = 20u;
@@ -2046,7 +2069,12 @@ static void test_background_flush_retries_http_timeout(void)
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
     EXPECT_EQ_INT(honch_track(client, "timeout_retry_event", NULL), HONCH_OK);
-    EXPECT_TRUE(wait_for_transport_calls(&transport, 2) != 0);
+    EXPECT_EQ_INT(honch_tick(client), HONCH_ERROR_TIMEOUT);
+    EXPECT_EQ_INT(honch_tick(client), HONCH_OK);
+    EXPECT_EQ_INT(transport.calls, 1);
+    usleep(30000u);
+    EXPECT_EQ_INT(honch_tick(client), HONCH_OK);
+    EXPECT_EQ_INT(transport.calls, 2);
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"timeout_retry_event\"");
 
     char pending_dir[160];
@@ -2057,14 +2085,13 @@ static void test_background_flush_retries_http_timeout(void)
     honch_test_set_transport(NULL, NULL);
 }
 
-static void test_background_flush_uses_esp_idf_default_threshold(void)
+static void test_tick_uses_default_threshold(void)
 {
     char queue_dir[128];
     make_temp_dir(queue_dir, sizeof(queue_dir));
     honch_config_t config = test_config(queue_dir);
     config.batch_size = 50u;
     config.max_queued_events = 100u;
-    config.disable_background_flush = 0;
     config.flush_retry_initial_ms = 10u;
     config.flush_retry_max_ms = 20u;
 
@@ -2077,7 +2104,9 @@ static void test_background_flush_uses_esp_idf_default_threshold(void)
         EXPECT_EQ_INT(honch_track(client, "default_threshold_event", NULL), HONCH_OK);
     }
 
-    EXPECT_TRUE(wait_for_transport_calls(&transport, 1) != 0);
+    EXPECT_EQ_INT(transport.calls, 0);
+    EXPECT_EQ_INT(honch_tick(client), HONCH_OK);
+    EXPECT_EQ_INT(transport.calls, 1);
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"default_threshold_event\"");
 
     char pending_dir[160];
@@ -2088,14 +2117,13 @@ static void test_background_flush_uses_esp_idf_default_threshold(void)
     honch_test_set_transport(NULL, NULL);
 }
 
-static void test_background_flush_can_be_explicitly_disabled(void)
+static void test_tick_is_required_for_scheduled_work(void)
 {
     char queue_dir[128];
     make_temp_dir(queue_dir, sizeof(queue_dir));
     honch_config_t config = test_config(queue_dir);
     config.batch_size = 50u;
     config.max_queued_events = 100u;
-    config.disable_background_flush = 1;
 
     fake_transport_context_t transport = {.response_code = 204L};
     honch_test_set_transport(fake_transport, &transport);
@@ -2103,7 +2131,7 @@ static void test_background_flush_can_be_explicitly_disabled(void)
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
     for (int i = 0; i < 35; i++) {
-        EXPECT_EQ_INT(honch_track(client, "disabled_background_event", NULL), HONCH_OK);
+        EXPECT_EQ_INT(honch_track(client, "cooperative_tick_event", NULL), HONCH_OK);
     }
 
     usleep(50000u);
@@ -2115,7 +2143,7 @@ static void test_background_flush_can_be_explicitly_disabled(void)
 
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
     EXPECT_TRUE(transport.calls > 0);
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"disabled_background_event\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"cooperative_tick_event\"");
 
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
@@ -2288,7 +2316,6 @@ static void test_transport_posts_v2_chunk_to_chunk_endpoint_without_encoding(voi
     char queue_dir[128];
     make_temp_dir(queue_dir, sizeof(queue_dir));
     honch_config_t config = test_config(queue_dir);
-    config.disable_background_flush = 1;
 
     fake_transport_context_t transport = {.response_code = 204L};
     honch_test_set_transport(fake_transport, &transport);
@@ -2318,7 +2345,6 @@ static void test_transport_maps_v2_chunk_response_codes(void)
     char queue_dir[128];
     make_temp_dir(queue_dir, sizeof(queue_dir));
     honch_config_t config = test_config(queue_dir);
-    config.disable_background_flush = 1;
 
     fake_transport_context_t transport = {.response_code = 204L};
     honch_test_set_transport(fake_transport, &transport);
@@ -2351,7 +2377,6 @@ static void test_transport_rejects_empty_v2_chunk_payload(void)
     char queue_dir[128];
     make_temp_dir(queue_dir, sizeof(queue_dir));
     honch_config_t config = test_config(queue_dir);
-    config.disable_background_flush = 1;
 
     fake_transport_context_t transport = {.response_code = 204L};
     honch_test_set_transport(fake_transport, &transport);
@@ -2560,11 +2585,12 @@ int main(void)
     test_event_record_preserves_json_string_escapes();
     test_event_record_handles_escaped_and_long_object_keys();
     test_event_record_handles_large_property_maps();
-    test_background_flush_threshold_drains_queue();
-    test_background_flush_retries_with_backoff();
-    test_background_flush_retries_http_timeout();
-    test_background_flush_uses_esp_idf_default_threshold();
-    test_background_flush_can_be_explicitly_disabled();
+    test_tick_threshold_drains_one_due_batch();
+    test_tick_keeps_threshold_due_when_more_batches_remain();
+    test_tick_retries_with_backoff();
+    test_tick_retries_http_timeout();
+    test_tick_uses_default_threshold();
+    test_tick_is_required_for_scheduled_work();
     test_flush_drains_multiple_batches();
     test_conformance_compact_wire_fixture();
     test_conformance_response_policy_fixture();

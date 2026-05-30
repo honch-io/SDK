@@ -7,7 +7,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <pthread.h>
 
 #define HONCH_SDK_VERSION "0.2.0"
 #define HONCH_DEFAULT_BATCH_SIZE 20u
@@ -55,11 +54,8 @@ typedef struct honch_event_record {
 } honch_event_record_t;
 
 struct honch_client {
-    pthread_mutex_t lifetime_mutex;
-    pthread_cond_t lifetime_cond;
-    pthread_mutex_t mutex;
-    pthread_cond_t scheduler_cond;
-    pthread_t scheduler_thread;
+    void *lifetime_mutex;
+    void *state_mutex;
     honch_platform_ops_t platform_ops;
     const honch_platform_ops_t *platform;
     honch_storage_ops_t storage_ops;
@@ -95,10 +91,8 @@ struct honch_client {
     uint64_t next_retry_flush_ms;
     unsigned int current_retry_delay_ms;
     uint64_t active_storage_reader_sequence;
-    bool scheduler_enabled;
-    bool scheduler_started;
-    bool scheduler_stop;
     bool scheduler_flush_requested;
+    bool flush_in_progress;
     bool closing;
     size_t active_calls;
     int (*battery_callback)(void);
@@ -186,11 +180,15 @@ honch_status_t honch_state_reset(honch_client_t *client);
 honch_status_t honch_queue_enqueue(honch_client_t *client, const unsigned char *event, size_t event_size);
 honch_status_t honch_queue_clear(honch_client_t *client);
 honch_status_t honch_queue_count_pending(honch_client_t *client, size_t *count);
+honch_status_t honch_queue_flush_one_locked(honch_client_t *client, bool *progressed);
 honch_status_t honch_queue_flush_locked(honch_client_t *client);
 
 honch_status_t honch_client_enter(honch_client_t *client);
 void honch_client_leave(honch_client_t *client);
 honch_status_t honch_client_begin_shutdown(honch_client_t *client);
+bool honch_client_lock_ops_valid(const honch_platform_ops_t *platform);
+honch_status_t honch_client_lock_create(honch_client_t *client, void **mutex);
+void honch_client_lock_destroy(honch_client_t *client, void *mutex);
 honch_status_t honch_client_state_lock(honch_client_t *client);
 void honch_client_state_unlock(honch_client_t *client);
 

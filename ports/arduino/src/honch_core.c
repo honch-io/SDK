@@ -4,7 +4,6 @@
 
 #include "honch_internal.h"
 
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -714,102 +713,67 @@ static bool honch_status_is_retryable(honch_status_t status)
            status == HONCH_ERROR_SERVER;
 }
 
-static void honch_scheduler_make_deadline(struct timespec *deadline, uint64_t wait_ms)
+static void honch_scheduler_record_flush_result(honch_client_t *client, honch_status_t status, uint64_t now)
 {
-    clock_gettime(CLOCK_REALTIME, deadline);
-    deadline->tv_sec += (time_t)(wait_ms / 1000u);
-    deadline->tv_nsec += (long)((wait_ms % 1000u) * 1000000u);
-    if (deadline->tv_nsec >= 1000000000L) {
-        deadline->tv_sec++;
-        deadline->tv_nsec -= 1000000000L;
+    if (status == HONCH_OK) {
+        client->current_retry_delay_ms = client->flush_retry_initial_ms;
+        client->next_retry_flush_ms = 0u;
+    } else if (honch_status_is_retryable(status)) {
+        uint64_t wait_ms = honch_next_retry_delay_ms(client);
+        client->next_retry_flush_ms = now + wait_ms;
+        client->scheduler_flush_requested = true;
+        honch_grow_retry_delay(client);
+    }
+
+    if (client->flush_interval_seconds > 0u) {
+        client->next_interval_flush_ms = now + honch_scheduler_interval_ms(client);
     }
 }
 
-static uint64_t honch_scheduler_wait_ms(honch_client_t *client, uint64_t now)
+static bool honch_scheduler_due_locked(honch_client_t *client, uint64_t now)
 {
     if (client->next_retry_flush_ms > now) {
-        return client->next_retry_flush_ms - now;
+        return false;
     }
-
-    uint64_t wait_ms = UINT64_MAX;
     if (client->scheduler_flush_requested) {
-        wait_ms = 0u;
+        return true;
     }
-    if (client->flush_interval_seconds > 0u) {
-        uint64_t interval_wait = client->next_interval_flush_ms > now ?
-            client->next_interval_flush_ms - now :
-            0u;
-        if (interval_wait < wait_ms) {
-            wait_ms = interval_wait;
-        }
-    }
-    return wait_ms;
+    return client->flush_interval_seconds > 0u && now >= client->next_interval_flush_ms;
 }
 
 static void honch_scheduler_notify_after_enqueue_locked(honch_client_t *client)
 {
-    if (!client->scheduler_enabled || client->flush_event_threshold == 0u) {
+    if (client == NULL || client->flush_event_threshold == 0u) {
         return;
     }
 
     if (client->queued_event_count >= client->flush_event_threshold) {
         client->scheduler_flush_requested = true;
-        if (client->scheduler_started) {
-            pthread_cond_signal(&client->scheduler_cond);
-        }
     }
 }
 
-static void *honch_scheduler_main(void *userdata)
+static void honch_scheduler_refresh_queue_request_locked(honch_client_t *client)
 {
-    honch_client_t *client = (honch_client_t *)userdata;
-    pthread_mutex_lock(&client->mutex);
-
-    while (!client->scheduler_stop) {
-        uint64_t now = honch_client_now_millis(client);
-        bool retry_blocked = client->next_retry_flush_ms > now;
-        bool interval_due = client->flush_interval_seconds > 0u && now >= client->next_interval_flush_ms;
-        bool should_flush = (client->scheduler_flush_requested || interval_due) && !retry_blocked;
-
-        if (should_flush) {
-            client->scheduler_flush_requested = false;
-            honch_status_t status = honch_queue_flush_locked(client);
-            now = honch_client_now_millis(client);
-
-            if (status == HONCH_OK) {
-                client->current_retry_delay_ms = client->flush_retry_initial_ms;
-                client->next_retry_flush_ms = 0u;
-            } else if (honch_status_is_retryable(status)) {
-                uint64_t wait_ms = honch_next_retry_delay_ms(client);
-                client->next_retry_flush_ms = now + wait_ms;
-                client->scheduler_flush_requested = true;
-                honch_grow_retry_delay(client);
-            }
-
-            if (client->flush_interval_seconds > 0u) {
-                client->next_interval_flush_ms = now + honch_scheduler_interval_ms(client);
-            }
-            continue;
-        }
-
-        uint64_t wait_ms = honch_scheduler_wait_ms(client, now);
-        if (wait_ms == UINT64_MAX) {
-            pthread_cond_wait(&client->scheduler_cond, &client->mutex);
-        } else {
-            struct timespec deadline;
-            honch_scheduler_make_deadline(&deadline, wait_ms);
-            pthread_cond_timedwait(&client->scheduler_cond, &client->mutex, &deadline);
-        }
+    if (client == NULL || client->flush_event_threshold == 0u) {
+        return;
     }
 
-    pthread_mutex_unlock(&client->mutex);
-    return NULL;
+    size_t pending_count = 0u;
+    honch_status_t status = honch_client_queue_depth(client, &pending_count);
+    if (status != HONCH_OK) {
+        return;
+    }
+
+    client->queued_event_count = pending_count;
+    if (pending_count >= client->flush_event_threshold) {
+        client->scheduler_flush_requested = true;
+    }
 }
 
-static honch_status_t honch_scheduler_start(honch_client_t *client)
+static void honch_scheduler_start(honch_client_t *client)
 {
-    if (!client->scheduler_enabled) {
-        return HONCH_OK;
+    if (client == NULL) {
+        return;
     }
 
     uint64_t now = honch_client_now_millis(client);
@@ -821,32 +785,11 @@ static honch_status_t honch_scheduler_start(honch_client_t *client)
     if (client->flush_event_threshold > 0u) {
         size_t pending_count = 0u;
         honch_status_t status = honch_client_queue_depth(client, &pending_count);
-        if (status != HONCH_OK) {
-            return status;
+        if (status == HONCH_OK) {
+            client->queued_event_count = pending_count;
+            client->scheduler_flush_requested = pending_count >= client->flush_event_threshold;
         }
-        client->scheduler_flush_requested = pending_count >= client->flush_event_threshold;
     }
-
-    if (pthread_create(&client->scheduler_thread, NULL, honch_scheduler_main, client) != 0) {
-        return HONCH_ERROR_IO;
-    }
-    client->scheduler_started = true;
-    return HONCH_OK;
-}
-
-static void honch_scheduler_stop(honch_client_t *client)
-{
-    if (!client->scheduler_started) {
-        return;
-    }
-
-    pthread_mutex_lock(&client->mutex);
-    client->scheduler_stop = true;
-    pthread_cond_signal(&client->scheduler_cond);
-    pthread_mutex_unlock(&client->mutex);
-
-    pthread_join(client->scheduler_thread, NULL);
-    client->scheduler_started = false;
 }
 
 static honch_status_t honch_new_session_id(honch_client_t *client, char **out)
@@ -1061,8 +1004,6 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
         next->flush_retry_max_ms = next->flush_retry_initial_ms;
     }
     next->durability_mode = config->durability_mode;
-    next->scheduler_enabled = config->disable_background_flush == 0 &&
-        (next->flush_interval_seconds > 0u || next->flush_event_threshold > 0u);
     next->battery_callback = config->battery_callback;
     next->battery_low_threshold = config->battery_low_threshold > 0 ?
         config->battery_low_threshold :
@@ -1072,14 +1013,23 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
 
     honch_status_t status = HONCH_OK;
     bool lifetime_mutex_initialized = false;
-    bool lifetime_cond_initialized = false;
-    bool mutex_initialized = false;
-    bool scheduler_cond_initialized = false;
+    bool state_mutex_initialized = false;
     bool firmware_version_pending_save = false;
     honch_lifecycle_queue_tracker_t lifecycle_tracker = {0};
     if (next->api_key == NULL || next->endpoint_url == NULL || next->queue_directory == NULL ||
         next->sdk_platform == NULL) {
         status = HONCH_ERROR_OUT_OF_MEMORY;
+    }
+    if (status == HONCH_OK && !honch_client_lock_ops_valid(next->platform)) {
+        status = HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    if (status == HONCH_OK) {
+        status = honch_client_lock_create(next, &next->lifetime_mutex);
+        lifetime_mutex_initialized = status == HONCH_OK;
+    }
+    if (status == HONCH_OK) {
+        status = honch_client_lock_create(next, &next->state_mutex);
+        state_mutex_initialized = status == HONCH_OK;
     }
     if (status == HONCH_OK) {
         status = honch_state_prepare(next, config);
@@ -1089,26 +1039,6 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     }
     if (status == HONCH_OK) {
         status = honch_client_queue_depth(next, &next->queued_event_count);
-    }
-    if (status == HONCH_OK && pthread_mutex_init(&next->lifetime_mutex, NULL) != 0) {
-        status = HONCH_ERROR_IO;
-    } else if (status == HONCH_OK) {
-        lifetime_mutex_initialized = true;
-    }
-    if (status == HONCH_OK && pthread_cond_init(&next->lifetime_cond, NULL) != 0) {
-        status = HONCH_ERROR_IO;
-    } else if (status == HONCH_OK) {
-        lifetime_cond_initialized = true;
-    }
-    if (status == HONCH_OK && pthread_mutex_init(&next->mutex, NULL) != 0) {
-        status = HONCH_ERROR_IO;
-    } else if (status == HONCH_OK) {
-        mutex_initialized = true;
-    }
-    if (status == HONCH_OK && pthread_cond_init(&next->scheduler_cond, NULL) != 0) {
-        status = HONCH_ERROR_IO;
-    } else if (status == HONCH_OK) {
-        scheduler_cond_initialized = true;
     }
     if (status == HONCH_OK) {
         honch_lifecycle_queue_tracker_begin(next, &lifecycle_tracker);
@@ -1133,7 +1063,7 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
         status = honch_state_save_firmware_version(next);
     }
     if (status == HONCH_OK) {
-        status = honch_scheduler_start(next);
+        honch_scheduler_start(next);
     }
 
     if (status != HONCH_OK) {
@@ -1143,18 +1073,11 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
                 status = rollback_status;
             }
         }
-        honch_scheduler_stop(next);
-        if (scheduler_cond_initialized) {
-            pthread_cond_destroy(&next->scheduler_cond);
-        }
-        if (mutex_initialized) {
-            pthread_mutex_destroy(&next->mutex);
-        }
-        if (lifetime_cond_initialized) {
-            pthread_cond_destroy(&next->lifetime_cond);
+        if (state_mutex_initialized) {
+            honch_client_lock_destroy(next, next->state_mutex);
         }
         if (lifetime_mutex_initialized) {
-            pthread_mutex_destroy(&next->lifetime_mutex);
+            honch_client_lock_destroy(next, next->lifetime_mutex);
         }
         honch_free_client_fields(next);
         free(next);
@@ -1494,7 +1417,7 @@ honch_status_t honch_core_session_end(honch_client_t *client)
     return status;
 }
 
-honch_status_t honch_core_flush(honch_client_t *client)
+honch_status_t honch_core_tick(honch_client_t *client)
 {
     honch_status_t status = honch_client_enter(client);
     if (status != HONCH_OK) {
@@ -1507,7 +1430,59 @@ honch_status_t honch_core_flush(honch_client_t *client)
         return status;
     }
 
+    uint64_t now = honch_client_now_millis(client);
+    if (!honch_scheduler_due_locked(client, now)) {
+        honch_client_unlock(client);
+        honch_client_leave(client);
+        return HONCH_OK;
+    }
+    if (client->flush_in_progress) {
+        honch_client_unlock(client);
+        honch_client_leave(client);
+        return HONCH_ERROR_BUSY;
+    }
+
+    client->flush_in_progress = true;
+    client->scheduler_flush_requested = false;
+    bool progressed = false;
+    status = honch_queue_flush_one_locked(client, &progressed);
+    now = honch_client_now_millis(client);
+    if (status == HONCH_ERROR_REJECTED && progressed) {
+        status = HONCH_OK;
+    }
+    honch_scheduler_record_flush_result(client, status, now);
+    if (status == HONCH_OK) {
+        honch_scheduler_refresh_queue_request_locked(client);
+    }
+    client->flush_in_progress = false;
+    honch_client_unlock(client);
+    honch_client_leave(client);
+    return status;
+}
+
+honch_status_t honch_core_flush(honch_client_t *client)
+{
+    honch_status_t status = honch_client_enter(client);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    status = honch_client_lock(client);
+    if (status != HONCH_OK) {
+        honch_client_leave(client);
+        return status;
+    }
+    if (client->flush_in_progress) {
+        honch_client_unlock(client);
+        honch_client_leave(client);
+        return HONCH_ERROR_BUSY;
+    }
+
+    client->flush_in_progress = true;
     status = honch_queue_flush_locked(client);
+    uint64_t now = honch_client_now_millis(client);
+    honch_scheduler_record_flush_result(client, status, now);
+    client->flush_in_progress = false;
     honch_client_unlock(client);
     honch_client_leave(client);
     return status;
@@ -1524,6 +1499,11 @@ honch_status_t honch_core_reset(honch_client_t *client)
     if (status != HONCH_OK) {
         honch_client_leave(client);
         return status;
+    }
+    if (client->flush_in_progress) {
+        honch_client_unlock(client);
+        honch_client_leave(client);
+        return HONCH_ERROR_BUSY;
     }
 
     status = honch_state_reset(client);
@@ -1548,15 +1528,11 @@ honch_status_t honch_core_shutdown(honch_client_t *client)
         return status;
     }
 
-    honch_scheduler_stop(client);
-
     honch_event_context_t event_context = {.battery_level = -1};
     status = honch_prepare_event_context(client, &event_context);
     if (status != HONCH_OK) {
-        pthread_cond_destroy(&client->scheduler_cond);
-        pthread_mutex_destroy(&client->mutex);
-        pthread_cond_destroy(&client->lifetime_cond);
-        pthread_mutex_destroy(&client->lifetime_mutex);
+        honch_client_lock_destroy(client, client->state_mutex);
+        honch_client_lock_destroy(client, client->lifetime_mutex);
         honch_free_client_fields(client);
         free(client);
         return status;
@@ -1565,10 +1541,8 @@ honch_status_t honch_core_shutdown(honch_client_t *client)
     status = honch_client_lock(client);
     if (status != HONCH_OK) {
         honch_event_context_free(&event_context);
-        pthread_cond_destroy(&client->scheduler_cond);
-        pthread_mutex_destroy(&client->mutex);
-        pthread_cond_destroy(&client->lifetime_cond);
-        pthread_mutex_destroy(&client->lifetime_mutex);
+        honch_client_lock_destroy(client, client->state_mutex);
+        honch_client_lock_destroy(client, client->lifetime_mutex);
         honch_free_client_fields(client);
         free(client);
         return status;
@@ -1589,10 +1563,8 @@ honch_status_t honch_core_shutdown(honch_client_t *client)
     honch_client_unlock(client);
     honch_event_context_free(&event_context);
 
-    pthread_cond_destroy(&client->scheduler_cond);
-    pthread_mutex_destroy(&client->mutex);
-    pthread_cond_destroy(&client->lifetime_cond);
-    pthread_mutex_destroy(&client->lifetime_mutex);
+    honch_client_lock_destroy(client, client->state_mutex);
+    honch_client_lock_destroy(client, client->lifetime_mutex);
     honch_free_client_fields(client);
     free(client);
     return status;
@@ -1673,6 +1645,8 @@ const char *honch_status_string(honch_status_t status)
             return "timeout";
         case HONCH_ERROR_INTERNAL:
             return "internal error";
+        case HONCH_ERROR_BUSY:
+            return "busy";
         default:
             return "unknown";
     }

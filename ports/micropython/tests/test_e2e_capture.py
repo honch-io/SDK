@@ -123,7 +123,6 @@ class HonchCaptureE2ETests(unittest.TestCase):
             max_queued_events=100,
             max_event_bytes=8192,
             transport_timeout_ms=15000,
-            disable_background_flush=True,
             battery_low_threshold=20,
         )
 

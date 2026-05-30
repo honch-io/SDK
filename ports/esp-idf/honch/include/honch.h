@@ -32,6 +32,7 @@ typedef enum {
     HONCH_ERR_NVS,
     HONCH_ERR_TRANSPORT,
     HONCH_ERR_TIMEOUT,
+    HONCH_ERR_BUSY,
     HONCH_ERR_INTERNAL,
 } honch_err_t;
 
@@ -68,6 +69,7 @@ honch_err_t honch_session_start(const char *session_name);
 honch_err_t honch_session_end(void);
 
 honch_err_t honch_flush(void);
+honch_err_t honch_tick(void);
 honch_err_t honch_reset(void);
 
 const char *honch_get_device_id(void);

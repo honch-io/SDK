@@ -5,22 +5,38 @@
 
 #include "esp_gpio_adapter.h"
 
-#include <pthread.h>
 #include <stdbool.h>
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+
 static bool s_gpio_initialized = false;
-static pthread_mutex_t s_gpio_lifecycle_mutex = PTHREAD_MUTEX_INITIALIZER;
+static StaticSemaphore_t s_gpio_lifecycle_mutex_storage;
+static SemaphoreHandle_t s_gpio_lifecycle_mutex = NULL;
+static portMUX_TYPE s_gpio_lifecycle_mutex_init_lock = portMUX_INITIALIZER_UNLOCKED;
 
 extern bool honch_esp_is_initialized(void);
 
 static honch_err_t honch_gpio_lifecycle_lock(void)
 {
-    return pthread_mutex_lock(&s_gpio_lifecycle_mutex) == 0 ? HONCH_OK : HONCH_ERR_INTERNAL;
+    if (s_gpio_lifecycle_mutex == NULL) {
+        portENTER_CRITICAL(&s_gpio_lifecycle_mutex_init_lock);
+        if (s_gpio_lifecycle_mutex == NULL) {
+            s_gpio_lifecycle_mutex = xSemaphoreCreateMutexStatic(&s_gpio_lifecycle_mutex_storage);
+        }
+        portEXIT_CRITICAL(&s_gpio_lifecycle_mutex_init_lock);
+    }
+    if (s_gpio_lifecycle_mutex == NULL) {
+        return HONCH_ERR_INTERNAL;
+    }
+    return xSemaphoreTake(s_gpio_lifecycle_mutex, portMAX_DELAY) == pdTRUE ? HONCH_OK : HONCH_ERR_INTERNAL;
 }
 
 static void honch_gpio_lifecycle_unlock(void)
 {
-    (void)pthread_mutex_unlock(&s_gpio_lifecycle_mutex);
+    if (s_gpio_lifecycle_mutex != NULL) {
+        (void)xSemaphoreGive(s_gpio_lifecycle_mutex);
+    }
 }
 
 void honch_esp_gpio_shutdown_hook(void)

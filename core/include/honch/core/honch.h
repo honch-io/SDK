@@ -16,6 +16,7 @@ honch_status_t honch_core_identify(honch_client_t *client, const char *distinct_
 honch_status_t honch_core_set_property(honch_client_t *client, const char *key, const char *value_json);
 honch_status_t honch_core_session_start(honch_client_t *client, const char *session_name);
 honch_status_t honch_core_session_end(honch_client_t *client);
+honch_status_t honch_core_tick(honch_client_t *client);
 honch_status_t honch_core_flush(honch_client_t *client);
 honch_status_t honch_core_reset(honch_client_t *client);
 honch_status_t honch_core_shutdown(honch_client_t *client);

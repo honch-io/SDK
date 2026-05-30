@@ -9,19 +9,22 @@
 #include "esp_core_adapter.h"
 #include "honch_internal.h"
 
-#include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 static const char *TAG = "honch";
 
 static honch_client_t *s_client = NULL;
 static bool s_client_initializing = false;
 static bool s_client_shutting_down = false;
-static pthread_mutex_t s_client_mutex = PTHREAD_MUTEX_INITIALIZER;
+static StaticSemaphore_t s_client_mutex_storage;
+static SemaphoreHandle_t s_client_mutex = NULL;
+static portMUX_TYPE s_client_mutex_init_lock = portMUX_INITIALIZER_UNLOCKED;
 static honch_esp_platform_t s_platform_ctx;
 static honch_esp_storage_t s_storage_ctx;
 static honch_esp_transport_t s_transport_ctx;
@@ -44,6 +47,27 @@ extern void honch_esp_gpio_shutdown_hook(void) __attribute__((weak));
 
 static honch_err_t honch_esp_status_to_err(honch_status_t status);
 
+static void honch_esp_client_lock(void)
+{
+    if (s_client_mutex == NULL) {
+        portENTER_CRITICAL(&s_client_mutex_init_lock);
+        if (s_client_mutex == NULL) {
+            s_client_mutex = xSemaphoreCreateMutexStatic(&s_client_mutex_storage);
+        }
+        portEXIT_CRITICAL(&s_client_mutex_init_lock);
+    }
+    if (s_client_mutex != NULL) {
+        (void)xSemaphoreTake(s_client_mutex, portMAX_DELAY);
+    }
+}
+
+static void honch_esp_client_unlock(void)
+{
+    if (s_client_mutex != NULL) {
+        (void)xSemaphoreGive(s_client_mutex);
+    }
+}
+
 static honch_err_t honch_esp_client_acquire(honch_client_t **out)
 {
     if (out == NULL) {
@@ -51,24 +75,22 @@ static honch_err_t honch_esp_client_acquire(honch_client_t **out)
     }
     *out = NULL;
 
-    if (pthread_mutex_lock(&s_client_mutex) != 0) {
-        return HONCH_ERR_INTERNAL;
-    }
+    honch_esp_client_lock();
 
     honch_client_t *client = s_client;
     if (client == NULL) {
-        (void)pthread_mutex_unlock(&s_client_mutex);
+        honch_esp_client_unlock();
         return HONCH_ERR_NOT_INITIALIZED;
     }
 
     honch_status_t status = honch_client_enter(client);
     if (status != HONCH_STATUS_OK) {
-        (void)pthread_mutex_unlock(&s_client_mutex);
+        honch_esp_client_unlock();
         return honch_esp_status_to_err(status);
     }
 
     *out = client;
-    (void)pthread_mutex_unlock(&s_client_mutex);
+    honch_esp_client_unlock();
     return HONCH_OK;
 }
 
@@ -84,66 +106,63 @@ static honch_err_t honch_esp_client_detach(honch_client_t **out)
     }
     *out = NULL;
 
-    if (pthread_mutex_lock(&s_client_mutex) != 0) {
-        return HONCH_ERR_INTERNAL;
-    }
+    honch_esp_client_lock();
 
     if (s_client == NULL) {
-        (void)pthread_mutex_unlock(&s_client_mutex);
+        honch_esp_client_unlock();
         return HONCH_ERR_NOT_INITIALIZED;
     }
 
     *out = s_client;
     s_client = NULL;
     s_client_shutting_down = true;
-    (void)pthread_mutex_unlock(&s_client_mutex);
+    honch_esp_client_unlock();
     return HONCH_OK;
 }
 
 static honch_err_t honch_esp_init_begin(void)
 {
-    if (pthread_mutex_lock(&s_client_mutex) != 0) {
-        return HONCH_ERR_INTERNAL;
-    }
+    honch_esp_client_lock();
 
     if (s_client != NULL || s_client_initializing || s_client_shutting_down) {
-        (void)pthread_mutex_unlock(&s_client_mutex);
+        honch_esp_client_unlock();
         return HONCH_ERR_ALREADY_INITIALIZED;
     }
 
     s_client_initializing = true;
-    (void)pthread_mutex_unlock(&s_client_mutex);
+    honch_esp_client_unlock();
     return HONCH_OK;
 }
 
 static void honch_esp_init_finish(honch_client_t *client)
 {
-    if (pthread_mutex_lock(&s_client_mutex) != 0) {
-        return;
-    }
-
+    honch_esp_client_lock();
     s_client = client;
     s_client_initializing = false;
-    (void)pthread_mutex_unlock(&s_client_mutex);
+    honch_esp_client_unlock();
 }
 
 static void honch_esp_shutdown_finish(void)
 {
-    if (pthread_mutex_lock(&s_client_mutex) != 0) {
-        return;
-    }
-
+    honch_esp_client_lock();
     s_client_shutting_down = false;
-    (void)pthread_mutex_unlock(&s_client_mutex);
+    honch_esp_client_unlock();
+}
+
+static void honch_esp_shutdown_restore(honch_client_t *client)
+{
+    honch_esp_client_lock();
+    s_client = client;
+    s_client_shutting_down = false;
+    honch_esp_client_unlock();
 }
 
 bool honch_esp_is_initialized(void)
 {
     bool initialized = false;
-    if (pthread_mutex_lock(&s_client_mutex) == 0) {
-        initialized = s_client != NULL;
-        (void)pthread_mutex_unlock(&s_client_mutex);
-    }
+    honch_esp_client_lock();
+    initialized = s_client != NULL;
+    honch_esp_client_unlock();
     return initialized;
 }
 
@@ -171,6 +190,8 @@ static honch_err_t honch_esp_status_to_err(honch_status_t status)
             return HONCH_ERR_QUEUE_FULL;
         case HONCH_STATUS_ERROR_TIMEOUT:
             return HONCH_ERR_TIMEOUT;
+        case HONCH_STATUS_ERROR_BUSY:
+            return HONCH_ERR_BUSY;
         case HONCH_STATUS_ERROR_INTERNAL:
         default:
             return HONCH_ERR_INTERNAL;
@@ -320,7 +341,6 @@ honch_err_t honch_init(const honch_config_t *config)
     core_config.battery_callback = config->battery_callback;
     core_config.battery_low_threshold = g_honch_battery_low_threshold;
     core_config.durability_mode = honch_esp_resolve_durability_mode(config->durability_mode);
-    core_config.disable_background_flush = 0;
     core_config.platform = &platform_ops;
     core_config.storage = &storage_ops;
     core_config.transport = &transport_ops;
@@ -347,10 +367,14 @@ honch_err_t honch_shutdown(void)
         return err;
     }
 
+    honch_status_t status = honch_core_shutdown(client);
+    if (status == HONCH_STATUS_ERROR_BUSY) {
+        honch_esp_shutdown_restore(client);
+        return HONCH_ERR_BUSY;
+    }
     if (honch_esp_gpio_shutdown_hook != NULL) {
         honch_esp_gpio_shutdown_hook();
     }
-    honch_status_t status = honch_core_shutdown(client);
     honch_esp_platform_ops_deinit(&s_platform_ctx);
     honch_esp_clear_legacy_globals();
     honch_esp_shutdown_finish();
@@ -425,6 +449,18 @@ honch_err_t honch_flush(void)
         return err;
     }
     honch_status_t status = honch_core_flush(client);
+    honch_esp_client_release(client);
+    return honch_esp_status_to_err(status);
+}
+
+honch_err_t honch_tick(void)
+{
+    honch_client_t *client = NULL;
+    honch_err_t err = honch_esp_client_acquire(&client);
+    if (err != HONCH_OK) {
+        return err;
+    }
+    honch_status_t status = honch_core_tick(client);
     honch_esp_client_release(client);
     return honch_esp_status_to_err(status);
 }

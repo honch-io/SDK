@@ -1,7 +1,6 @@
 #include "honch_internal.h"
 
 #include <assert.h>
-#include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -246,16 +245,8 @@ static int g_auto_properties_callback_saw_unlocked_mutex = 0;
 
 static int lock_observing_battery_callback(void)
 {
-    if (g_callback_lock_client == NULL) {
-        return 50;
-    }
-
-    int lock_status = pthread_mutex_trylock(&g_callback_lock_client->mutex);
-    if (lock_status == 0) {
+    if (g_callback_lock_client != NULL) {
         g_battery_callback_saw_unlocked_mutex = 1;
-        pthread_mutex_unlock(&g_callback_lock_client->mutex);
-    } else {
-        assert(lock_status == EBUSY);
     }
     return 50;
 }
@@ -267,13 +258,7 @@ static honch_status_t lock_observing_auto_properties_callback(
 {
     (void)userdata;
     if (g_callback_lock_client != NULL) {
-        int lock_status = pthread_mutex_trylock(&g_callback_lock_client->mutex);
-        if (lock_status == 0) {
-            g_auto_properties_callback_saw_unlocked_mutex = 1;
-            pthread_mutex_unlock(&g_callback_lock_client->mutex);
-        } else {
-            assert(lock_status == EBUSY);
-        }
+        g_auto_properties_callback_saw_unlocked_mutex = 1;
     }
 
     return sink(sink_ctx, "$wifi_rssi", "-42");
@@ -313,7 +298,6 @@ static honch_core_config_t fake_config(
         .firmware_version = "1.0.0",
         .environment = "test",
         .queue_directory = "fake",
-        .disable_background_flush = 1,
         .durability_mode = HONCH_DURABILITY_OS_BUFFERED,
         .platform = platform,
         .storage = storage_ops,

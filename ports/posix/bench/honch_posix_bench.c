@@ -313,7 +313,6 @@ static honch_config_t bench_config(const char *queue_dir)
         .flush_event_threshold = 30u,
         .flush_retry_initial_ms = 1000u,
         .flush_retry_max_ms = 300000u,
-        .disable_background_flush = 1,
         .battery_callback = NULL,
         .battery_low_threshold = 15
     };
@@ -719,7 +718,6 @@ static int run_rate_sweep(const rate_sweep_config_t *config)
 
     honch_config_t config_base = bench_config(queue_dir);
     config_base.flush_event_threshold = config->flush_every;
-    config_base.disable_background_flush = 1;
 
     honch_client_t *client = NULL;
     honch_status_t status = honch_init(&client, &config_base);

@@ -9,6 +9,8 @@
 #include "esp_log.h"
 #include "esp_random.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 static const char *TAG = "honch";
 static const int64_t HONCH_MIN_UNIX_TIME_SECONDS = 1577836800;
@@ -65,6 +67,47 @@ static void honch_esp_log(void *ctx, honch_log_level_t level, const char *messag
     }
 }
 
+static honch_status_t honch_esp_mutex_create(void *ctx, void **mutex)
+{
+    (void)ctx;
+    if (mutex == NULL) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    SemaphoreHandle_t handle = xSemaphoreCreateMutex();
+    if (handle == NULL) {
+        return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
+    }
+    *mutex = handle;
+    return HONCH_STATUS_OK;
+}
+
+static void honch_esp_mutex_destroy(void *ctx, void *mutex)
+{
+    (void)ctx;
+    if (mutex != NULL) {
+        vSemaphoreDelete((SemaphoreHandle_t)mutex);
+    }
+}
+
+static honch_status_t honch_esp_mutex_lock(void *ctx, void *mutex)
+{
+    (void)ctx;
+    if (mutex == NULL) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    return xSemaphoreTake((SemaphoreHandle_t)mutex, portMAX_DELAY) == pdTRUE ?
+        HONCH_STATUS_OK :
+        HONCH_STATUS_ERROR_IO;
+}
+
+static void honch_esp_mutex_unlock(void *ctx, void *mutex)
+{
+    (void)ctx;
+    if (mutex != NULL) {
+        (void)xSemaphoreGive((SemaphoreHandle_t)mutex);
+    }
+}
+
 honch_status_t honch_esp_platform_ops_init(honch_platform_ops_t *ops, honch_esp_platform_t *ctx)
 {
     if (ops == NULL || ctx == NULL) {
@@ -77,6 +120,10 @@ honch_status_t honch_esp_platform_ops_init(honch_platform_ops_t *ops, honch_esp_
         .uptime_ms = honch_esp_uptime_ms,
         .random_bytes = honch_esp_random_bytes,
         .log = honch_esp_log,
+        .mutex_create = honch_esp_mutex_create,
+        .mutex_destroy = honch_esp_mutex_destroy,
+        .mutex_lock = honch_esp_mutex_lock,
+        .mutex_unlock = honch_esp_mutex_unlock,
         .ctx = ctx
     };
     return HONCH_STATUS_OK;

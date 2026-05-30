@@ -49,7 +49,6 @@ class HonchConfig:
         self.flush_retry_max_ms = int(kwargs.get("flush_retry_max_ms") or DEFAULT_FLUSH_RETRY_MAX_MS)
         if self.flush_retry_max_ms < self.flush_retry_initial_ms:
             self.flush_retry_max_ms = self.flush_retry_initial_ms
-        self.disable_background_flush = bool(kwargs.get("disable_background_flush", False))
         self.battery_callback = kwargs.get("battery_callback")
         self.battery_low_threshold = int(kwargs.get("battery_low_threshold") or DEFAULT_BATTERY_LOW_THRESHOLD)
         self.auto_properties_callback = kwargs.get("auto_properties_callback")
