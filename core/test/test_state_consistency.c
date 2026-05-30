@@ -24,6 +24,7 @@ typedef struct fake_state_storage {
     int fail_queue_push_call;
     int queue_consume_calls;
     int queue_drop_oldest_calls;
+    int queue_peek_calls;
     int track_queue_depth;
     const char *state_size_fault_key;
     const char *state_read_overreport_key;
@@ -159,6 +160,22 @@ static honch_status_t fake_queue_push(void *ctx, const uint8_t *event, size_t ev
     if (storage->track_queue_depth) {
         storage->queue_depth = storage->queued_sequence_count;
     }
+    return HONCH_OK;
+}
+
+static honch_status_t fake_queue_peek(void *ctx, honch_storage_reader_t *reader)
+{
+    fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
+    if (storage == NULL || reader == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    if ((size_t)storage->queue_peek_calls >= storage->queued_sequence_count) {
+        return HONCH_ERROR_NOT_INITIALIZED;
+    }
+
+    *reader = (honch_storage_reader_t) {
+        .sequence = storage->queued_sequences[storage->queue_peek_calls++]
+    };
     return HONCH_OK;
 }
 
@@ -313,6 +330,7 @@ static honch_core_config_t fake_config(
         .state_set = fake_state_set,
         .state_delete = fake_state_delete,
         .queue_push = fake_queue_push,
+        .queue_peek = fake_queue_peek,
         .queue_consume = fake_queue_consume,
         .queue_drop_oldest = fake_queue_drop_oldest,
         .queue_clear = fake_queue_clear,
@@ -442,6 +460,54 @@ static void test_set_property_rejects_reserved_key(void)
     assert(honch_core_set_property(client, "$device_id", honch_str("spoof")) == HONCH_ERROR_INVALID_ARGUMENT);
     assert(honch_core_set_property(client, "$session_id", honch_str("spoof")) == HONCH_ERROR_INVALID_ARGUMENT);
     assert(storage.queue_push_calls == queue_push_calls);
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+static void test_track_rejects_promoted_distinct_id_property_key(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_storage_ops_t storage_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    int queue_push_calls = storage.queue_push_calls;
+    const honch_wire_v2_property_t properties[] = {
+        honch_prop("distinct_id", honch_str("spoofed"))
+    };
+    assert(honch_core_track(client, "bad_distinct_id_property", properties, 1u) ==
+        HONCH_ERROR_INVALID_ARGUMENT);
+    assert(storage.queue_push_calls == queue_push_calls);
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+static void test_init_sets_next_sequence_after_existing_storage_events(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .queue_depth = 2u,
+        .queued_sequences = {2u, 5u},
+        .queued_sequence_count = 2u
+    };
+    honch_platform_ops_t platform;
+    honch_storage_ops_t storage_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(storage.queue_peek_calls == 2);
+    assert(storage.queued_sequence_count == 3u);
+    assert(storage.queued_sequences[2] == 6u);
+    assert(honch_core_track(client, "after_existing_storage", NULL, 0u) == HONCH_OK);
+    assert(storage.queued_sequence_count == 4u);
+    assert(storage.queued_sequences[3] == 7u);
+
+    storage.queue_depth = 0u;
+    storage.queued_sequence_count = 0u;
+    client->queued_event_count = 0u;
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
@@ -677,6 +743,8 @@ int main(void)
     test_failed_reset_second_identity_write_preserves_persisted_identity();
     test_set_property_rejects_blank_key();
     test_set_property_rejects_reserved_key();
+    test_track_rejects_promoted_distinct_id_property_key();
+    test_init_sets_next_sequence_after_existing_storage_events();
     test_sequence_wrap_rejects_enqueue_without_advancing();
     test_custom_storage_enqueue_updates_cached_queue_depth_without_refresh();
     test_custom_storage_drops_oldest_at_queue_limit();

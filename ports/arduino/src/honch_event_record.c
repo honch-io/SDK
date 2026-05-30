@@ -71,6 +71,7 @@ static honch_status_t honch_record_append_value(
 static honch_status_t honch_record_validate_unique_keys(
     const honch_wire_v2_map_pair_t *entries,
     size_t count);
+static bool honch_record_property_is_promoted_context(const char *key);
 
 static size_t honch_record_uvarint_size(uint64_t value)
 {
@@ -123,7 +124,7 @@ static honch_status_t honch_record_measure_key_value(
     size_t depth,
     size_t *size)
 {
-    if (honch_is_blank(key)) {
+    if (honch_is_blank(key) || honch_record_property_is_promoted_context(key)) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
     honch_status_t status = honch_record_measure_string(key, false, size);
@@ -221,7 +222,7 @@ static honch_status_t honch_record_append_key_value(
     const honch_wire_v2_value_t *value,
     size_t depth)
 {
-    if (honch_is_blank(key)) {
+    if (honch_is_blank(key) || honch_record_property_is_promoted_context(key)) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
     honch_status_t status = honch_record_append_string(buffer, key, false);
@@ -782,6 +783,7 @@ static bool honch_record_property_is_promoted_context(const char *key)
 {
     static const char *promoted[] = {
         "$device_id",
+        "distinct_id",
         "$device_model",
         "$firmware_version",
         "$sdk_platform",

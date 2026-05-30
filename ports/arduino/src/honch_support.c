@@ -150,6 +150,7 @@ bool honch_property_key_is_reserved(const char *key)
 {
     static const char *reserved[] = {
         "$battery_level",
+        "distinct_id",
         "$device_id",
         "$device_model",
         "$environment",

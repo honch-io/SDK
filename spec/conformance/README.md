@@ -12,7 +12,7 @@ These fixtures define behavior every Honch SDK must implement. They are not tied
 
 ## Rules
 
-- SDK-owned properties win over user-supplied properties.
+- SDK-owned property keys are rejected when supplied by users.
 - Event timestamps are assigned when `track` is called.
 - Queue entries remain pending until delivery is confirmed.
 - Retryable failures preserve events.

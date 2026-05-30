@@ -101,7 +101,6 @@ class ConformanceFixtureTests(unittest.TestCase):
 
     def test_input_style_event_fixtures_delegate_track_calls_to_core(self):
         for path in (
-            "spec/conformance/events/auto_stamp_wins_conflict.json",
             "spec/conformance/events/boot_event.json",
             "spec/conformance/events/custom_event_with_session.json",
         ):
@@ -117,6 +116,17 @@ class ConformanceFixtureTests(unittest.TestCase):
                     client._core.calls[-1],
                     ("track", fixture["expected"]["event"], fixture["input"]["properties"]),
                 )
+
+    def test_auto_stamp_conflict_fixture_expects_rejection(self):
+        fixture = load_fixture("spec/conformance/events/auto_stamp_wins_conflict.json")
+        readme = (ROOT / "spec/conformance/README.md").read_text(encoding="utf-8")
+
+        self.assertEqual(fixture["description"], "SDK rejects user-supplied SDK-owned properties before queueing")
+        self.assertEqual(fixture["expected"], {"error": "invalid_argument"})
+        self.assertIn("$device_model", fixture["input"]["properties"])
+        self.assertIn("$sdk_platform", fixture["input"]["properties"])
+        self.assertIn("SDK-owned property keys are rejected", readme)
+        self.assertNotIn("SDK-owned properties win over user-supplied properties", readme)
 
     def test_identity_reset_fixture_delegates_identify_reset_and_final_track(self):
         fixture = load_fixture("spec/conformance/events/identity-reset.json")

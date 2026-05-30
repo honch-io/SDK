@@ -110,8 +110,9 @@ client.get_device_id()
 
 `properties` and `traits` must be dictionaries containing typed wire-v2 values:
 `None`, `bool`, `int`, `float`, `str`, `bytes`, lists, and dictionaries with
-string keys. SDK-owned auto properties are stamped by the C core and win over
-user-supplied properties with the same key.
+string keys. Capture may reject bytes unless the project enables binary
+properties. SDK-owned auto property keys supplied by users are rejected before
+queueing.
 
 Call `client.tick()` periodically from the device main loop to run scheduled
 flush work for `flush_interval_seconds` and `flush_event_threshold`.
