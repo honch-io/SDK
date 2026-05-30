@@ -19,6 +19,17 @@
 static honch_status_t honch_esp_queue_depth(void *ctx, size_t *depth);
 static bool honch_esp_queue_blob_exists(nvs_handle_t handle, uint64_t sequence, size_t *value_size);
 
+static void honch_esp_free_storage_events(honch_storage_event_t *events, size_t event_count)
+{
+    if (events == NULL) {
+        return;
+    }
+    for (size_t i = 0u; i < event_count; i++) {
+        free(events[i].data);
+        events[i] = (honch_storage_event_t){0};
+    }
+}
+
 static honch_status_t honch_esp_nvs_status(esp_err_t err)
 {
     switch (err) {
@@ -705,6 +716,80 @@ static honch_status_t honch_esp_nvs_queue_peek(void *ctx, honch_storage_reader_t
     return HONCH_STATUS_ERROR_NOT_INITIALIZED;
 }
 
+static honch_status_t honch_esp_nvs_queue_read_batch(
+    honch_storage_event_t *events,
+    size_t max_events,
+    size_t max_event_bytes,
+    size_t *event_count)
+{
+    if (events == NULL || event_count == NULL) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+
+    *event_count = 0u;
+    if (max_events == 0u) {
+        return HONCH_STATUS_OK;
+    }
+
+    uint64_t head = 0u;
+    uint64_t tail = 0u;
+    honch_status_t status = honch_esp_get_head_tail(&head, &tail);
+    if (status != HONCH_STATUS_OK) {
+        return status;
+    }
+
+    nvs_handle_t handle = 0;
+    esp_err_t err = nvs_open(HONCH_ESP_QUEUE_NAMESPACE, NVS_READONLY, &handle);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        return HONCH_STATUS_ERROR_NOT_INITIALIZED;
+    }
+    if (err != ESP_OK) {
+        return honch_esp_nvs_status(err);
+    }
+
+    for (uint64_t sequence = tail; sequence < head && *event_count < max_events; sequence++) {
+        size_t value_size = 0u;
+        if (!honch_esp_queue_blob_exists(handle, sequence, &value_size)) {
+            continue;
+        }
+        if (value_size == 0u || value_size > max_event_bytes) {
+            status = HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+            break;
+        }
+
+        uint8_t *copy = (uint8_t *)malloc(value_size);
+        if (copy == NULL) {
+            status = HONCH_STATUS_ERROR_OUT_OF_MEMORY;
+            break;
+        }
+
+        char key[HONCH_ESP_NVS_KEY_SIZE];
+        honch_esp_sequence_key(sequence, key);
+        size_t read_size = value_size;
+        err = nvs_get_blob(handle, key, copy, &read_size);
+        if (err != ESP_OK || read_size != value_size) {
+            free(copy);
+            status = err == ESP_OK ? HONCH_STATUS_ERROR_IO : honch_esp_nvs_status(err);
+            break;
+        }
+
+        events[*event_count] = (honch_storage_event_t) {
+            .data = copy,
+            .length = value_size,
+            .sequence = sequence
+        };
+        (*event_count)++;
+    }
+
+    nvs_close(handle);
+    if (status != HONCH_STATUS_OK) {
+        honch_esp_free_storage_events(events, *event_count);
+        *event_count = 0u;
+        return status;
+    }
+    return *event_count == 0u ? HONCH_STATUS_ERROR_NOT_INITIALIZED : HONCH_STATUS_OK;
+}
+
 static honch_status_t honch_esp_queue_erase_sequence(uint64_t sequence)
 {
     uint64_t head = 0u;
@@ -742,6 +827,51 @@ static honch_status_t honch_esp_nvs_queue_consume(void *ctx, uint64_t sequence)
 {
     (void)ctx;
     return honch_esp_queue_erase_sequence(sequence);
+}
+
+static honch_status_t honch_esp_nvs_queue_consume_batch(const uint64_t *sequences, size_t sequence_count)
+{
+    if (sequences == NULL && sequence_count > 0u) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    if (sequence_count == 0u) {
+        return HONCH_STATUS_OK;
+    }
+
+    uint64_t head = 0u;
+    uint64_t tail = 0u;
+    honch_status_t status = honch_esp_get_head_tail(&head, &tail);
+    if (status != HONCH_STATUS_OK) {
+        return status;
+    }
+
+    nvs_handle_t handle = 0;
+    esp_err_t err = nvs_open(HONCH_ESP_QUEUE_NAMESPACE, NVS_READWRITE, &handle);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        return HONCH_STATUS_OK;
+    }
+    if (err != ESP_OK) {
+        return honch_esp_nvs_status(err);
+    }
+
+    for (size_t i = 0u; i < sequence_count; i++) {
+        char key[HONCH_ESP_NVS_KEY_SIZE];
+        honch_esp_sequence_key(sequences[i], key);
+        err = nvs_erase_key(handle, key);
+        if (err == ESP_ERR_NVS_NOT_FOUND) {
+            err = ESP_OK;
+        }
+        if (err != ESP_OK) {
+            status = honch_esp_nvs_status(err);
+            break;
+        }
+    }
+    if (status == HONCH_STATUS_OK) {
+        status = honch_esp_advance_tail_locked(handle, head, &tail);
+    }
+
+    nvs_close(handle);
+    return status;
 }
 
 static honch_status_t honch_esp_queue_push(void *ctx, const uint8_t *event, size_t event_size, uint64_t sequence)
@@ -788,11 +918,11 @@ static honch_status_t honch_esp_queue_read_batch(
             event_count);
     }
 
+    if (storage != NULL && storage->nvs_fallback_active) {
+        return honch_esp_nvs_queue_read_batch(events, max_events, max_event_bytes, event_count);
+    }
     if (event_count != NULL) {
         *event_count = 0u;
-    }
-    if (storage != NULL && storage->nvs_fallback_active) {
-        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
     return HONCH_STATUS_ERROR_NOT_INITIALIZED;
 }
@@ -833,6 +963,16 @@ static honch_status_t honch_esp_queue_consume_batch(
 
     if (honch_esp_ram_queue_contains_all(storage, sequences, sequence_count)) {
         return honch_esp_ram_queue_consume_batch(storage, sequences, sequence_count);
+    }
+    if (storage->ram_count == 0u) {
+        honch_status_t status = honch_esp_nvs_queue_consume_batch(sequences, sequence_count);
+        if (status == HONCH_STATUS_OK) {
+            size_t depth = 0u;
+            if (honch_esp_queue_depth(ctx, &depth) == HONCH_STATUS_OK && depth == 0u) {
+                storage->nvs_fallback_active = false;
+            }
+        }
+        return status;
     }
 
     honch_status_t status = HONCH_STATUS_OK;
