@@ -1,6 +1,7 @@
 #include "honch/core/packetizer.h"
 #include "honch_internal.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #define HONCH_PACKETIZER_VERSION 1u
@@ -9,6 +10,7 @@
 #define HONCH_PACKETIZER_FLAG_FINAL 0x02u
 #define HONCH_PACKETIZER_HEADER_SIZE 20u
 #define HONCH_PACKETIZER_MAX_CHUNK_PAYLOAD UINT16_MAX
+#define HONCH_PACKETIZER_MAX_MESSAGE_BYTES 4096u
 
 static void honch_packetizer_write_u16(uint8_t *out, uint16_t value)
 {
@@ -81,6 +83,101 @@ static honch_status_t honch_packetizer_reset_peek_cursor(honch_client_t *client)
     return client->storage->queue_depth(client->storage->ctx, &depth);
 }
 
+static honch_status_t honch_packetizer_read_event(
+    const honch_storage_reader_t *reader,
+    honch_payload_t *event)
+{
+    event->data = NULL;
+    event->length = 0u;
+    if (reader == NULL || reader->read == NULL || reader->total_size == 0u) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    uint8_t *data = (uint8_t *)malloc(reader->total_size);
+    if (data == NULL) {
+        return HONCH_ERROR_OUT_OF_MEMORY;
+    }
+    honch_status_t status = reader->read(reader->ctx, 0u, data, reader->total_size);
+    if (status != HONCH_OK) {
+        free(data);
+        return status;
+    }
+    event->data = data;
+    event->length = reader->total_size;
+    return HONCH_OK;
+}
+
+static honch_status_t honch_packetizer_build_wire_v2_message(
+    honch_client_t *client,
+    const honch_storage_reader_t *reader,
+    honch_payload_t *message)
+{
+    message->data = NULL;
+    message->length = 0u;
+    if (client == NULL || reader == NULL ||
+        client->device_id == NULL || client->device_model == NULL ||
+        client->firmware_version == NULL || client->sdk_platform == NULL ||
+        client->environment == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    honch_payload_t event = {0};
+    honch_status_t status = honch_packetizer_read_event(reader, &event);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    honch_event_record_t record = {0};
+    status = honch_event_record_parse(event.data, event.length, &record);
+    if (status != HONCH_OK) {
+        free(event.data);
+        return status;
+    }
+    honch_event_record_prepare_wire_properties(&record);
+
+    honch_wire_v2_event_t compact_event = {
+        .event_name = record.event_name,
+        .timestamp_ms = record.timestamp_ms,
+        .properties = record.properties,
+        .property_count = record.property_count
+    };
+    honch_wire_v2_batch_context_t context = {
+        .distinct_id = record.distinct_id,
+        .device_id = client->device_id,
+        .device_model = client->device_model,
+        .firmware_version = client->firmware_version,
+        .sdk_platform = client->sdk_platform,
+        .sdk_version = HONCH_SDK_VERSION,
+        .environment = client->environment,
+        .session_id = record.session_id != NULL ? record.session_id : client->session_id
+    };
+
+    uint8_t *buffer = (uint8_t *)malloc(HONCH_PACKETIZER_MAX_MESSAGE_BYTES);
+    if (buffer == NULL) {
+        honch_event_record_free(&record);
+        free(event.data);
+        return HONCH_ERROR_OUT_OF_MEMORY;
+    }
+    size_t message_size = 0u;
+    status = honch_wire_v2_encode_event_batch(
+        &context,
+        record.timestamp_ms,
+        &compact_event,
+        1u,
+        buffer,
+        HONCH_PACKETIZER_MAX_MESSAGE_BYTES,
+        &message_size);
+    honch_event_record_free(&record);
+    free(event.data);
+    if (status != HONCH_OK) {
+        free(buffer);
+        return status;
+    }
+    message->data = buffer;
+    message->length = message_size;
+    return HONCH_OK;
+}
+
 bool honch_core_data_available(honch_client_t *client, uint32_t source_mask)
 {
     honch_status_t status = honch_client_enter(client);
@@ -132,18 +229,29 @@ honch_status_t honch_packetizer_begin(honch_client_t *client, honch_packetizer_t
         honch_client_leave(client);
         return status;
     }
-    if (reader.read == NULL || reader.total_size == 0u || reader.total_size > UINT32_MAX) {
+    if (reader.read == NULL || reader.total_size == 0u) {
         honch_client_state_unlock(client);
         honch_client_leave(client);
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
+
+    honch_payload_t message = {0};
+    status = honch_packetizer_build_wire_v2_message(client, &reader, &message);
+    if (status != HONCH_OK || message.length == 0u || message.length > UINT32_MAX) {
+        free(message.data);
+        honch_client_state_unlock(client);
+        honch_client_leave(client);
+        return status == HONCH_OK ? HONCH_ERROR_INVALID_ARGUMENT : status;
+    }
+    size_t total_size = message.length;
+    free(message.data);
 
     *packetizer = (honch_packetizer_t) {
         .client = client,
         .source_mask = source_mask,
         .sequence = reader.sequence,
         .offset = 0u,
-        .total_size = reader.total_size,
+        .total_size = total_size,
         .active = true
     };
     return HONCH_OK;
@@ -172,8 +280,17 @@ honch_status_t honch_packetizer_next(
     if (status != HONCH_OK) {
         return status;
     }
-    if (reader.read == NULL || reader.sequence != packetizer->sequence ||
-        reader.total_size != packetizer->total_size) {
+    if (reader.read == NULL || reader.sequence != packetizer->sequence) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    honch_payload_t message = {0};
+    status = honch_packetizer_build_wire_v2_message(packetizer->client, &reader, &message);
+    if (status != HONCH_OK) {
+        return status;
+    }
+    if (message.length != packetizer->total_size) {
+        free(message.data);
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
@@ -184,6 +301,7 @@ honch_status_t honch_packetizer_next(
     }
     size_t payload_size = remaining < payload_capacity ? remaining : payload_capacity;
     if (payload_size == 0u) {
+        free(message.data);
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
@@ -205,10 +323,8 @@ honch_status_t honch_packetizer_next(
     buffer[18] = 0u;
     buffer[19] = 0u;
 
-    status = reader.read(reader.ctx, packetizer->offset, buffer + HONCH_PACKETIZER_HEADER_SIZE, payload_size);
-    if (status != HONCH_OK) {
-        return status;
-    }
+    memcpy(buffer + HONCH_PACKETIZER_HEADER_SIZE, message.data + packetizer->offset, payload_size);
+    free(message.data);
 
     uint16_t crc = honch_packetizer_frame_crc16(
         buffer,

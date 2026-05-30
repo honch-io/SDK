@@ -79,13 +79,15 @@ static honch_status_t honch_append_property_pair(
     const char *key,
     const char *value)
 {
-    honch_status_t status = honch_cbor_append_text(buffer, key);
+    honch_buffer_t json;
+    honch_status_t status = honch_buffer_init(&json, strlen(value) + 3u);
     if (status == HONCH_OK) {
-        status = honch_cbor_append_text(buffer, value);
+        status = honch_json_append_string(&json, value);
     }
     if (status == HONCH_OK) {
-        (*member_count)++;
+        status = honch_event_record_append_property_json(buffer, member_count, key, json.data);
     }
+    honch_buffer_free(&json);
     return status;
 }
 
@@ -95,14 +97,7 @@ static honch_status_t honch_append_raw_property_pair(
     const char *key,
     const char *value_json)
 {
-    honch_status_t status = honch_cbor_append_text(buffer, key);
-    if (status == HONCH_OK) {
-        status = honch_cbor_append_json_value(buffer, value_json);
-    }
-    if (status == HONCH_OK) {
-        (*member_count)++;
-    }
-    return status;
+    return honch_event_record_append_property_json(buffer, member_count, key, value_json);
 }
 
 static bool honch_auto_property_key_is_allowed(const char *key)
@@ -231,7 +226,7 @@ static honch_status_t honch_build_property_pairs(
     const honch_auto_properties_snapshot_t *auto_properties)
 {
     size_t user_member_count = 0u;
-    honch_status_t status = honch_cbor_append_json_object_members(buffer, properties_json, &user_member_count);
+    honch_status_t status = honch_event_record_append_json_object_members(buffer, properties_json, &user_member_count);
     if (status == HONCH_OK) {
         *member_count += user_member_count;
     }
@@ -267,75 +262,6 @@ static honch_status_t honch_build_property_pairs(
     }
 
     return status;
-}
-
-static size_t honch_cbor_map_header_encode(size_t count, char out[9])
-{
-    uint64_t value = (uint64_t)count;
-    if (value < 24u) {
-        out[0] = (char)(0xa0u | value);
-        return 1u;
-    }
-    if (value <= UINT8_MAX) {
-        out[0] = (char)(0xa0u | 24u);
-        out[1] = (char)value;
-        return 2u;
-    }
-    if (value <= UINT16_MAX) {
-        out[0] = (char)(0xa0u | 25u);
-        out[1] = (char)(value >> 8);
-        out[2] = (char)value;
-        return 3u;
-    }
-    if (value <= UINT32_MAX) {
-        out[0] = (char)(0xa0u | 26u);
-        out[1] = (char)(value >> 24);
-        out[2] = (char)(value >> 16);
-        out[3] = (char)(value >> 8);
-        out[4] = (char)value;
-        return 5u;
-    }
-
-    out[0] = (char)(0xa0u | 27u);
-    out[1] = (char)(value >> 56);
-    out[2] = (char)(value >> 48);
-    out[3] = (char)(value >> 40);
-    out[4] = (char)(value >> 32);
-    out[5] = (char)(value >> 24);
-    out[6] = (char)(value >> 16);
-    out[7] = (char)(value >> 8);
-    out[8] = (char)value;
-    return 9u;
-}
-
-static honch_status_t honch_cbor_patch_map_header(honch_buffer_t *buffer, size_t offset, size_t body_offset, size_t count)
-{
-    char header[9];
-    size_t header_length = honch_cbor_map_header_encode(count, header);
-    size_t reserved_length = body_offset - offset;
-    if (header_length > reserved_length) {
-        size_t extra = header_length - reserved_length;
-        size_t needed = 0u;
-        honch_status_t status = honch_size_add3(buffer->length, extra, 1u, &needed);
-        if (status != HONCH_OK) {
-            return status;
-        }
-        status = honch_buffer_reserve(buffer, needed);
-        if (status != HONCH_OK) {
-            return status;
-        }
-        size_t body_length = buffer->length - body_offset;
-        memmove(buffer->data + body_offset + extra, buffer->data + body_offset, body_length);
-        buffer->length += extra;
-        buffer->data[buffer->length] = '\0';
-    } else if (header_length < reserved_length) {
-        size_t body_length = buffer->length - body_offset;
-        memmove(buffer->data + offset + header_length, buffer->data + body_offset, body_length);
-        buffer->length -= reserved_length - header_length;
-        buffer->data[buffer->length] = '\0';
-    }
-    memcpy(buffer->data + offset, header, header_length);
-    return HONCH_OK;
 }
 
 static uint64_t honch_client_now_millis(honch_client_t *client);
@@ -396,69 +322,42 @@ static honch_status_t honch_build_event(
     out->data = NULL;
     out->length = 0u;
 
-    honch_buffer_t buffer;
-    honch_status_t status = honch_buffer_init(&buffer, 1024u);
+    honch_buffer_t properties;
+    honch_status_t status = honch_buffer_init(&properties, 512u);
     if (status != HONCH_OK) {
         return status;
     }
 
-    if (status == HONCH_OK) {
-        status = honch_cbor_append_map(&buffer, 4u);
-    }
-    if (status == HONCH_OK) {
-        status = honch_cbor_append_text(&buffer, "event");
-    }
-    if (status == HONCH_OK) {
-        status = honch_cbor_append_text(&buffer, event_name);
-    }
-    if (status == HONCH_OK) {
-        status = honch_cbor_append_text(&buffer, "distinct_id");
-    }
-    if (status == HONCH_OK) {
-        status = honch_cbor_append_text(&buffer, client->distinct_id);
-    }
-    if (status == HONCH_OK) {
-        status = honch_cbor_append_text(&buffer, "timestamp");
-    }
-    if (status == HONCH_OK) {
-        status = honch_cbor_append_int(&buffer, (int64_t)honch_client_now_millis(client));
-    }
-    if (status == HONCH_OK) {
-        status = honch_cbor_append_text(&buffer, "properties");
-    }
-
-    size_t property_map_offset = buffer.length;
-    char property_map_placeholder = 0;
-    if (status == HONCH_OK) {
-        status = honch_buffer_append_n(&buffer, &property_map_placeholder, 1u);
-    }
-    size_t property_body_offset = buffer.length;
     size_t property_count = 0u;
     if (status == HONCH_OK) {
         status = honch_build_property_pairs(
             client,
-            &buffer,
+            &properties,
             &property_count,
             properties_json,
             battery_level,
             auto_properties);
     }
     if (status == HONCH_OK) {
-        status = honch_cbor_patch_map_header(&buffer, property_map_offset, property_body_offset, property_count);
+        status = honch_event_record_build(
+            event_name,
+            client->distinct_id,
+            client->session_id,
+            honch_client_now_millis(client),
+            &properties,
+            property_count,
+            out);
     }
-
-    if (status == HONCH_OK && buffer.length > client->max_event_bytes) {
+    if (status == HONCH_OK && out->length > client->max_event_bytes) {
         status = HONCH_ERROR_INVALID_ARGUMENT;
     }
-
+    honch_buffer_free(&properties);
     if (status != HONCH_OK) {
-        honch_buffer_free(&buffer);
-        return status;
+        free(out->data);
+        out->data = NULL;
+        out->length = 0u;
     }
-
-    out->data = (unsigned char *)buffer.data;
-    out->length = buffer.length;
-    return HONCH_OK;
+    return status;
 }
 
 static int honch_read_battery_level(honch_client_t *client)

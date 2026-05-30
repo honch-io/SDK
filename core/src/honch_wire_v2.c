@@ -36,6 +36,11 @@ uint64_t honch_wire_v2_zigzag_i64(int64_t value)
     return (bits << 1u) ^ (uint64_t)(value >> 63);
 }
 
+int64_t honch_wire_v2_unzigzag_i64(uint64_t value)
+{
+    return (int64_t)((value >> 1u) ^ (uint64_t)-(int64_t)(value & 1u));
+}
+
 uint16_t honch_wire_v2_crc16(const uint8_t *data, size_t data_size)
 {
     uint16_t crc = 0xffffu;

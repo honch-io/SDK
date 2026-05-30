@@ -122,68 +122,6 @@ static int count_substring(const char *haystack, const char *needle)
     return count;
 }
 
-typedef struct cbor_reader {
-    const unsigned char *data;
-    size_t length;
-    size_t offset;
-} cbor_reader_t;
-
-static int append_text(char *out, size_t out_size, size_t *used, const char *text, size_t length)
-{
-    if (*used >= out_size) {
-        return 0;
-    }
-    for (size_t i = 0u; i < length; i++) {
-        unsigned char ch = (unsigned char)text[i];
-        const char *escaped = NULL;
-        char unicode[8];
-        switch (ch) {
-            case '"':
-                escaped = "\\\"";
-                break;
-            case '\\':
-                escaped = "\\\\";
-                break;
-            case '\b':
-                escaped = "\\b";
-                break;
-            case '\f':
-                escaped = "\\f";
-                break;
-            case '\n':
-                escaped = "\\n";
-                break;
-            case '\r':
-                escaped = "\\r";
-                break;
-            case '\t':
-                escaped = "\\t";
-                break;
-            default:
-                if (ch < 0x20u) {
-                    snprintf(unicode, sizeof(unicode), "\\u%04x", ch);
-                    escaped = unicode;
-                }
-                break;
-        }
-        if (escaped != NULL) {
-            size_t escaped_length = strlen(escaped);
-            if (*used + escaped_length >= out_size) {
-                return 0;
-            }
-            memcpy(out + *used, escaped, escaped_length);
-            *used += escaped_length;
-        } else {
-            if (*used + 1u >= out_size) {
-                return 0;
-            }
-            out[(*used)++] = (char)ch;
-        }
-    }
-    out[*used] = '\0';
-    return 1;
-}
-
 static int append_literal(char *out, size_t out_size, size_t *used, const char *literal)
 {
     size_t length = strlen(literal);
@@ -193,148 +131,6 @@ static int append_literal(char *out, size_t out_size, size_t *used, const char *
     memcpy(out + *used, literal, length);
     *used += length;
     out[*used] = '\0';
-    return 1;
-}
-
-static int cbor_read_uint(cbor_reader_t *reader, unsigned char additional, unsigned long long *out)
-{
-    if (additional < 24u) {
-        *out = additional;
-        return 1;
-    }
-    size_t bytes = additional == 24u ? 1u : additional == 25u ? 2u : additional == 26u ? 4u : additional == 27u ? 8u : 0u;
-    if (bytes == 0u || reader->length - reader->offset < bytes) {
-        return 0;
-    }
-    unsigned long long value = 0u;
-    for (size_t i = 0u; i < bytes; i++) {
-        value = (value << 8) | reader->data[reader->offset++];
-    }
-    *out = value;
-    return 1;
-}
-
-static int cbor_read_big_endian_double(cbor_reader_t *reader, double *out)
-{
-    if (reader->length - reader->offset < 8u) {
-        return 0;
-    }
-
-    uint64_t bits = 0u;
-    for (size_t i = 0u; i < 8u; i++) {
-        bits = (bits << 8) | reader->data[reader->offset++];
-    }
-    memcpy(out, &bits, sizeof(bits));
-    return 1;
-}
-
-static int cbor_to_json_value(cbor_reader_t *reader, char *out, size_t out_size, size_t *used);
-
-static int cbor_to_json_items(cbor_reader_t *reader, unsigned long long count, char close, char *out, size_t out_size, size_t *used)
-{
-    for (unsigned long long i = 0u; i < count; i++) {
-        if (i > 0u && !append_literal(out, out_size, used, ",")) {
-            return 0;
-        }
-        if (!cbor_to_json_value(reader, out, out_size, used)) {
-            return 0;
-        }
-    }
-    char close_text[2] = { close, '\0' };
-    return append_literal(out, out_size, used, close_text);
-}
-
-static int cbor_to_json_value(cbor_reader_t *reader, char *out, size_t out_size, size_t *used)
-{
-    if (reader->offset >= reader->length) {
-        return 0;
-    }
-    unsigned char initial = reader->data[reader->offset++];
-    unsigned char major = (unsigned char)(initial & 0xe0u);
-    unsigned char additional = (unsigned char)(initial & 0x1fu);
-    unsigned long long value = 0u;
-
-    switch (major) {
-        case 0x00u:
-            if (!cbor_read_uint(reader, additional, &value)) {
-                return 0;
-            }
-            char positive[32];
-            snprintf(positive, sizeof(positive), "%llu", value);
-            return append_literal(out, out_size, used, positive);
-        case 0x20u:
-            if (!cbor_read_uint(reader, additional, &value)) {
-                return 0;
-            }
-            char negative[32];
-            snprintf(negative, sizeof(negative), "-%llu", value + 1u);
-            return append_literal(out, out_size, used, negative);
-        case 0x60u:
-            if (!cbor_read_uint(reader, additional, &value) || value > reader->length - reader->offset) {
-                return 0;
-            }
-            if (!append_literal(out, out_size, used, "\"") ||
-                !append_text(out, out_size, used, (const char *)reader->data + reader->offset, (size_t)value) ||
-                !append_literal(out, out_size, used, "\"")) {
-                return 0;
-            }
-            reader->offset += (size_t)value;
-            return 1;
-        case 0x80u:
-            if (!cbor_read_uint(reader, additional, &value) || !append_literal(out, out_size, used, "[")) {
-                return 0;
-            }
-            return cbor_to_json_items(reader, value, ']', out, out_size, used);
-        case 0xa0u:
-            if (!cbor_read_uint(reader, additional, &value) || !append_literal(out, out_size, used, "{")) {
-                return 0;
-            }
-            for (unsigned long long i = 0u; i < value; i++) {
-                if (i > 0u && !append_literal(out, out_size, used, ",")) {
-                    return 0;
-                }
-                if (!cbor_to_json_value(reader, out, out_size, used) ||
-                    !append_literal(out, out_size, used, ":") ||
-                    !cbor_to_json_value(reader, out, out_size, used)) {
-                    return 0;
-                }
-            }
-            return append_literal(out, out_size, used, "}");
-        case 0xe0u:
-            if (additional == 20u) {
-                return append_literal(out, out_size, used, "false");
-            }
-            if (additional == 21u) {
-                return append_literal(out, out_size, used, "true");
-            }
-            if (additional == 22u) {
-                return append_literal(out, out_size, used, "null");
-            }
-            if (additional == 27u) {
-                double number = 0.0;
-                if (!cbor_read_big_endian_double(reader, &number)) {
-                    return 0;
-                }
-                char number_text[32];
-                snprintf(number_text, sizeof(number_text), "%.15g", number);
-                return append_literal(out, out_size, used, number_text);
-            }
-            return 0;
-        default:
-            return 0;
-    }
-}
-
-static int cbor_to_json(const unsigned char *body, size_t body_size, char *out, size_t out_size)
-{
-    cbor_reader_t reader = {.data = body, .length = body_size, .offset = 0u};
-    size_t used = 0u;
-    if (out_size == 0u || !cbor_to_json_value(&reader, out, out_size, &used) || reader.offset != reader.length) {
-        if (out_size > 0u) {
-            out[0] = '\0';
-        }
-        return 0;
-    }
     return 1;
 }
 
@@ -840,7 +636,7 @@ static honch_status_t fake_transport(
                 context->last_payload[0] = '\0';
             }
         }
-    } else if (!cbor_to_json(body, body_size, context->last_payload, sizeof(context->last_payload))) {
+    } else {
         context->last_payload[0] = '\0';
     }
     *http_status = (more && response_code == 204L) ? 202L : response_code;
@@ -1074,7 +870,7 @@ static void test_track_persists_event(void)
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 2);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 2);
 
     honch_shutdown(client);
 }
@@ -1128,9 +924,9 @@ static void test_os_buffered_durability_tracks_and_flushes_event(void)
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 2);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 2);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 0);
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"fast_event\"");
 
     honch_shutdown(client);
@@ -1187,7 +983,7 @@ static void test_strict_json_validation(void)
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 5);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 5);
 
     honch_shutdown(client);
 }
@@ -1612,7 +1408,7 @@ static void test_lifecycle_events_are_queued(void)
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
     transport.last_payload[0] = '\0';
     EXPECT_EQ_INT(honch_shutdown(client), HONCH_OK);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 0);
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$device_shutdown\"");
 
     honch_test_set_transport(NULL, NULL);
@@ -1835,11 +1631,11 @@ static void test_identify_does_not_queue_event_when_persistence_fails(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 1);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 1);
     EXPECT_EQ_INT(chmod(state_dir, 0500), 0);
 
     EXPECT_EQ_INT(honch_identify(client, "user-1", "{\"plan\":\"beta\"}"), HONCH_ERROR_IO);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 1);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 1);
 
     EXPECT_EQ_INT(chmod(state_dir, 0700), 0);
     honch_shutdown(client);
@@ -1862,7 +1658,7 @@ static void test_queue_limit_drops_oldest(void)
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 1);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 1);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
     EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"event\":\"first\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"second\"");
@@ -1885,7 +1681,7 @@ static void test_flush_retry_keeps_events(void)
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 2);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 2);
 
     honch_shutdown(client);
 }
@@ -1909,14 +1705,14 @@ static void test_flush_retryable_http_status_keeps_events_until_success(void)
     char dead_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
     snprintf(dead_dir, sizeof(dead_dir), "%s/dead", queue_dir);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 2);
-    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".cbor"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 2);
+    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".hqe"), 0);
 
     transport.response_code = 204L;
     transport.last_payload[0] = '\0';
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 0);
-    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".cbor"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".hqe"), 0);
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"retryable_status\"");
 
     honch_shutdown(client);
@@ -1942,14 +1738,14 @@ static void test_flush_http_timeout_keeps_events_until_success(void)
     char dead_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
     snprintf(dead_dir, sizeof(dead_dir), "%s/dead", queue_dir);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 2);
-    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".cbor"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 2);
+    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".hqe"), 0);
 
     transport.response_code = 204L;
     transport.last_payload[0] = '\0';
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 0);
-    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".cbor"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".hqe"), 0);
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"timeout_status\"");
 
     honch_shutdown(client);
@@ -1977,8 +1773,8 @@ static void test_flush_dead_letters_invalid_persisted_queue_files(void)
     char oversized_path[240];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
     snprintf(dead_dir, sizeof(dead_dir), "%s/dead", queue_dir);
-    snprintf(malformed_path, sizeof(malformed_path), "%s/00000000000000000000-000000-malformed.cbor", pending_dir);
-    snprintf(oversized_path, sizeof(oversized_path), "%s/00000000000000000001-000001-oversized.cbor", pending_dir);
+    snprintf(malformed_path, sizeof(malformed_path), "%s/00000000000000000000-000000-malformed.hqe", pending_dir);
+    snprintf(oversized_path, sizeof(oversized_path), "%s/00000000000000000001-000001-oversized.hqe", pending_dir);
 
     EXPECT_TRUE(write_text_file(malformed_path, "{\"event\":") != 0);
 
@@ -1995,8 +1791,8 @@ static void test_flush_dead_letters_invalid_persisted_queue_files(void)
     EXPECT_TRUE(write_text_file(oversized_path, oversized) != 0);
 
     EXPECT_EQ_INT(honch_flush(client), HONCH_ERROR_REJECTED);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 0);
-    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".cbor"), 2);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".hqe"), 2);
     EXPECT_EQ_INT(transport.calls, 1);
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"valid_after_corrupt\"");
 
@@ -2022,20 +1818,20 @@ static void test_flush_ignores_malformed_queue_filenames(void)
     char malformed_path[240];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
     snprintf(dead_dir, sizeof(dead_dir), "%s/dead", queue_dir);
-    snprintf(malformed_path, sizeof(malformed_path), "%s/00000000000000000000-malformed.cbor", pending_dir);
+    snprintf(malformed_path, sizeof(malformed_path), "%s/00000000000000000000-malformed.hqe", pending_dir);
     EXPECT_TRUE(write_text_file(malformed_path, "{\"event\":") != 0);
 
     EXPECT_EQ_INT(honch_track(client, "valid_with_malformed_neighbor", NULL), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
-    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".cbor"), 0);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 1);
+    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".hqe"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 1);
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"valid_with_malformed_neighbor\"");
 
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
 }
 
-static void test_flush_dead_letters_semantically_invalid_cbor_event(void)
+static void test_flush_dead_letters_semantically_invalid_queue_record(void)
 {
     char queue_dir[128];
     make_temp_dir(queue_dir, sizeof(queue_dir));
@@ -2052,22 +1848,22 @@ static void test_flush_dead_letters_semantically_invalid_cbor_event(void)
     char invalid_path[240];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
     snprintf(dead_dir, sizeof(dead_dir), "%s/dead", queue_dir);
-    snprintf(invalid_path, sizeof(invalid_path), "%s/00000000000000000000-000000-invalid.cbor", pending_dir);
+    snprintf(invalid_path, sizeof(invalid_path), "%s/00000000000000000000-000000-invalid.hqe", pending_dir);
 
     const unsigned char valid_but_not_event[] = {0xf6};
     EXPECT_TRUE(write_bytes_file(invalid_path, valid_but_not_event, sizeof(valid_but_not_event)) != 0);
     EXPECT_EQ_INT(honch_track(client, "valid_after_invalid", "{\"ok\":true}"), HONCH_OK);
 
     EXPECT_EQ_INT(honch_flush(client), HONCH_ERROR_REJECTED);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 0);
-    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".cbor"), 1);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".hqe"), 1);
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"valid_after_invalid\"");
 
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
 }
 
-static void test_cbor_encoding_preserves_json_string_escapes(void)
+static void test_event_record_preserves_json_string_escapes(void)
 {
     char queue_dir[128];
     make_temp_dir(queue_dir, sizeof(queue_dir));
@@ -2090,7 +1886,7 @@ static void test_cbor_encoding_preserves_json_string_escapes(void)
     honch_test_set_transport(NULL, NULL);
 }
 
-static void test_cbor_encoding_handles_escaped_and_long_object_keys(void)
+static void test_event_record_handles_escaped_and_long_object_keys(void)
 {
     char queue_dir[128];
     make_temp_dir(queue_dir, sizeof(queue_dir));
@@ -2127,7 +1923,7 @@ static void test_cbor_encoding_handles_escaped_and_long_object_keys(void)
     honch_test_set_transport(NULL, NULL);
 }
 
-static void test_cbor_encoding_handles_large_property_maps(void)
+static void test_event_record_handles_large_property_maps(void)
 {
     char queue_dir[128];
     make_temp_dir(queue_dir, sizeof(queue_dir));
@@ -2191,7 +1987,7 @@ static void test_background_flush_threshold_drains_queue(void)
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
-    EXPECT_TRUE(wait_for_file_count(pending_dir, ".cbor", 0u) != 0);
+    EXPECT_TRUE(wait_for_file_count(pending_dir, ".hqe", 0u) != 0);
 
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
@@ -2223,7 +2019,7 @@ static void test_background_flush_retries_with_backoff(void)
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
-    EXPECT_TRUE(wait_for_file_count(pending_dir, ".cbor", 0u) != 0);
+    EXPECT_TRUE(wait_for_file_count(pending_dir, ".hqe", 0u) != 0);
 
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
@@ -2255,7 +2051,7 @@ static void test_background_flush_retries_http_timeout(void)
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
-    EXPECT_TRUE(wait_for_file_count(pending_dir, ".cbor", 0u) != 0);
+    EXPECT_TRUE(wait_for_file_count(pending_dir, ".hqe", 0u) != 0);
 
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
@@ -2286,7 +2082,7 @@ static void test_background_flush_uses_esp_idf_default_threshold(void)
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
-    EXPECT_TRUE(wait_for_file_count(pending_dir, ".cbor", 0u) != 0);
+    EXPECT_TRUE(wait_for_file_count(pending_dir, ".hqe", 0u) != 0);
 
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
@@ -2315,7 +2111,7 @@ static void test_background_flush_can_be_explicitly_disabled(void)
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 36);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 36);
 
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
     EXPECT_TRUE(transport.calls > 0);
@@ -2344,7 +2140,7 @@ static void test_flush_drains_multiple_batches(void)
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 0);
     EXPECT_EQ_INT(transport.calls, 2);
     EXPECT_TRUE(strcmp(transport.last_url, "http://collector.local/capture") == 0);
     EXPECT_TRUE(strcmp(transport.last_api_key, "test-key") == 0);
@@ -2411,10 +2207,10 @@ static void expect_conformance_response_policy_case(long response_code, int shou
     snprintf(dead_dir, sizeof(dead_dir), "%s/dead", queue_dir);
 
     if (should_preserve) {
-        EXPECT_TRUE(count_files_with_suffix(pending_dir, ".cbor") > 0u);
-        EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".cbor"), 0);
+        EXPECT_TRUE(count_files_with_suffix(pending_dir, ".hqe") > 0u);
+        EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".hqe"), 0);
     } else {
-        EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 0);
+        EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 0);
     }
 
     honch_shutdown(client);
@@ -2457,7 +2253,7 @@ static void test_batch_size_is_capped_to_esp_limit(void)
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 0);
     EXPECT_EQ_INT(transport.calls, 2);
 
     honch_shutdown(client);
@@ -2620,8 +2416,8 @@ static void test_flush_rejected_moves_events_to_dead_letter(void)
     char dead_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
     snprintf(dead_dir, sizeof(dead_dir), "%s/dead", queue_dir);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 0);
-    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".cbor"), 2);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".hqe"), 2);
 
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
@@ -2646,12 +2442,12 @@ static void test_reset_clears_queued_events(void)
     char dead_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
     snprintf(dead_dir, sizeof(dead_dir), "%s/dead", queue_dir);
-    EXPECT_TRUE(count_files_with_suffix(dead_dir, ".cbor") > 0u);
+    EXPECT_TRUE(count_files_with_suffix(dead_dir, ".hqe") > 0u);
 
     transport.response_code = 204L;
     EXPECT_EQ_INT(honch_reset(client), HONCH_OK);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 0);
-    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".cbor"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 0);
+    EXPECT_EQ_INT(count_files_with_suffix(dead_dir, ".hqe"), 0);
     int calls_after_reset = transport.calls;
     transport.last_payload[0] = '\0';
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
@@ -2676,11 +2472,11 @@ static void test_reset_does_not_queue_event_when_state_reset_fails(void)
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 1);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 1);
     EXPECT_EQ_INT(chmod(state_dir, 0500), 0);
 
     EXPECT_EQ_INT(honch_reset(client), HONCH_ERROR_IO);
-    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".cbor"), 1);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 1);
 
     EXPECT_EQ_INT(chmod(state_dir, 0700), 0);
     honch_shutdown(client);
@@ -2760,10 +2556,10 @@ int main(void)
     test_flush_http_timeout_keeps_events_until_success();
     test_flush_dead_letters_invalid_persisted_queue_files();
     test_flush_ignores_malformed_queue_filenames();
-    test_flush_dead_letters_semantically_invalid_cbor_event();
-    test_cbor_encoding_preserves_json_string_escapes();
-    test_cbor_encoding_handles_escaped_and_long_object_keys();
-    test_cbor_encoding_handles_large_property_maps();
+    test_flush_dead_letters_semantically_invalid_queue_record();
+    test_event_record_preserves_json_string_escapes();
+    test_event_record_handles_escaped_and_long_object_keys();
+    test_event_record_handles_large_property_maps();
     test_background_flush_threshold_drains_queue();
     test_background_flush_retries_with_backoff();
     test_background_flush_retries_http_timeout();

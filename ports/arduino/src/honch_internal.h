@@ -2,6 +2,7 @@
 #define HONCH_INTERNAL_H
 
 #include "honch/core/honch.h"
+#include "honch/core/wire_v2.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -43,6 +44,15 @@ typedef struct honch_file_list {
     size_t count;
     size_t capacity;
 } honch_file_list_t;
+
+typedef struct honch_event_record {
+    const char *event_name;
+    const char *distinct_id;
+    const char *session_id;
+    uint64_t timestamp_ms;
+    honch_wire_v2_property_t properties[64];
+    size_t property_count;
+} honch_event_record_t;
 
 struct honch_client {
     pthread_mutex_t lifetime_mutex;
@@ -120,17 +130,28 @@ honch_status_t honch_json_append_string(honch_buffer_t *buffer, const char *valu
 bool honch_json_is_object(const char *json);
 bool honch_json_is_value(const char *json);
 
-honch_status_t honch_cbor_append_text(honch_buffer_t *buffer, const char *value);
-honch_status_t honch_cbor_append_text_n(honch_buffer_t *buffer, const char *value, size_t length);
-honch_status_t honch_cbor_append_int(honch_buffer_t *buffer, int64_t value);
-honch_status_t honch_cbor_append_map(honch_buffer_t *buffer, size_t count);
-honch_status_t honch_cbor_append_array(honch_buffer_t *buffer, size_t count);
-honch_status_t honch_cbor_append_json_value(honch_buffer_t *buffer, const char *json);
-honch_status_t honch_cbor_append_json_object_members(
+honch_status_t honch_event_record_append_json_value(honch_buffer_t *buffer, const char *json);
+honch_status_t honch_event_record_append_json_object_members(
     honch_buffer_t *buffer,
     const char *json,
     size_t *member_count);
-bool honch_cbor_validate_event(const unsigned char *data, size_t length);
+honch_status_t honch_event_record_append_property_json(
+    honch_buffer_t *buffer,
+    size_t *member_count,
+    const char *key,
+    const char *value_json);
+honch_status_t honch_event_record_build(
+    const char *event_name,
+    const char *distinct_id,
+    const char *session_id,
+    uint64_t timestamp_ms,
+    const honch_buffer_t *properties,
+    size_t property_count,
+    honch_payload_t *out);
+honch_status_t honch_event_record_parse(const uint8_t *data, size_t length, honch_event_record_t *record);
+void honch_event_record_prepare_wire_properties(honch_event_record_t *record);
+void honch_event_record_free(honch_event_record_t *record);
+bool honch_event_record_validate(const uint8_t *data, size_t length);
 
 uint64_t honch_now_millis(void);
 honch_status_t honch_random_hex(char out[33]);

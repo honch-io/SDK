@@ -234,7 +234,7 @@ static void scan_cbor_files(const char *directory, size_t *files, size_t *bytes)
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
         size_t len = strlen(entry->d_name);
-        if (len < 5u || strcmp(entry->d_name + len - 5u, ".cbor") != 0) {
+        if (len < 5u || strcmp(entry->d_name + len - 5u, ".hqe") != 0) {
             continue;
         }
 

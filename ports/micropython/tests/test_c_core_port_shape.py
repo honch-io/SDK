@@ -19,7 +19,7 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertIn("INTERFACE_LIBRARY", cmake)
         self.assertIn("honch_micropython", cmake)
         self.assertIn("${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_core.c", cmake)
-        self.assertIn("${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_cbor.c", cmake)
+        self.assertIn("${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_event_record.c", cmake)
         self.assertIn("${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_packetizer.c", cmake)
 
     def test_rp2_build_reserves_c_heap_for_core_allocations(self):

@@ -78,7 +78,7 @@ class PosixChunkWireTest(unittest.TestCase):
         internal = read_sdk("core/src/honch_internal.h")
         queue_policy = read_sdk("core/src/honch_queue_policy.c")
 
-        self.assertIn('".cbor"', queue)
+        self.assertIn('".hqe"', queue)
         self.assertIn("const unsigned char *event", internal)
         self.assertIn("size_t event_size", internal)
         self.assertIn("honch_core_build_wire_v2_message", queue_policy)

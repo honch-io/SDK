@@ -1,6 +1,6 @@
 set(HONCH_CORE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_core.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_cbor.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_event_record.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_json.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_lifecycle.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_packetizer.c
@@ -89,9 +89,28 @@ if(HONCH_BUILD_TESTS)
 
     add_test(NAME honch_core_wire_v2_tests COMMAND honch_core_wire_v2_tests)
 
+    add_executable(honch_core_state_consistency_tests
+        test/test_state_consistency.c
+        ../ports/posix/src/posix_platform.c
+        ../ports/posix/src/posix_state.c
+        ../ports/posix/src/posix_storage.c
+    )
+
+    target_link_libraries(honch_core_state_consistency_tests PRIVATE honch_core)
+    target_include_directories(honch_core_state_consistency_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/../ports/posix/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../ports/posix/src
+    )
+    target_compile_options(honch_core_state_consistency_tests PRIVATE
+        $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
+    )
+
+    add_test(NAME honch_core_state_consistency_tests COMMAND honch_core_state_consistency_tests)
+
     add_executable(honch_core_retry_tests
         test/test_retry.c
-        src/honch_cbor.c
+        src/honch_event_record.c
         src/honch_json.c
         src/honch_lifecycle.c
         src/honch_queue_policy.c

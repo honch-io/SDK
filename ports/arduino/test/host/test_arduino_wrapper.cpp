@@ -1,4 +1,6 @@
 #include <assert.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "../../src/Honch.h"
@@ -35,7 +37,10 @@ int main() {
   assert(Honch.setProperty("mode", "\"host\""));
   assert(Honch.sessionStart("demo"));
   assert(Honch.sessionEnd());
-  assert(Honch.flush());
+  if (!Honch.flush()) {
+    fprintf(stderr, "flush failed: %s\n", Honch.lastError());
+    abort();
+  }
   assert(strlen(Honch.deviceId()) > 0);
   assert(strcmp(Honch.lastError(), "ok") == 0);
   assert(Honch.shutdown());

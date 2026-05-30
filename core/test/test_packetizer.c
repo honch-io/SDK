@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define HONCH_PACKET_HEADER_SIZE 20u
@@ -101,6 +102,11 @@ static void fake_client_with_storage(honch_client_t *client, fake_storage_t *sto
     assert(pthread_cond_init(&client->lifetime_cond, NULL) == 0);
     assert(pthread_mutex_init(&client->mutex, NULL) == 0);
     client->storage = ops;
+    client->device_id = "device-1";
+    client->device_model = "model-x";
+    client->firmware_version = "1.0.0";
+    client->sdk_platform = "posix";
+    client->environment = "production";
     storage->client = client;
 }
 
@@ -134,12 +140,29 @@ static uint16_t read_u16_be(const uint8_t *buffer)
     return (uint16_t)(((uint16_t)buffer[0] << 8u) | buffer[1]);
 }
 
+static honch_payload_t build_test_record(void)
+{
+    honch_buffer_t properties;
+    assert(honch_buffer_init(&properties, 16u) == HONCH_OK);
+    honch_payload_t payload = {0};
+    assert(honch_event_record_build(
+        "boot",
+        "user-1",
+        NULL,
+        1700000000000ULL,
+        &properties,
+        0u,
+        &payload) == HONCH_OK);
+    honch_buffer_free(&properties);
+    return payload;
+}
+
 static void test_tiny_buffer_rejected(void)
 {
-    const uint8_t message[] = {0xa1u, 0x01u, 0x02u};
+    honch_payload_t message = build_test_record();
     fake_storage_t storage = {
-        .message = message,
-        .message_size = sizeof(message),
+        .message = message.data,
+        .message_size = message.length,
         .sequence = HONCH_TEST_SEQUENCE,
         .has_message = true
     };
@@ -158,14 +181,15 @@ static void test_tiny_buffer_rejected(void)
     assert(!storage.consumed);
     assert(honch_packetizer_abort(&packetizer) == HONCH_OK);
     fake_client_destroy(&client);
+    free(message.data);
 }
 
 static void test_single_chunk_message_has_first_and_final_flags(void)
 {
-    const uint8_t message[] = {0xa1u, 0x65u, 'e', 'v', 'e', 'n', 't'};
+    honch_payload_t message = build_test_record();
     fake_storage_t storage = {
-        .message = message,
-        .message_size = sizeof(message),
+        .message = message.data,
+        .message_size = message.length,
         .sequence = HONCH_TEST_SEQUENCE,
         .has_message = true
     };
@@ -173,14 +197,14 @@ static void test_single_chunk_message_has_first_and_final_flags(void)
     honch_client_t client = {0};
     fake_client_with_storage(&client, &storage, &ops);
     honch_packetizer_t packetizer = {0};
-    uint8_t buffer[64] = {0};
+    uint8_t buffer[256] = {0};
     size_t out_size = 0u;
     bool complete = false;
 
     assert(honch_packetizer_begin(&client, &packetizer, HONCH_DATA_SOURCE_EVENTS) == HONCH_OK);
     assert(honch_packetizer_next(&packetizer, buffer, sizeof(buffer), &out_size, &complete) == HONCH_OK);
 
-    assert(out_size == HONCH_PACKET_HEADER_SIZE + sizeof(message));
+    assert(out_size > HONCH_PACKET_HEADER_SIZE);
     assert(complete);
     assert(buffer[0] == 1u);
     assert(buffer[1] == 1u);
@@ -188,19 +212,21 @@ static void test_single_chunk_message_has_first_and_final_flags(void)
     assert(buffer[3] == 0u);
     assert(read_u64_be(buffer + 4u) == HONCH_TEST_SEQUENCE);
     assert(read_u32_be(buffer + 12u) == 0u);
-    assert(read_u16_be(buffer + 16u) == sizeof(message));
-    assert(read_u16_be(buffer + 18u) == 0xb4c8u);
-    assert(memcmp(buffer + HONCH_PACKET_HEADER_SIZE, message, sizeof(message)) == 0);
+    assert(read_u16_be(buffer + 16u) == out_size - HONCH_PACKET_HEADER_SIZE);
+    assert(read_u16_be(buffer + 18u) != 0u);
+    assert(buffer[HONCH_PACKET_HEADER_SIZE] == 0x02u);
+    assert(memcmp(buffer + HONCH_PACKET_HEADER_SIZE, "HQR1", 4u) != 0);
     assert(honch_packetizer_abort(&packetizer) == HONCH_OK);
     fake_client_destroy(&client);
+    free(message.data);
 }
 
 static void test_multi_chunk_message_offsets_increase(void)
 {
-    const uint8_t message[] = {0x01u, 0x02u, 0x03u, 0x04u, 0x05u};
+    honch_payload_t message = build_test_record();
     fake_storage_t storage = {
-        .message = message,
-        .message_size = sizeof(message),
+        .message = message.data,
+        .message_size = message.length,
         .sequence = HONCH_TEST_SEQUENCE,
         .has_message = true
     };
@@ -228,14 +254,15 @@ static void test_multi_chunk_message_offsets_increase(void)
     assert(read_u16_be(second + 16u) == 2u);
     assert(honch_packetizer_abort(&packetizer) == HONCH_OK);
     fake_client_destroy(&client);
+    free(message.data);
 }
 
 static void test_abort_does_not_consume_storage(void)
 {
-    const uint8_t message[] = {0xa0u};
+    honch_payload_t message = build_test_record();
     fake_storage_t storage = {
-        .message = message,
-        .message_size = sizeof(message),
+        .message = message.data,
+        .message_size = message.length,
         .sequence = HONCH_TEST_SEQUENCE,
         .has_message = true
     };
@@ -250,14 +277,15 @@ static void test_abort_does_not_consume_storage(void)
     assert(storage.has_message);
     assert(!packetizer.active);
     fake_client_destroy(&client);
+    free(message.data);
 }
 
 static void test_confirm_consumes_storage(void)
 {
-    const uint8_t message[] = {0xa0u};
+    honch_payload_t message = build_test_record();
     fake_storage_t storage = {
-        .message = message,
-        .message_size = sizeof(message),
+        .message = message.data,
+        .message_size = message.length,
         .sequence = HONCH_TEST_SEQUENCE,
         .has_message = true
     };
@@ -265,7 +293,7 @@ static void test_confirm_consumes_storage(void)
     honch_client_t client = {0};
     fake_client_with_storage(&client, &storage, &ops);
     honch_packetizer_t packetizer = {0};
-    uint8_t buffer[64] = {0};
+    uint8_t buffer[256] = {0};
     size_t out_size = 0u;
     bool complete = false;
 
@@ -277,14 +305,15 @@ static void test_confirm_consumes_storage(void)
     assert(!storage.has_message);
     assert(!packetizer.active);
     fake_client_destroy(&client);
+    free(message.data);
 }
 
 static void test_confirm_failure_invalidates_packetizer_after_releasing_client(void)
 {
-    const uint8_t message[] = {0xa0u};
+    honch_payload_t message = build_test_record();
     fake_storage_t storage = {
-        .message = message,
-        .message_size = sizeof(message),
+        .message = message.data,
+        .message_size = message.length,
         .sequence = HONCH_TEST_SEQUENCE,
         .has_message = true,
         .consume_status = HONCH_ERROR_IO
@@ -293,7 +322,7 @@ static void test_confirm_failure_invalidates_packetizer_after_releasing_client(v
     honch_client_t client = {0};
     fake_client_with_storage(&client, &storage, &ops);
     honch_packetizer_t packetizer = {0};
-    uint8_t buffer[64] = {0};
+    uint8_t buffer[256] = {0};
     size_t out_size = 0u;
     bool complete = false;
 
@@ -307,14 +336,15 @@ static void test_confirm_failure_invalidates_packetizer_after_releasing_client(v
     assert(pthread_mutex_trylock(&client.mutex) == 0);
     assert(pthread_mutex_unlock(&client.mutex) == 0);
     fake_client_destroy(&client);
+    free(message.data);
 }
 
 static void test_packetizer_peek_runs_under_client_lock(void)
 {
-    const uint8_t message[] = {0xa0u};
+    honch_payload_t message = build_test_record();
     fake_storage_t storage = {
-        .message = message,
-        .message_size = sizeof(message),
+        .message = message.data,
+        .message_size = message.length,
         .sequence = HONCH_TEST_SEQUENCE,
         .has_message = true,
         .require_client_lock_on_peek = true
@@ -328,6 +358,7 @@ static void test_packetizer_peek_runs_under_client_lock(void)
     assert(storage.peek_saw_client_lock);
     assert(honch_packetizer_abort(&packetizer) == HONCH_OK);
     fake_client_destroy(&client);
+    free(message.data);
 }
 
 int main(void)
