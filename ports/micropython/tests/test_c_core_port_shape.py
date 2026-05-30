@@ -142,7 +142,8 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         compact_spec = " ".join(spec.split())
 
         self.assertIn("User-supplied properties using SDK-owned keys are rejected", compact_spec)
-        self.assertIn("wire-v2 context", compact_spec)
+        self.assertIn("Promoted context properties are encoded once in wire-v2 message context", compact_spec)
+        self.assertIn("wire-v2 message context", compact_spec)
         self.assertIn("removed from the event properties before wire encoding", compact_spec)
         self.assertNotIn("user-supplied properties with the same key are overwritten", spec)
         self.assertNotIn("just put them in `properties`", spec)

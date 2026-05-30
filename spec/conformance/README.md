@@ -14,6 +14,8 @@ These fixtures define behavior every Honch SDK must implement. They are not tied
 
 - SDK-owned property keys are rejected when supplied by users.
 - Event timestamps are assigned when `track` is called.
+- Promoted context properties are encoded once in wire-v2 message context and
+  are stripped from per-event properties before wire encoding.
 - Queue entries remain pending until delivery is confirmed.
 - Retryable failures preserve events.
 - Permanent rejection dead-letters or drops according to platform capability.

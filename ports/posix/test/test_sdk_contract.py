@@ -142,12 +142,22 @@ class PosixChunkWireTest(unittest.TestCase):
     def test_docs_reference_chunk_wire_contract(self) -> None:
         readme = read("README.md")
         spec = (SDK_ROOT / "spec/wire-format-v2.md").read_text()
+        root_readme = read_sdk("README.md")
+        production_e2e = read_sdk("docs/production-e2e.md")
+        release_runner = read_sdk("tools/release_e2e.py")
 
         self.assertIn("/capture", readme)
         self.assertIn("application/vnd.honch.chunk", readme)
         self.assertIn("POST /capture", spec)
         self.assertNotIn("application/cbor", readme)
         self.assertNotIn("POST /batch", readme)
+        self.assertIn("HQR1 queue records", root_readme)
+        self.assertIn("ports/posix/test/test_sdk_contract.py", production_e2e)
+        self.assertIn("ports/esp-idf/tests/test_sdk_contract.py", production_e2e)
+        self.assertIn("ports/posix/test/test_sdk_contract.py", release_runner)
+        self.assertIn("ports/esp-idf/tests/test_sdk_contract.py", release_runner)
+        self.assertNotIn("test_cbor_migration.py", production_e2e)
+        self.assertNotIn("test_cbor_migration.py", release_runner)
 
     def test_generated_ids_fail_closed_when_secure_randomness_is_unavailable(self) -> None:
         platform = read_sdk("ports/posix/src/posix_platform.c")

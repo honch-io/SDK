@@ -208,8 +208,8 @@ frees the client, and returns the first shutdown error encountered or
 events until `honch_session_end` queues `$session_end`.
 
 Auto-stamped property keys such as `$device_id`, `$session_id`, and
-`$sdk_platform` are owned by the SDK. Per-event properties using those keys are
-ignored so the SDK-stamped values win.
+`$sdk_platform` are owned by the SDK. User-supplied properties using those keys
+are rejected before queueing so application input cannot spoof SDK context.
 
 `honch_set_property` queues a `$set_property` event whose properties contain the
 provided key/value pair. It does not persist context onto future events.
@@ -240,10 +240,10 @@ static honch_status_t add_platform_properties(
 ```
 
 The SDK validates each key and typed value before appending it. Adapter
-properties are added after user properties and before SDK-owned properties, so
-core-owned values such as `$device_id`, `$sdk_platform`, and `$firmware_version`
-cannot be overridden by either user input or an adapter. The callback should
-return quickly because event enqueueing waits for it to finish.
+properties are collected separately and only approved adapter-owned keys are
+accepted. Core-owned values such as `$device_id`, `$sdk_platform`, and
+`$firmware_version` cannot be overridden by either user input or an adapter. The
+callback should return quickly because event enqueueing waits for it to finish.
 
 Call `honch_tick()` periodically from your main loop or scheduler to perform
 bounded cooperative flush work. When `flush_interval_seconds` or

@@ -309,6 +309,11 @@ timestamp = base_time_ms + time_delta_ms
 This allows efficient encoding for tightly grouped events while still
 supporting late-arriving queued events.
 
+SDKs must preserve event time, not upload time. If an event was queued while
+only boot-relative time was available, the SDK normalizes that event to
+realtime once a realtime clock becomes valid and marks the message context with
+the resulting `device_time_source`.
+
 `property_key_ref` is a compact key reference:
 
 ```text
