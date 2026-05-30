@@ -191,6 +191,7 @@ I (300) honch_footprint: HONCH_FOOTPRINT_CPU samples=100 avg_us=76 min_us=40 p50
 
         self.assertIn("honch_esp_ram_queue_entry_t *ram_entries;", header)
         self.assertIn("size_t ram_entry_capacity;", header)
+        self.assertIn("#define HONCH_ESP_RAM_QUEUE_MAX_EVENTS 256u", header)
         self.assertNotIn("ram_entries[HONCH_ESP_RAM_QUEUE_MAX_EVENTS]", header)
         self.assertIn("ctx->ram_entries = (honch_esp_ram_queue_entry_t *)entries_start;", storage)
 

@@ -127,47 +127,54 @@ static honch_status_t honch_packetizer_build_wire_v2_message(
         return status;
     }
 
-    honch_event_record_t record = {0};
-    status = honch_event_record_parse(event.data, event.length, &record);
+    honch_event_record_t *record = (honch_event_record_t *)calloc(1u, sizeof(*record));
+    if (record == NULL) {
+        free(event.data);
+        return HONCH_ERROR_OUT_OF_MEMORY;
+    }
+    status = honch_event_record_parse(event.data, event.length, record);
     if (status != HONCH_OK) {
+        free(record);
         free(event.data);
         return status;
     }
-    honch_event_record_prepare_wire_properties(&record);
+    honch_event_record_prepare_wire_properties(record);
 
     honch_wire_v2_event_t compact_event = {
-        .event_name = record.event_name,
-        .timestamp_ms = record.timestamp_ms,
-        .properties = record.properties,
-        .property_count = record.property_count
+        .event_name = record->event_name,
+        .timestamp_ms = record->timestamp_ms,
+        .properties = record->properties,
+        .property_count = record->property_count
     };
     honch_wire_v2_batch_context_t context = {
-        .distinct_id = record.distinct_id,
+        .distinct_id = record->distinct_id,
         .device_id = client->device_id,
         .device_model = client->device_model,
         .firmware_version = client->firmware_version,
         .sdk_platform = client->sdk_platform,
         .sdk_version = HONCH_SDK_VERSION,
         .environment = client->environment,
-        .session_id = record.session_id != NULL ? record.session_id : client->session_id
+        .session_id = record->session_id != NULL ? record->session_id : client->session_id
     };
 
     uint8_t *buffer = (uint8_t *)malloc(HONCH_PACKETIZER_MAX_MESSAGE_BYTES);
     if (buffer == NULL) {
-        honch_event_record_free(&record);
+        honch_event_record_free(record);
+        free(record);
         free(event.data);
         return HONCH_ERROR_OUT_OF_MEMORY;
     }
     size_t message_size = 0u;
     status = honch_wire_v2_encode_event_batch(
         &context,
-        record.timestamp_ms,
+        record->timestamp_ms,
         &compact_event,
         1u,
         buffer,
         HONCH_PACKETIZER_MAX_MESSAGE_BYTES,
         &message_size);
-    honch_event_record_free(&record);
+    honch_event_record_free(record);
+    free(record);
     free(event.data);
     if (status != HONCH_OK) {
         free(buffer);

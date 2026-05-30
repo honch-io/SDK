@@ -60,6 +60,7 @@ static EventGroupHandle_t s_wifi_event_group;
 static int s_retry_num = 0;
 static uint8_t s_event_buffer[32768];
 static uint32_t s_queued_estimate = 0;
+static uint32_t s_accepted_since_flush = 0;
 static uint32_t s_track_samples[CONFIG_RATE_SWEEP_MAX_WINDOW_SAMPLES];
 static uint32_t s_flush_samples[RATE_SWEEP_MAX_FLUSH_SAMPLES];
 #if CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS && CONFIG_FREERTOS_USE_TRACE_FACILITY
@@ -345,7 +346,6 @@ static bool run_rate_sweep_warmup(uint32_t rate, char *properties, size_t proper
         return true;
     }
 
-    uint32_t accepted_since_flush = 0;
     uint32_t sequence = 0;
     int64_t start_us = esp_timer_get_time();
     int64_t end_us = start_us + ((int64_t)CONFIG_RATE_SWEEP_WARMUP_SECONDS * 1000000);
@@ -365,16 +365,16 @@ static bool run_rate_sweep_warmup(uint32_t rate, char *properties, size_t proper
             return false;
         }
         s_queued_estimate++;
-        accepted_since_flush++;
+        s_accepted_since_flush++;
         sequence++;
 
-        if (accepted_since_flush >= CONFIG_RATE_SWEEP_FLUSH_EVERY) {
+        if (s_accepted_since_flush >= CONFIG_RATE_SWEEP_FLUSH_EVERY) {
             honch_err_t flush_err = honch_flush();
             if (flush_err != HONCH_OK) {
                 return false;
             }
             s_queued_estimate = 0;
-            accepted_since_flush = 0;
+            s_accepted_since_flush = 0;
         }
     }
 
@@ -384,6 +384,7 @@ static bool run_rate_sweep_warmup(uint32_t rate, char *properties, size_t proper
             return false;
         }
         s_queued_estimate = 0;
+        s_accepted_since_flush = 0;
     }
     return true;
 }
@@ -394,7 +395,6 @@ static bool run_rate_window(uint32_t rate, uint32_t window_index, char *properti
     cpu_snapshot_t cpu_before = cpu_snapshot();
     int64_t window_start_us = esp_timer_get_time();
     int64_t window_end_us = window_start_us + ((int64_t)CONFIG_RATE_SWEEP_WINDOW_SECONDS * 1000000);
-    uint32_t accepted_since_flush = 0;
 
     while (esp_timer_get_time() < window_end_us) {
         int64_t deadline_us = window_start_us + (((int64_t)window.attempted * 1000000) / rate);
@@ -420,12 +420,12 @@ static bool run_rate_window(uint32_t rate, uint32_t window_index, char *properti
         if (track_err == HONCH_OK) {
             window.accepted++;
             s_queued_estimate++;
-            accepted_since_flush++;
+            s_accepted_since_flush++;
         } else {
             window.failed++;
         }
 
-        if (accepted_since_flush >= CONFIG_RATE_SWEEP_FLUSH_EVERY) {
+        if (s_accepted_since_flush >= CONFIG_RATE_SWEEP_FLUSH_EVERY) {
             start_us = esp_timer_get_time();
             honch_err_t flush_err = honch_flush();
             elapsed_us = esp_timer_get_time() - start_us;
@@ -435,7 +435,7 @@ static bool run_rate_window(uint32_t rate, uint32_t window_index, char *properti
                 flush_err == HONCH_OK);
             if (flush_err == HONCH_OK) {
                 s_queued_estimate = 0;
-                accepted_since_flush = 0;
+                s_accepted_since_flush = 0;
             }
         }
     }
@@ -562,6 +562,7 @@ static bool run_rate_sweep_suite(uint32_t suite_id)
         int64_t flush_us = esp_timer_get_time() - flush_start_us;
         if (flush_err == HONCH_OK) {
             s_queued_estimate = 0;
+            s_accepted_since_flush = 0;
         } else {
             ok = false;
         }

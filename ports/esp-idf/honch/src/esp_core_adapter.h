@@ -16,7 +16,7 @@
 
 #include "freertos/FreeRTOS.h"
 
-#define HONCH_ESP_RAM_QUEUE_MAX_EVENTS 64u
+#define HONCH_ESP_RAM_QUEUE_MAX_EVENTS 256u
 
 typedef honch_client_t honch_esp_core_client_t;
 
