@@ -1,7 +1,6 @@
 set(HONCH_CORE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_core.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_event_record.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_json.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_lifecycle.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_packetizer.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_queue_policy.c
@@ -111,7 +110,6 @@ if(HONCH_BUILD_TESTS)
     add_executable(honch_core_retry_tests
         test/test_retry.c
         src/honch_event_record.c
-        src/honch_json.c
         src/honch_lifecycle.c
         src/honch_queue_policy.c
         src/honch_support.c

@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "honch/core/status.h"
 
@@ -129,6 +130,125 @@ typedef struct honch_wire_v2_event {
     const honch_wire_v2_property_t *properties;
     size_t property_count;
 } honch_wire_v2_event_t;
+
+static inline honch_wire_v2_value_t honch_null(void)
+{
+    honch_wire_v2_value_t out;
+    memset(&out, 0, sizeof(out));
+    out.type = HONCH_WIRE_V2_VALUE_TYPE_NULL;
+    return out;
+}
+
+static inline honch_wire_v2_value_t honch_bool(bool value)
+{
+    honch_wire_v2_value_t out;
+    memset(&out, 0, sizeof(out));
+    out.type = HONCH_WIRE_V2_VALUE_TYPE_BOOL;
+    out.bool_value = value;
+    return out;
+}
+
+static inline honch_wire_v2_value_t honch_u64(uint64_t value)
+{
+    honch_wire_v2_value_t out;
+    memset(&out, 0, sizeof(out));
+    out.type = HONCH_WIRE_V2_VALUE_TYPE_UINT;
+    out.uint_value = value;
+    return out;
+}
+
+static inline honch_wire_v2_value_t honch_i64(int64_t value)
+{
+    honch_wire_v2_value_t out;
+    memset(&out, 0, sizeof(out));
+    out.type = HONCH_WIRE_V2_VALUE_TYPE_INT;
+    out.int_value = value;
+    return out;
+}
+
+static inline honch_wire_v2_value_t honch_f32(float value)
+{
+    honch_wire_v2_value_t out;
+    memset(&out, 0, sizeof(out));
+    out.type = HONCH_WIRE_V2_VALUE_TYPE_FLOAT32;
+    out.float32_value = value;
+    return out;
+}
+
+static inline honch_wire_v2_value_t honch_f64(double value)
+{
+    honch_wire_v2_value_t out;
+    memset(&out, 0, sizeof(out));
+    out.type = HONCH_WIRE_V2_VALUE_TYPE_FLOAT64;
+    out.float64_value = value;
+    return out;
+}
+
+static inline honch_wire_v2_value_t honch_str(const char *value)
+{
+    honch_wire_v2_value_t out;
+    memset(&out, 0, sizeof(out));
+    out.type = HONCH_WIRE_V2_VALUE_TYPE_STRING;
+    out.string_value = value;
+    out.string_size = SIZE_MAX;
+    return out;
+}
+
+static inline honch_wire_v2_value_t honch_strn(const char *value, size_t size)
+{
+    honch_wire_v2_value_t out;
+    memset(&out, 0, sizeof(out));
+    out.type = HONCH_WIRE_V2_VALUE_TYPE_STRING;
+    out.string_value = value;
+    out.string_size = size;
+    return out;
+}
+
+static inline honch_wire_v2_value_t honch_bytes(const uint8_t *data, size_t size)
+{
+    honch_wire_v2_value_t out;
+    memset(&out, 0, sizeof(out));
+    out.type = HONCH_WIRE_V2_VALUE_TYPE_BYTES;
+    out.bytes.data = data;
+    out.bytes.size = size;
+    return out;
+}
+
+static inline honch_wire_v2_value_t honch_array(const honch_wire_v2_value_t *items, size_t count)
+{
+    honch_wire_v2_value_t out;
+    memset(&out, 0, sizeof(out));
+    out.type = HONCH_WIRE_V2_VALUE_TYPE_ARRAY;
+    out.array.items = items;
+    out.array.count = count;
+    return out;
+}
+
+static inline honch_wire_v2_value_t honch_map(const honch_wire_v2_map_pair_t *entries, size_t count)
+{
+    honch_wire_v2_value_t out;
+    memset(&out, 0, sizeof(out));
+    out.type = HONCH_WIRE_V2_VALUE_TYPE_MAP;
+    out.map.entries = entries;
+    out.map.count = count;
+    return out;
+}
+
+static inline honch_wire_v2_property_t honch_prop(const char *key, honch_wire_v2_value_t value)
+{
+    honch_wire_v2_property_t out;
+    out.key = key;
+    out.value = value;
+    return out;
+}
+
+static inline honch_wire_v2_map_pair_t honch_pair(const char *key, honch_wire_v2_value_t value)
+{
+    honch_wire_v2_map_pair_t out;
+    out.key = key;
+    out.value = value;
+    return out;
+}
 
 uint64_t honch_wire_v2_zigzag_i64(int64_t value);
 uint16_t honch_wire_v2_crc16(const uint8_t *data, size_t data_size);

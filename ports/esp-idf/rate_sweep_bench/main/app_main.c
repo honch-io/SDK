@@ -340,7 +340,7 @@ static void fill_pad(char *pad, size_t pad_size)
     pad[want] = '\0';
 }
 
-static bool run_rate_sweep_warmup(uint32_t rate, char *properties, size_t properties_size, const char *pad)
+static bool run_rate_sweep_warmup(uint32_t rate, const char *pad)
 {
     if (CONFIG_RATE_SWEEP_WARMUP_SECONDS == 0) {
         return true;
@@ -353,14 +353,13 @@ static bool run_rate_sweep_warmup(uint32_t rate, char *properties, size_t proper
     while (esp_timer_get_time() < end_us) {
         int64_t deadline_us = start_us + (((int64_t)sequence * 1000000) / rate);
         delay_until_us(deadline_us);
-        snprintf(
-            properties,
-            properties_size,
-            "{\"rate\":%" PRIu32 ",\"seq\":%" PRIu32 ",\"warmup\":true,\"pad\":\"%s\"}",
-            rate,
-            sequence,
-            pad);
-        honch_err_t track_err = honch_track("bench_rate_warmup", properties);
+        const honch_property_t properties[] = {
+            honch_prop("rate", honch_u64(rate)),
+            honch_prop("seq", honch_u64(sequence)),
+            honch_prop("warmup", honch_bool(true)),
+            honch_prop("pad", honch_str(pad))
+        };
+        honch_err_t track_err = honch_track("bench_rate_warmup", properties, 4u);
         if (track_err != HONCH_OK) {
             return false;
         }
@@ -389,7 +388,7 @@ static bool run_rate_sweep_warmup(uint32_t rate, char *properties, size_t proper
     return true;
 }
 
-static bool run_rate_window(uint32_t rate, uint32_t window_index, char *properties, size_t properties_size, const char *pad)
+static bool run_rate_window(uint32_t rate, uint32_t window_index, const char *pad)
 {
     bench_window_t window = {0};
     cpu_snapshot_t cpu_before = cpu_snapshot();
@@ -400,19 +399,16 @@ static bool run_rate_window(uint32_t rate, uint32_t window_index, char *properti
         int64_t deadline_us = window_start_us + (((int64_t)window.attempted * 1000000) / rate);
         delay_until_us(deadline_us);
         uint32_t sequence = window_index * 100000u + window.attempted;
-        snprintf(
-            properties,
-            properties_size,
-            "{\"rate\":%" PRIu32 ",\"window\":%" PRIu32 ",\"seq\":%" PRIu32
-            ",\"sample\":%" PRIu32 ",\"pad\":\"%s\"}",
-            rate,
-            window_index,
-            sequence,
-            (uint32_t)((sequence * 1103515245u + 12345u) & 0xffffu),
-            pad);
+        const honch_property_t properties[] = {
+            honch_prop("rate", honch_u64(rate)),
+            honch_prop("window", honch_u64(window_index)),
+            honch_prop("seq", honch_u64(sequence)),
+            honch_prop("sample", honch_u64((sequence * 1103515245u + 12345u) & 0xffffu)),
+            honch_prop("pad", honch_str(pad))
+        };
 
         int64_t start_us = esp_timer_get_time();
-        honch_err_t track_err = honch_track("bench_rate_event", properties);
+        honch_err_t track_err = honch_track("bench_rate_event", properties, 5u);
         int64_t elapsed_us = esp_timer_get_time() - start_us;
         window_add_track_sample(&window, elapsed_us > UINT32_MAX ? UINT32_MAX : (uint32_t)elapsed_us);
         window.attempted++;
@@ -513,7 +509,6 @@ static bool run_rate_sweep_suite(uint32_t suite_id)
     }
 
     char pad[CONFIG_RATE_SWEEP_PAYLOAD_BYTES + 1];
-    char properties[900];
     fill_pad(pad, sizeof(pad));
 
     ESP_LOGI(
@@ -543,7 +538,7 @@ static bool run_rate_sweep_suite(uint32_t suite_id)
             CONFIG_RATE_SWEEP_WARMUP_SECONDS,
             CONFIG_RATE_SWEEP_WINDOW_SECONDS);
 
-        if (!run_rate_sweep_warmup(rate, properties, sizeof(properties), pad)) {
+        if (!run_rate_sweep_warmup(rate, pad)) {
             ok = false;
         }
 
@@ -553,7 +548,7 @@ static bool run_rate_sweep_suite(uint32_t suite_id)
         }
 
         for (uint32_t window = 1; ok && window <= windows; window++) {
-            ok = run_rate_window(rate, window, properties, sizeof(properties), pad);
+            ok = run_rate_window(rate, window, pad);
             vTaskDelay(pdMS_TO_TICKS(1));
         }
 

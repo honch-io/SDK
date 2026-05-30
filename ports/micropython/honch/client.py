@@ -1,9 +1,4 @@
 try:
-    import ujson as json
-except ImportError:
-    import json
-
-try:
     import _honch_core
 except ImportError:
     _honch_core = None
@@ -19,7 +14,7 @@ from .errors import (
     StorageError,
     TransportError,
 )
-from .validation import require_distinct_id, require_event_name, require_json_value, require_properties
+from .validation import require_distinct_id, require_event_name, require_properties, require_value
 
 
 class Honch:
@@ -44,17 +39,16 @@ class Honch:
 
     def track(self, event_name, properties=None):
         require_event_name(event_name)
-        self._call("track", event_name, _json_object(require_properties(properties)))
+        self._call("track", event_name, require_properties(properties))
 
     def identify(self, distinct_id, traits=None):
         require_distinct_id(distinct_id)
-        self._call("identify", distinct_id, _json_object(require_properties(traits)))
+        self._call("identify", distinct_id, require_properties(traits))
 
     def set_property(self, key, value=None):
         if not isinstance(key, str) or key.strip() == "":
             raise InvalidArgumentError("invalid property key")
-        require_json_value(value)
-        self._call("set_property", key, _json_value(value))
+        self._call("set_property", key, require_value(value))
 
     def session_start(self, session_name=None):
         if session_name is not None:
@@ -117,21 +111,6 @@ def _config_to_dict(config):
         "flush_retry_max_ms": config.flush_retry_max_ms,
         "battery_low_threshold": config.battery_low_threshold,
     }
-
-
-def _json_object(value):
-    return _json_dumps(value)
-
-
-def _json_value(value):
-    return _json_dumps(value)
-
-
-def _json_dumps(value):
-    try:
-        return json.dumps(value, separators=(",", ":"))
-    except TypeError:
-        return json.dumps(value)
 
 
 def _raise_mapped(exc):

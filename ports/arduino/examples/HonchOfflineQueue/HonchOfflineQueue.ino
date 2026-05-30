@@ -29,7 +29,7 @@ void setup() {
   config.insecureSkipTlsVerify = false;
 
   Honch.begin(config);
-  Honch.track("staged_before_wifi", "{}");
+  Honch.track("staged_before_wifi");
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED) {

@@ -261,7 +261,7 @@ static honch_status_t lock_observing_auto_properties_callback(
         g_auto_properties_callback_saw_unlocked_mutex = 1;
     }
 
-    return sink(sink_ctx, "$wifi_rssi", "-42");
+    return sink(sink_ctx, "$wifi_rssi", honch_i64(-42));
 }
 
 static honch_core_config_t fake_config(
@@ -315,7 +315,7 @@ static void test_core_state_lock_works_without_platform_lock_callbacks(void)
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
-    assert(honch_core_track(client, "custom_event", NULL) == HONCH_OK);
+    assert(honch_core_track(client, "custom_event", NULL, 0u) == HONCH_OK);
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
@@ -390,8 +390,8 @@ static void test_set_property_rejects_blank_key(void)
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
     int queue_push_calls = storage.queue_push_calls;
-    assert(honch_core_set_property(client, "", "\"value\"") == HONCH_ERROR_INVALID_ARGUMENT);
-    assert(honch_core_set_property(client, "   ", "\"value\"") == HONCH_ERROR_INVALID_ARGUMENT);
+    assert(honch_core_set_property(client, "", honch_str("value")) == HONCH_ERROR_INVALID_ARGUMENT);
+    assert(honch_core_set_property(client, "   ", honch_str("value")) == HONCH_ERROR_INVALID_ARGUMENT);
     assert(storage.queue_push_calls == queue_push_calls);
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
@@ -407,8 +407,8 @@ static void test_set_property_rejects_reserved_key(void)
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
     int queue_push_calls = storage.queue_push_calls;
-    assert(honch_core_set_property(client, "$device_id", "\"spoof\"") == HONCH_ERROR_INVALID_ARGUMENT);
-    assert(honch_core_set_property(client, "$session_id", "\"spoof\"") == HONCH_ERROR_INVALID_ARGUMENT);
+    assert(honch_core_set_property(client, "$device_id", honch_str("spoof")) == HONCH_ERROR_INVALID_ARGUMENT);
+    assert(honch_core_set_property(client, "$session_id", honch_str("spoof")) == HONCH_ERROR_INVALID_ARGUMENT);
     assert(storage.queue_push_calls == queue_push_calls);
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
@@ -425,7 +425,7 @@ static void test_sequence_wrap_rejects_enqueue_without_advancing(void)
     assert(honch_core_init(&client, &config) == HONCH_OK);
     int queue_push_calls = storage.queue_push_calls;
     client->sequence = UINT64_MAX;
-    assert(honch_core_track(client, "sequence_wrap_probe", NULL) == HONCH_ERROR_QUEUE_FULL);
+    assert(honch_core_track(client, "sequence_wrap_probe", NULL, 0u) == HONCH_ERROR_QUEUE_FULL);
     assert(client->sequence == UINT64_MAX);
     assert(storage.queue_push_calls == queue_push_calls);
     client->sequence = 42u;
@@ -447,7 +447,7 @@ static void test_custom_storage_enqueue_refreshes_cached_queue_depth(void)
     assert(honch_core_init(&client, &config) == HONCH_OK);
     assert(storage.queue_depth == 1u);
     assert(client->queued_event_count == storage.queue_depth);
-    assert(honch_core_track(client, "custom_depth_probe", NULL) == HONCH_OK);
+    assert(honch_core_track(client, "custom_depth_probe", NULL, 0u) == HONCH_OK);
     assert(storage.queue_depth == 2u);
     assert(client->queued_event_count == storage.queue_depth);
     storage.track_queue_depth = 0;
@@ -472,7 +472,7 @@ static void test_custom_storage_drops_oldest_at_queue_limit(void)
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
     assert(storage.queue_depth == 1u);
-    assert(honch_core_track(client, "bounded_custom_queue", NULL) == HONCH_OK);
+    assert(honch_core_track(client, "bounded_custom_queue", NULL, 0u) == HONCH_OK);
     assert(storage.queue_drop_oldest_calls == 1);
     assert(storage.queue_depth == 1u);
     assert(client->queued_event_count == 1u);
@@ -527,7 +527,11 @@ static void test_track_rejects_embedded_nul_property_key(void)
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
     int queue_push_calls = storage.queue_push_calls;
-    assert(honch_core_track(client, "bad_property_key", "{\"bad\\u0000key\":1}") ==
+    const char invalid_key[] = {(char)0xff, '\0'};
+    const honch_property_t properties[] = {
+        honch_prop(invalid_key, honch_i64(1))
+    };
+    assert(honch_core_track(client, "bad_property_key", properties, 1u) ==
         HONCH_ERROR_INVALID_ARGUMENT);
     assert(storage.queue_push_calls == queue_push_calls);
     assert(honch_core_shutdown(client) == HONCH_OK);
@@ -544,7 +548,11 @@ static void test_identify_rejects_embedded_nul_trait_key(void)
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
     int queue_push_calls = storage.queue_push_calls;
-    assert(honch_core_identify(client, "user-1", "{\"bad\\u0000key\":1}") ==
+    const char invalid_key[] = {(char)0xff, '\0'};
+    const honch_property_t traits[] = {
+        honch_prop(invalid_key, honch_i64(1))
+    };
+    assert(honch_core_identify(client, "user-1", traits, 1u) ==
         HONCH_ERROR_INVALID_ARGUMENT);
     assert(strcmp(storage.distinct_id, storage.device_id) == 0);
     assert(storage.queue_push_calls == queue_push_calls);
@@ -598,7 +606,7 @@ static void test_battery_callback_runs_outside_client_mutex(void)
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
     g_callback_lock_client = client;
-    assert(honch_core_track(client, "battery_lock_probe", NULL) == HONCH_OK);
+    assert(honch_core_track(client, "battery_lock_probe", NULL, 0u) == HONCH_OK);
     assert(g_battery_callback_saw_unlocked_mutex == 1);
     g_callback_lock_client = NULL;
     assert(honch_core_shutdown(client) == HONCH_OK);
@@ -619,7 +627,7 @@ static void test_auto_properties_callback_runs_outside_client_mutex(void)
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
     g_callback_lock_client = client;
-    assert(honch_core_track(client, "auto_properties_lock_probe", NULL) == HONCH_OK);
+    assert(honch_core_track(client, "auto_properties_lock_probe", NULL, 0u) == HONCH_OK);
     assert(g_auto_properties_callback_saw_unlocked_mutex == 1);
     g_callback_lock_client = NULL;
     assert(honch_core_shutdown(client) == HONCH_OK);

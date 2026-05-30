@@ -32,26 +32,26 @@ def require_properties(properties):
         return {}
     if not isinstance(properties, dict):
         raise InvalidArgumentError("properties must be a dict")
-    _validate_json_value(properties)
+    _validate_typed_value(properties)
     return dict(properties)
 
 
-def require_json_value(value):
-    _validate_json_value(value)
+def require_value(value):
+    _validate_typed_value(value)
     return value
 
 
-def _validate_json_value(value):
-    if value is None or isinstance(value, (bool, int, float, str)):
+def _validate_typed_value(value):
+    if value is None or isinstance(value, (bool, int, float, str, bytes)):
         return
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         for item in value:
-            _validate_json_value(item)
+            _validate_typed_value(item)
         return
     if isinstance(value, dict):
         for key, item in value.items():
             if not isinstance(key, str):
                 raise InvalidArgumentError("property keys must be strings")
-            _validate_json_value(item)
+            _validate_typed_value(item)
         return
-    raise InvalidArgumentError("unsupported JSON value")
+    raise InvalidArgumentError("unsupported property value")

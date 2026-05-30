@@ -53,15 +53,12 @@ static honch_status_t track_gpio_sample(
         return HONCH_OK;
     }
 
-    char properties[96];
-    snprintf(
-        properties,
-        sizeof(properties),
-        "{\"pin\":%d,\"edge\":\"%s\",\"value\":%d}",
-        tracker->pin,
-        edge_name(previous, normalized),
-        normalized);
-    return honch_track(client, "gpio_edge", properties);
+    const honch_property_t properties[] = {
+        honch_prop("pin", honch_i64(tracker->pin)),
+        honch_prop("edge", honch_str(edge_name(previous, normalized))),
+        honch_prop("value", honch_i64(normalized))
+    };
+    return honch_track(client, "gpio_edge", properties, 3u);
 }
 
 int main(void)

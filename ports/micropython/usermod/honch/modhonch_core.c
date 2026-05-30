@@ -13,6 +13,171 @@ typedef struct honch_micropython_client {
 
 extern const mp_obj_type_t honch_micropython_client_type;
 
+#define HONCH_MP_MAX_TYPED_VALUES 64u
+#define HONCH_MP_MAX_TYPED_PAIRS 64u
+#define HONCH_MP_MAX_PROPERTIES 64u
+
+typedef struct honch_mp_typed_pool {
+    honch_value_t values[HONCH_MP_MAX_TYPED_VALUES];
+    honch_map_pair_t pairs[HONCH_MP_MAX_TYPED_PAIRS];
+    size_t value_count;
+    size_t pair_count;
+} honch_mp_typed_pool_t;
+
+static honch_status_t honch_mp_value_from_obj(
+    mp_obj_t obj,
+    honch_mp_typed_pool_t *pool,
+    honch_value_t *out,
+    size_t depth);
+
+static honch_status_t honch_mp_alloc_values(
+    honch_mp_typed_pool_t *pool,
+    size_t count,
+    honch_value_t **out)
+{
+    if (pool == NULL || out == NULL || count > HONCH_MP_MAX_TYPED_VALUES - pool->value_count) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    *out = &pool->values[pool->value_count];
+    pool->value_count += count;
+    return HONCH_STATUS_OK;
+}
+
+static honch_status_t honch_mp_alloc_pairs(
+    honch_mp_typed_pool_t *pool,
+    size_t count,
+    honch_map_pair_t **out)
+{
+    if (pool == NULL || out == NULL || count > HONCH_MP_MAX_TYPED_PAIRS - pool->pair_count) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    *out = &pool->pairs[pool->pair_count];
+    pool->pair_count += count;
+    return HONCH_STATUS_OK;
+}
+
+static honch_status_t honch_mp_value_from_map(
+    mp_obj_t obj,
+    honch_mp_typed_pool_t *pool,
+    honch_value_t *out,
+    size_t depth)
+{
+    mp_map_t *map = mp_obj_dict_get_map(obj);
+    honch_map_pair_t *pairs = NULL;
+    honch_status_t status = honch_mp_alloc_pairs(pool, map->used, &pairs);
+    if (status != HONCH_STATUS_OK) {
+        return status;
+    }
+    for (size_t i = 0u; i < map->used; i++) {
+        mp_map_elem_t *elem = &map->table[i];
+        if (!mp_obj_is_str(elem->key)) {
+            return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+        }
+        pairs[i].key = mp_obj_str_get_str(elem->key);
+        status = honch_mp_value_from_obj(elem->value, pool, &pairs[i].value, depth + 1u);
+        if (status != HONCH_STATUS_OK) {
+            return status;
+        }
+    }
+    *out = honch_map(pairs, map->used);
+    return HONCH_STATUS_OK;
+}
+
+static honch_status_t honch_mp_value_from_obj(
+    mp_obj_t obj,
+    honch_mp_typed_pool_t *pool,
+    honch_value_t *out,
+    size_t depth)
+{
+    if (pool == NULL || out == NULL || depth > 8u) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    if (obj == mp_const_none) {
+        *out = honch_null();
+        return HONCH_STATUS_OK;
+    }
+    if (obj == mp_const_true || obj == mp_const_false) {
+        *out = honch_bool(obj == mp_const_true);
+        return HONCH_STATUS_OK;
+    }
+    if (mp_obj_is_int(obj)) {
+        *out = honch_i64((int64_t)mp_obj_get_int(obj));
+        return HONCH_STATUS_OK;
+    }
+#if MICROPY_PY_BUILTINS_FLOAT
+    if (mp_obj_is_float(obj)) {
+        *out = honch_f64((double)mp_obj_get_float(obj));
+        return HONCH_STATUS_OK;
+    }
+#endif
+    if (mp_obj_is_type(obj, &mp_type_bytes)) {
+        size_t length = 0u;
+        const char *value = mp_obj_str_get_data(obj, &length);
+        *out = honch_bytes((const uint8_t *)value, length);
+        return HONCH_STATUS_OK;
+    }
+    if (mp_obj_is_str(obj)) {
+        size_t length = 0u;
+        const char *value = mp_obj_str_get_data(obj, &length);
+        *out = honch_strn(value, length);
+        return HONCH_STATUS_OK;
+    }
+    if (mp_obj_is_type(obj, &mp_type_dict)) {
+        return honch_mp_value_from_map(obj, pool, out, depth);
+    }
+    if (mp_obj_is_type(obj, &mp_type_tuple) || mp_obj_is_type(obj, &mp_type_list)) {
+        size_t count = 0u;
+        mp_obj_t *items_obj = NULL;
+        mp_obj_get_array(obj, &count, &items_obj);
+        honch_value_t *items = NULL;
+        honch_status_t status = honch_mp_alloc_values(pool, count, &items);
+        if (status != HONCH_STATUS_OK) {
+            return status;
+        }
+        for (size_t i = 0u; i < count; i++) {
+            status = honch_mp_value_from_obj(items_obj[i], pool, &items[i], depth + 1u);
+            if (status != HONCH_STATUS_OK) {
+                return status;
+            }
+        }
+        *out = honch_array(items, count);
+        return HONCH_STATUS_OK;
+    }
+    return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+}
+
+static honch_status_t honch_mp_properties_from_obj(
+    mp_obj_t obj,
+    honch_mp_typed_pool_t *pool,
+    honch_property_t *properties,
+    size_t *property_count)
+{
+    if (obj == mp_const_none) {
+        *property_count = 0u;
+        return HONCH_STATUS_OK;
+    }
+    if (!mp_obj_is_type(obj, &mp_type_dict)) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    mp_map_t *map = mp_obj_dict_get_map(obj);
+    if (map->used > HONCH_MP_MAX_PROPERTIES) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    for (size_t i = 0u; i < map->used; i++) {
+        mp_map_elem_t *elem = &map->table[i];
+        if (!mp_obj_is_str(elem->key)) {
+            return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+        }
+        properties[i].key = mp_obj_str_get_str(elem->key);
+        honch_status_t status = honch_mp_value_from_obj(elem->value, pool, &properties[i].value, 0u);
+        if (status != HONCH_STATUS_OK) {
+            return status;
+        }
+    }
+    *property_count = map->used;
+    return HONCH_STATUS_OK;
+}
+
 static const char *honch_mp_map_get_str(mp_obj_t dict_obj, qstr key, const char *fallback)
 {
     mp_map_t *map = mp_obj_dict_get_map(dict_obj);
@@ -131,10 +296,17 @@ static honch_micropython_client_t *honch_get_self(mp_obj_t self_in)
 static mp_obj_t honch_client_track(mp_obj_t self_in, mp_obj_t event_in, mp_obj_t properties_in)
 {
     honch_micropython_client_t *self = honch_get_self(self_in);
-    honch_status_t status = honch_core_track(
-        self->client,
-        mp_obj_str_get_str(event_in),
-        mp_obj_str_get_str(properties_in));
+    honch_mp_typed_pool_t pool = {0};
+    honch_property_t properties[HONCH_MP_MAX_PROPERTIES];
+    size_t property_count = 0u;
+    honch_status_t status = honch_mp_properties_from_obj(properties_in, &pool, properties, &property_count);
+    if (status == HONCH_STATUS_OK) {
+        status = honch_core_track(
+            self->client,
+            mp_obj_str_get_str(event_in),
+            properties,
+            property_count);
+    }
     if (status != HONCH_STATUS_OK) {
         honch_micropython_raise_status(status);
     }
@@ -145,9 +317,16 @@ static MP_DEFINE_CONST_FUN_OBJ_3(honch_client_track_obj, honch_client_track);
 static mp_obj_t honch_client_identify(mp_obj_t self_in, mp_obj_t distinct_id_in, mp_obj_t traits_in)
 {
     honch_micropython_client_t *self = honch_get_self(self_in);
-    honch_status_t status = honch_core_identify(self->client,
-        mp_obj_str_get_str(distinct_id_in),
-        mp_obj_str_get_str(traits_in));
+    honch_mp_typed_pool_t pool = {0};
+    honch_property_t traits[HONCH_MP_MAX_PROPERTIES];
+    size_t trait_count = 0u;
+    honch_status_t status = honch_mp_properties_from_obj(traits_in, &pool, traits, &trait_count);
+    if (status == HONCH_STATUS_OK) {
+        status = honch_core_identify(self->client,
+            mp_obj_str_get_str(distinct_id_in),
+            traits,
+            trait_count);
+    }
     if (status != HONCH_STATUS_OK) {
         honch_micropython_raise_status(status);
     }
@@ -158,10 +337,15 @@ static MP_DEFINE_CONST_FUN_OBJ_3(honch_client_identify_obj, honch_client_identif
 static mp_obj_t honch_client_set_property(mp_obj_t self_in, mp_obj_t key_in, mp_obj_t value_in)
 {
     honch_micropython_client_t *self = honch_get_self(self_in);
-    honch_status_t status = honch_core_set_property(
-        self->client,
-        mp_obj_str_get_str(key_in),
-        mp_obj_str_get_str(value_in));
+    honch_mp_typed_pool_t pool = {0};
+    honch_value_t value;
+    honch_status_t status = honch_mp_value_from_obj(value_in, &pool, &value, 0u);
+    if (status == HONCH_STATUS_OK) {
+        status = honch_core_set_property(
+            self->client,
+            mp_obj_str_get_str(key_in),
+            value);
+    }
     if (status != HONCH_STATUS_OK) {
         honch_micropython_raise_status(status);
     }
@@ -195,10 +379,10 @@ static MP_DEFINE_CONST_FUN_OBJ_1(honch_client_session_end_obj, honch_client_sess
 static mp_obj_t honch_client_connectivity_changed(mp_obj_t self_in, mp_obj_t connected_in)
 {
     honch_micropython_client_t *self = honch_get_self(self_in);
-    const char *properties = mp_obj_is_true(connected_in) ?
-        "{\"state\":\"connected\"}" :
-        "{\"state\":\"disconnected\"}";
-    honch_status_t status = honch_core_track(self->client, "$connectivity_change", properties);
+    const honch_property_t properties[] = {
+        honch_prop("state", honch_str(mp_obj_is_true(connected_in) ? "connected" : "disconnected"))
+    };
+    honch_status_t status = honch_core_track(self->client, "$connectivity_change", properties, 1u);
     if (status != HONCH_STATUS_OK) {
         honch_micropython_raise_status(status);
     }

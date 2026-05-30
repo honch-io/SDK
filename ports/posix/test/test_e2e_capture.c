@@ -1,6 +1,7 @@
 #include "honch/honch.h"
 
 #include <curl/curl.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -236,15 +237,12 @@ static int e2e_battery_callback(void)
 static honch_status_t e2e_auto_properties(void *userdata, honch_property_sink_fn sink, void *sink_ctx)
 {
     (void)userdata;
-    char rssi_json[16];
-    snprintf(rssi_json, sizeof(rssi_json), "%d", e2e_wifi_rssi);
-
-    honch_status_t status = sink(sink_ctx, "$wifi_rssi", rssi_json);
+    honch_status_t status = sink(sink_ctx, "$wifi_rssi", honch_i64(e2e_wifi_rssi));
     if (status == HONCH_OK) {
-        status = sink(sink_ctx, "adapter_property", "\"e2e-adapter\"");
+        status = sink(sink_ctx, "adapter_property", honch_str("e2e-adapter"));
     }
     if (status == HONCH_OK) {
-        status = sink(sink_ctx, "$device_id", "\"adapter-spoof\"");
+        status = sink(sink_ctx, "$device_id", honch_str("adapter-spoof"));
     }
     return status;
 }
@@ -352,24 +350,42 @@ int main(void)
     EXPECT_EQ_STATUS(honch_copy_device_id(client, first_device_id, sizeof(first_device_id)), HONCH_OK);
     EXPECT_TRUE(first_device_id[0] != '\0');
 
-    EXPECT_EQ_STATUS(honch_track(client, "", NULL), HONCH_ERROR_INVALID_ARGUMENT);
-    EXPECT_EQ_STATUS(honch_track(client, event_edge, "[]"), HONCH_ERROR_INVALID_ARGUMENT);
-    EXPECT_EQ_STATUS(honch_track(client, event_edge, "{\"unterminated\""), HONCH_ERROR_INVALID_ARGUMENT);
-    EXPECT_EQ_STATUS(honch_set_property(client, "bad", "\"unterminated"), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ_STATUS(honch_track(client, "", NULL, 0u), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ_STATUS(honch_track(client, event_edge, NULL, 1u), HONCH_ERROR_INVALID_ARGUMENT);
+    const honch_property_t invalid_properties[] = {
+        honch_prop("bad", honch_f64(NAN))
+    };
+    EXPECT_EQ_STATUS(honch_track(client, event_edge, invalid_properties, 1u), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ_STATUS(honch_set_property(client, "bad", honch_f64(NAN)), HONCH_ERROR_INVALID_ARGUMENT);
 
     e2e_battery_level = 12;
-    EXPECT_EQ_STATUS(
-        honch_track(
-            client,
-            event_edge,
-            "{\"source\":\"posix-e2e\",\"nested\":{\"mode\":\"hdr\",\"frames\":[1,2,3]},"
-            "\"quote\":\"say \\\"hi\\\"\",\"$device_id\":\"spoofed-device\",\"\\u0024sdk_platform\":\"spoofed-platform\"}"),
-        HONCH_OK);
+    const honch_value_t frame_values[] = {
+        honch_u64(1),
+        honch_u64(2),
+        honch_u64(3)
+    };
+    const honch_map_pair_t nested_pairs[] = {
+        honch_pair("mode", honch_str("hdr")),
+        honch_pair("frames", honch_array(frame_values, 3))
+    };
+    const honch_property_t edge_properties[] = {
+        honch_prop("source", honch_str("posix-e2e")),
+        honch_prop("nested", honch_map(nested_pairs, 2)),
+        honch_prop("quote", honch_str("say \"hi\""))
+    };
+    EXPECT_EQ_STATUS(honch_track(client, event_edge, edge_properties, 3u), HONCH_OK);
 
-    EXPECT_EQ_STATUS(honch_identify(client, user_id, "{\"plan\":\"beta\",\"cohort\":\"local\"}"), HONCH_OK);
-    EXPECT_EQ_STATUS(honch_set_property(client, "favorite_mode", "\"night\""), HONCH_OK);
+    const honch_property_t identify_traits[] = {
+        honch_prop("plan", honch_str("beta")),
+        honch_prop("cohort", honch_str("local"))
+    };
+    EXPECT_EQ_STATUS(honch_identify(client, user_id, identify_traits, 2u), HONCH_OK);
+    EXPECT_EQ_STATUS(honch_set_property(client, "favorite_mode", honch_str("night")), HONCH_OK);
     EXPECT_EQ_STATUS(honch_session_start(client, "recording"), HONCH_OK);
-    EXPECT_EQ_STATUS(honch_track(client, event_session, "{\"mode\":\"hdr\"}"), HONCH_OK);
+    const honch_property_t session_properties[] = {
+        honch_prop("mode", honch_str("hdr"))
+    };
+    EXPECT_EQ_STATUS(honch_track(client, event_session, session_properties, 1u), HONCH_OK);
     EXPECT_EQ_STATUS(honch_session_end(client), HONCH_OK);
     EXPECT_EQ_STATUS(honch_flush(client), HONCH_OK);
 
@@ -426,7 +442,10 @@ int main(void)
     char restarted_device_id[128];
     EXPECT_EQ_STATUS(honch_copy_device_id(client, restarted_device_id, sizeof(restarted_device_id)), HONCH_OK);
     EXPECT_TRUE(strcmp(restarted_device_id, first_device_id) == 0);
-    EXPECT_EQ_STATUS(honch_track(client, event_restart, "{\"phase\":\"restart\"}"), HONCH_OK);
+    const honch_property_t restart_properties[] = {
+        honch_prop("phase", honch_str("restart"))
+    };
+    EXPECT_EQ_STATUS(honch_track(client, event_restart, restart_properties, 1u), HONCH_OK);
     EXPECT_EQ_STATUS(honch_flush(client), HONCH_OK);
 
     if (verify_event(clickhouse_url, database, project_id, event_restart, &row)) {
@@ -439,7 +458,10 @@ int main(void)
     char reset_device_id[128];
     EXPECT_EQ_STATUS(honch_copy_device_id(client, reset_device_id, sizeof(reset_device_id)), HONCH_OK);
     EXPECT_TRUE(strcmp(reset_device_id, first_device_id) != 0);
-    EXPECT_EQ_STATUS(honch_track(client, event_after_reset, "{\"phase\":\"after_reset\"}"), HONCH_OK);
+    const honch_property_t after_reset_properties[] = {
+        honch_prop("phase", honch_str("after_reset"))
+    };
+    EXPECT_EQ_STATUS(honch_track(client, event_after_reset, after_reset_properties, 1u), HONCH_OK);
     EXPECT_EQ_STATUS(honch_flush(client), HONCH_OK);
 
     if (verify_event(clickhouse_url, database, project_id, event_after_reset, &row)) {

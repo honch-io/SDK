@@ -25,15 +25,24 @@ int main(void)
         return 1;
     }
 
-    status = honch_identify(client, "local-user-001", "{\"role\":\"developer\"}");
+    const honch_property_t traits[] = {
+        honch_prop("role", honch_str("developer"))
+    };
+    status = honch_identify(client, "local-user-001", traits, 1u);
     if (status == HONCH_OK) {
         status = honch_session_start(client, "local-diagnostics");
     }
     if (status == HONCH_OK) {
-        status = honch_track(client, "button_pressed", "{\"button\":\"power\"}");
+        const honch_property_t properties[] = {
+            honch_prop("button", honch_str("power"))
+        };
+        status = honch_track(client, "button_pressed", properties, 1u);
     }
     if (status == HONCH_OK) {
-        status = honch_track(client, "screen_viewed", "{\"screen\":\"diagnostics\"}");
+        const honch_property_t properties[] = {
+            honch_prop("screen", honch_str("diagnostics"))
+        };
+        status = honch_track(client, "screen_viewed", properties, 1u);
     }
     if (status == HONCH_OK) {
         status = honch_session_end(client);

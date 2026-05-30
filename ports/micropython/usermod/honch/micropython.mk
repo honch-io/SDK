@@ -8,7 +8,6 @@ SRC_USERMOD_C += \
 	$(HONCH_MICROPYTHON_DIR)/mptransport_adapter.c \
 	$(HONCH_CORE_DIR)/src/honch_core.c \
 	$(HONCH_CORE_DIR)/src/honch_event_record.c \
-	$(HONCH_CORE_DIR)/src/honch_json.c \
 	$(HONCH_CORE_DIR)/src/honch_lifecycle.c \
 	$(HONCH_CORE_DIR)/src/honch_packetizer.c \
 	$(HONCH_CORE_DIR)/src/honch_queue_policy.c \

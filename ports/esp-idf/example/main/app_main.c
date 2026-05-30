@@ -162,14 +162,20 @@ void app_main(void)
     honch_session_start("demo");
 
     // Track a custom event
-    honch_track("app_started", "{\"foo\":\"bar\"}");
+    const honch_property_t app_started[] = {
+        honch_prop("foo", honch_str("bar"))
+    };
+    honch_track("app_started", app_started, 1u);
 
     // End the session
     honch_session_end();
 
     // Idle loop
     while (1) {
-        err = honch_track("heartbeat", "{\"source\":\"esp-idf-example\"}");
+        const honch_property_t heartbeat[] = {
+            honch_prop("source", honch_str("esp-idf-example"))
+        };
+        err = honch_track("heartbeat", heartbeat, 1u);
         ESP_LOGI(TAG, "honch_track heartbeat: %d", err);
         err = honch_tick();
         ESP_LOGI(TAG, "honch_tick: %d", err);

@@ -21,6 +21,7 @@
 #define HONCH_DEFAULT_FLUSH_RETRY_MAX_MS 300000u
 #define HONCH_MAX_EVENT_NAME 128u
 #define HONCH_MAX_DISTINCT_ID 256u
+#define HONCH_MAX_EVENT_PROPERTIES 64u
 
 typedef struct honch_buffer {
     char *data;
@@ -120,26 +121,12 @@ honch_status_t honch_buffer_append_n(honch_buffer_t *buffer, const char *value, 
 honch_status_t honch_buffer_append(honch_buffer_t *buffer, const char *value);
 honch_status_t honch_buffer_appendf(honch_buffer_t *buffer, const char *format, ...);
 
-honch_status_t honch_json_append_string(honch_buffer_t *buffer, const char *value);
-bool honch_json_is_object(const char *json);
-bool honch_json_is_value(const char *json);
-
-honch_status_t honch_event_record_append_json_value(honch_buffer_t *buffer, const char *json);
-honch_status_t honch_event_record_append_json_object_members(
-    honch_buffer_t *buffer,
-    const char *json,
-    size_t *member_count);
-honch_status_t honch_event_record_append_property_json(
-    honch_buffer_t *buffer,
-    size_t *member_count,
-    const char *key,
-    const char *value_json);
 honch_status_t honch_event_record_build(
     const char *event_name,
     const char *distinct_id,
     const char *session_id,
     uint64_t timestamp_ms,
-    const honch_buffer_t *properties,
+    const honch_wire_v2_property_t *properties,
     size_t property_count,
     honch_payload_t *out);
 honch_status_t honch_event_record_parse(const uint8_t *data, size_t length, honch_event_record_t *record);

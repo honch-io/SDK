@@ -33,14 +33,17 @@ The basic flow is:
 ```text
 platform pin interrupt/sample
   -> adapter debounce and edge match
-  -> adapter builds small JSON properties
+  -> adapter builds small typed properties
   -> honch_track(client, event_name, properties)
 ```
 
 For example, a button on pin 0 might produce:
 
 ```c
-honch_track(client, "button_pressed", "{\"pin\":0}");
+const honch_property_t properties[] = {
+    honch_prop("pin", honch_u64(0))
+};
+honch_track(client, "button_pressed", properties, 1);
 ```
 
 Adapters may add extra non-sensitive platform details such as edge direction or

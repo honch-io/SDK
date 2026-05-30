@@ -1,14 +1,10 @@
 #include "honch_internal.h"
 
-#include <ctype.h>
-#include <errno.h>
-#include <float.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
 #define HONCH_EVENT_RECORD_MAX_DEPTH 8u
-#define HONCH_EVENT_RECORD_MAX_PROPERTIES 64u
 
 enum {
     HONCH_RECORD_NULL = 0u,
@@ -19,13 +15,10 @@ enum {
     HONCH_RECORD_FLOAT32 = 5u,
     HONCH_RECORD_FLOAT64 = 6u,
     HONCH_RECORD_STRING = 7u,
+    HONCH_RECORD_BYTES = 8u,
     HONCH_RECORD_ARRAY = 9u,
     HONCH_RECORD_MAP = 10u
 };
-
-typedef struct honch_record_json_parser {
-    const char *cursor;
-} honch_record_json_parser_t;
 
 typedef struct honch_record_reader {
     const uint8_t *data;
@@ -34,28 +27,6 @@ typedef struct honch_record_reader {
 } honch_record_reader_t;
 
 static const uint8_t HONCH_EVENT_RECORD_MAGIC[] = {'H', 'Q', 'R', '1'};
-
-static void honch_json_skip_ws(honch_record_json_parser_t *parser)
-{
-    while (*parser->cursor == ' ' || *parser->cursor == '\t' ||
-           *parser->cursor == '\n' || *parser->cursor == '\r') {
-        parser->cursor++;
-    }
-}
-
-static int honch_json_hex_digit_value(char ch)
-{
-    if (ch >= '0' && ch <= '9') {
-        return ch - '0';
-    }
-    if (ch >= 'a' && ch <= 'f') {
-        return ch - 'a' + 10;
-    }
-    if (ch >= 'A' && ch <= 'F') {
-        return ch - 'A' + 10;
-    }
-    return -1;
-}
 
 static honch_status_t honch_record_append_byte(honch_buffer_t *buffer, uint8_t value)
 {
@@ -93,631 +64,159 @@ static honch_status_t honch_record_append_string(honch_buffer_t *buffer, const c
     return honch_record_append_string_n(buffer, value, strlen(value), allow_empty);
 }
 
-static honch_status_t honch_json_buffer_append(void *ctx, const char *value, size_t length)
-{
-    return honch_buffer_append_n((honch_buffer_t *)ctx, value, length);
-}
-
-typedef struct honch_json_scan_ctx {
-    bool found_nul;
-} honch_json_scan_ctx_t;
-
-static honch_status_t honch_json_scan_append(void *ctx, const char *value, size_t length)
-{
-    honch_json_scan_ctx_t *scan = (honch_json_scan_ctx_t *)ctx;
-    if (scan != NULL && memchr(value, '\0', length) != NULL) {
-        scan->found_nul = true;
-    }
-    return HONCH_OK;
-}
-
-static honch_status_t honch_json_decode_string_to(
-    honch_record_json_parser_t *parser,
-    honch_status_t (*append)(void *ctx, const char *value, size_t length),
-    void *append_ctx)
-{
-    if (*parser->cursor != '"') {
-        return HONCH_ERROR_INVALID_ARGUMENT;
-    }
-    parser->cursor++;
-
-    while (*parser->cursor != '\0') {
-        unsigned char ch = (unsigned char)*parser->cursor;
-        if (ch == '"') {
-            parser->cursor++;
-            return HONCH_OK;
-        }
-        if (ch < 0x20u) {
-            return HONCH_ERROR_INVALID_ARGUMENT;
-        }
-        if (ch != '\\') {
-            const char *start = parser->cursor;
-            do {
-                parser->cursor++;
-                ch = (unsigned char)*parser->cursor;
-            } while (ch != '\0' && ch != '"' && ch != '\\' && ch >= 0x20u);
-            size_t length = (size_t)(parser->cursor - start);
-            if (!honch_utf8_is_valid(start, length)) {
-                return HONCH_ERROR_INVALID_ARGUMENT;
-            }
-            honch_status_t status = append(append_ctx, start, length);
-            if (status != HONCH_OK) {
-                return status;
-            }
-            continue;
-        }
-
-        parser->cursor++;
-        char escaped = *parser->cursor;
-        switch (escaped) {
-            case '"':
-            case '\\':
-            case '/':
-                if (append(append_ctx, &escaped, 1u) != HONCH_OK) {
-                    return HONCH_ERROR_OUT_OF_MEMORY;
-                }
-                parser->cursor++;
-                break;
-            case 'b':
-                if (append(append_ctx, "\b", 1u) != HONCH_OK) {
-                    return HONCH_ERROR_OUT_OF_MEMORY;
-                }
-                parser->cursor++;
-                break;
-            case 'f':
-                if (append(append_ctx, "\f", 1u) != HONCH_OK) {
-                    return HONCH_ERROR_OUT_OF_MEMORY;
-                }
-                parser->cursor++;
-                break;
-            case 'n':
-                if (append(append_ctx, "\n", 1u) != HONCH_OK) {
-                    return HONCH_ERROR_OUT_OF_MEMORY;
-                }
-                parser->cursor++;
-                break;
-            case 'r':
-                if (append(append_ctx, "\r", 1u) != HONCH_OK) {
-                    return HONCH_ERROR_OUT_OF_MEMORY;
-                }
-                parser->cursor++;
-                break;
-            case 't':
-                if (append(append_ctx, "\t", 1u) != HONCH_OK) {
-                    return HONCH_ERROR_OUT_OF_MEMORY;
-                }
-                parser->cursor++;
-                break;
-            case 'u': {
-                parser->cursor++;
-                unsigned int codepoint = 0u;
-                for (size_t i = 0u; i < 4u; i++) {
-                    int digit = honch_json_hex_digit_value(parser->cursor[i]);
-                    if (digit < 0) {
-                        return HONCH_ERROR_INVALID_ARGUMENT;
-                    }
-                    codepoint = (codepoint << 4) | (unsigned int)digit;
-                }
-                parser->cursor += 4u;
-                if (codepoint >= 0xd800u && codepoint <= 0xdbffu) {
-                    if (parser->cursor[0] != '\\' || parser->cursor[1] != 'u') {
-                        return HONCH_ERROR_INVALID_ARGUMENT;
-                    }
-                    parser->cursor += 2u;
-                    unsigned int low = 0u;
-                    for (size_t i = 0u; i < 4u; i++) {
-                        int digit = honch_json_hex_digit_value(parser->cursor[i]);
-                        if (digit < 0) {
-                            return HONCH_ERROR_INVALID_ARGUMENT;
-                        }
-                        low = (low << 4) | (unsigned int)digit;
-                    }
-                    if (low < 0xdc00u || low > 0xdfffu) {
-                        return HONCH_ERROR_INVALID_ARGUMENT;
-                    }
-                    parser->cursor += 4u;
-                    codepoint = 0x10000u + (((codepoint - 0xd800u) << 10) | (low - 0xdc00u));
-                } else if (codepoint >= 0xdc00u && codepoint <= 0xdfffu) {
-                    return HONCH_ERROR_INVALID_ARGUMENT;
-                }
-                char encoded[4];
-                size_t encoded_length = 0u;
-                if (codepoint <= 0x7fu) {
-                    encoded[0] = (char)codepoint;
-                    encoded_length = 1u;
-                } else if (codepoint <= 0x7ffu) {
-                    encoded[0] = (char)(0xc0u | (codepoint >> 6));
-                    encoded[1] = (char)(0x80u | (codepoint & 0x3fu));
-                    encoded_length = 2u;
-                } else if (codepoint <= 0xffffu) {
-                    encoded[0] = (char)(0xe0u | (codepoint >> 12));
-                    encoded[1] = (char)(0x80u | ((codepoint >> 6) & 0x3fu));
-                    encoded[2] = (char)(0x80u | (codepoint & 0x3fu));
-                    encoded_length = 3u;
-                } else if (codepoint <= 0x10ffffu) {
-                    encoded[0] = (char)(0xf0u | (codepoint >> 18));
-                    encoded[1] = (char)(0x80u | ((codepoint >> 12) & 0x3fu));
-                    encoded[2] = (char)(0x80u | ((codepoint >> 6) & 0x3fu));
-                    encoded[3] = (char)(0x80u | (codepoint & 0x3fu));
-                    encoded_length = 4u;
-                } else {
-                    return HONCH_ERROR_INVALID_ARGUMENT;
-                }
-                if (append(append_ctx, encoded, encoded_length) != HONCH_OK) {
-                    return HONCH_ERROR_OUT_OF_MEMORY;
-                }
-                break;
-            }
-            default:
-                return HONCH_ERROR_INVALID_ARGUMENT;
-        }
-    }
-    return HONCH_ERROR_INVALID_ARGUMENT;
-}
-
-static honch_status_t honch_json_decode_string(honch_record_json_parser_t *parser, honch_buffer_t *decoded)
-{
-    return honch_json_decode_string_to(parser, honch_json_buffer_append, decoded);
-}
-
-static honch_status_t honch_record_append_json_value(
-    honch_record_json_parser_t *parser,
+static honch_status_t honch_record_append_value(
     honch_buffer_t *buffer,
+    const honch_wire_v2_value_t *value,
     size_t depth);
 
-static honch_status_t honch_record_append_json_string_value(honch_record_json_parser_t *parser, honch_buffer_t *buffer)
-{
-    honch_buffer_t decoded;
-    honch_status_t status = honch_buffer_init(&decoded, 32u);
-    if (status != HONCH_OK) {
-        return status;
-    }
-    status = honch_json_decode_string(parser, &decoded);
-    if (status == HONCH_OK && buffer != NULL) {
-        status = honch_record_append_byte(buffer, HONCH_RECORD_STRING);
-    }
-    if (status == HONCH_OK && buffer != NULL) {
-        status = honch_record_append_string_n(buffer, decoded.data, decoded.length, true);
-    }
-    honch_buffer_free(&decoded);
-    return status;
-}
-
-static honch_status_t honch_record_append_json_literal(
-    honch_record_json_parser_t *parser,
+static honch_status_t honch_record_append_key_value(
     honch_buffer_t *buffer,
-    const char *literal,
-    uint8_t tag)
-{
-    size_t length = strlen(literal);
-    if (strncmp(parser->cursor, literal, length) != 0) {
-        return HONCH_ERROR_INVALID_ARGUMENT;
-    }
-    parser->cursor += length;
-    if (buffer == NULL) {
-        return HONCH_OK;
-    }
-    return honch_record_append_byte(buffer, tag);
-}
-
-static honch_status_t honch_record_append_json_number(honch_record_json_parser_t *parser, honch_buffer_t *buffer)
-{
-    const char *start = parser->cursor;
-    if (*parser->cursor == '-') {
-        parser->cursor++;
-    }
-    if (*parser->cursor == '0') {
-        parser->cursor++;
-    } else if (isdigit((unsigned char)*parser->cursor)) {
-        while (isdigit((unsigned char)*parser->cursor)) {
-            parser->cursor++;
-        }
-    } else {
-        return HONCH_ERROR_INVALID_ARGUMENT;
-    }
-
-    bool floating = false;
-    if (*parser->cursor == '.') {
-        floating = true;
-        parser->cursor++;
-        if (!isdigit((unsigned char)*parser->cursor)) {
-            return HONCH_ERROR_INVALID_ARGUMENT;
-        }
-        while (isdigit((unsigned char)*parser->cursor)) {
-            parser->cursor++;
-        }
-    }
-    if (*parser->cursor == 'e' || *parser->cursor == 'E') {
-        floating = true;
-        parser->cursor++;
-        if (*parser->cursor == '+' || *parser->cursor == '-') {
-            parser->cursor++;
-        }
-        if (!isdigit((unsigned char)*parser->cursor)) {
-            return HONCH_ERROR_INVALID_ARGUMENT;
-        }
-        while (isdigit((unsigned char)*parser->cursor)) {
-            parser->cursor++;
-        }
-    }
-
-    size_t length = (size_t)(parser->cursor - start);
-    char token[128];
-    if (length >= sizeof(token)) {
-        return HONCH_ERROR_INVALID_ARGUMENT;
-    }
-    memcpy(token, start, length);
-    token[length] = '\0';
-
-    if (!floating) {
-        errno = 0;
-        char *end = NULL;
-        long long integer = strtoll(token, &end, 10);
-        if (errno != 0 || end == NULL || *end != '\0') {
-            return HONCH_ERROR_INVALID_ARGUMENT;
-        }
-        if (buffer == NULL) {
-            return HONCH_OK;
-        }
-        honch_status_t status = HONCH_OK;
-        if (integer >= 0) {
-            status = honch_record_append_byte(buffer, HONCH_RECORD_UINT);
-            if (status == HONCH_OK) {
-                status = honch_record_append_uvarint(buffer, (uint64_t)integer);
-            }
-        } else {
-            status = honch_record_append_byte(buffer, HONCH_RECORD_INT);
-            if (status == HONCH_OK) {
-                status = honch_record_append_uvarint(buffer, honch_wire_v2_zigzag_i64((int64_t)integer));
-            }
-        }
-        return status;
-    }
-
-    errno = 0;
-    char *end = NULL;
-    double number = strtod(token, &end);
-    if (errno != 0 || end == NULL || *end != '\0' || !isfinite(number)) {
-        return HONCH_ERROR_INVALID_ARGUMENT;
-    }
-    if (buffer == NULL) {
-        return HONCH_OK;
-    }
-    union {
-        double number;
-        uint64_t bits;
-    } encoded = {.number = number};
-    honch_status_t status = honch_record_append_byte(buffer, HONCH_RECORD_FLOAT64);
-    for (size_t i = 0u; status == HONCH_OK && i < sizeof(encoded.bits); i++) {
-        status = honch_record_append_byte(buffer, (uint8_t)(encoded.bits >> (i * 8u)));
-    }
-    return status;
-}
-
-static honch_status_t honch_record_append_json_array(
-    honch_record_json_parser_t *parser,
-    honch_buffer_t *buffer,
-    size_t depth)
-{
-    if (depth >= HONCH_EVENT_RECORD_MAX_DEPTH || *parser->cursor != '[') {
-        return HONCH_ERROR_INVALID_ARGUMENT;
-    }
-    parser->cursor++;
-    honch_json_skip_ws(parser);
-    size_t count = 0u;
-    const char *items_start = parser->cursor;
-    if (*parser->cursor != ']') {
-        for (;;) {
-            honch_status_t status = honch_record_append_json_value(parser, NULL, depth + 1u);
-            if (status != HONCH_OK) {
-                return status;
-            }
-            count++;
-            honch_json_skip_ws(parser);
-            if (*parser->cursor == ']') {
-                break;
-            }
-            if (*parser->cursor != ',') {
-                return HONCH_ERROR_INVALID_ARGUMENT;
-            }
-            parser->cursor++;
-            honch_json_skip_ws(parser);
-        }
-    }
-    honch_status_t status = HONCH_OK;
-    if (buffer != NULL) {
-        status = honch_record_append_byte(buffer, HONCH_RECORD_ARRAY);
-        if (status == HONCH_OK) {
-            status = honch_record_append_uvarint(buffer, (uint64_t)count);
-        }
-    }
-    parser->cursor = items_start;
-    for (size_t i = 0u; status == HONCH_OK && i < count; i++) {
-        status = honch_record_append_json_value(parser, buffer, depth + 1u);
-        honch_json_skip_ws(parser);
-        if (i + 1u < count) {
-            parser->cursor++;
-            honch_json_skip_ws(parser);
-        }
-    }
-    if (status != HONCH_OK || *parser->cursor != ']') {
-        return status == HONCH_OK ? HONCH_ERROR_INVALID_ARGUMENT : status;
-    }
-    parser->cursor++;
-    return HONCH_OK;
-}
-
-static honch_status_t honch_record_append_json_object(
-    honch_record_json_parser_t *parser,
-    honch_buffer_t *buffer,
-    size_t depth)
-{
-    if (depth >= HONCH_EVENT_RECORD_MAX_DEPTH || *parser->cursor != '{') {
-        return HONCH_ERROR_INVALID_ARGUMENT;
-    }
-    parser->cursor++;
-    honch_json_skip_ws(parser);
-    size_t count = 0u;
-    const char *members_start = parser->cursor;
-    if (*parser->cursor != '}') {
-        for (;;) {
-            honch_json_scan_ctx_t scan = {0};
-            honch_status_t status = honch_json_decode_string_to(parser, honch_json_scan_append, &scan);
-            if (status == HONCH_OK && scan.found_nul) {
-                status = HONCH_ERROR_INVALID_ARGUMENT;
-            }
-            if (status != HONCH_OK) {
-                return status;
-            }
-            honch_json_skip_ws(parser);
-            if (*parser->cursor != ':') {
-                return HONCH_ERROR_INVALID_ARGUMENT;
-            }
-            parser->cursor++;
-            honch_json_skip_ws(parser);
-            status = honch_record_append_json_value(parser, NULL, depth + 1u);
-            if (status != HONCH_OK) {
-                return status;
-            }
-            count++;
-            honch_json_skip_ws(parser);
-            if (*parser->cursor == '}') {
-                break;
-            }
-            if (*parser->cursor != ',') {
-                return HONCH_ERROR_INVALID_ARGUMENT;
-            }
-            parser->cursor++;
-            honch_json_skip_ws(parser);
-        }
-    }
-    honch_status_t status = HONCH_OK;
-    if (buffer != NULL) {
-        status = honch_record_append_byte(buffer, HONCH_RECORD_MAP);
-        if (status == HONCH_OK) {
-            status = honch_record_append_uvarint(buffer, (uint64_t)count);
-        }
-    }
-    honch_buffer_t *seen_keys = NULL;
-    size_t seen_key_count = 0u;
-    if (status == HONCH_OK && count > 0u) {
-        if (count > SIZE_MAX / sizeof(*seen_keys)) {
-            return HONCH_ERROR_INVALID_ARGUMENT;
-        }
-        seen_keys = (honch_buffer_t *)calloc(count, sizeof(*seen_keys));
-        if (seen_keys == NULL) {
-            return HONCH_ERROR_OUT_OF_MEMORY;
-        }
-    }
-    parser->cursor = members_start;
-    for (size_t i = 0u; status == HONCH_OK && i < count; i++) {
-        honch_buffer_t key;
-        status = honch_buffer_init(&key, 32u);
-        if (status != HONCH_OK) {
-            break;
-        }
-        status = honch_json_decode_string(parser, &key);
-        if (status == HONCH_OK && memchr(key.data, '\0', key.length) != NULL) {
-            status = HONCH_ERROR_INVALID_ARGUMENT;
-        }
-        if (status == HONCH_OK) {
-            for (size_t j = 0u; j < seen_key_count; j++) {
-                if (seen_keys[j].length == key.length && memcmp(seen_keys[j].data, key.data, key.length) == 0) {
-                    status = HONCH_ERROR_INVALID_ARGUMENT;
-                    break;
-                }
-            }
-        }
-        if (status == HONCH_OK && buffer != NULL) {
-            status = honch_record_append_string_n(buffer, key.data, key.length, false);
-        }
-        if (status != HONCH_OK) {
-            honch_buffer_free(&key);
-            break;
-        }
-        seen_keys[seen_key_count++] = key;
-        key = (honch_buffer_t){0};
-        honch_buffer_free(&key);
-        honch_json_skip_ws(parser);
-        if (*parser->cursor != ':') {
-            status = HONCH_ERROR_INVALID_ARGUMENT;
-            break;
-        }
-        parser->cursor++;
-        honch_json_skip_ws(parser);
-        status = honch_record_append_json_value(parser, buffer, depth + 1u);
-        honch_json_skip_ws(parser);
-        if (i + 1u < count) {
-            parser->cursor++;
-            honch_json_skip_ws(parser);
-        }
-    }
-    if (status != HONCH_OK || *parser->cursor != '}') {
-        status = status == HONCH_OK ? HONCH_ERROR_INVALID_ARGUMENT : status;
-    } else {
-        parser->cursor++;
-    }
-    for (size_t i = 0u; i < seen_key_count; i++) {
-        honch_buffer_free(&seen_keys[i]);
-    }
-    free(seen_keys);
-    return status;
-}
-
-static honch_status_t honch_record_append_json_value(
-    honch_record_json_parser_t *parser,
-    honch_buffer_t *buffer,
-    size_t depth)
-{
-    honch_json_skip_ws(parser);
-    switch (*parser->cursor) {
-        case '{':
-            return honch_record_append_json_object(parser, buffer, depth);
-        case '[':
-            return honch_record_append_json_array(parser, buffer, depth);
-        case '"':
-            return honch_record_append_json_string_value(parser, buffer);
-        case 't':
-            return honch_record_append_json_literal(parser, buffer, "true", HONCH_RECORD_TRUE);
-        case 'f':
-            return honch_record_append_json_literal(parser, buffer, "false", HONCH_RECORD_FALSE);
-        case 'n':
-            return honch_record_append_json_literal(parser, buffer, "null", HONCH_RECORD_NULL);
-        default:
-            return honch_record_append_json_number(parser, buffer);
-    }
-}
-
-honch_status_t honch_event_record_append_json_value(honch_buffer_t *buffer, const char *json)
-{
-    if (json == NULL) {
-        return honch_record_append_byte(buffer, HONCH_RECORD_NULL);
-    }
-    honch_record_json_parser_t parser = {.cursor = json};
-    honch_status_t status = honch_record_append_json_value(&parser, buffer, 0u);
-    if (status != HONCH_OK) {
-        return status;
-    }
-    honch_json_skip_ws(&parser);
-    return *parser.cursor == '\0' ? HONCH_OK : HONCH_ERROR_INVALID_ARGUMENT;
-}
-
-honch_status_t honch_event_record_append_property_json(
-    honch_buffer_t *buffer,
-    size_t *member_count,
     const char *key,
-    const char *value_json)
+    const honch_wire_v2_value_t *value,
+    size_t depth)
 {
-    if (buffer == NULL || member_count == NULL || honch_is_blank(key)) {
+    if (honch_is_blank(key)) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
     honch_status_t status = honch_record_append_string(buffer, key, false);
     if (status == HONCH_OK) {
-        status = honch_event_record_append_json_value(buffer, value_json);
-    }
-    if (status == HONCH_OK) {
-        (*member_count)++;
+        status = honch_record_append_value(buffer, value, depth);
     }
     return status;
 }
 
-honch_status_t honch_event_record_append_json_object_members(
-    honch_buffer_t *buffer,
-    const char *json,
-    size_t *member_count)
+static honch_status_t honch_record_validate_unique_keys(
+    const honch_wire_v2_map_pair_t *entries,
+    size_t count)
 {
-    *member_count = 0u;
-    if (json == NULL) {
-        return HONCH_OK;
-    }
-    honch_buffer_t *seen_keys = (honch_buffer_t *)calloc(HONCH_EVENT_RECORD_MAX_PROPERTIES, sizeof(*seen_keys));
-    if (seen_keys == NULL) {
-        return HONCH_ERROR_OUT_OF_MEMORY;
-    }
-    size_t seen_key_count = 0u;
-    honch_status_t status = HONCH_OK;
-    honch_record_json_parser_t parser = {.cursor = json};
-    honch_json_skip_ws(&parser);
-    if (*parser.cursor != '{') {
-        return HONCH_ERROR_INVALID_ARGUMENT;
-    }
-    parser.cursor++;
-    honch_json_skip_ws(&parser);
-    if (*parser.cursor == '}') {
-        parser.cursor++;
-        honch_json_skip_ws(&parser);
-        return *parser.cursor == '\0' ? HONCH_OK : HONCH_ERROR_INVALID_ARGUMENT;
-    }
-    for (;;) {
-        honch_buffer_t key;
-        status = honch_buffer_init(&key, 32u);
-        if (status != HONCH_OK) {
-            break;
+    for (size_t i = 0u; i < count; i++) {
+        if (honch_is_blank(entries[i].key)) {
+            return HONCH_ERROR_INVALID_ARGUMENT;
         }
-        status = honch_json_decode_string(&parser, &key);
-        if (status == HONCH_OK && memchr(key.data, '\0', key.length) != NULL) {
-            status = HONCH_ERROR_INVALID_ARGUMENT;
-        }
-        bool include = status == HONCH_OK && !honch_property_key_is_reserved(key.data);
-        if (status == HONCH_OK && include && *member_count >= HONCH_EVENT_RECORD_MAX_PROPERTIES) {
-            status = HONCH_ERROR_INVALID_ARGUMENT;
-        }
-        if (status == HONCH_OK && include) {
-            for (size_t i = 0u; i < seen_key_count; i++) {
-                if (seen_keys[i].length == key.length && memcmp(seen_keys[i].data, key.data, key.length) == 0) {
-                    status = HONCH_ERROR_INVALID_ARGUMENT;
-                    break;
-                }
+        for (size_t j = i + 1u; j < count; j++) {
+            if (strcmp(entries[i].key, entries[j].key) == 0) {
+                return HONCH_ERROR_INVALID_ARGUMENT;
             }
         }
-        if (status == HONCH_OK && include) {
-            status = honch_record_append_string_n(buffer, key.data, key.length, false);
-        }
-        if (status != HONCH_OK) {
-            honch_buffer_free(&key);
-            break;
-        }
-        if (include) {
-            seen_keys[seen_key_count++] = key;
-            key = (honch_buffer_t){0};
-        }
-        honch_buffer_free(&key);
-        honch_json_skip_ws(&parser);
-        if (*parser.cursor != ':') {
-            status = HONCH_ERROR_INVALID_ARGUMENT;
-            break;
-        }
-        parser.cursor++;
-        honch_json_skip_ws(&parser);
-        status = honch_record_append_json_value(&parser, include ? buffer : NULL, 0u);
-        if (status != HONCH_OK) {
-            break;
-        }
-        if (include) {
-            (*member_count)++;
-        }
-        honch_json_skip_ws(&parser);
-        if (*parser.cursor == '}') {
-            parser.cursor++;
-            honch_json_skip_ws(&parser);
-            status = *parser.cursor == '\0' ? HONCH_OK : HONCH_ERROR_INVALID_ARGUMENT;
-            break;
-        }
-        if (*parser.cursor != ',') {
-            status = HONCH_ERROR_INVALID_ARGUMENT;
-            break;
-        }
-        parser.cursor++;
-        honch_json_skip_ws(&parser);
     }
-    for (size_t i = 0u; i < seen_key_count; i++) {
-        honch_buffer_free(&seen_keys[i]);
+    return HONCH_OK;
+}
+
+static honch_status_t honch_record_append_value(
+    honch_buffer_t *buffer,
+    const honch_wire_v2_value_t *value,
+    size_t depth)
+{
+    if (buffer == NULL || value == NULL || depth > HONCH_EVENT_RECORD_MAX_DEPTH) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
     }
-    free(seen_keys);
-    if (status != HONCH_OK) {
-        *member_count = 0u;
+
+    honch_status_t status = HONCH_OK;
+    switch (value->type) {
+        case HONCH_WIRE_V2_VALUE_TYPE_NULL:
+            return honch_record_append_byte(buffer, HONCH_RECORD_NULL);
+        case HONCH_WIRE_V2_VALUE_TYPE_BOOL:
+            return honch_record_append_byte(buffer, value->bool_value ? HONCH_RECORD_TRUE : HONCH_RECORD_FALSE);
+        case HONCH_WIRE_V2_VALUE_TYPE_UINT:
+            status = honch_record_append_byte(buffer, HONCH_RECORD_UINT);
+            if (status == HONCH_OK) {
+                status = honch_record_append_uvarint(buffer, value->uint_value);
+            }
+            return status;
+        case HONCH_WIRE_V2_VALUE_TYPE_INT:
+            status = honch_record_append_byte(buffer, HONCH_RECORD_INT);
+            if (status == HONCH_OK) {
+                status = honch_record_append_uvarint(buffer, honch_wire_v2_zigzag_i64(value->int_value));
+            }
+            return status;
+        case HONCH_WIRE_V2_VALUE_TYPE_FLOAT32: {
+            if (!isfinite(value->float32_value)) {
+                return HONCH_ERROR_INVALID_ARGUMENT;
+            }
+            union {
+                float number;
+                uint32_t bits;
+            } encoded = {.number = value->float32_value};
+            status = honch_record_append_byte(buffer, HONCH_RECORD_FLOAT32);
+            for (size_t i = 0u; status == HONCH_OK && i < sizeof(encoded.bits); i++) {
+                status = honch_record_append_byte(buffer, (uint8_t)(encoded.bits >> (i * 8u)));
+            }
+            return status;
+        }
+        case HONCH_WIRE_V2_VALUE_TYPE_FLOAT64: {
+            if (!isfinite(value->float64_value)) {
+                return HONCH_ERROR_INVALID_ARGUMENT;
+            }
+            union {
+                double number;
+                uint64_t bits;
+            } encoded = {.number = value->float64_value};
+            status = honch_record_append_byte(buffer, HONCH_RECORD_FLOAT64);
+            for (size_t i = 0u; status == HONCH_OK && i < sizeof(encoded.bits); i++) {
+                status = honch_record_append_byte(buffer, (uint8_t)(encoded.bits >> (i * 8u)));
+            }
+            return status;
+        }
+        case HONCH_WIRE_V2_VALUE_TYPE_STRING: {
+            if (value->string_value == NULL) {
+                return HONCH_ERROR_INVALID_ARGUMENT;
+            }
+            size_t string_size = value->string_size == SIZE_MAX ? strlen(value->string_value) : value->string_size;
+            status = honch_record_append_byte(buffer, HONCH_RECORD_STRING);
+            if (status == HONCH_OK) {
+                status = honch_record_append_string_n(buffer, value->string_value, string_size, true);
+            }
+            return status;
+        }
+        case HONCH_WIRE_V2_VALUE_TYPE_BYTES:
+            if (value->bytes.size > 0u && value->bytes.data == NULL) {
+                return HONCH_ERROR_INVALID_ARGUMENT;
+            }
+            status = honch_record_append_byte(buffer, HONCH_RECORD_BYTES);
+            if (status == HONCH_OK) {
+                status = honch_record_append_uvarint(buffer, (uint64_t)value->bytes.size);
+            }
+            if (status == HONCH_OK && value->bytes.size > 0u) {
+                status = honch_buffer_append_n(buffer, (const char *)value->bytes.data, value->bytes.size);
+            }
+            return status;
+        case HONCH_WIRE_V2_VALUE_TYPE_ARRAY:
+            if (depth >= HONCH_EVENT_RECORD_MAX_DEPTH ||
+                (value->array.count > 0u && value->array.items == NULL)) {
+                return HONCH_ERROR_INVALID_ARGUMENT;
+            }
+            status = honch_record_append_byte(buffer, HONCH_RECORD_ARRAY);
+            if (status == HONCH_OK) {
+                status = honch_record_append_uvarint(buffer, (uint64_t)value->array.count);
+            }
+            for (size_t i = 0u; status == HONCH_OK && i < value->array.count; i++) {
+                status = honch_record_append_value(buffer, &value->array.items[i], depth + 1u);
+            }
+            return status;
+        case HONCH_WIRE_V2_VALUE_TYPE_MAP:
+            if (depth >= HONCH_EVENT_RECORD_MAX_DEPTH ||
+                (value->map.count > 0u && value->map.entries == NULL)) {
+                return HONCH_ERROR_INVALID_ARGUMENT;
+            }
+            status = honch_record_validate_unique_keys(value->map.entries, value->map.count);
+            if (status != HONCH_OK) {
+                return status;
+            }
+            status = honch_record_append_byte(buffer, HONCH_RECORD_MAP);
+            if (status == HONCH_OK) {
+                status = honch_record_append_uvarint(buffer, (uint64_t)value->map.count);
+            }
+            for (size_t i = 0u; status == HONCH_OK && i < value->map.count; i++) {
+                status = honch_record_append_key_value(
+                    buffer,
+                    value->map.entries[i].key,
+                    &value->map.entries[i].value,
+                    depth + 1u);
+            }
+            return status;
+        default:
+            return HONCH_ERROR_INVALID_ARGUMENT;
     }
-    return status;
 }
 
 honch_status_t honch_event_record_build(
@@ -725,22 +224,36 @@ honch_status_t honch_event_record_build(
     const char *distinct_id,
     const char *session_id,
     uint64_t timestamp_ms,
-    const honch_buffer_t *properties,
+    const honch_wire_v2_property_t *properties,
     size_t property_count,
     honch_payload_t *out)
 {
     if (out == NULL || honch_is_blank(event_name) || honch_is_blank(distinct_id) ||
-        properties == NULL || property_count > HONCH_EVENT_RECORD_MAX_PROPERTIES) {
+        (property_count > 0u && properties == NULL) || property_count > HONCH_MAX_EVENT_PROPERTIES) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
     out->data = NULL;
     out->length = 0u;
     honch_buffer_t buffer;
-    honch_status_t status = honch_buffer_init(&buffer, 128u + properties->length);
+    honch_status_t status = honch_buffer_init(&buffer, 128u);
     if (status != HONCH_OK) {
         return status;
     }
-    status = honch_buffer_append_n(&buffer, (const char *)HONCH_EVENT_RECORD_MAGIC, sizeof(HONCH_EVENT_RECORD_MAGIC));
+    for (size_t i = 0u; status == HONCH_OK && i < property_count; i++) {
+        if (honch_is_blank(properties[i].key)) {
+            status = HONCH_ERROR_INVALID_ARGUMENT;
+            break;
+        }
+        for (size_t j = i + 1u; j < property_count; j++) {
+            if (strcmp(properties[i].key, properties[j].key) == 0) {
+                status = HONCH_ERROR_INVALID_ARGUMENT;
+                break;
+            }
+        }
+    }
+    if (status == HONCH_OK) {
+        status = honch_buffer_append_n(&buffer, (const char *)HONCH_EVENT_RECORD_MAGIC, sizeof(HONCH_EVENT_RECORD_MAGIC));
+    }
     if (status == HONCH_OK) {
         status = honch_record_append_uvarint(&buffer, timestamp_ms);
     }
@@ -759,8 +272,8 @@ honch_status_t honch_event_record_build(
     if (status == HONCH_OK) {
         status = honch_record_append_uvarint(&buffer, (uint64_t)property_count);
     }
-    if (status == HONCH_OK && properties->length > 0u) {
-        status = honch_buffer_append_n(&buffer, properties->data, properties->length);
+    for (size_t i = 0u; status == HONCH_OK && i < property_count; i++) {
+        status = honch_record_append_key_value(&buffer, properties[i].key, &properties[i].value, 0u);
     }
     if (status != HONCH_OK) {
         honch_buffer_free(&buffer);
@@ -926,6 +439,20 @@ static honch_status_t honch_record_read_value(honch_record_reader_t *reader, hon
             };
             return HONCH_OK;
         }
+        case HONCH_RECORD_BYTES: {
+            uint64_t bytes_size = 0u;
+            honch_status_t status = honch_record_read_uvarint(reader, &bytes_size);
+            if (status != HONCH_OK || bytes_size > SIZE_MAX || bytes_size > reader->length - reader->offset) {
+                return HONCH_ERROR_INVALID_ARGUMENT;
+            }
+            const uint8_t *bytes = reader->data + reader->offset;
+            reader->offset += (size_t)bytes_size;
+            *value = (honch_wire_v2_value_t){
+                .type = HONCH_WIRE_V2_VALUE_TYPE_BYTES,
+                .bytes = {.data = bytes, .size = (size_t)bytes_size}
+            };
+            return HONCH_OK;
+        }
         case HONCH_RECORD_ARRAY: {
             if (depth >= HONCH_EVENT_RECORD_MAX_DEPTH) {
                 return HONCH_ERROR_INVALID_ARGUMENT;
@@ -1028,7 +555,7 @@ honch_status_t honch_event_record_parse(const uint8_t *data, size_t length, honc
     if (status == HONCH_OK) {
         status = honch_record_read_uvarint(&reader, &property_count);
     }
-    if (status != HONCH_OK || property_count > HONCH_EVENT_RECORD_MAX_PROPERTIES) {
+    if (status != HONCH_OK || property_count > HONCH_MAX_EVENT_PROPERTIES) {
         return status == HONCH_OK ? HONCH_ERROR_INVALID_ARGUMENT : status;
     }
     for (uint64_t i = 0u; i < property_count; i++) {

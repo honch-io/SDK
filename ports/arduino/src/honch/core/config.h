@@ -7,6 +7,7 @@
 #include "honch/core/status.h"
 #include "honch/core/storage.h"
 #include "honch/core/transport.h"
+#include "honch/core/wire_v2.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -15,7 +16,7 @@ extern "C" {
 typedef honch_status_t (*honch_property_sink_fn)(
     void *ctx,
     const char *key,
-    const char *json_value);
+    honch_wire_v2_value_t value);
 
 typedef honch_status_t (*honch_auto_properties_fn)(
     void *userdata,

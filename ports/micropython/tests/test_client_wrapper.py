@@ -16,14 +16,14 @@ class FakeCoreClient:
         self.calls = []
         self.device_id = "device-from-core"
 
-    def track(self, event_name, properties_json):
-        self.calls.append(("track", event_name, properties_json))
+    def track(self, event_name, properties):
+        self.calls.append(("track", event_name, properties))
 
-    def identify(self, distinct_id, traits_json):
-        self.calls.append(("identify", distinct_id, traits_json))
+    def identify(self, distinct_id, traits):
+        self.calls.append(("identify", distinct_id, traits))
 
-    def set_property(self, key, value_json):
-        self.calls.append(("set_property", key, value_json))
+    def set_property(self, key, value):
+        self.calls.append(("set_property", key, value))
 
     def session_start(self, session_name):
         self.calls.append(("session_start", session_name))
@@ -105,9 +105,9 @@ class ClientWrapperTests(unittest.TestCase):
         self.assertEqual(
             client._core.calls,
             [
-                ("track", "pressed", '{"button":"power"}'),
-                ("identify", "user-1", '{"plan":"beta"}'),
-                ("set_property", "mode", '"hdr"'),
+                ("track", "pressed", {"button": "power"}),
+                ("identify", "user-1", {"plan": "beta"}),
+                ("set_property", "mode", "hdr"),
                 ("session_start", "recording"),
                 ("session_end",),
                 ("connectivity_changed", True),
