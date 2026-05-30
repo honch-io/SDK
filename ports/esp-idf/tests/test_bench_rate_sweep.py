@@ -39,6 +39,7 @@ class EspIdfBenchRateSweepTests(unittest.TestCase):
         self.assertIn("RATE_SWEEP_DURATION_SECONDS", kconfig)
         self.assertIn("RATE_SWEEP_WARMUP_SECONDS", kconfig)
         self.assertIn("RATE_SWEEP_WINDOW_SECONDS", kconfig)
+        self.assertIn("RATE_SWEEP_FLUSH_TIMING", kconfig)
 
     def test_rate_sweep_flush_counter_spans_windows(self) -> None:
         app = read("ports/esp-idf/rate_sweep_bench/main/app_main.c")

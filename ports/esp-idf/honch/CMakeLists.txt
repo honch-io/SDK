@@ -42,3 +42,7 @@ idf_component_register(
         esp_driver_gpio
         driver
 )
+
+if(CONFIG_RATE_SWEEP_FLUSH_TIMING)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE HONCH_FLUSH_TIMING=1)
+endif()
