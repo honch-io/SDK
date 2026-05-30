@@ -218,6 +218,10 @@ static void honch_client_unlock(honch_client_t *client);
 
 static honch_status_t honch_client_enforce_custom_queue_limit(honch_client_t *client)
 {
+    if (client != NULL && client->queued_event_count < client->max_queued_events) {
+        return HONCH_OK;
+    }
+
     if (client == NULL || client->storage == NULL ||
         client->storage->queue_depth == NULL || client->storage->queue_drop_oldest == NULL) {
         return HONCH_OK;
@@ -415,10 +419,7 @@ static honch_status_t honch_client_queue_push_recorded(
             if (sequence_out != NULL) {
                 *sequence_out = sequence;
             }
-            size_t depth = 0u;
-            if (honch_client_queue_depth(client, &depth) == HONCH_OK) {
-                client->queued_event_count = depth;
-            } else if (client->queued_event_count < SIZE_MAX) {
+            if (client->queued_event_count < SIZE_MAX) {
                 client->queued_event_count++;
             }
         }

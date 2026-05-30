@@ -515,8 +515,6 @@ static int run_rate_window(
     const rate_sweep_config_t *config,
     unsigned int rate,
     unsigned int window,
-    char *properties,
-    size_t properties_size,
     const char *payload,
     bench_transport_t *transport,
     const char *queue_dir,
@@ -553,17 +551,16 @@ static int run_rate_window(
             window_start + (((unsigned long long)attempted * 1000000ull) / (unsigned long long)rate);
         sleep_until_us(deadline);
 
-        snprintf(properties,
-                 properties_size,
-                 "{\"seq\":%zu,\"target_eps\":%u,\"window\":%u,\"sample\":%u,\"payload\":\"%s\"}",
-                 *global_sequence,
-                 rate,
-                 window,
-                 (unsigned int)((*global_sequence * 1103515245u + 12345u) & 0xffffu),
-                 payload);
+        const honch_property_t properties[] = {
+            honch_prop("seq", honch_u64((uint64_t)*global_sequence)),
+            honch_prop("target_eps", honch_u64((uint64_t)rate)),
+            honch_prop("window", honch_u64((uint64_t)window)),
+            honch_prop("sample", honch_u64((uint64_t)((*global_sequence * 1103515245u + 12345u) & 0xffffu))),
+            honch_prop("payload", honch_str(payload)),
+        };
 
         unsigned long long start = now_us();
-        status = honch_track(client, "bench_rate_event", properties);
+        status = honch_track(client, "bench_rate_event", properties, sizeof(properties) / sizeof(properties[0]));
         unsigned long long elapsed = now_us() - start;
         if (rate_window_record_track(track_samples, sample_capacity, &track_count, elapsed) != 0) {
             failed++;
@@ -641,8 +638,6 @@ static int run_rate_warmup(
     honch_client_t *client,
     const rate_sweep_config_t *config,
     unsigned int rate,
-    char *properties,
-    size_t properties_size,
     const char *payload,
     size_t *queued_estimate,
     size_t *global_sequence)
@@ -659,13 +654,14 @@ static int run_rate_warmup(
         unsigned long long deadline =
             start_us + (((unsigned long long)attempted * 1000000ull) / (unsigned long long)rate);
         sleep_until_us(deadline);
-        snprintf(properties,
-                 properties_size,
-                 "{\"seq\":%zu,\"target_eps\":%u,\"warmup\":true,\"payload\":\"%s\"}",
-                 *global_sequence,
-                 rate,
-                 payload);
-        honch_status_t status = honch_track(client, "bench_rate_warmup", properties);
+        const honch_property_t properties[] = {
+            honch_prop("seq", honch_u64((uint64_t)*global_sequence)),
+            honch_prop("target_eps", honch_u64((uint64_t)rate)),
+            honch_prop("warmup", honch_bool(true)),
+            honch_prop("payload", honch_str(payload)),
+        };
+        honch_status_t status =
+            honch_track(client, "bench_rate_warmup", properties, sizeof(properties) / sizeof(properties[0]));
         attempted++;
         (*global_sequence)++;
         if (status == HONCH_OK) {
@@ -701,12 +697,9 @@ static int run_rate_sweep(const rate_sweep_config_t *config)
     }
 
     size_t payload_size = config->payload_bytes + 1u;
-    size_t properties_size = config->payload_bytes + 256u;
     char *payload = (char *)calloc(payload_size, sizeof(*payload));
-    char *properties = (char *)calloc(properties_size, sizeof(*properties));
-    if (payload == NULL || properties == NULL) {
+    if (payload == NULL) {
         free(payload);
-        free(properties);
         remove_tree(queue_dir);
         return 1;
     }
@@ -724,7 +717,6 @@ static int run_rate_sweep(const rate_sweep_config_t *config)
     if (status != HONCH_OK) {
         honch_test_set_transport(NULL, NULL);
         free(payload);
-        free(properties);
         remove_tree(queue_dir);
         return 1;
     }
@@ -758,8 +750,6 @@ static int run_rate_sweep(const rate_sweep_config_t *config)
             client,
             config,
             rate,
-            properties,
-            properties_size,
             payload,
             &queued_estimate,
             &global_sequence);
@@ -773,8 +763,6 @@ static int run_rate_sweep(const rate_sweep_config_t *config)
                 config,
                 rate,
                 window,
-                properties,
-                properties_size,
                 payload,
                 &transport,
                 queue_dir,
@@ -809,7 +797,6 @@ static int run_rate_sweep(const rate_sweep_config_t *config)
     }
     honch_test_set_transport(NULL, NULL);
     free(payload);
-    free(properties);
     remove_tree(queue_dir);
     return rc;
 }
@@ -934,7 +921,11 @@ static int run_init_shutdown(void)
     return status == HONCH_OK ? 0 : 1;
 }
 
-static int run_track_scenario(const char *name, const char *properties, size_t iterations)
+static int run_track_scenario(
+    const char *name,
+    const honch_property_t *properties,
+    size_t property_count,
+    size_t iterations)
 {
     unsigned long long *samples = (unsigned long long *)calloc(iterations, sizeof(*samples));
     if (samples == NULL) {
@@ -956,7 +947,7 @@ static int run_track_scenario(const char *name, const char *properties, size_t i
     honch_status_t status = honch_init(&client, &config);
     for (size_t i = 0u; status == HONCH_OK && i < iterations; i++) {
         unsigned long long start = now_us();
-        status = honch_track(client, "bench_event", properties);
+        status = honch_track(client, "bench_event", properties, property_count);
         samples[i] = now_us() - start;
     }
 
@@ -990,8 +981,13 @@ static int run_flush_scenario(const char *name, size_t events, long http_status)
 
     honch_client_t *client = NULL;
     honch_status_t status = honch_init(&client, &config);
+    const honch_property_t properties[] = {
+        honch_prop("mode", honch_str("hdr")),
+        honch_prop("frames", honch_u64(120u)),
+        honch_prop("ok", honch_bool(true)),
+    };
     for (size_t i = 0u; status == HONCH_OK && i < events; i++) {
-        status = honch_track(client, "bench_flush_event", "{\"mode\":\"hdr\",\"frames\":120,\"ok\":true}");
+        status = honch_track(client, "bench_flush_event", properties, sizeof(properties) / sizeof(properties[0]));
     }
 
     transport = (bench_transport_t){.status = http_status};
@@ -1034,16 +1030,58 @@ int main(int argc, char **argv)
     if (run_init_shutdown() != 0) {
         return 1;
     }
-    if (run_track_scenario("track_empty_properties", "{}", 1000u) != 0) {
+    if (run_track_scenario("track_empty_properties", NULL, 0u, 1000u) != 0) {
         return 1;
     }
-    if (run_track_scenario("track_small_properties", "{\"button\":1,\"mode\":\"single\"}", 1000u) != 0) {
+    const honch_property_t small_properties[] = {
+        honch_prop("button", honch_u64(1u)),
+        honch_prop("mode", honch_str("single")),
+    };
+    if (run_track_scenario(
+            "track_small_properties",
+            small_properties,
+            sizeof(small_properties) / sizeof(small_properties[0]),
+            1000u) != 0) {
         return 1;
     }
-    if (run_track_scenario("track_nested_properties", "{\"mode\":\"hdr\",\"nested\":{\"iso\":800,\"stabilized\":true},\"tags\":[\"field\",\"beta\"],\"ratio\":1.5}", 1000u) != 0) {
+    const honch_wire_v2_map_pair_t nested_map[] = {
+        honch_pair("iso", honch_u64(800u)),
+        honch_pair("stabilized", honch_bool(true)),
+    };
+    const honch_wire_v2_value_t nested_tags[] = {
+        honch_str("field"),
+        honch_str("beta"),
+    };
+    const honch_property_t nested_properties[] = {
+        honch_prop("mode", honch_str("hdr")),
+        honch_prop("nested", honch_map(nested_map, sizeof(nested_map) / sizeof(nested_map[0]))),
+        honch_prop("tags", honch_array(nested_tags, sizeof(nested_tags) / sizeof(nested_tags[0]))),
+        honch_prop("ratio", honch_f64(1.5)),
+    };
+    if (run_track_scenario(
+            "track_nested_properties",
+            nested_properties,
+            sizeof(nested_properties) / sizeof(nested_properties[0]),
+            1000u) != 0) {
         return 1;
     }
-    if (run_track_scenario("track_1kb_properties", "{\"blob\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}", 500u) != 0) {
+    const honch_property_t large_properties[] = {
+        honch_prop(
+            "blob",
+            honch_str("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")),
+    };
+    if (run_track_scenario(
+            "track_1kb_properties",
+            large_properties,
+            sizeof(large_properties) / sizeof(large_properties[0]),
+            500u) != 0) {
         return 1;
     }
     if (run_flush_scenario("flush_1_success", 1u, 202L) != 0) {

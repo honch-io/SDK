@@ -17,6 +17,7 @@ typedef struct fake_state_storage {
     size_t last_queued_size;
     size_t queued_sequence_count;
     int queue_push_calls;
+    int queue_depth_calls;
     int fail_queue_push_call;
     int queue_consume_calls;
     int queue_drop_oldest_calls;
@@ -216,6 +217,7 @@ static honch_status_t fake_queue_drop_oldest(void *ctx)
 static honch_status_t fake_queue_depth(void *ctx, size_t *depth)
 {
     fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
+    storage->queue_depth_calls++;
     *depth = storage->queue_depth;
     return HONCH_OK;
 }
@@ -432,7 +434,7 @@ static void test_sequence_wrap_rejects_enqueue_without_advancing(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
-static void test_custom_storage_enqueue_refreshes_cached_queue_depth(void)
+static void test_custom_storage_enqueue_updates_cached_queue_depth_without_refresh(void)
 {
     fake_state_storage_t storage = {
         .queue_push_status = HONCH_OK,
@@ -447,7 +449,9 @@ static void test_custom_storage_enqueue_refreshes_cached_queue_depth(void)
     assert(honch_core_init(&client, &config) == HONCH_OK);
     assert(storage.queue_depth == 1u);
     assert(client->queued_event_count == storage.queue_depth);
+    int queue_depth_calls = storage.queue_depth_calls;
     assert(honch_core_track(client, "custom_depth_probe", NULL, 0u) == HONCH_OK);
+    assert(storage.queue_depth_calls == queue_depth_calls);
     assert(storage.queue_depth == 2u);
     assert(client->queued_event_count == storage.queue_depth);
     storage.track_queue_depth = 0;
@@ -643,7 +647,7 @@ int main(void)
     test_set_property_rejects_blank_key();
     test_set_property_rejects_reserved_key();
     test_sequence_wrap_rejects_enqueue_without_advancing();
-    test_custom_storage_enqueue_refreshes_cached_queue_depth();
+    test_custom_storage_enqueue_updates_cached_queue_depth_without_refresh();
     test_custom_storage_drops_oldest_at_queue_limit();
     test_failed_session_replacement_preserves_old_session();
     test_track_rejects_embedded_nul_property_key();
