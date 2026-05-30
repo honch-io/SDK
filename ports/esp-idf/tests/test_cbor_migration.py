@@ -110,6 +110,11 @@ class EspIdfChunkWireTest(unittest.TestCase):
 
         self.assertIn("flush_interval_seconds", public_header)
         self.assertIn("flush_event_threshold", public_header)
+        self.assertIn("if (config->flush_event_threshold > 0u)", compat)
+        self.assertIn(
+            "core_config.batch_size = config->flush_event_threshold > HONCH_MAX_BATCH_SIZE",
+            compat,
+        )
         self.assertIn("core_config.flush_interval_seconds = config->flush_interval_seconds", compat)
         self.assertIn("core_config.flush_event_threshold = config->flush_event_threshold", compat)
         self.assertIn("core_config.disable_background_flush = 0", compat)
