@@ -310,6 +310,11 @@ honch_err_t honch_init(const honch_config_t *config)
     core_config.environment = s_environment;
     core_config.sdk_platform = "esp-idf";
     core_config.queue_directory = "nvs";
+    if (config->flush_event_threshold > 0u) {
+        core_config.batch_size = config->flush_event_threshold > HONCH_MAX_BATCH_SIZE ?
+            HONCH_MAX_BATCH_SIZE :
+            config->flush_event_threshold;
+    }
     core_config.flush_interval_seconds = config->flush_interval_seconds;
     core_config.flush_event_threshold = config->flush_event_threshold;
     core_config.battery_callback = config->battery_callback;
