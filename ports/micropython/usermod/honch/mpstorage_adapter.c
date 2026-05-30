@@ -241,12 +241,12 @@ static honch_status_t honch_mp_state_delete(void *ctx, const char *key)
 
 static void honch_mp_sequence_name(uint64_t sequence, char out[32])
 {
-    snprintf(out, 32u, "%020llu.cbor", (unsigned long long)sequence);
+    snprintf(out, 32u, "%020llu.hqe", (unsigned long long)sequence);
 }
 
 static int honch_mp_parse_sequence(const char *name, uint64_t *sequence)
 {
-    if (name == NULL || strlen(name) != 25u || strcmp(name + 20u, ".cbor") != 0) {
+    if (name == NULL || strlen(name) != 24u || strcmp(name + 20u, ".hqe") != 0) {
         return 0;
     }
     uint64_t value = 0u;

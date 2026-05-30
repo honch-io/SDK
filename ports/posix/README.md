@@ -333,7 +333,7 @@ Queue behavior:
 - `HONCH_DURABILITY_OS_BUFFERED` keeps atomic rename behavior but skips
   per-event fsyncs; this lowers enqueue latency but queued events may be lost
   after OS crash or power loss before storage is flushed
-- events are stored as `.cbor` files
+- events are stored as `.hqe` files
 - startup removes temporary write files
 - queue length is bounded by `max_queued_events`
 - flush requests are sent in batches capped at 50 events

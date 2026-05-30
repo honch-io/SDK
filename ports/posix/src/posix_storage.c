@@ -470,7 +470,7 @@ honch_status_t honch_posix_storage_ops_init(
 
 static honch_status_t honch_list_queue_files(honch_client_t *client, honch_file_list_t *files)
 {
-    honch_status_t status = honch_list_files_with_suffix(client->pending_directory, ".cbor", files);
+    honch_status_t status = honch_list_files_with_suffix(client->pending_directory, ".hqe", files);
     if (status != HONCH_OK) {
         return status;
     }
@@ -549,7 +549,7 @@ static honch_status_t honch_queue_enqueue_with_sequence(
     snprintf(
         filename,
         sizeof(filename),
-        "%020llu-%06llu-%s.cbor",
+        "%020llu-%06llu-%s.hqe",
         (unsigned long long)honch_now_millis(),
         (unsigned long long)sequence,
         event_id);
@@ -601,7 +601,7 @@ static honch_status_t honch_delete_files(const honch_file_list_t *files, size_t 
 static honch_status_t honch_delete_queue_directory(const char *directory)
 {
     honch_file_list_t files = {0};
-    honch_status_t status = honch_list_files_with_suffix(directory, ".cbor", &files);
+    honch_status_t status = honch_list_files_with_suffix(directory, ".hqe", &files);
     if (status == HONCH_OK) {
         status = honch_delete_files(&files, files.count);
     }

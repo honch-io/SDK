@@ -75,6 +75,21 @@ typedef enum honch_wire_v2_value_type {
 typedef struct honch_wire_v2_value honch_wire_v2_value_t;
 typedef struct honch_wire_v2_map_pair honch_wire_v2_map_pair_t;
 
+typedef struct honch_wire_v2_bytes {
+    const uint8_t *data;
+    size_t size;
+} honch_wire_v2_bytes_t;
+
+typedef struct honch_wire_v2_array {
+    const honch_wire_v2_value_t *items;
+    size_t count;
+} honch_wire_v2_array_t;
+
+typedef struct honch_wire_v2_map {
+    const honch_wire_v2_map_pair_t *entries;
+    size_t count;
+} honch_wire_v2_map_t;
+
 struct honch_wire_v2_value {
     honch_wire_v2_value_type_t type;
     union {
@@ -84,18 +99,9 @@ struct honch_wire_v2_value {
         float float32_value;
         double float64_value;
         const char *string_value;
-        struct {
-            const uint8_t *data;
-            size_t size;
-        } bytes;
-        struct {
-            const honch_wire_v2_value_t *items;
-            size_t count;
-        } array;
-        struct {
-            const honch_wire_v2_map_pair_t *entries;
-            size_t count;
-        } map;
+        honch_wire_v2_bytes_t bytes;
+        honch_wire_v2_array_t array;
+        honch_wire_v2_map_t map;
     };
     /* For string values, SIZE_MAX means NUL-terminated C string.
        Any other value is an exact UTF-8 byte length; 0 encodes empty. */
@@ -128,6 +134,7 @@ uint64_t honch_wire_v2_zigzag_i64(int64_t value);
 uint16_t honch_wire_v2_crc16(const uint8_t *data, size_t data_size);
 honch_status_t honch_wire_v2_encode_uvarint(uint64_t value, uint8_t *out, size_t out_size, size_t *written);
 honch_status_t honch_wire_v2_encode_svarint(int64_t value, uint8_t *out, size_t out_size, size_t *written);
+int64_t honch_wire_v2_unzigzag_i64(uint64_t value);
 honch_status_t honch_wire_v2_encode_frame(
     const honch_wire_v2_frame_spec_t *spec,
     uint8_t *out,

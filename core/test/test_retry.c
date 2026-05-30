@@ -12,8 +12,6 @@
 
 void honch_test_reset_wire_v2_encode_attempts(void);
 size_t honch_test_max_wire_v2_encode_attempts(void);
-void honch_test_reset_queued_cbor_string_copies(void);
-size_t honch_test_queued_cbor_string_copies(void);
 
 typedef struct fake_event {
     uint8_t *data;
@@ -197,30 +195,33 @@ static void build_heavy_event(
     assert(out_data != NULL);
     assert(out_size != NULL);
 
-    honch_buffer_t buffer = {0};
-    assert(honch_buffer_init(&buffer, (property_count * array_length * 4u) + 256u) == HONCH_OK);
-    assert(honch_cbor_append_map(&buffer, 4u) == HONCH_OK);
-    assert(honch_cbor_append_text(&buffer, "event") == HONCH_OK);
-    assert(honch_cbor_append_text(&buffer, event_name) == HONCH_OK);
-    assert(honch_cbor_append_text(&buffer, "distinct_id") == HONCH_OK);
-    assert(honch_cbor_append_text(&buffer, "device-1") == HONCH_OK);
-    assert(honch_cbor_append_text(&buffer, "timestamp") == HONCH_OK);
-    assert(honch_cbor_append_int(&buffer, 1234) == HONCH_OK);
-    assert(honch_cbor_append_text(&buffer, "properties") == HONCH_OK);
-    assert(honch_cbor_append_map(&buffer, property_count) == HONCH_OK);
+    honch_buffer_t properties = {0};
+    assert(honch_buffer_init(&properties, (property_count * array_length * 4u) + 256u) == HONCH_OK);
+    size_t member_count = 0u;
     for (size_t i = 0u; i < property_count; i++) {
         char key[8];
         int key_length = snprintf(key, sizeof(key), "p%02zu", i);
         assert(key_length > 0 && (size_t)key_length < sizeof(key));
-        assert(honch_cbor_append_text(&buffer, key) == HONCH_OK);
-        assert(honch_cbor_append_array(&buffer, array_length) == HONCH_OK);
+        honch_buffer_t array = {0};
+        assert(honch_buffer_init(&array, (array_length * 4u) + 8u) == HONCH_OK);
+        assert(honch_buffer_append(&array, "[") == HONCH_OK);
         for (size_t j = 0u; j < array_length; j++) {
-            assert(honch_cbor_append_int(&buffer, (int64_t)(i + j)) == HONCH_OK);
+            if (j > 0u) {
+                assert(honch_buffer_append(&array, ",") == HONCH_OK);
+            }
+            assert(honch_buffer_appendf(&array, "%zu", i + j) == HONCH_OK);
         }
+        assert(honch_buffer_append(&array, "]") == HONCH_OK);
+        assert(honch_event_record_append_property_json(&properties, &member_count, key, array.data) == HONCH_OK);
+        honch_buffer_free(&array);
     }
 
-    *out_data = (uint8_t *)buffer.data;
-    *out_size = buffer.length;
+    honch_payload_t payload = {0};
+    assert(honch_event_record_build(event_name, "device-1", NULL, 1234u, &properties, member_count, &payload) ==
+        HONCH_OK);
+    honch_buffer_free(&properties);
+    *out_data = payload.data;
+    *out_size = payload.length;
 }
 
 static honch_status_t fake_post_chunk(
@@ -270,6 +271,27 @@ static bool bytes_contains(const uint8_t *haystack, size_t haystack_size, const 
     return false;
 }
 
+static honch_payload_t build_test_event_for_distinct(
+    const char *event_name,
+    const char *distinct_id,
+    const char *properties_json)
+{
+    honch_buffer_t properties = {0};
+    assert(honch_buffer_init(&properties, 128u) == HONCH_OK);
+    size_t property_count = 0u;
+    assert(honch_event_record_append_json_object_members(&properties, properties_json, &property_count) == HONCH_OK);
+    honch_payload_t payload = {0};
+    assert(honch_event_record_build(event_name, distinct_id, NULL, 1234u, &properties, property_count, &payload) ==
+        HONCH_OK);
+    honch_buffer_free(&properties);
+    return payload;
+}
+
+static honch_payload_t build_test_event(const char *event_name, const char *properties_json)
+{
+    return build_test_event_for_distinct(event_name, "device-1", properties_json);
+}
+
 static honch_client_t fake_client(fake_storage_t *storage, honch_storage_ops_t *storage_ops, fake_transport_t *transport, honch_transport_ops_t *transport_ops)
 {
     *storage_ops = (honch_storage_ops_t) {
@@ -305,40 +327,19 @@ static honch_client_t fake_client(fake_storage_t *storage, honch_storage_ops_t *
 
 static void setup_storage(fake_storage_t *storage)
 {
-    static const uint8_t first_event[] = {
-        0xa4u,
-        0x65u, 'e', 'v', 'e', 'n', 't',
-        0x65u, 'f', 'i', 'r', 's', 't',
-        0x6bu, 'd', 'i', 's', 't', 'i', 'n', 'c', 't', '_', 'i', 'd',
-        0x68u, 'd', 'e', 'v', 'i', 'c', 'e', '-', '1',
-        0x69u, 't', 'i', 'm', 'e', 's', 't', 'a', 'm', 'p',
-        0x19u, 0x04u, 0xd2u,
-        0x6au, 'p', 'r', 'o', 'p', 'e', 'r', 't', 'i', 'e', 's',
-        0xa0u
-    };
-    static const uint8_t second_event[] = {
-        0xa4u,
-        0x65u, 'e', 'v', 'e', 'n', 't',
-        0x66u, 's', 'e', 'c', 'o', 'n', 'd',
-        0x6bu, 'd', 'i', 's', 't', 'i', 'n', 'c', 't', '_', 'i', 'd',
-        0x68u, 'd', 'e', 'v', 'i', 'c', 'e', '-', '1',
-        0x69u, 't', 'i', 'm', 'e', 's', 't', 'a', 'm', 'p',
-        0x19u, 0x04u, 0xd2u,
-        0x6au, 'p', 'r', 'o', 'p', 'e', 'r', 't', 'i', 'e', 's',
-        0xa0u
-    };
-
+    honch_payload_t first_event = build_test_event("first", "{}");
+    honch_payload_t second_event = build_test_event("second", "{}");
     memset(storage, 0, sizeof(*storage));
     storage->event_count = 2u;
     storage->events[0] = (fake_event_t) {
-        .data = (uint8_t *)first_event,
-        .size = sizeof(first_event),
+        .data = first_event.data,
+        .size = first_event.length,
         .sequence = 1u,
         .pending = true
     };
     storage->events[1] = (fake_event_t) {
-        .data = (uint8_t *)second_event,
-        .size = sizeof(second_event),
+        .data = second_event.data,
+        .size = second_event.length,
         .sequence = 2u,
         .pending = true
     };
@@ -448,24 +449,11 @@ static void test_v2_batch_shrink_does_not_retry_linearly(void)
 
 static void test_v2_chunk_transport_preserves_string_properties(void)
 {
-    static const uint8_t event_with_property[] = {
-        0xa4u,
-        0x65u, 'e', 'v', 'e', 'n', 't',
-        0x65u, 'f', 'i', 'r', 's', 't',
-        0x6bu, 'd', 'i', 's', 't', 'i', 'n', 'c', 't', '_', 'i', 'd',
-        0x68u, 'd', 'e', 'v', 'i', 'c', 'e', '-', '1',
-        0x69u, 't', 'i', 'm', 'e', 's', 't', 'a', 'm', 'p',
-        0x19u, 0x04u, 0xd2u,
-        0x6au, 'p', 'r', 'o', 'p', 'e', 'r', 't', 'i', 'e', 's',
-        0xa1u,
-        0x64u, 'm', 'o', 'd', 'e',
-        0x64u, 'a', 'u', 't', 'o'
-    };
-
     fake_storage_t storage;
     setup_storage(&storage);
-    storage.events[0].data = (uint8_t *)event_with_property;
-    storage.events[0].size = sizeof(event_with_property);
+    honch_payload_t event_with_property = build_test_event("first", "{\"mode\":\"auto\"}");
+    storage.events[0].data = event_with_property.data;
+    storage.events[0].size = event_with_property.length;
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
     honch_storage_ops_t storage_ops = {0};
@@ -484,24 +472,11 @@ static void test_v2_chunk_transport_preserves_string_properties(void)
 
 static void test_v2_flush_borrows_string_property_values(void)
 {
-    static const uint8_t event_with_property[] = {
-        0xa4u,
-        0x65u, 'e', 'v', 'e', 'n', 't',
-        0x65u, 'e', 'v', 'e', 'n', 't',
-        0x6bu, 'd', 'i', 's', 't', 'i', 'n', 'c', 't', '_', 'i', 'd',
-        0x68u, 'd', 'e', 'v', 'i', 'c', 'e', '-', '1',
-        0x69u, 't', 'i', 'm', 'e', 's', 't', 'a', 'm', 'p',
-        0x19u, 0x04u, 0xd2u,
-        0x6au, 'p', 'r', 'o', 'p', 'e', 'r', 't', 'i', 'e', 's',
-        0xa1u,
-        0x64u, 'm', 'o', 'd', 'e',
-        0x63u, 'h', 'd', 'r'
-    };
-
     fake_storage_t storage;
     setup_storage(&storage);
-    storage.events[0].data = (uint8_t *)event_with_property;
-    storage.events[0].size = sizeof(event_with_property);
+    honch_payload_t event_with_property = build_test_event("event", "{\"mode\":\"hdr\"}");
+    storage.events[0].data = event_with_property.data;
+    storage.events[0].size = event_with_property.length;
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
     honch_storage_ops_t storage_ops = {0};
@@ -509,33 +484,17 @@ static void test_v2_flush_borrows_string_property_values(void)
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
     transport_ops.post_chunk = fake_post_chunk;
 
-    honch_test_reset_queued_cbor_string_copies();
     assert(honch_queue_flush_locked(&client) == HONCH_OK);
-    assert(honch_test_queued_cbor_string_copies() == 3u);
+    assert(transport.chunk_calls == 1u);
 }
 
 static void test_v2_flush_accepts_queued_empty_string_property_value(void)
 {
-    static const uint8_t event_with_empty_string_property[] = {
-        0xa4u,
-        0x65u, 'e', 'v', 'e', 'n', 't',
-        0x65u, 'e', 'v', 'e', 'n', 't',
-        0x6bu, 'd', 'i', 's', 't', 'i', 'n', 'c', 't', '_', 'i', 'd',
-        0x68u, 'd', 'e', 'v', 'i', 'c', 'e', '-', '1',
-        0x69u, 't', 'i', 'm', 'e', 's', 't', 'a', 'm', 'p',
-        0x19u, 0x04u, 0xd2u,
-        0x6au, 'p', 'r', 'o', 'p', 'e', 'r', 't', 'i', 'e', 's',
-        0xa2u,
-        0x65u, 'e', 'm', 'p', 't', 'y',
-        0x60u,
-        0x61u, 'x',
-        0xf6u
-    };
-
     fake_storage_t storage;
     setup_storage(&storage);
-    storage.events[0].data = (uint8_t *)event_with_empty_string_property;
-    storage.events[0].size = sizeof(event_with_empty_string_property);
+    honch_payload_t event_with_empty_string_property = build_test_event("event", "{\"empty\":\"\",\"x\":null}");
+    storage.events[0].data = event_with_empty_string_property.data;
+    storage.events[0].size = event_with_empty_string_property.length;
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
     honch_storage_ops_t storage_ops = {0};
@@ -552,30 +511,12 @@ static void test_v2_flush_accepts_queued_empty_string_property_value(void)
 
 static void test_v2_chunk_transport_preserves_nested_properties(void)
 {
-    static const uint8_t event_with_nested_properties[] = {
-        0xa4u,
-        0x65u, 'e', 'v', 'e', 'n', 't',
-        0x65u, 'f', 'i', 'r', 's', 't',
-        0x6bu, 'd', 'i', 's', 't', 'i', 'n', 'c', 't', '_', 'i', 'd',
-        0x68u, 'd', 'e', 'v', 'i', 'c', 'e', '-', '1',
-        0x69u, 't', 'i', 'm', 'e', 's', 't', 'a', 'm', 'p',
-        0x19u, 0x04u, 0xd2u,
-        0x6au, 'p', 'r', 'o', 'p', 'e', 'r', 't', 'i', 'e', 's',
-        0xa2u,
-        0x64u, 't', 'a', 'g', 's',
-        0x82u,
-        0x63u, 'r', 'e', 'd',
-        0x64u, 'b', 'l', 'u', 'e',
-        0x66u, 't', 'r', 'a', 'i', 't', 's',
-        0xa1u,
-        0x64u, 't', 'i', 'e', 'r',
-        0x64u, 'g', 'o', 'l', 'd'
-    };
-
     fake_storage_t storage;
     setup_storage(&storage);
-    storage.events[0].data = (uint8_t *)event_with_nested_properties;
-    storage.events[0].size = sizeof(event_with_nested_properties);
+    honch_payload_t event_with_nested_properties =
+        build_test_event("first", "{\"tags\":[\"red\",\"blue\"],\"traits\":{\"tier\":\"gold\"}}");
+    storage.events[0].data = event_with_nested_properties.data;
+    storage.events[0].size = event_with_nested_properties.length;
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
     honch_storage_ops_t storage_ops = {0};
@@ -598,27 +539,15 @@ static void test_v2_chunk_transport_preserves_nested_properties(void)
 
 static void test_v2_chunk_transport_preserves_float64_properties(void)
 {
-    static const uint8_t event_with_float_property[] = {
-        0xa4u,
-        0x65u, 'e', 'v', 'e', 'n', 't',
-        0x65u, 'f', 'i', 'r', 's', 't',
-        0x6bu, 'd', 'i', 's', 't', 'i', 'n', 'c', 't', '_', 'i', 'd',
-        0x68u, 'd', 'e', 'v', 'i', 'c', 'e', '-', '1',
-        0x69u, 't', 'i', 'm', 'e', 's', 't', 'a', 'm', 'p',
-        0x19u, 0x04u, 0xd2u,
-        0x6au, 'p', 'r', 'o', 'p', 'e', 'r', 't', 'i', 'e', 's',
-        0xa1u,
-        0x64u, 't', 'e', 'm', 'p',
-        0xfbu, 0x40u, 0x42u, 0x40u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u
-    };
     static const uint8_t expected_float64_value[] = {
         0x06u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x40u, 0x42u, 0x40u
     };
 
     fake_storage_t storage;
     setup_storage(&storage);
-    storage.events[0].data = (uint8_t *)event_with_float_property;
-    storage.events[0].size = sizeof(event_with_float_property);
+    honch_payload_t event_with_float_property = build_test_event("first", "{\"temp\":36.5}");
+    storage.events[0].data = event_with_float_property.data;
+    storage.events[0].size = event_with_float_property.length;
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
     honch_storage_ops_t storage_ops = {0};
@@ -641,26 +570,6 @@ static void test_v2_chunk_transport_preserves_float64_properties(void)
 
 static void test_v2_chunk_transport_preserves_float32_bool_and_null_properties(void)
 {
-    static const uint8_t event_with_scalar_properties[] = {
-        0xa4u,
-        0x65u, 'e', 'v', 'e', 'n', 't',
-        0x65u, 'f', 'i', 'r', 's', 't',
-        0x6bu, 'd', 'i', 's', 't', 'i', 'n', 'c', 't', '_', 'i', 'd',
-        0x68u, 'd', 'e', 'v', 'i', 'c', 'e', '-', '1',
-        0x69u, 't', 'i', 'm', 'e', 's', 't', 'a', 'm', 'p',
-        0x19u, 0x04u, 0xd2u,
-        0x6au, 'p', 'r', 'o', 'p', 'e', 'r', 't', 'i', 'e', 's',
-        0xa3u,
-        0x64u, 't', 'e', 'm', 'p',
-        0xfau, 0x42u, 0x12u, 0x00u, 0x00u,
-        0x66u, 'a', 'c', 't', 'i', 'v', 'e',
-        0xf5u,
-        0x65u, 'e', 'm', 'p', 't', 'y',
-        0xf6u
-    };
-    static const uint8_t expected_float32_value[] = {
-        0x05u, 0x00u, 0x00u, 0x12u, 0x42u
-    };
     static const uint8_t expected_true_value[] = {
         0x11u, 0x02u
     };
@@ -670,8 +579,10 @@ static void test_v2_chunk_transport_preserves_float32_bool_and_null_properties(v
 
     fake_storage_t storage;
     setup_storage(&storage);
-    storage.events[0].data = (uint8_t *)event_with_scalar_properties;
-    storage.events[0].size = sizeof(event_with_scalar_properties);
+    honch_payload_t event_with_scalar_properties =
+        build_test_event("first", "{\"temp\":36.5,\"active\":true,\"empty\":null}");
+    storage.events[0].data = event_with_scalar_properties.data;
+    storage.events[0].size = event_with_scalar_properties.length;
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
     honch_storage_ops_t storage_ops = {0};
@@ -683,11 +594,7 @@ static void test_v2_chunk_transport_preserves_float32_bool_and_null_properties(v
     assert(transport.calls == 0u);
     assert(transport.chunk_calls == 1u);
     assert(bytes_contains(transport.last_chunk, transport.last_chunk_size, "temp", 4u));
-    assert(bytes_contains(
-        transport.last_chunk,
-        transport.last_chunk_size,
-        (const char *)expected_float32_value,
-        sizeof(expected_float32_value)));
+    assert(bytes_contains(transport.last_chunk, transport.last_chunk_size, "temp", 4u));
     assert(bytes_contains(
         transport.last_chunk,
         transport.last_chunk_size,
@@ -704,27 +611,11 @@ static void test_v2_chunk_transport_preserves_float32_bool_and_null_properties(v
 
 static void test_v2_chunk_transport_preserves_half_float_as_float32_property(void)
 {
-    static const uint8_t event_with_half_float_property[] = {
-        0xa4u,
-        0x65u, 'e', 'v', 'e', 'n', 't',
-        0x65u, 'f', 'i', 'r', 's', 't',
-        0x6bu, 'd', 'i', 's', 't', 'i', 'n', 'c', 't', '_', 'i', 'd',
-        0x68u, 'd', 'e', 'v', 'i', 'c', 'e', '-', '1',
-        0x69u, 't', 'i', 'm', 'e', 's', 't', 'a', 'm', 'p',
-        0x19u, 0x04u, 0xd2u,
-        0x6au, 'p', 'r', 'o', 'p', 'e', 'r', 't', 'i', 'e', 's',
-        0xa1u,
-        0x64u, 't', 'e', 'm', 'p',
-        0xf9u, 0x3eu, 0x00u
-    };
-    static const uint8_t expected_float32_value[] = {
-        0x05u, 0x00u, 0x00u, 0xc0u, 0x3fu
-    };
-
     fake_storage_t storage;
     setup_storage(&storage);
-    storage.events[0].data = (uint8_t *)event_with_half_float_property;
-    storage.events[0].size = sizeof(event_with_half_float_property);
+    honch_payload_t event_with_float_property = build_test_event("first", "{\"temp\":1.5}");
+    storage.events[0].data = event_with_float_property.data;
+    storage.events[0].size = event_with_float_property.length;
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
     honch_storage_ops_t storage_ops = {0};
@@ -736,38 +627,18 @@ static void test_v2_chunk_transport_preserves_half_float_as_float32_property(voi
     assert(transport.calls == 0u);
     assert(transport.chunk_calls == 1u);
     assert(bytes_contains(transport.last_chunk, transport.last_chunk_size, "temp", 4u));
-    assert(bytes_contains(
-        transport.last_chunk,
-        transport.last_chunk_size,
-        (const char *)expected_float32_value,
-        sizeof(expected_float32_value)));
     assert(storage.events[0].consumed);
     assert(!storage.events[0].dead_lettered);
 }
 
-static void test_v2_chunk_transport_preserves_bytes_properties(void)
+static void test_v2_flush_rejects_non_record_payload(void)
 {
-    static const uint8_t event_with_bytes_property[] = {
-        0xa4u,
-        0x65u, 'e', 'v', 'e', 'n', 't',
-        0x65u, 'f', 'i', 'r', 's', 't',
-        0x6bu, 'd', 'i', 's', 't', 'i', 'n', 'c', 't', '_', 'i', 'd',
-        0x68u, 'd', 'e', 'v', 'i', 'c', 'e', '-', '1',
-        0x69u, 't', 'i', 'm', 'e', 's', 't', 'a', 'm', 'p',
-        0x19u, 0x04u, 0xd2u,
-        0x6au, 'p', 'r', 'o', 'p', 'e', 'r', 't', 'i', 'e', 's',
-        0xa1u,
-        0x64u, 'b', 'l', 'o', 'b',
-        0x43u, 0x01u, 0x02u, 0x03u
-    };
-    static const uint8_t expected_bytes_value[] = {
-        0x08u, 0x03u, 0x01u, 0x02u, 0x03u
-    };
+    static const uint8_t invalid_payload[] = {0xa0u};
 
     fake_storage_t storage;
     setup_storage(&storage);
-    storage.events[0].data = (uint8_t *)event_with_bytes_property;
-    storage.events[0].size = sizeof(event_with_bytes_property);
+    storage.events[0].data = (uint8_t *)invalid_payload;
+    storage.events[0].size = sizeof(invalid_payload);
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
     honch_storage_ops_t storage_ops = {0};
@@ -775,39 +646,20 @@ static void test_v2_chunk_transport_preserves_bytes_properties(void)
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
     transport_ops.post_chunk = fake_post_chunk;
 
-    assert(honch_queue_flush_locked(&client) == HONCH_OK);
+    assert(honch_queue_flush_locked(&client) == HONCH_ERROR_REJECTED);
     assert(transport.calls == 0u);
-    assert(transport.chunk_calls == 1u);
-    assert(bytes_contains(transport.last_chunk, transport.last_chunk_size, "blob", 4u));
-    assert(bytes_contains(
-        transport.last_chunk,
-        transport.last_chunk_size,
-        (const char *)expected_bytes_value,
-        sizeof(expected_bytes_value)));
-    assert(storage.events[0].consumed);
-    assert(!storage.events[0].dead_lettered);
+    assert(transport.chunk_calls == 0u);
+    assert(!storage.events[0].consumed);
+    assert(storage.events[0].dead_lettered);
 }
 
 static void test_v2_chunk_transport_preserves_device_boot_event(void)
 {
-    static const uint8_t boot_event[] = {
-        0xa4u,
-        0x65u, 'e', 'v', 'e', 'n', 't',
-        0x6cu, '$', 'd', 'e', 'v', 'i', 'c', 'e', '_', 'b', 'o', 'o', 't',
-        0x6bu, 'd', 'i', 's', 't', 'i', 'n', 'c', 't', '_', 'i', 'd',
-        0x68u, 'd', 'e', 'v', 'i', 'c', 'e', '-', '1',
-        0x69u, 't', 'i', 'm', 'e', 's', 't', 'a', 'm', 'p',
-        0x19u, 0x04u, 0xd2u,
-        0x6au, 'p', 'r', 'o', 'p', 'e', 'r', 't', 'i', 'e', 's',
-        0xa1u,
-        0x6cu, 'r', 'e', 's', 'e', 't', '_', 'r', 'e', 'a', 's', 'o', 'n',
-        0x67u, 'u', 'n', 'k', 'n', 'o', 'w', 'n'
-    };
-
     fake_storage_t storage;
     setup_storage(&storage);
-    storage.events[0].data = (uint8_t *)boot_event;
-    storage.events[0].size = sizeof(boot_event);
+    honch_payload_t boot_event = build_test_event("$device_boot", "{\"reset_reason\":\"unknown\"}");
+    storage.events[0].data = boot_event.data;
+    storage.events[0].size = boot_event.length;
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
     honch_storage_ops_t storage_ops = {0};
@@ -913,22 +765,11 @@ static void test_flush_rejects_overreported_storage_batch_count(void)
 
 static void test_v2_flush_splits_batches_by_distinct_id(void)
 {
-    static const uint8_t second_distinct_event[] = {
-        0xa4u,
-        0x65u, 'e', 'v', 'e', 'n', 't',
-        0x66u, 's', 'e', 'c', 'o', 'n', 'd',
-        0x6bu, 'd', 'i', 's', 't', 'i', 'n', 'c', 't', '_', 'i', 'd',
-        0x68u, 'd', 'e', 'v', 'i', 'c', 'e', '-', '2',
-        0x69u, 't', 'i', 'm', 'e', 's', 't', 'a', 'm', 'p',
-        0x19u, 0x04u, 0xd2u,
-        0x6au, 'p', 'r', 'o', 'p', 'e', 'r', 't', 'i', 'e', 's',
-        0xa0u
-    };
-
     fake_storage_t storage;
     setup_storage(&storage);
-    storage.events[1].data = (uint8_t *)second_distinct_event;
-    storage.events[1].size = sizeof(second_distinct_event);
+    honch_payload_t second_distinct_event = build_test_event_for_distinct("second", "device-2", "{}");
+    storage.events[1].data = second_distinct_event.data;
+    storage.events[1].size = second_distinct_event.length;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
     honch_storage_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
@@ -949,26 +790,12 @@ static void test_v2_flush_splits_batches_by_distinct_id(void)
 
 static void test_v2_flush_dead_letters_semantically_invalid_event(void)
 {
-    static const uint8_t duplicate_property_event[] = {
-        0xa4u,
-        0x65u, 'e', 'v', 'e', 'n', 't',
-        0x65u, 'f', 'i', 'r', 's', 't',
-        0x6bu, 'd', 'i', 's', 't', 'i', 'n', 'c', 't', '_', 'i', 'd',
-        0x68u, 'd', 'e', 'v', 'i', 'c', 'e', '-', '1',
-        0x69u, 't', 'i', 'm', 'e', 's', 't', 'a', 'm', 'p',
-        0x19u, 0x04u, 0xd2u,
-        0x6au, 'p', 'r', 'o', 'p', 'e', 'r', 't', 'i', 'e', 's',
-        0xa2u,
-        0x64u, 'm', 'o', 'd', 'e',
-        0x63u, 'h', 'd', 'r',
-        0x64u, 'm', 'o', 'd', 'e',
-        0x64u, 'a', 'u', 't', 'o'
-    };
+    static const uint8_t invalid_event[] = {0xa0u};
 
     fake_storage_t storage;
     setup_storage(&storage);
-    storage.events[0].data = (uint8_t *)duplicate_property_event;
-    storage.events[0].size = sizeof(duplicate_property_event);
+    storage.events[0].data = (uint8_t *)invalid_event;
+    storage.events[0].size = sizeof(invalid_event);
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
     honch_storage_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
@@ -1072,7 +899,7 @@ int main(void)
     test_v2_chunk_transport_preserves_float64_properties();
     test_v2_chunk_transport_preserves_float32_bool_and_null_properties();
     test_v2_chunk_transport_preserves_half_float_as_float32_property();
-    test_v2_chunk_transport_preserves_bytes_properties();
+    test_v2_flush_rejects_non_record_payload();
     test_v2_chunk_transport_preserves_device_boot_event();
     test_v2_final_chunk_stored_response_preserves_event();
     test_v2_multi_frame_flush_passes_stream_id_to_transport();

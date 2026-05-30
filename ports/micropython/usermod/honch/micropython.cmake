@@ -11,7 +11,7 @@ target_sources(honch_micropython INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/mptransport_adapter.c
     ${CMAKE_CURRENT_LIST_DIR}/pthread_stub.c
     ${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_core.c
-    ${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_cbor.c
+    ${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_event_record.c
     ${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_json.c
     ${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_lifecycle.c
     ${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_packetizer.c
