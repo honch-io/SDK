@@ -748,6 +748,48 @@ static honch_status_t lifecycle_transport(
     return HONCH_OK;
 }
 
+typedef struct fake_clock_context {
+    uint64_t now_ms;
+    uint64_t uptime_ms;
+} fake_clock_context_t;
+
+static uint64_t fake_clock_now_ms(void *ctx)
+{
+    return ((fake_clock_context_t *)ctx)->now_ms;
+}
+
+static uint64_t fake_clock_uptime_ms(void *ctx)
+{
+    return ((fake_clock_context_t *)ctx)->uptime_ms;
+}
+
+static honch_status_t fake_core_transport(
+    void *ctx,
+    const char *endpoint_url,
+    const char *api_key,
+    const char *stream_id,
+    const uint8_t *body,
+    size_t body_size,
+    honch_transport_result_t *result)
+{
+    fake_transport_context_t *transport = (fake_transport_context_t *)ctx;
+    long http_status = 0;
+    honch_status_t status = fake_transport(
+        endpoint_url,
+        api_key,
+        stream_id,
+        body,
+        body_size,
+        "application/vnd.honch.wire-v2",
+        transport,
+        &http_status);
+    if (status != HONCH_OK) {
+        return status;
+    }
+    *result = http_status == 204L ? HONCH_TRANSPORT_ACCEPTED : HONCH_TRANSPORT_RETRY;
+    return HONCH_OK;
+}
+
 static int test_battery_level = -1;
 
 static int test_battery_callback(void)
@@ -955,6 +997,77 @@ static void test_packetizer_reads_posix_storage_event(void)
 
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
+}
+
+static void test_packetizer_sets_monotonic_time_source(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+
+    fake_clock_context_t clock = {
+        .now_ms = 1200u,
+        .uptime_ms = 1200u
+    };
+    honch_platform_ops_t platform = {
+        .now_ms = fake_clock_now_ms,
+        .uptime_ms = fake_clock_uptime_ms,
+        .random_bytes = lifecycle_random_bytes,
+        .ctx = &clock
+    };
+    honch_posix_storage_t storage_ctx;
+    honch_storage_ops_t storage;
+    EXPECT_EQ_INT(honch_posix_storage_ops_init(&storage, &storage_ctx, queue_dir), HONCH_OK);
+    honch_transport_ops_t transport = {
+        .post_chunk = lifecycle_transport
+    };
+    honch_core_config_t config = {
+        .api_key = "test-key",
+        .endpoint_url = "http://collector.local/",
+        .device_id = "device-1",
+        .device_model = "X3-Pro",
+        .firmware_version = "3.4.1",
+        .environment = "production",
+        .queue_directory = queue_dir,
+        .batch_size = 10u,
+        .max_queued_events = 10u,
+        .max_event_bytes = 8192u,
+        .platform = &platform,
+        .storage = &storage,
+        .transport = &transport
+    };
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_core_init(&client, &config), HONCH_OK);
+    clock.now_ms = 1700000005000ULL;
+    clock.uptime_ms = 5000u;
+
+    honch_packetizer_t packetizer = {0};
+    unsigned char frame[512] = {0};
+    size_t frame_size = 0u;
+    bool message_complete = false;
+
+    EXPECT_EQ_INT(honch_packetizer_begin(client, &packetizer, HONCH_DATA_SOURCE_EVENTS), HONCH_OK);
+    EXPECT_EQ_INT(honch_packetizer_next(
+        &packetizer,
+        frame,
+        sizeof(frame),
+        &frame_size,
+        &message_complete), HONCH_OK);
+    EXPECT_TRUE(frame_size > 20u);
+    EXPECT_TRUE(message_complete);
+
+    char payload[4096];
+    EXPECT_TRUE(wire_message_to_json(
+        frame + 20u,
+        frame_size - 20u,
+        "test-key",
+        payload,
+        sizeof(payload)) != 0);
+    EXPECT_STR_CONTAINS(payload, "\"device_time_source\":2");
+    EXPECT_STR_CONTAINS(payload, "\"timestamp\":1700000001200");
+    EXPECT_EQ_INT(honch_packetizer_confirm(&packetizer), HONCH_OK);
+
+    EXPECT_EQ_INT(honch_core_shutdown(client), HONCH_OK);
 }
 
 static void test_os_buffered_durability_tracks_and_flushes_event(void)
@@ -1615,6 +1728,151 @@ static void test_core_state_lock_works_without_platform_lock_callbacks(void)
     EXPECT_EQ_INT(honch_core_init(&client, &config), HONCH_OK);
     EXPECT_EQ_INT(honch_core_track(client, "state_lock_contract", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_core_shutdown(client), HONCH_OK);
+}
+
+static void test_flush_marks_realtime_time_source(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+
+    fake_transport_context_t transport = {.response_code = 204L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"device_time_source\":1");
+
+    EXPECT_EQ_INT(honch_shutdown(client), HONCH_OK);
+    honch_test_set_transport(NULL, NULL);
+}
+
+static void test_flush_marks_monotonic_time_source_after_clock_sync(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+
+    fake_clock_context_t clock = {
+        .now_ms = 1200u,
+        .uptime_ms = 1200u
+    };
+    fake_transport_context_t transport_ctx = {.response_code = 204L};
+    honch_platform_ops_t platform = {
+        .now_ms = fake_clock_now_ms,
+        .uptime_ms = fake_clock_uptime_ms,
+        .random_bytes = lifecycle_random_bytes,
+        .ctx = &clock
+    };
+    honch_transport_ops_t transport = {
+        .post_chunk = fake_core_transport,
+        .ctx = &transport_ctx
+    };
+    honch_posix_storage_t storage_ctx;
+    honch_storage_ops_t storage;
+    EXPECT_EQ_INT(honch_posix_storage_ops_init(&storage, &storage_ctx, queue_dir), HONCH_OK);
+    honch_core_config_t config = {
+        .api_key = "test-key",
+        .endpoint_url = "http://collector.local/",
+        .device_id = "device-1",
+        .device_model = "X3-Pro",
+        .firmware_version = "3.4.1",
+        .environment = "production",
+        .queue_directory = queue_dir,
+        .batch_size = 10u,
+        .max_queued_events = 10u,
+        .max_event_bytes = 8192u,
+        .platform = &platform,
+        .storage = &storage,
+        .transport = &transport
+    };
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_core_init(&client, &config), HONCH_OK);
+    clock.now_ms = 1700000005000ULL;
+    clock.uptime_ms = 5000u;
+    EXPECT_EQ_INT(honch_core_flush(client), HONCH_OK);
+    EXPECT_STR_CONTAINS(transport_ctx.last_payload, "\"device_time_source\":2");
+    EXPECT_STR_CONTAINS(transport_ctx.last_payload, "\"timestamp\":1700000001200");
+
+    EXPECT_EQ_INT(honch_core_shutdown(client), HONCH_OK);
+}
+
+static void test_flush_marks_unknown_time_source_without_clock_sync(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+
+    fake_clock_context_t clock = {
+        .now_ms = 1200u,
+        .uptime_ms = 1200u
+    };
+    fake_transport_context_t transport_ctx = {.response_code = 204L};
+    honch_platform_ops_t platform = {
+        .now_ms = fake_clock_now_ms,
+        .uptime_ms = fake_clock_uptime_ms,
+        .random_bytes = lifecycle_random_bytes,
+        .ctx = &clock
+    };
+    honch_transport_ops_t transport = {
+        .post_chunk = fake_core_transport,
+        .ctx = &transport_ctx
+    };
+    honch_posix_storage_t storage_ctx;
+    honch_storage_ops_t storage;
+    EXPECT_EQ_INT(honch_posix_storage_ops_init(&storage, &storage_ctx, queue_dir), HONCH_OK);
+    honch_core_config_t config = {
+        .api_key = "test-key",
+        .endpoint_url = "http://collector.local/",
+        .device_id = "device-1",
+        .device_model = "X3-Pro",
+        .firmware_version = "3.4.1",
+        .environment = "production",
+        .queue_directory = queue_dir,
+        .batch_size = 10u,
+        .max_queued_events = 10u,
+        .max_event_bytes = 8192u,
+        .platform = &platform,
+        .storage = &storage,
+        .transport = &transport
+    };
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_core_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_core_flush(client), HONCH_OK);
+    EXPECT_STR_CONTAINS(transport_ctx.last_payload, "\"device_time_source\":0");
+    EXPECT_STR_CONTAINS(transport_ctx.last_payload, "\"timestamp\":1200");
+
+    EXPECT_EQ_INT(honch_core_shutdown(client), HONCH_OK);
+}
+
+static void test_flush_encodes_fitting_wire_message_once(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 50u;
+    config.max_queued_events = 80u;
+
+    fake_transport_context_t transport = {.response_code = 204L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+
+    honch_test_reset_wire_v2_encode_attempts();
+    for (int i = 0; i < 20; i++) {
+        char event_name[32];
+        snprintf(event_name, sizeof(event_name), "event_%02d", i);
+        EXPECT_EQ_INT(honch_track(client, event_name, NULL, 0u), HONCH_OK);
+    }
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_EQ_INT(honch_test_max_wire_v2_encode_attempts(), 1);
+
+    EXPECT_EQ_INT(honch_shutdown(client), HONCH_OK);
+    honch_test_set_transport(NULL, NULL);
 }
 
 static void test_firmware_update_emitted_when_version_changes(void)
@@ -2714,6 +2972,7 @@ int main(void)
     test_shutdown_reports_status();
     test_track_persists_event();
     test_packetizer_reads_posix_storage_event();
+    test_packetizer_sets_monotonic_time_source();
     test_os_buffered_durability_tracks_and_flushes_event();
     test_typed_value_validation();
     test_generated_device_id_persists();
@@ -2734,6 +2993,10 @@ int main(void)
     test_lifecycle_events_are_queued();
     test_shutdown_flush_reports_transport_error();
     test_core_state_lock_works_without_platform_lock_callbacks();
+    test_flush_marks_realtime_time_source();
+    test_flush_marks_monotonic_time_source_after_clock_sync();
+    test_flush_marks_unknown_time_source_without_clock_sync();
+    test_flush_encodes_fitting_wire_message_once();
     test_firmware_update_emitted_when_version_changes();
     test_battery_callback_stamps_level_and_emits_low_event();
     test_battery_low_uses_same_sample_for_event_properties();

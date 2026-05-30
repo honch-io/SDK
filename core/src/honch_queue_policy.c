@@ -41,7 +41,6 @@ static void honch_flush_timing_log(honch_client_t *client, const char *message)
 }
 #endif
 
-#ifdef HONCH_TESTING
 static size_t s_honch_test_max_wire_v2_encode_attempts = 0u;
 
 void honch_test_reset_wire_v2_encode_attempts(void)
@@ -53,8 +52,6 @@ size_t honch_test_max_wire_v2_encode_attempts(void)
 {
     return s_honch_test_max_wire_v2_encode_attempts;
 }
-
-#endif
 
 static void honch_snapshot_boot_epoch(honch_client_t *client, honch_flush_context_t *context)
 {
@@ -86,6 +83,14 @@ static uint64_t honch_normalize_queued_timestamp(
     }
 
     return context->boot_epoch_ms + timestamp_ms;
+}
+
+static uint64_t honch_device_time_source_for_batch(bool has_unknown_time, bool used_boot_epoch)
+{
+    if (has_unknown_time) {
+        return 0u;
+    }
+    return used_boot_epoch ? 2u : 1u;
 }
 
 static honch_status_t honch_core_queue_depth(honch_client_t *client, size_t *depth)
@@ -348,6 +353,8 @@ static honch_status_t honch_core_build_wire_v2_message(
 
     honch_status_t status = HONCH_OK;
     size_t parsed_count = 0u;
+    bool used_boot_epoch = false;
+    bool has_unknown_time = false;
     for (size_t i = 0u; status == HONCH_OK && i < event_count; i++) {
         status = honch_event_record_parse(events[i].data, events[i].length, &parsed[i]);
         if (status != HONCH_OK) {
@@ -364,7 +371,16 @@ static honch_status_t honch_core_build_wire_v2_message(
             break;
         }
         if (status == HONCH_OK) {
+            uint64_t queued_timestamp_ms = parsed[i].timestamp_ms;
             parsed[i].timestamp_ms = honch_normalize_queued_timestamp(flush_context, parsed[i].timestamp_ms);
+            if (queued_timestamp_ms > 0u &&
+                queued_timestamp_ms < HONCH_MIN_UNIX_TIME_MS &&
+                parsed[i].timestamp_ms >= HONCH_MIN_UNIX_TIME_MS) {
+                used_boot_epoch = true;
+            }
+            if (parsed[i].timestamp_ms < HONCH_MIN_UNIX_TIME_MS) {
+                has_unknown_time = true;
+            }
             compact_events[i] = (honch_wire_v2_event_t) {
                 .event_name = parsed[i].event_name,
                 .timestamp_ms = parsed[i].timestamp_ms,
@@ -391,7 +407,9 @@ static honch_status_t honch_core_build_wire_v2_message(
         .sdk_platform = flush_context->sdk_platform,
         .sdk_version = HONCH_SDK_VERSION,
         .environment = flush_context->environment,
-        .session_id = parsed[0].session_id != NULL ? parsed[0].session_id : flush_context->session_id
+        .session_id = parsed[0].session_id != NULL ? parsed[0].session_id : flush_context->session_id,
+        .has_device_time_source = true,
+        .device_time_source = honch_device_time_source_for_batch(has_unknown_time, used_boot_epoch)
     };
 
     uint8_t *buffer = (uint8_t *)malloc(HONCH_WIRE_V2_MAX_FRAME_BYTES);
@@ -407,32 +425,39 @@ static honch_status_t honch_core_build_wire_v2_message(
     size_t message_size = 0u;
     size_t encoded_count = 0u;
     size_t encode_attempts = 0u;
-    status = HONCH_ERROR_OUT_OF_MEMORY;
-    size_t low = 1u;
-    size_t high = parsed_count;
-    while (low <= high) {
-        size_t try_count = low + ((high - low) / 2u);
-        encode_attempts++;
-        status = honch_wire_v2_encode_event_batch(
-            &context,
-            parsed[0].timestamp_ms,
-            compact_events,
-            try_count,
-            buffer,
-            HONCH_WIRE_V2_MAX_FRAME_BYTES,
-            &message_size);
-        if (status == HONCH_OK) {
-            encoded_count = try_count;
-            low = try_count + 1u;
-            continue;
+    status = honch_wire_v2_measure_event_batch(
+        &context,
+        parsed[0].timestamp_ms,
+        compact_events,
+        parsed_count,
+        &message_size);
+    if (status == HONCH_OK && message_size <= HONCH_WIRE_V2_MAX_FRAME_BYTES) {
+        encoded_count = parsed_count;
+    } else if (status == HONCH_ERROR_OUT_OF_MEMORY || status == HONCH_ERROR_INVALID_ARGUMENT) {
+        status = HONCH_ERROR_OUT_OF_MEMORY;
+        size_t low = 1u;
+        size_t high = parsed_count;
+        while (low <= high) {
+            size_t try_count = low + ((high - low) / 2u);
+            status = honch_wire_v2_measure_event_batch(
+                &context,
+                parsed[0].timestamp_ms,
+                compact_events,
+                try_count,
+                &message_size);
+            if (status == HONCH_OK && message_size <= HONCH_WIRE_V2_MAX_FRAME_BYTES) {
+                encoded_count = try_count;
+                low = try_count + 1u;
+                continue;
+            }
+            if (status != HONCH_ERROR_OUT_OF_MEMORY && status != HONCH_ERROR_INVALID_ARGUMENT) {
+                break;
+            }
+            if (try_count == 1u) {
+                break;
+            }
+            high = try_count - 1u;
         }
-        if (status != HONCH_ERROR_OUT_OF_MEMORY) {
-            break;
-        }
-        if (try_count == 1u) {
-            break;
-        }
-        high = try_count - 1u;
     }
     if (encoded_count > 0u) {
         encode_attempts++;
@@ -447,13 +472,9 @@ static honch_status_t honch_core_build_wire_v2_message(
     } else if (status == HONCH_ERROR_OUT_OF_MEMORY) {
         status = HONCH_ERROR_INVALID_ARGUMENT;
     }
-#ifdef HONCH_TESTING
     if (encode_attempts > s_honch_test_max_wire_v2_encode_attempts) {
         s_honch_test_max_wire_v2_encode_attempts = encode_attempts;
     }
-#else
-    (void)encode_attempts;
-#endif
     for (size_t i = 0u; i < event_count; i++) {
         honch_event_record_free(&parsed[i]);
     }

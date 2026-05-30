@@ -281,6 +281,12 @@ honch_status_t honch_wire_v2_encode_event_batch(
     uint8_t *out,
     size_t out_size,
     size_t *written);
+honch_status_t honch_wire_v2_measure_event_batch(
+    const honch_wire_v2_batch_context_t *context,
+    uint64_t base_time_ms,
+    const honch_wire_v2_event_t *events,
+    size_t event_count,
+    size_t *written);
 
 #ifdef __cplusplus
 }
