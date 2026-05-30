@@ -85,10 +85,10 @@ idf.py set-target esp32
 idf.py build
 ```
 
-Run the ESP-IDF migration guard from the repository root:
+Run the ESP-IDF SDK contract guard from the repository root:
 
 ```bash
-python3 ports/esp-idf/tests/test_cbor_migration.py
+python3 ports/esp-idf/tests/test_sdk_contract.py
 ```
 
 ### Arduino ESP32

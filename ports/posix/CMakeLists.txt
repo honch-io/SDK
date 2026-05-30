@@ -140,8 +140,8 @@ if(HONCH_BUILD_TESTS)
     add_test(NAME honch_posix_state_consistency_tests COMMAND honch_posix_state_consistency_tests)
 
     add_test(
-        NAME honch_posix_cbor_migration_tests
-        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_cbor_migration.py
+        NAME honch_posix_sdk_contract_tests
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_sdk_contract.py
     )
 
     if(HONCH_BUILD_E2E)
