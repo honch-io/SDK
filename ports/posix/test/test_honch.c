@@ -81,6 +81,66 @@ static int read_text_file(const char *path, char *out, size_t size)
     return 1;
 }
 
+static int read_first_file_with_suffix(
+    const char *directory,
+    const char *suffix,
+    unsigned char *out,
+    size_t capacity,
+    size_t *out_size)
+{
+    DIR *dir = opendir(directory);
+    if (dir == NULL || out == NULL || out_size == NULL) {
+        if (dir != NULL) {
+            closedir(dir);
+        }
+        return 0;
+    }
+
+    size_t suffix_length = strlen(suffix);
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        size_t length = strlen(entry->d_name);
+        if (length < suffix_length || strcmp(entry->d_name + length - suffix_length, suffix) != 0) {
+            continue;
+        }
+
+        char path[260];
+        int written = snprintf(path, sizeof(path), "%s/%s", directory, entry->d_name);
+        if (written < 0 || (size_t)written >= sizeof(path)) {
+            closedir(dir);
+            return 0;
+        }
+
+        FILE *file = fopen(path, "rb");
+        if (file == NULL) {
+            closedir(dir);
+            return 0;
+        }
+        *out_size = fread(out, 1u, capacity, file);
+        int ok = ferror(file) == 0;
+        fclose(file);
+        closedir(dir);
+        return ok;
+    }
+
+    closedir(dir);
+    return 0;
+}
+
+static int buffer_contains_text(const unsigned char *buffer, size_t size, const char *needle)
+{
+    size_t needle_size = strlen(needle);
+    if (needle_size == 0u || needle_size > size) {
+        return 0;
+    }
+    for (size_t i = 0u; i <= size - needle_size; i++) {
+        if (memcmp(buffer + i, needle, needle_size) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static int write_text_file(const char *path, const char *content)
 {
     FILE *file = fopen(path, "wb");
@@ -1370,6 +1430,68 @@ static void test_auto_properties_callback_cannot_override_sdk_owned_properties(v
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_queue_record_omits_promoted_context_properties(void)
+{
+    char queue_dir[128];
+    char pending_dir[160];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
+
+    int rssi = -61;
+    test_battery_level = 42;
+    honch_config_t config = test_config(queue_dir);
+    config.batch_size = 10u;
+    config.battery_callback = test_battery_callback;
+    config.auto_properties_callback = test_auto_properties_success;
+    config.auto_properties_userdata = &rssi;
+
+    fake_transport_context_t transport = {.response_code = 204L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 0);
+
+    const honch_property_t properties[] = {
+        honch_prop("mode", honch_str("burst"))
+    };
+    EXPECT_EQ_INT(honch_track(client, "queued_context_probe", properties, 1u), HONCH_OK);
+    EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 1);
+
+    unsigned char record[2048];
+    size_t record_size = 0u;
+    EXPECT_TRUE(read_first_file_with_suffix(pending_dir, ".hqe", record, sizeof(record), &record_size) != 0);
+    EXPECT_TRUE(buffer_contains_text(record, record_size, "queued_context_probe"));
+    EXPECT_TRUE(buffer_contains_text(record, record_size, "mode"));
+    EXPECT_TRUE(buffer_contains_text(record, record_size, "$battery_level"));
+    EXPECT_TRUE(buffer_contains_text(record, record_size, "$wifi_rssi"));
+    EXPECT_TRUE(buffer_contains_text(record, record_size, "adapter_property"));
+    EXPECT_TRUE(!buffer_contains_text(record, record_size, "$device_id"));
+    EXPECT_TRUE(!buffer_contains_text(record, record_size, "$device_model"));
+    EXPECT_TRUE(!buffer_contains_text(record, record_size, "$firmware_version"));
+    EXPECT_TRUE(!buffer_contains_text(record, record_size, "$sdk_platform"));
+    EXPECT_TRUE(!buffer_contains_text(record, record_size, "$sdk_version"));
+    EXPECT_TRUE(!buffer_contains_text(record, record_size, "$environment"));
+
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"queued_context_probe\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"mode\":\"burst\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$battery_level\":42");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$wifi_rssi\":-61");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"adapter_property\":\"adapter-value\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$device_id\":\"device-1\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$device_model\":\"X3-Pro\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$firmware_version\":\"3.4.1\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$sdk_platform\":\"c-posix\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$sdk_version\":\"0.2.0\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$environment\":\"production\"");
+
+    test_battery_level = -1;
+    honch_shutdown(client);
+    honch_test_set_transport(NULL, NULL);
+}
+
 static void test_session_events_and_context(void)
 {
     char queue_dir[128];
@@ -2607,6 +2729,7 @@ int main(void)
     test_auto_properties_callback_adds_platform_properties();
     test_auto_properties_callback_rejects_invalid_typed_value();
     test_auto_properties_callback_cannot_override_sdk_owned_properties();
+    test_queue_record_omits_promoted_context_properties();
     test_session_events_and_context();
     test_lifecycle_events_are_queued();
     test_shutdown_flush_reports_transport_error();
