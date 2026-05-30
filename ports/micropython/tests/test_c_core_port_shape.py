@@ -117,6 +117,28 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertIn("CircuitPython is not covered", readme)
         self.assertIn("_honch_core", readme)
 
+    def test_readme_documents_typed_hqr1_queue_records(self):
+        readme = self.read("ports/micropython/README.md")
+
+        self.assertIn("typed event values", readme)
+        self.assertIn("HQR1 queue records", readme)
+        self.assertIn("compact wire-v2 packetization", readme)
+        self.assertIn("`bytes`", readme)
+        self.assertNotIn("CBOR", readme)
+        self.assertNotIn("JSON-compatible", readme)
+
+    def test_auto_properties_spec_matches_core_lifecycle_behavior(self):
+        spec = self.read("spec/auto-properties.md")
+
+        self.assertIn("`reset()` clears SDK identity, state, and queued events", spec)
+        self.assertIn("Connectivity changes are not auto-detected by the portable core", spec)
+        automatic = spec.split("These events are emitted automatically by the SDK:", 1)[1].split(
+            "### Reset Reason Values", 1
+        )[0]
+        table = automatic.split("`reset()` clears SDK identity", 1)[0]
+        self.assertNotIn("$device_reset", table)
+        self.assertNotIn("$connectivity_change", table)
+
 
 if __name__ == "__main__":
     unittest.main()

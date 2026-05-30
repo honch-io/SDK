@@ -301,6 +301,45 @@ static bool read_test_uvarint(const uint8_t *bytes, size_t size, size_t *offset,
     return false;
 }
 
+static size_t append_test_uvarint(uint8_t *bytes, size_t offset, uint64_t value)
+{
+    do {
+        uint8_t byte = (uint8_t)(value & 0x7fu);
+        value >>= 7u;
+        if (value != 0u) {
+            byte |= 0x80u;
+        }
+        bytes[offset++] = byte;
+    } while (value != 0u);
+    return offset;
+}
+
+static size_t append_test_string(uint8_t *bytes, size_t offset, const char *value)
+{
+    size_t length = strlen(value);
+    offset = append_test_uvarint(bytes, offset, (uint64_t)length);
+    memcpy(bytes + offset, value, length);
+    offset += length;
+    bytes[offset++] = 0u;
+    return offset;
+}
+
+static size_t build_malformed_count_record(uint8_t *bytes, uint8_t value_tag, uint64_t count)
+{
+    size_t offset = 0u;
+    memcpy(bytes + offset, "HQR1", 4u);
+    offset += 4u;
+    offset = append_test_uvarint(bytes, offset, 1234u);
+    offset = append_test_string(bytes, offset, "device-1");
+    bytes[offset++] = 0u;
+    offset = append_test_string(bytes, offset, "malformed");
+    offset = append_test_uvarint(bytes, offset, 1u);
+    offset = append_test_string(bytes, offset, "value");
+    bytes[offset++] = value_tag;
+    offset = append_test_uvarint(bytes, offset, count);
+    return offset;
+}
+
 static uint64_t last_chunk_base_time_ms(const fake_transport_t *transport)
 {
     assert(transport->last_chunk_size > 4u);
@@ -441,6 +480,22 @@ static void test_hqr1_rejects_duplicate_nested_map_keys(void)
     honch_payload_t payload = {0};
     assert(honch_event_record_build("duplicate", "device-1", NULL, 1234u, properties, 1u, &payload) ==
         HONCH_ERROR_INVALID_ARGUMENT);
+}
+
+static void test_hqr1_rejects_malformed_array_count_before_allocation(void)
+{
+    uint8_t record[64];
+    size_t record_size = build_malformed_count_record(record, 9u, UINT64_MAX / 128u);
+    honch_event_record_t parsed;
+    assert(honch_event_record_parse(record, record_size, &parsed) == HONCH_ERROR_INVALID_ARGUMENT);
+}
+
+static void test_hqr1_rejects_malformed_map_count_before_allocation(void)
+{
+    uint8_t record[64];
+    size_t record_size = build_malformed_count_record(record, 10u, UINT64_MAX / 128u);
+    honch_event_record_t parsed;
+    assert(honch_event_record_parse(record, record_size, &parsed) == HONCH_ERROR_INVALID_ARGUMENT);
 }
 
 static honch_client_t fake_client(fake_storage_t *storage, honch_storage_ops_t *storage_ops, fake_transport_t *transport, honch_transport_ops_t *transport_ops)
@@ -1115,6 +1170,8 @@ int main(void)
     test_hqr1_rejects_values_deeper_than_wire_v2_limit();
     test_hqr1_rejects_duplicate_top_level_property_keys();
     test_hqr1_rejects_duplicate_nested_map_keys();
+    test_hqr1_rejects_malformed_array_count_before_allocation();
+    test_hqr1_rejects_malformed_map_count_before_allocation();
     test_2xx_consumes_events();
     test_v2_chunk_transport_consumes_events_on_acceptance();
     test_v2_chunk_transport_splits_oversized_batch_without_dead_lettering_first_event();

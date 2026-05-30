@@ -33,12 +33,17 @@ These events are emitted automatically by the SDK:
 |-------|------|-----------------|
 | `$device_boot` | End of `init()` | `reset_reason` (string) |
 | `$device_shutdown` | Start of `shutdown()` | — |
-| `$connectivity_change` | Wi-Fi connect/disconnect | `state`: `"connected"` or `"disconnected"` |
 | `$firmware_update` | Boot, if version changed | `previous_version`, `new_version` |
 | `$battery_low` | Battery drops below threshold | `level` (int) |
 | `$session_start` | `session_start()` called | `session_name` (string, optional) |
 | `$session_end` | `session_end()` called | — |
-| `$device_reset` | `reset()` called | — |
+
+`reset()` clears SDK identity, state, and queued events. It does not enqueue a
+`$device_reset` lifecycle event.
+
+Ports may expose explicit connectivity helpers that enqueue
+`$connectivity_change` with `state`: `"connected"` or `"disconnected"`.
+Connectivity changes are not auto-detected by the portable core.
 
 ### Reset Reason Values (embedded SDKs)
 
