@@ -39,6 +39,10 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn('"src/esp_transport_http.c"', cmake)
         self.assertIn("#include \"honch/core/transport.h\"", adapter)
         self.assertIn("esp_http_client_init", transport)
+        self.assertIn("#include \"esp_event.h\"", transport)
+        self.assertIn("#include \"esp_netif.h\"", transport)
+        self.assertIn("esp_event_loop_create_default()", transport)
+        self.assertIn("esp_netif_init()", transport)
         self.assertIn('"/capture"', transport)
         self.assertIn('"Content-Type", "application/vnd.honch.chunk"', transport)
         self.assertIn('"X-Honch-Project-Key"', transport)
@@ -156,7 +160,9 @@ class EspIdfChunkWireTest(unittest.TestCase):
 
         for dependency in (
             "nvs_flash",
+            "esp_event",
             "esp_http_client",
+            "esp_netif",
             "esp-tls",
             "esp_timer",
             "esp_driver_gpio",
@@ -167,7 +173,6 @@ class EspIdfChunkWireTest(unittest.TestCase):
 
         for unused_dependency in (
             "        esp_wifi",
-            "        esp_event",
             "        cbor",
             "        espressif__cjson",
             "        efuse",

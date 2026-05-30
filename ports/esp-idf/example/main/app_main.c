@@ -2,6 +2,7 @@
 // Copyright 2026 Honch Dev
 
 #include <stdio.h>
+#include <stdbool.h>
 #include <string.h>
 #include <time.h>
 #include "freertos/FreeRTOS.h"
@@ -124,18 +125,23 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    // Connect to Wi-Fi
-    wifi_init_sta();
-    sync_time();
+    bool offline_smoke = strlen(CONFIG_WIFI_SSID) == 0;
+    if (!offline_smoke) {
+        wifi_init_sta();
+        sync_time();
+    } else {
+        ESP_LOGW(TAG, "No Wi-Fi SSID configured; running offline tick smoke test");
+    }
 
     // Initialize Honch
     honch_config_t config = {
-        .api_key = CONFIG_HONCH_API_KEY,
-        .host = CONFIG_HONCH_HOST,
+        .api_key = strlen(CONFIG_HONCH_API_KEY) > 0 ? CONFIG_HONCH_API_KEY : "offline-test-key",
+        .host = offline_smoke ? "http://127.0.0.1:9" : CONFIG_HONCH_HOST,
         .device_model = "demo-board",
         .firmware_version = "0.1.0",
         .event_buffer = s_event_buffer,
         .event_buffer_size = sizeof(s_event_buffer),
+        .flush_event_threshold = 1,
     };
 
     honch_err_t err = honch_init(&config);
@@ -163,8 +169,10 @@ void app_main(void)
 
     // Idle loop
     while (1) {
-        honch_track("heartbeat", "{\"source\":\"esp-idf-example\"}");
-        honch_flush();
+        err = honch_track("heartbeat", "{\"source\":\"esp-idf-example\"}");
+        ESP_LOGI(TAG, "honch_track heartbeat: %d", err);
+        err = honch_tick();
+        ESP_LOGI(TAG, "honch_tick: %d", err);
         ESP_LOGI(TAG, "Free heap: %u bytes", (unsigned)esp_get_free_heap_size());
         vTaskDelay(pdMS_TO_TICKS(HEARTBEAT_INTERVAL_SECONDS * 1000));
     }
