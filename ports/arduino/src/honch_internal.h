@@ -76,6 +76,7 @@ struct honch_client {
     char *state_directory;
     char *distinct_id;
     char *session_id;
+    honch_wire_v2_property_t build_properties[HONCH_MAX_EVENT_PROPERTIES];
     bool configured_device_id;
     size_t batch_size;
     size_t max_queued_events;
