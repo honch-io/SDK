@@ -492,20 +492,25 @@ static honch_status_t honch_record_read_string(
 {
     uint64_t length = 0u;
     honch_status_t status = honch_record_read_uvarint(reader, &length);
-    if (status != HONCH_OK || length > SIZE_MAX || (size_t)length + 1u > reader->length - reader->offset) {
+    size_t remaining = reader->length - reader->offset;
+    if (status != HONCH_OK || length > (uint64_t)SIZE_MAX) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    size_t string_length = (size_t)length;
+    if (string_length > remaining || remaining - string_length < 1u) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
     const char *value = (const char *)reader->data + reader->offset;
     if ((!allow_empty && length == 0u) ||
-        value[length] != '\0' ||
-        (!allow_embedded_nul && memchr(value, '\0', (size_t)length) != NULL) ||
-        !honch_utf8_is_valid(value, (size_t)length)) {
+        value[string_length] != '\0' ||
+        (!allow_embedded_nul && memchr(value, '\0', string_length) != NULL) ||
+        !honch_utf8_is_valid(value, string_length)) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
-    reader->offset += (size_t)length + 1u;
+    reader->offset += string_length + 1u;
     *out = value;
     if (out_size != NULL) {
-        *out_size = (size_t)length;
+        *out_size = string_length;
     }
     return HONCH_OK;
 }

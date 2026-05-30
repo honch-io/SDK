@@ -54,11 +54,17 @@ void app_main(void)
     honch_init(&config);
 
     // Track custom events
-    honch_track("button_pressed", "{\"count\": 1}");
+    honch_property_t button_props[] = {
+        honch_prop("count", honch_i64(1)),
+    };
+    honch_track("button_pressed", button_props, 1u);
 
     // Use sessions to group events
     honch_session_start("user_session");
-    honch_track("screen_viewed", "{\"screen\": \"home\"}");
+    honch_property_t screen_props[] = {
+        honch_prop("screen", honch_str("home")),
+    };
+    honch_track("screen_viewed", screen_props, 1u);
     honch_session_end();
 
     // Track GPIO pins (e.g., a button)

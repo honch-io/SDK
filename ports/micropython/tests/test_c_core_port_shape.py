@@ -46,6 +46,13 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
 
         self.assertNotIn("honch_mp_map_get_bool", module)
 
+    def test_c_binding_iterates_filled_dict_slots(self):
+        module = self.read("ports/micropython/usermod/honch/modhonch_core.c")
+
+        self.assertIn("i < map->alloc", module)
+        self.assertIn("mp_map_slot_is_filled(map, i)", module)
+        self.assertNotIn("i < map->used; i++) {\n        mp_map_elem_t *elem = &map->table[i];", module)
+
     def test_micropython_adapters_implement_core_ops(self):
         adapters = "\n".join(
             [
@@ -129,7 +136,13 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
 
     def test_auto_properties_spec_matches_core_lifecycle_behavior(self):
         spec = self.read("spec/auto-properties.md")
+        compact_spec = " ".join(spec.split())
 
+        self.assertIn("User-supplied properties using SDK-owned keys are rejected", compact_spec)
+        self.assertIn("wire-v2 context", compact_spec)
+        self.assertIn("removed from the event properties before wire encoding", compact_spec)
+        self.assertNotIn("user-supplied properties with the same key are overwritten", spec)
+        self.assertNotIn("just put them in `properties`", spec)
         self.assertIn("`reset()` clears SDK identity, state, and queued events", spec)
         self.assertIn("Connectivity changes are not auto-detected by the portable core", spec)
         automatic = spec.split("These events are emitted automatically by the SDK:", 1)[1].split(

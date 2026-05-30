@@ -156,6 +156,9 @@ static honch_status_t honch_packetizer_build_wire_v2_message(
         client->environment == NULL) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
+    if (reader->total_size > client->max_event_bytes) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
 
     honch_payload_t event = {0};
     honch_status_t status = honch_packetizer_read_event(reader, &event);

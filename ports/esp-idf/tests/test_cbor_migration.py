@@ -103,6 +103,17 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn(".queue_consume = honch_esp_queue_consume", storage)
         self.assertIn(".queue_dead_letter = honch_esp_queue_dead_letter", storage)
 
+    def test_esp_ram_queue_drop_oldest_removes_ram_entries_first(self) -> None:
+        storage = read("ports/esp-idf/honch/src/esp_storage_nvs.c")
+        drop_oldest = storage.split("static honch_status_t honch_esp_queue_drop_oldest(void *ctx)", 1)[1].split(
+            "\n}\n", 1
+        )[0]
+
+        self.assertIn("honch_esp_storage_t *storage = (honch_esp_storage_t *)ctx;", drop_oldest)
+        self.assertIn("honch_esp_ram_queue_has_events(storage)", drop_oldest)
+        self.assertIn("honch_esp_ram_queue_remove_at(storage, 0u);", drop_oldest)
+        self.assertNotIn("(void)ctx", drop_oldest)
+
     def test_public_config_has_no_legacy_wire_toggles(self) -> None:
         compat = read("ports/esp-idf/honch/src/esp_compat.c")
         public_header = read("ports/esp-idf/honch/include/honch.h")
@@ -112,6 +123,14 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertNotIn("enable_wire_v2", combined)
         self.assertNotIn("disable_gzip", combined)
         self.assertNotIn("gzip_min_bytes", combined)
+
+    def test_readme_tracks_typed_properties_not_json_strings(self) -> None:
+        readme = read("ports/esp-idf/README.md")
+
+        self.assertIn("honch_property_t", readme)
+        self.assertIn("honch_track(\"button_pressed\", button_props, 1u)", readme)
+        self.assertNotIn("honch_track(\"button_pressed\", \"{", readme)
+        self.assertNotIn("honch_track(\"screen_viewed\", \"{", readme)
 
     def test_esp_idf_uses_cooperative_tick_config(self) -> None:
         compat = read("ports/esp-idf/honch/src/esp_compat.c")
