@@ -10,7 +10,7 @@ Product analytics SDKs for connected hardware. This repository contains the shar
 | C/POSIX | Stable | `0.2.0` | [`ports/posix/`](ports/posix/) |
 | MicroPython | Stable | `0.2.0` | [`ports/micropython/`](ports/micropython/) |
 | Arduino ESP32 | Preview | `0.1.0` | [`ports/arduino/`](ports/arduino/) |
-| React Native Relay | Preview | `0.1.0` | [`ports/react-native-relay/`](ports/react-native-relay/) |
+| React Native Relay | Preview | `0.1.0` | [`mobile/react-native-relay/`](mobile/react-native-relay/) |
 
 Stable SDKs are supported integration paths for product work. Preview SDKs are usable for evaluation and controlled pilots, but production rollout should wait for product-specific validation on the target hardware or host app.
 
@@ -21,7 +21,7 @@ Stable SDKs are supported integration paths for product work. Preview SDKs are u
 - [`ports/posix/`](ports/posix/) — C/POSIX SDK for embedded Linux and local validation.
 - [`ports/micropython/`](ports/micropython/) — MicroPython wrapper and `_honch_core` user module.
 - [`ports/arduino/`](ports/arduino/) — preview Arduino ESP32 wrapper around the shared C core.
-- [`ports/react-native-relay/`](ports/react-native-relay/) — preview relay package for forwarding device-originated payloads through companion apps.
+- [`mobile/react-native-relay/`](mobile/react-native-relay/) — preview relay package for forwarding device-originated payloads through companion apps.
 - [`spec/`](spec/) — shared SDK/Capture contracts and conformance fixtures.
 - [`docs/`](docs/) — maintainer notes, production-readiness records, ADRs, and release evidence.
 
@@ -94,7 +94,7 @@ The [`spec/`](spec/) directory defines contracts that official SDKs and Capture 
 
 ## Adding A New SDK
 
-1. Create a directory under `ports/`.
+1. Create a device SDK directory under `ports/`, or a companion app relay package under `mobile/`.
 2. Implement the compact upload contract from `spec/wire-format-v2.md`.
 3. Stamp properties from `spec/auto-properties.md`.
 4. Validate against conformance fixtures in `spec/conformance/`.
