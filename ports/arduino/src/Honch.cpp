@@ -10,38 +10,42 @@ honch_arduino_platform_t g_platform;
 honch_arduino_storage_t g_storage;
 honch_arduino_transport_t g_transport;
 honch_platform_ops_t g_platformOps;
-honch_storage_ops_t g_storageOps;
+honch_event_queue_ops_t g_eventQueueOps;
 honch_transport_ops_t g_transportOps;
-char g_deviceId[32];
+honch_status_t gConfigStatus = HONCH_OK;
 
 } // namespace
 
 honch_core_config_t honch_arduino_make_core_config(const HonchConfig &config) {
   honch_core_config_t coreConfig = {};
+  gConfigStatus = HONCH_OK;
 
-  (void)honch_arduino_platform_ops_init(&g_platformOps, &g_platform);
-  (void)honch_arduino_storage_ops_init(&g_storageOps, &g_storage, config);
-  (void)honch_arduino_transport_ops_init(&g_transportOps, &g_transport, config);
-
-  g_deviceId[0] = '\0';
-  (void)honch_arduino_device_id(&g_platform, g_deviceId, sizeof(g_deviceId));
+  gConfigStatus = honch_arduino_platform_ops_init(&g_platformOps, &g_platform);
+  if (config.eventQueueOps != nullptr) {
+    g_eventQueueOps = *config.eventQueueOps;
+  } else if (gConfigStatus == HONCH_OK) {
+    gConfigStatus = honch_arduino_storage_ops_init(&g_eventQueueOps, &g_storage, config);
+  }
+  if (gConfigStatus == HONCH_OK) {
+    gConfigStatus = honch_arduino_transport_ops_init(&g_transportOps, &g_transport, config);
+  }
 
   coreConfig.api_key = config.apiKey;
   coreConfig.endpoint_url = config.host;
-  coreConfig.device_id = g_deviceId[0] == '\0' ? nullptr : g_deviceId;
+  coreConfig.device_id = config.deviceId;
   coreConfig.device_model = config.deviceModel;
   coreConfig.firmware_version = config.firmwareVersion;
   coreConfig.environment = config.environment;
   coreConfig.sdk_platform = "arduino-esp32";
-  coreConfig.queue_directory = "arduino";
+  coreConfig.queue_directory = "";
   coreConfig.batch_size = config.flushEventThreshold;
   coreConfig.max_queued_events = 1000;
   coreConfig.max_event_bytes = config.eventBufferSize;
   coreConfig.flush_interval_seconds = config.flushIntervalSeconds;
   coreConfig.flush_event_threshold = config.flushEventThreshold;
-  coreConfig.durability_mode = HONCH_DURABILITY_SYNC_ALWAYS;
   coreConfig.platform = &g_platformOps;
-  coreConfig.storage = &g_storageOps;
+  coreConfig.state_storage = config.stateStorageOps;
+  coreConfig.event_queue = &g_eventQueueOps;
   coreConfig.transport = &g_transportOps;
   return coreConfig;
 }
@@ -67,10 +71,14 @@ bool HonchClass::begin(const HonchConfig &config) {
   }
 
   honch_core_config_t coreConfig = honch_arduino_make_core_config(config);
-  honch_status_t status = honch_core_init(&_client, &coreConfig);
+  honch_status_t status = gConfigStatus;
+  if (status == HONCH_OK) {
+    status = honch_core_init(&_client, &coreConfig);
+  }
   honch_arduino_release_core_config(&coreConfig);
   if (status != HONCH_OK) {
     _client = nullptr;
+    honch_arduino_storage_ops_deinit(&g_storage);
   }
   return setLastStatus(status);
 }
@@ -122,6 +130,7 @@ bool HonchClass::shutdown() {
   honch_status_t status = honch_core_shutdown(client);
   if (status != HONCH_ERROR_BUSY) {
     _client = nullptr;
+    honch_arduino_storage_ops_deinit(&g_storage);
   }
   return setLastStatus(status);
 }
@@ -133,6 +142,10 @@ bool HonchClass::reset() {
 const char *HonchClass::deviceId() {
   const char *id = honch_core_get_device_id(_client);
   return id == nullptr ? "" : id;
+}
+
+bool HonchClass::queueStats(honch_queue_stats_t *stats) {
+  return setLastStatus(honch_core_get_queue_stats(_client, stats));
 }
 
 const char *HonchClass::lastError() {

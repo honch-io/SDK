@@ -37,7 +37,7 @@ client = honch.Honch(
     endpoint_url="https://capture.honch.io",
     device_model="ActionCam X1",
     firmware_version="1.2.3",
-    queue_directory="/honch",
+    event_buffer=bytearray(8192),
 )
 
 client.identify("user-123", {"plan": "beta"})
@@ -56,7 +56,7 @@ Required:
 - `endpoint_url`
 - `device_model`
 - `firmware_version`
-- `queue_directory`
+- `event_buffer`
 
 Optional:
 
@@ -90,22 +90,22 @@ client.flush()
 client.reset()
 client.shutdown()
 client.get_device_id()
+client.queue_stats()
 ```
 
 Call `client.tick()` periodically from the device main loop for scheduled flush work. Use `client.flush()` when you want an immediate drain attempt.
 
+Properties support typed event values, including strings, integers, floats,
+booleans, lists, dictionaries, null, and `bytes`. Capture may reject bytes
+unless the project enables binary properties. SDK-owned auto property keys
+supplied by users are rejected before compact wire-v2 packetization.
+
 ## Storage And Transport
 
-The user C module stores state and queue files below `queue_directory`:
-
-```text
-pending/
-dead/
-state/
-  device_id
-  distinct_id
-  firmware_version
-```
+The default user C module stores queued events in the caller-provided
+`event_buffer`. Events, `identify()` state, and firmware-version state are
+volatile by default and are lost across reset or power loss. Device id defaults
+to `machine.unique_id()` when `device_id` is not supplied.
 
 Flush sends compact chunk frames to `POST <endpoint_url>/capture` with `Content-Type: application/vnd.honch.chunk`, `X-Honch-Project-Key`, and `X-Honch-Stream-Id`.
 

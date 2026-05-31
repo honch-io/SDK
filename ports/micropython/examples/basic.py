@@ -6,7 +6,7 @@ client = honch.Honch(
     endpoint_url="https://capture.honch.io",
     device_model="dev-board",
     firmware_version="1.0.0",
-    queue_directory="/honch",
+    event_buffer=bytearray(8192),
 )
 
 client.identify("user-123", {"plan": "beta"})

@@ -34,7 +34,8 @@ typedef struct fake_state_storage {
 static honch_core_config_t fake_config(
     fake_state_storage_t *storage,
     honch_platform_ops_t *platform,
-    honch_storage_ops_t *storage_ops,
+    honch_state_storage_ops_t *state_ops,
+    honch_event_queue_ops_t *queue_ops,
     honch_transport_ops_t *transport);
 
 static uint64_t fake_now_ms(void *ctx)
@@ -183,9 +184,10 @@ static void test_queue_push_uses_honch_event_record_format(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
     honch_platform_ops_t platform;
-    honch_storage_ops_t storage_ops;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
@@ -199,9 +201,10 @@ static void test_zero_platform_time_queues_parseable_event_record(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK, .now_ms = 0u, .force_now_ms = 1};
     honch_platform_ops_t platform;
-    honch_storage_ops_t storage_ops;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
@@ -316,7 +319,8 @@ static honch_status_t lock_observing_auto_properties_callback(
 static honch_core_config_t fake_config(
     fake_state_storage_t *storage,
     honch_platform_ops_t *platform,
-    honch_storage_ops_t *storage_ops,
+    honch_state_storage_ops_t *state_ops,
+    honch_event_queue_ops_t *queue_ops,
     honch_transport_ops_t *transport)
 {
     *platform = (honch_platform_ops_t) {
@@ -325,10 +329,13 @@ static honch_core_config_t fake_config(
         .random_bytes = fake_random_bytes,
         .ctx = storage
     };
-    *storage_ops = (honch_storage_ops_t) {
+    *state_ops = (honch_state_storage_ops_t) {
         .state_get = fake_state_get,
         .state_set = fake_state_set,
         .state_delete = fake_state_delete,
+        .ctx = storage
+    };
+    *queue_ops = (honch_event_queue_ops_t) {
         .queue_push = fake_queue_push,
         .queue_peek = fake_queue_peek,
         .queue_consume = fake_queue_consume,
@@ -350,7 +357,8 @@ static honch_core_config_t fake_config(
         .queue_directory = "fake",
         .durability_mode = HONCH_DURABILITY_OS_BUFFERED,
         .platform = platform,
-        .storage = storage_ops,
+        .state_storage = state_ops,
+        .event_queue = queue_ops,
         .transport = transport
     };
 }
@@ -359,9 +367,10 @@ static void test_core_state_lock_works_without_platform_lock_callbacks(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
     honch_platform_ops_t platform;
-    honch_storage_ops_t storage_ops;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
@@ -374,9 +383,10 @@ static void test_failed_firmware_update_queue_does_not_advance_persisted_version
     fake_state_storage_t storage = {.queue_push_status = HONCH_ERROR_IO};
     snprintf(storage.firmware_version, sizeof(storage.firmware_version), "1.0.0");
     honch_platform_ops_t platform;
-    honch_storage_ops_t storage_ops;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
     config.firmware_version = "1.1.0";
 
     honch_client_t *client = NULL;
@@ -394,9 +404,10 @@ static void test_failed_init_rolls_back_queued_lifecycle_events(void)
     };
     snprintf(storage.firmware_version, sizeof(storage.firmware_version), "1.0.0");
     honch_platform_ops_t platform;
-    honch_storage_ops_t storage_ops;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
     config.firmware_version = "1.1.0";
 
     honch_client_t *client = NULL;
@@ -415,9 +426,10 @@ static void test_failed_reset_second_identity_write_preserves_persisted_identity
     snprintf(storage.device_id, sizeof(storage.device_id), "device-old");
     snprintf(storage.distinct_id, sizeof(storage.distinct_id), "device-old");
     honch_platform_ops_t platform;
-    honch_storage_ops_t storage_ops;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
@@ -433,9 +445,10 @@ static void test_set_property_rejects_blank_key(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
     honch_platform_ops_t platform;
-    honch_storage_ops_t storage_ops;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
@@ -450,9 +463,10 @@ static void test_set_property_rejects_reserved_key(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
     honch_platform_ops_t platform;
-    honch_storage_ops_t storage_ops;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
@@ -467,9 +481,10 @@ static void test_track_rejects_promoted_distinct_id_property_key(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
     honch_platform_ops_t platform;
-    honch_storage_ops_t storage_ops;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
@@ -492,9 +507,10 @@ static void test_init_sets_next_sequence_after_existing_storage_events(void)
         .queued_sequence_count = 2u
     };
     honch_platform_ops_t platform;
-    honch_storage_ops_t storage_ops;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
@@ -515,9 +531,10 @@ static void test_sequence_wrap_rejects_enqueue_without_advancing(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
     honch_platform_ops_t platform;
-    honch_storage_ops_t storage_ops;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
@@ -537,9 +554,10 @@ static void test_custom_storage_enqueue_updates_cached_queue_depth_without_refre
         .track_queue_depth = 1
     };
     honch_platform_ops_t platform;
-    honch_storage_ops_t storage_ops;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
@@ -564,9 +582,10 @@ static void test_custom_storage_drops_oldest_at_queue_limit(void)
         .track_queue_depth = 1
     };
     honch_platform_ops_t platform;
-    honch_storage_ops_t storage_ops;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
     config.max_queued_events = 1u;
 
     honch_client_t *client = NULL;
@@ -590,9 +609,10 @@ static void test_failed_session_replacement_preserves_old_session(void)
         .track_queue_depth = 1
     };
     honch_platform_ops_t platform;
-    honch_storage_ops_t storage_ops;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
@@ -620,9 +640,10 @@ static void test_track_rejects_embedded_nul_property_key(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
     honch_platform_ops_t platform;
-    honch_storage_ops_t storage_ops;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
@@ -641,9 +662,10 @@ static void test_identify_rejects_embedded_nul_trait_key(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
     honch_platform_ops_t platform;
-    honch_storage_ops_t storage_ops;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
@@ -666,9 +688,10 @@ static void test_state_get_rejects_size_overflow(void)
         .state_size_fault_key = "device_id"
     };
     honch_platform_ops_t platform;
-    honch_storage_ops_t storage_ops;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_ERROR_INVALID_ARGUMENT);
@@ -682,9 +705,10 @@ static void test_state_get_rejects_inconsistent_read_size(void)
         .state_read_overreport_key = "device_id"
     };
     honch_platform_ops_t platform;
-    honch_storage_ops_t storage_ops;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_ERROR_INVALID_ARGUMENT);
@@ -695,9 +719,10 @@ static void test_battery_callback_runs_outside_client_mutex(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
     honch_platform_ops_t platform;
-    honch_storage_ops_t storage_ops;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
     config.battery_callback = lock_observing_battery_callback;
 
     g_callback_lock_client = NULL;
@@ -716,9 +741,10 @@ static void test_auto_properties_callback_runs_outside_client_mutex(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
     honch_platform_ops_t platform;
-    honch_storage_ops_t storage_ops;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &storage_ops, &transport);
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
     config.auto_properties_callback = lock_observing_auto_properties_callback;
 
     g_callback_lock_client = NULL;

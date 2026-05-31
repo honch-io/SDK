@@ -13,6 +13,7 @@
 
 #include "honch/core/honch.h"
 #include "honch/core/platform.h"
+#include "honch/core/ram_queue.h"
 #include "honch/core/storage.h"
 #include "honch/core/transport.h"
 
@@ -23,11 +24,7 @@ typedef struct honch_micropython_platform {
 } honch_micropython_platform_t;
 
 typedef struct honch_micropython_storage {
-    char *queue_directory;
-    char *pending_directory;
-    char *dead_directory;
-    char *state_directory;
-    uint64_t active_sequence;
+    honch_ram_queue_t ram_queue;
 } honch_micropython_storage_t;
 
 typedef struct honch_micropython_transport {
@@ -40,9 +37,10 @@ honch_status_t honch_micropython_platform_ops_init(
     honch_micropython_platform_t *ctx);
 
 honch_status_t honch_micropython_storage_ops_init(
-    honch_storage_ops_t *ops,
+    honch_event_queue_ops_t *ops,
     honch_micropython_storage_t *ctx,
-    const char *queue_directory);
+    uint8_t *buffer,
+    size_t buffer_size);
 
 void honch_micropython_storage_ops_deinit(honch_micropython_storage_t *ctx);
 

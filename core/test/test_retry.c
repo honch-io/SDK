@@ -532,9 +532,9 @@ static void test_hqr1_rejects_wrapping_string_length_without_oob_read(void)
     assert(!honch_event_record_validate(record, record_size));
 }
 
-static honch_client_t fake_client(fake_storage_t *storage, honch_storage_ops_t *storage_ops, fake_transport_t *transport, honch_transport_ops_t *transport_ops)
+static honch_client_t fake_client(fake_storage_t *storage, honch_event_queue_ops_t *storage_ops, fake_transport_t *transport, honch_transport_ops_t *transport_ops)
 {
-    *storage_ops = (honch_storage_ops_t) {
+    *storage_ops = (honch_event_queue_ops_t) {
         .queue_peek = fake_queue_peek,
         .queue_read_batch = fake_queue_read_batch,
         .queue_consume = fake_queue_consume,
@@ -560,7 +560,7 @@ static honch_client_t fake_client(fake_storage_t *storage, honch_storage_ops_t *
     snprintf(client.wire_v2_stream_id, sizeof(client.wire_v2_stream_id), "boot0001");
     client.batch_size = 2u;
     client.max_event_bytes = 1024u;
-    client.storage = storage_ops;
+    client.event_queue = storage_ops;
     client.transport = transport_ops;
     return client;
 }
@@ -591,7 +591,7 @@ static void test_v2_chunk_transport_consumes_events_on_acceptance(void)
     setup_storage(&storage);
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
     transport_ops.post_chunk = fake_post_chunk;
@@ -630,7 +630,7 @@ static void test_v2_chunk_transport_splits_oversized_batch_without_dead_letterin
     };
 
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
     client.max_event_bytes = 8192u;
@@ -670,7 +670,7 @@ static void test_v2_batch_shrink_does_not_retry_linearly(void)
     }
 
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
     client.batch_size = event_count;
@@ -699,7 +699,7 @@ static void test_v2_chunk_transport_preserves_string_properties(void)
     storage.events[0].size = event_with_property.length;
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
     transport_ops.post_chunk = fake_post_chunk;
@@ -725,7 +725,7 @@ static void test_v2_flush_borrows_string_property_values(void)
     storage.events[0].size = event_with_property.length;
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
     transport_ops.post_chunk = fake_post_chunk;
@@ -747,7 +747,7 @@ static void test_v2_flush_accepts_queued_empty_string_property_value(void)
     storage.events[0].size = event_with_empty_string_property.length;
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
     transport_ops.post_chunk = fake_post_chunk;
@@ -779,7 +779,7 @@ static void test_v2_chunk_transport_preserves_nested_properties(void)
     storage.events[0].size = event_with_nested_properties.length;
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
     transport_ops.post_chunk = fake_post_chunk;
@@ -813,7 +813,7 @@ static void test_v2_chunk_transport_preserves_float64_properties(void)
     storage.events[0].size = event_with_float_property.length;
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
     transport_ops.post_chunk = fake_post_chunk;
@@ -852,7 +852,7 @@ static void test_v2_chunk_transport_preserves_float32_bool_and_null_properties(v
     storage.events[0].size = event_with_scalar_properties.length;
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
     transport_ops.post_chunk = fake_post_chunk;
@@ -888,7 +888,7 @@ static void test_v2_chunk_transport_preserves_half_float_as_float32_property(voi
     storage.events[0].size = event_with_float_property.length;
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
     transport_ops.post_chunk = fake_post_chunk;
@@ -911,7 +911,7 @@ static void test_v2_flush_rejects_non_record_payload(void)
     storage.events[0].size = sizeof(invalid_payload);
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
     transport_ops.post_chunk = fake_post_chunk;
@@ -935,7 +935,7 @@ static void test_v2_chunk_transport_preserves_device_boot_event(void)
     storage.events[0].size = boot_event.length;
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
     transport_ops.post_chunk = fake_post_chunk;
@@ -976,7 +976,7 @@ static void test_v2_flush_reconstructs_boot_relative_timestamps_when_wall_clock_
         .ctx = &clock
     };
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
     client.platform = &platform;
@@ -993,7 +993,7 @@ static void test_v2_final_chunk_stored_response_preserves_event(void)
     setup_storage(&storage);
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_CHUNK_STORED, .status = HONCH_OK};
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
     transport_ops.post_chunk = fake_post_chunk;
@@ -1016,7 +1016,7 @@ static void test_v2_multi_frame_flush_passes_stream_id_to_transport(void)
         .status = HONCH_OK,
         .reject_missing_stream_id = true
     };
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
     transport_ops.post_chunk = fake_post_chunk;
@@ -1038,7 +1038,7 @@ static void test_flush_uses_storage_batch_read_when_available(void)
         .result = HONCH_TRANSPORT_ACCEPTED,
         .status = HONCH_OK
     };
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
 
@@ -1059,7 +1059,7 @@ static void test_flush_rejects_overreported_storage_batch_count(void)
         .result = HONCH_TRANSPORT_ACCEPTED,
         .status = HONCH_OK
     };
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
     storage_ops.queue_read_batch = fake_queue_read_batch_overreports;
@@ -1083,7 +1083,7 @@ static void test_v2_flush_splits_batches_by_distinct_id(void)
     storage.events[1].data = second_distinct_event.data;
     storage.events[1].size = second_distinct_event.length;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
     transport_ops.post_chunk = fake_post_chunk;
@@ -1109,7 +1109,7 @@ static void test_v2_flush_dead_letters_semantically_invalid_event(void)
     storage.events[0].data = (uint8_t *)invalid_event;
     storage.events[0].size = sizeof(invalid_event);
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
     transport_ops.post_chunk = fake_post_chunk;
@@ -1130,7 +1130,7 @@ static void test_2xx_consumes_events(void)
     fake_storage_t storage;
     setup_storage(&storage);
     fake_transport_t transport = {.result = HONCH_TRANSPORT_ACCEPTED, .status = HONCH_OK};
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
 
@@ -1147,7 +1147,7 @@ static void assert_rejected_dead_letters(honch_transport_result_t result)
     setup_storage(&storage);
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = result, .status = HONCH_ERROR_REJECTED};
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
 
@@ -1173,7 +1173,7 @@ static void assert_retry_preserves_events(honch_status_t status)
     setup_storage(&storage);
     storage.events[1].pending = false;
     fake_transport_t transport = {.result = HONCH_TRANSPORT_RETRY, .status = status};
-    honch_storage_ops_t storage_ops = {0};
+    honch_event_queue_ops_t storage_ops = {0};
     honch_transport_ops_t transport_ops = {0};
     honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
 

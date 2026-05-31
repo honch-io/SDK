@@ -118,7 +118,7 @@ class HonchCaptureE2ETests(unittest.TestCase):
             device_model="MicroPython E2E",
             firmware_version=firmware_version,
             environment="e2e",
-            queue_directory=queue_dir,
+            event_buffer=bytearray(8192),
             batch_size=3,
             max_queued_events=100,
             max_event_bytes=8192,

@@ -23,7 +23,6 @@ ENDPOINT_URL = "http://192.168.1.244:8001"
 DEVICE_MODEL = "MicroPython E2E"
 FIRMWARE_VERSION = "e2e-fw-1"
 ENVIRONMENT = "e2e"
-QUEUE_DIRECTORY = "/honch"
 BATTERY_LOW_THRESHOLD = 20
 
 # Real Pico W network credentials from the Desktop test script.
@@ -75,7 +74,7 @@ def main():
         device_model=DEVICE_MODEL,
         firmware_version=FIRMWARE_VERSION,
         environment=ENVIRONMENT,
-        queue_directory=QUEUE_DIRECTORY,
+        event_buffer=bytearray(16384),
         batch_size=3,
         max_queued_events=100,
         max_event_bytes=8192,

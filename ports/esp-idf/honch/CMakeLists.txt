@@ -5,7 +5,7 @@ set(HONCH_ESP_PORT_SOURCES
     "src/esp_compat.c"
     "src/esp_core_shims.c"
     "src/esp_platform.c"
-    "src/esp_storage_nvs.c"
+    "src/esp_storage.c"
     "src/esp_transport_http.c"
     "src/esp_gpio_adapter.c"
     "src/esp_gpio_public.c"
@@ -17,6 +17,7 @@ set(HONCH_CORE_SOURCES
     "core/src/honch_event_record.c"
     "core/src/honch_lifecycle.c"
     "core/src/honch_queue_policy.c"
+    "core/src/honch_ram_queue.c"
     "core/src/honch_support.c"
     "core/src/honch_wire_v2.c"
 )
@@ -33,13 +34,13 @@ idf_component_register(
         "${HONCH_ESP_COMPONENT_DIR}/src"
         "${HONCH_SDK_ROOT}/core/src"
     REQUIRES
-        nvs_flash
         esp_event
         esp_http_client
         esp_netif
         esp-tls
         esp_timer
         esp_driver_gpio
+        efuse
         driver
         freertos
 )

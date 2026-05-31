@@ -13,7 +13,6 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_sntp.h"
-#include "nvs_flash.h"
 #include "honch.h"
 
 static const char *TAG = "honch_example";
@@ -74,6 +73,7 @@ static void wifi_init_sta(void)
     };
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
@@ -117,14 +117,6 @@ static uint8_t s_event_buffer[16384];
 
 void app_main(void)
 {
-    // Initialize NVS
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
-
     bool offline_smoke = strlen(CONFIG_WIFI_SSID) == 0;
     if (!offline_smoke) {
         wifi_init_sta();

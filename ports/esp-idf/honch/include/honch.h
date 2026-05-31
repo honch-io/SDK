@@ -29,10 +29,11 @@ typedef enum {
     HONCH_ERR_ALREADY_INITIALIZED,
     HONCH_ERR_NO_MEM,
     HONCH_ERR_QUEUE_FULL,
-    HONCH_ERR_NVS,
+    HONCH_ERR_IO,
     HONCH_ERR_TRANSPORT,
     HONCH_ERR_TIMEOUT,
     HONCH_ERR_BUSY,
+    HONCH_ERR_NOT_SUPPORTED,
     HONCH_ERR_INTERNAL,
 } honch_err_t;
 
@@ -54,8 +55,8 @@ typedef struct {
     uint32_t flush_event_threshold;      // optional, default 30
     int (*battery_callback)(void);       // optional, returns 0-100 or -1 if unknown
     int battery_low_threshold;           // optional, default 15
-    honch_durability_mode_t durability_mode; // optional, HONCH_DURABILITY_OS_BUFFERED default;
-                                             // HONCH_DURABILITY_SYNC_ALWAYS for stronger queue persistence
+    const honch_state_storage_ops_t *state_storage_ops; // optional, enables durable identity/version state
+    const honch_event_queue_ops_t *event_queue_ops;     // optional, replaces default RAM event queue
 } honch_config_t;
 
 honch_err_t honch_init(const honch_config_t *config);
@@ -73,6 +74,7 @@ honch_err_t honch_tick(void);
 honch_err_t honch_reset(void);
 
 const char *honch_get_device_id(void);
+honch_err_t honch_get_queue_stats(honch_queue_stats_t *stats);
 
 honch_err_t honch_track_gpio(gpio_num_t pin, const char *event_name, honch_gpio_mode_t mode);
 

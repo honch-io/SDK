@@ -1,17 +1,21 @@
-#include "honch_micropython.h"
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Honch Dev
+
+#include "esp_core_adapter.h"
 
 #include <string.h>
 
-honch_status_t honch_micropython_storage_ops_init(
+#include "honch/core/ram_queue.h"
+
+honch_status_t honch_esp_event_queue_ops_init(
     honch_event_queue_ops_t *ops,
-    honch_micropython_storage_t *ctx,
+    honch_esp_storage_t *ctx,
     uint8_t *buffer,
     size_t buffer_size)
 {
-    if (ops == NULL || ctx == NULL || buffer == NULL || buffer_size == 0u) {
+    if (ops == NULL || ctx == NULL) {
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
-    memset(ctx, 0, sizeof(*ctx));
     honch_status_t status = honch_ram_queue_init(&ctx->ram_queue, buffer, buffer_size);
     if (status != HONCH_STATUS_OK) {
         return status;
@@ -23,9 +27,11 @@ honch_status_t honch_micropython_storage_ops_init(
     return status;
 }
 
-void honch_micropython_storage_ops_deinit(honch_micropython_storage_t *ctx)
+void honch_esp_event_queue_ops_deinit(honch_esp_storage_t *ctx)
 {
-    if (ctx != NULL) {
-        honch_ram_queue_deinit(&ctx->ram_queue);
+    if (ctx == NULL) {
+        return;
     }
+    honch_ram_queue_deinit(&ctx->ram_queue);
+    memset(ctx, 0, sizeof(*ctx));
 }

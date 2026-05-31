@@ -10,25 +10,26 @@ def read(path: str) -> str:
 
 
 class EspIdfDurabilityConfigTests(unittest.TestCase):
-    def test_public_config_exposes_durability_mode(self) -> None:
+    def test_public_config_omits_durability_mode(self) -> None:
         header = read("ports/esp-idf/honch/include/honch.h")
 
-        self.assertIn("HONCH_DURABILITY_OS_BUFFERED", header)
-        self.assertIn("HONCH_DURABILITY_SYNC_ALWAYS", header)
-        self.assertIn("honch_durability_mode_t durability_mode;", header)
+        self.assertNotIn("HONCH_DURABILITY_OS_BUFFERED", header)
+        self.assertNotIn("HONCH_DURABILITY_SYNC_ALWAYS", header)
+        self.assertNotIn("durability_mode", header)
 
-    def test_init_forwards_configured_durability_to_core(self) -> None:
+    def test_init_uses_explicit_event_queue_extension_point(self) -> None:
         compat = read("ports/esp-idf/honch/src/esp_compat.c")
 
-        self.assertIn("honch_esp_resolve_durability_mode(config->durability_mode)", compat)
-        self.assertNotIn("core_config.durability_mode = HONCH_DURABILITY_OS_BUFFERED;", compat)
+        self.assertIn("config->event_queue_ops", compat)
+        self.assertIn("config->state_storage_ops", compat)
+        self.assertNotIn("honch_esp_resolve_durability_mode", compat)
 
-    def test_readme_documents_durability_mode(self) -> None:
+    def test_readme_documents_volatile_default(self) -> None:
         readme = read("ports/esp-idf/README.md")
 
-        self.assertIn("durability_mode", readme)
-        self.assertIn("HONCH_DURABILITY_OS_BUFFERED", readme)
-        self.assertIn("HONCH_DURABILITY_SYNC_ALWAYS", readme)
+        self.assertIn("RAM-only by default", readme)
+        self.assertIn("event_queue_ops", readme)
+        self.assertNotIn("durability_mode", readme)
 
 
 if __name__ == "__main__":

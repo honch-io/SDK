@@ -15,7 +15,6 @@
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "nvs_flash.h"
 
 #if FOOTPRINT_ENABLE_HONCH
 #include "honch.h"
@@ -97,6 +96,7 @@ static void run_connected_baseline_sample(void)
     esp_err_t wifi_err = esp_wifi_init(&wifi_cfg);
     if (wifi_err == ESP_OK) {
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+        ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     } else if (wifi_err != ESP_ERR_WIFI_INIT_STATE) {
         ESP_ERROR_CHECK(wifi_err);
     }
@@ -183,13 +183,6 @@ static void run_honch_cpu_sample(void)
 
 void app_main(void)
 {
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
-
     ESP_LOGI(TAG,
              "HONCH_FOOTPRINT_BUILD with_honch=%d connected_baseline=%d",
              FOOTPRINT_ENABLE_HONCH,

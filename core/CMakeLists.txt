@@ -4,6 +4,7 @@ set(HONCH_CORE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_lifecycle.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_packetizer.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_queue_policy.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_ram_queue.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_support.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_wire_v2.c
 )

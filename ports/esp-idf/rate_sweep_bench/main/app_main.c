@@ -21,7 +21,6 @@
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
 #include "honch.h"
-#include "nvs_flash.h"
 
 static const char *TAG = "honch_rate_sweep";
 
@@ -258,6 +257,7 @@ static bool wifi_init_sta(void)
     };
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
@@ -584,13 +584,6 @@ static bool run_rate_sweep_suite(uint32_t suite_id)
 
 void app_main(void)
 {
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
-
     if (!wifi_init_sta()) {
         return;
     }

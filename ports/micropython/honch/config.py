@@ -22,7 +22,7 @@ def is_blank(value):
 
 class HonchConfig:
     def __init__(self, **kwargs):
-        required = ("api_key", "endpoint_url", "device_model", "firmware_version", "queue_directory")
+        required = ("api_key", "endpoint_url", "device_model", "firmware_version", "event_buffer")
         for key in required:
             if is_blank(kwargs.get(key)):
                 raise InvalidArgumentError("missing required config: " + key)
@@ -33,7 +33,7 @@ class HonchConfig:
         self.device_model = str(kwargs["device_model"])
         self.firmware_version = str(kwargs["firmware_version"])
         self.environment = str(kwargs.get("environment") or "production")
-        self.queue_directory = str(kwargs["queue_directory"])
+        self.event_buffer = kwargs["event_buffer"]
         self.batch_size = int(kwargs.get("batch_size") or DEFAULT_BATCH_SIZE)
         if self.batch_size > MAX_BATCH_SIZE:
             self.batch_size = MAX_BATCH_SIZE

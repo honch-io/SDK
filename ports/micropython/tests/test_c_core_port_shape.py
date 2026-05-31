@@ -66,7 +66,8 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertIn("honch_micropython_storage_ops_init", adapters)
         self.assertIn("honch_micropython_transport_ops_init", adapters)
         self.assertIn("honch_platform_ops_t", adapters)
-        self.assertIn("honch_storage_ops_t", adapters)
+        self.assertIn("honch_event_queue_ops_t", adapters)
+        self.assertIn("honch_ram_queue_init", adapters)
         self.assertIn("honch_transport_ops_t", adapters)
 
     def test_micropython_transport_declares_chunk_wire_adapter(self):
@@ -124,12 +125,13 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertIn("CircuitPython is not covered", readme)
         self.assertIn("_honch_core", readme)
 
-    def test_readme_documents_typed_hqr1_queue_records(self):
+    def test_readme_documents_typed_values_and_volatile_queue(self):
         readme = self.read("ports/micropython/README.md")
         compact_readme = " ".join(readme.split())
 
         self.assertIn("typed event values", readme)
-        self.assertIn("HQR1 queue records", readme)
+        self.assertIn("caller-provided", readme)
+        self.assertIn("volatile by default", readme)
         self.assertIn("compact wire-v2 packetization", readme)
         self.assertIn("`bytes`", readme)
         self.assertIn("Capture may reject bytes unless the project enables binary properties", compact_readme)

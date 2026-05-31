@@ -168,96 +168,70 @@ honch_status_t honch_random_hex(char out[33])
     return HONCH_STATUS_OK;
 }
 
-honch_status_t honch_state_prepare(honch_client_t *client, const honch_core_config_t *config)
+static honch_status_t honch_mp_default_device_id(char **out)
 {
-    HONCH_MP_DEBUG_INIT("state_prepare_begin");
-    if (client == NULL || config == NULL || client->storage == NULL) {
+    if (out == NULL) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    *out = NULL;
+
+    nlr_buf_t nlr;
+    if (nlr_push(&nlr) != 0) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    mp_obj_t machine_module = mp_import_name(MP_QSTR_machine, mp_const_none, MP_OBJ_NEW_SMALL_INT(0));
+    mp_obj_t unique_id = mp_load_attr(machine_module, MP_QSTR_unique_id);
+    mp_obj_t value = mp_call_function_0(unique_id);
+    mp_buffer_info_t info;
+    mp_get_buffer_raise(value, &info, MP_BUFFER_READ);
+    if (info.buf == NULL || info.len == 0u) {
+        nlr_pop();
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
 
-    if (config->device_id != NULL && !honch_is_blank(config->device_id)) {
-        HONCH_MP_DEBUG_INIT("state_device_id_config_begin");
-        client->configured_device_id = true;
-        client->device_id = honch_micropython_strdup(config->device_id);
-        if (client->device_id == NULL) {
-            return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
-        }
-        honch_status_t write_status = client->storage->state_set(
-            client->storage->ctx,
-            "device_id",
-            (const uint8_t *)client->device_id,
-            strlen(client->device_id));
-        if (write_status != HONCH_STATUS_OK) {
-            return write_status;
-        }
-        HONCH_MP_DEBUG_INIT("state_device_id_config_done");
-    } else {
-        HONCH_MP_DEBUG_INIT("state_device_id_load_begin");
-        size_t value_size = 0u;
-        honch_status_t status = client->storage->state_get(client->storage->ctx, "device_id", NULL, &value_size);
-        if (status != HONCH_STATUS_OK) {
-            return status;
-        }
-        if (value_size > 0u) {
-            client->device_id = (char *)malloc(value_size + 1u);
-            if (client->device_id == NULL) {
-                return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
-            }
-            status = client->storage->state_get(client->storage->ctx, "device_id", (uint8_t *)client->device_id, &value_size);
-            if (status != HONCH_STATUS_OK) {
-                return status;
-            }
-            client->device_id[value_size] = '\0';
-        } else {
-            char generated[33];
-            status = honch_random_hex(generated);
-            if (status != HONCH_STATUS_OK) {
-                return status;
-            }
-            client->device_id = honch_micropython_strdup(generated);
-            if (client->device_id == NULL) {
-                return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
-            }
-            status = client->storage->state_set(client->storage->ctx, "device_id", (const uint8_t *)client->device_id, strlen(client->device_id));
-            if (status != HONCH_STATUS_OK) {
-                return status;
-            }
-        }
-        HONCH_MP_DEBUG_INIT("state_device_id_load_done");
+    static const char hex[] = "0123456789abcdef";
+    size_t total = 4u + (info.len * 2u) + 1u;
+    char *device_id = (char *)malloc(total);
+    if (device_id == NULL) {
+        nlr_pop();
+        return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
+    }
+    memcpy(device_id, "mpy-", 4u);
+    const uint8_t *bytes = (const uint8_t *)info.buf;
+    for (size_t i = 0u; i < info.len; i++) {
+        device_id[4u + (i * 2u)] = hex[(bytes[i] >> 4u) & 0x0fu];
+        device_id[5u + (i * 2u)] = hex[bytes[i] & 0x0fu];
+    }
+    device_id[total - 1u] = '\0';
+    *out = device_id;
+    nlr_pop();
+    return HONCH_STATUS_OK;
+}
+
+honch_status_t honch_state_prepare(honch_client_t *client, const honch_core_config_t *config)
+{
+    HONCH_MP_DEBUG_INIT("state_prepare_begin");
+    if (client == NULL || config == NULL) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
 
-    HONCH_MP_DEBUG_INIT("state_distinct_begin");
-    size_t distinct_size = 0u;
-    honch_status_t status = client->storage->state_get(client->storage->ctx, "distinct_id", NULL, &distinct_size);
+    honch_status_t status = HONCH_STATUS_OK;
+    if (config->device_id != NULL && !honch_is_blank(config->device_id)) {
+        client->configured_device_id = true;
+        client->device_id = honch_micropython_strdup(config->device_id);
+        status = client->device_id == NULL ? HONCH_STATUS_ERROR_OUT_OF_MEMORY : HONCH_STATUS_OK;
+    } else {
+        status = honch_mp_default_device_id(&client->device_id);
+    }
     if (status != HONCH_STATUS_OK) {
         return status;
     }
-    if (distinct_size > 0u) {
-        client->distinct_id = (char *)malloc(distinct_size + 1u);
-        if (client->distinct_id == NULL) {
-            return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
-        }
-        status = client->storage->state_get(client->storage->ctx, "distinct_id", (uint8_t *)client->distinct_id, &distinct_size);
-        if (status != HONCH_STATUS_OK) {
-            return status;
-        }
-        client->distinct_id[distinct_size] = '\0';
-    } else {
-        client->distinct_id = honch_micropython_strdup(client->device_id);
-        if (client->distinct_id == NULL) {
-            return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
-        }
-        status = honch_state_save_distinct_id(client);
-        if (status != HONCH_STATUS_OK) {
-            return status;
-        }
-    }
-    HONCH_MP_DEBUG_INIT("state_distinct_done");
 
+    client->distinct_id = honch_micropython_strdup(client->device_id);
     client->device_model = honch_micropython_strdup(config->device_model);
     client->firmware_version = honch_micropython_strdup(config->firmware_version);
     client->environment = honch_micropython_strdup(honch_is_blank(config->environment) ? "production" : config->environment);
-    if (client->device_model == NULL || client->firmware_version == NULL || client->environment == NULL) {
+    if (client->distinct_id == NULL || client->device_model == NULL || client->firmware_version == NULL || client->environment == NULL) {
         return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
     }
     HONCH_MP_DEBUG_INIT("state_prepare_done");
@@ -266,126 +240,72 @@ honch_status_t honch_state_prepare(honch_client_t *client, const honch_core_conf
 
 honch_status_t honch_state_save_distinct_id(honch_client_t *client)
 {
-    return honch_state_save_distinct_id_value(client, client->distinct_id);
+    return honch_state_save_distinct_id_value(client, client != NULL ? client->distinct_id : NULL);
 }
 
 honch_status_t honch_state_save_distinct_id_value(honch_client_t *client, const char *distinct_id)
 {
-    if (client == NULL || client->storage == NULL || distinct_id == NULL) {
+    if (client == NULL || distinct_id == NULL) {
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
-    return client->storage->state_set(client->storage->ctx, "distinct_id", (const uint8_t *)distinct_id, strlen(distinct_id));
+    return HONCH_STATUS_OK;
 }
 
 honch_status_t honch_state_check_firmware_version(honch_client_t *client, bool *changed, char **previous_version)
 {
-    HONCH_MP_DEBUG_INIT("firmware_check_begin");
-    if (client == NULL || changed == NULL || previous_version == NULL || client->storage == NULL) {
+    if (client == NULL || changed == NULL || previous_version == NULL) {
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
     *changed = false;
     *previous_version = NULL;
-
-    size_t value_size = 0u;
-    honch_status_t status = client->storage->state_get(client->storage->ctx, "firmware_version", NULL, &value_size);
-    if (status != HONCH_STATUS_OK) {
-        return status;
-    }
-    if (value_size > 0u) {
-        char *stored = (char *)malloc(value_size + 1u);
-        if (stored == NULL) {
-            return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
-        }
-        status = client->storage->state_get(client->storage->ctx, "firmware_version", (uint8_t *)stored, &value_size);
-        if (status != HONCH_STATUS_OK) {
-            free(stored);
-            return status;
-        }
-        stored[value_size] = '\0';
-        if (strcmp(stored, client->firmware_version) != 0) {
-            *changed = true;
-            *previous_version = stored;
-            stored = NULL;
-        }
-        free(stored);
-    }
-    honch_status_t write_status = client->storage->state_set(client->storage->ctx, "firmware_version", (const uint8_t *)client->firmware_version, strlen(client->firmware_version));
-    HONCH_MP_DEBUG_INIT("firmware_check_done");
-    return write_status;
+    return HONCH_STATUS_OK;
 }
 
 honch_status_t honch_state_save_firmware_version(honch_client_t *client)
 {
-    if (client == NULL || client->storage == NULL || honch_is_blank(client->firmware_version)) {
+    if (client == NULL || honch_is_blank(client->firmware_version)) {
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
-    return client->storage->state_set(
-        client->storage->ctx,
-        "firmware_version",
-        (const uint8_t *)client->firmware_version,
-        strlen(client->firmware_version));
+    return HONCH_STATUS_OK;
 }
 
 honch_status_t honch_state_reset(honch_client_t *client)
 {
-    if (client == NULL || client->storage == NULL) {
+    if (client == NULL || client->device_id == NULL) {
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
-    honch_status_t status = HONCH_STATUS_OK;
-    char *device_id = NULL;
-    char *distinct_id = NULL;
-    if (client->configured_device_id) {
-        device_id = honch_micropython_strdup(client->device_id);
-        distinct_id = honch_micropython_strdup(client->device_id);
-        if (device_id == NULL || distinct_id == NULL) {
-            free(device_id);
-            free(distinct_id);
-            return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
-        }
-    } else {
-        char generated[33];
-        status = honch_random_hex(generated);
-        if (status != HONCH_STATUS_OK) {
-            return status;
-        }
-        device_id = honch_micropython_strdup(generated);
-        distinct_id = honch_micropython_strdup(generated);
-        if (device_id == NULL || distinct_id == NULL) {
-            free(device_id);
-            free(distinct_id);
-            return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
-        }
+    char *distinct_id = honch_micropython_strdup(client->device_id);
+    if (distinct_id == NULL) {
+        return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
     }
-    status = client->storage->state_set(client->storage->ctx, "device_id", (const uint8_t *)device_id, strlen(device_id));
-    if (status == HONCH_STATUS_OK) {
-        status = client->storage->state_set(client->storage->ctx, "distinct_id", (const uint8_t *)distinct_id, strlen(distinct_id));
-    }
-    if (status != HONCH_STATUS_OK) {
-        free(device_id);
-        free(distinct_id);
-        return status;
-    }
-    free(client->device_id);
     free(client->distinct_id);
-    client->device_id = device_id;
     client->distinct_id = distinct_id;
     return HONCH_STATUS_OK;
 }
 
 honch_status_t honch_queue_enqueue(honch_client_t *client, const unsigned char *event, size_t event_size)
 {
-    if (client == NULL || client->storage == NULL || client->storage->queue_push == NULL) {
+    if (client == NULL || client->event_queue == NULL || client->event_queue->queue_push == NULL) {
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
-    return client->storage->queue_push(client->storage->ctx, event, event_size, client->sequence++);
+    if (client->sequence == UINT64_MAX) {
+        return HONCH_STATUS_ERROR_QUEUE_FULL;
+    }
+    return client->event_queue->queue_push(client->event_queue->ctx, event, event_size, client->sequence++);
 }
 
 honch_status_t honch_queue_clear(honch_client_t *client)
 {
-    return client->storage->queue_clear(client->storage->ctx);
+    if (client == NULL || client->event_queue == NULL || client->event_queue->queue_clear == NULL) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    return client->event_queue->queue_clear(client->event_queue->ctx);
 }
 
 honch_status_t honch_queue_count_pending(honch_client_t *client, size_t *count)
 {
-    return client->storage->queue_depth(client->storage->ctx, count);
+    if (client == NULL || client->event_queue == NULL || client->event_queue->queue_depth == NULL || count == NULL) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    return client->event_queue->queue_depth(client->event_queue->ctx, count);
 }
