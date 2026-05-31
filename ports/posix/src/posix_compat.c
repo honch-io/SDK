@@ -25,6 +25,8 @@ static void honch_posix_config_to_core(const honch_config_t *config, honch_core_
         .battery_low_threshold = config->battery_low_threshold,
         .auto_properties_callback = config->auto_properties_callback,
         .auto_properties_userdata = config->auto_properties_userdata,
+        .connectivity_callback = config->connectivity_callback,
+        .connectivity_userdata = config->connectivity_userdata,
         .durability_mode = config->durability_mode
     };
 }

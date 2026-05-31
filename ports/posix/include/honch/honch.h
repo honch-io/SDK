@@ -21,6 +21,7 @@ typedef honch_status_t honch_err_t;
 #define HONCH_ERR_TIMEOUT HONCH_ERROR_TIMEOUT
 #define HONCH_ERR_BUSY HONCH_ERROR_BUSY
 #define HONCH_ERR_INTERNAL HONCH_ERROR_INTERNAL
+#define HONCH_ERR_OFFLINE HONCH_ERROR_OFFLINE
 
 typedef struct honch_config {
     const char *api_key;
@@ -43,6 +44,8 @@ typedef struct honch_config {
     int battery_low_threshold;
     honch_auto_properties_fn auto_properties_callback;
     void *auto_properties_userdata;
+    honch_connectivity_fn connectivity_callback;
+    void *connectivity_userdata;
     honch_durability_mode_t durability_mode;
 } honch_config_t;
 

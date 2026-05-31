@@ -141,6 +141,7 @@ idf.py flash monitor
 | `transport_timeout_ms`   | No       | 3000           | Per HTTP request timeout                   |
 | `battery_callback`       | No       | NULL           | Function returning 0-100 or -1             |
 | `battery_low_threshold`  | No       | 15             | Battery level that triggers `$battery_low` |
+| `connectivity_callback`  | No       | NULL           | Return false while offline or radio is off |
 | `state_storage_ops`      | No       | NULL           | Durable state storage for identity/version |
 | `event_queue_ops`        | No       | NULL           | Durable/custom event queue implementation  |
 
@@ -151,6 +152,13 @@ Do not call `honch_tick()` or `honch_flush()` from an ISR, control loop, UI
 loop, or other customer-critical path. Keep `honch_track()` on product paths and
 run delivery from a background task that your firmware can afford to block for
 up to `transport_timeout_ms`.
+
+Do not call `honch_tick()` while connectivity is unavailable or the radio is
+intentionally off. If that is hard to guarantee, provide
+`connectivity_callback`; it must return quickly and should read host-owned
+network/radio state. When it returns false, `honch_tick()` keeps queued uploads
+pending and `honch_flush()` returns `HONCH_ERR_OFFLINE` without DNS, TLS, retry
+backoff growth, or transport I/O.
 
 Successful outbound uploads are spaced by `flush_min_interval_ms`, which
 defaults to 10000 ms so telemetry does not continuously share the radio with

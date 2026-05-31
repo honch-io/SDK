@@ -107,6 +107,20 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertIn(".flush_min_interval_ms = honch_mp_map_get_uint", module)
         self.assertIn("flush_min_interval_ms", readme)
 
+    def test_micropython_exposes_connectivity_gate(self):
+        module = self.read("ports/micropython/usermod/honch/modhonch_core.c")
+        client = self.read("ports/micropython/honch/client.py")
+        config = self.read("ports/micropython/honch/config.py")
+        errors = self.read("ports/micropython/honch/errors.py")
+        readme = self.read("ports/micropython/README.md")
+
+        self.assertIn("self.connectivity_callback", config)
+        self.assertIn("def _connectivity_available", client)
+        self.assertIn("OfflineError", client)
+        self.assertIn("class OfflineError", errors)
+        self.assertIn("ERROR_OFFLINE", module)
+        self.assertIn("connectivity_callback", readme)
+
     def test_python_client_is_thin_wrapper_over_c_module(self):
         client = self.read("ports/micropython/honch/client.py")
 

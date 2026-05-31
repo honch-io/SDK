@@ -62,8 +62,12 @@ void loop() {
 event threshold is reached. Successful outbound uploads are spaced by
 `flushMinIntervalMs`; leave it at the 10000 ms default for consumer firmware, or
 set it to `HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS` for benchmark or explicit
-high-throughput modes. The SDK does not start a hidden background task. Use
-`Honch.loop()` as an alias if that fits the sketch.
+high-throughput modes. Do not call `Honch.tick()` while Wi-Fi is unavailable or
+the radio is intentionally off. If the sketch cannot guarantee that, set
+`connectivityCallback`; when it returns false, ticks keep uploads pending and
+`Honch.flush()` returns false with `lastError()` set to `offline` without
+network I/O. The SDK does not start a hidden background task. Use `Honch.loop()`
+as an alias if that fits the sketch.
 
 The default queue uses only the caller-provided RAM buffer. Events and
 `identify()` state are lost across reset or power loss unless you provide

@@ -547,6 +547,7 @@ static const mp_rom_map_elem_t honch_core_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_ERROR_TIMEOUT), MP_ROM_INT(HONCH_STATUS_ERROR_TIMEOUT) },
     { MP_ROM_QSTR(MP_QSTR_ERROR_BUSY), MP_ROM_INT(HONCH_STATUS_ERROR_BUSY) },
     { MP_ROM_QSTR(MP_QSTR_ERROR_NOT_SUPPORTED), MP_ROM_INT(HONCH_STATUS_ERROR_NOT_SUPPORTED) },
+    { MP_ROM_QSTR(MP_QSTR_ERROR_OFFLINE), MP_ROM_INT(HONCH_STATUS_ERROR_OFFLINE) },
 };
 static MP_DEFINE_CONST_DICT(honch_core_module_globals, honch_core_module_globals_table);
 

@@ -75,8 +75,13 @@ Optional:
 - `flush_retry_initial_ms`
 - `flush_retry_max_ms`
 - `battery_low_threshold`
+- `connectivity_callback` (return false while offline; ticks are skipped and `flush()` raises `OfflineError`)
 
 Python `platform=`, `transport=`, `battery_callback=`, and `auto_properties_callback=` hooks are not supported by the C-core-derived port. Board behavior belongs in the user module adapters.
+
+Do not call `tick()` while WLAN is disconnected or the radio is intentionally
+off. If your loop cannot guarantee that, pass `connectivity_callback`; it should
+be fast and read host-owned connectivity state.
 
 ## Public API
 

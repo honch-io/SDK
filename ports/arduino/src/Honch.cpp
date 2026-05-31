@@ -13,12 +13,18 @@ honch_platform_ops_t g_platformOps;
 honch_event_queue_ops_t g_eventQueueOps;
 honch_transport_ops_t g_transportOps;
 honch_status_t gConfigStatus = HONCH_OK;
+bool (*gConnectivityCallback)() = nullptr;
+
+int honch_arduino_connectivity_callback(void *) {
+  return gConnectivityCallback == nullptr || gConnectivityCallback() ? 1 : 0;
+}
 
 } // namespace
 
 honch_core_config_t honch_arduino_make_core_config(const HonchConfig &config) {
   honch_core_config_t coreConfig = {};
   gConfigStatus = HONCH_OK;
+  gConnectivityCallback = config.connectivityCallback;
 
   gConfigStatus = honch_arduino_platform_ops_init(&g_platformOps, &g_platform);
   if (config.eventQueueOps != nullptr) {
@@ -44,6 +50,8 @@ honch_core_config_t honch_arduino_make_core_config(const HonchConfig &config) {
   coreConfig.flush_interval_seconds = config.flushIntervalSeconds;
   coreConfig.flush_min_interval_ms = config.flushMinIntervalMs;
   coreConfig.flush_event_threshold = config.flushEventThreshold;
+  coreConfig.connectivity_callback = honch_arduino_connectivity_callback;
+  coreConfig.connectivity_userdata = nullptr;
   coreConfig.platform = &g_platformOps;
   coreConfig.state_storage = config.stateStorageOps;
   coreConfig.event_queue = &g_eventQueueOps;
