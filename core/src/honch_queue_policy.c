@@ -831,9 +831,10 @@ honch_status_t honch_queue_flush_one_locked(honch_client_t *client, bool *progre
     return status == HONCH_OK ? HONCH_ERROR_TRANSPORT : status;
 }
 
-honch_status_t honch_queue_flush_locked(honch_client_t *client)
+honch_status_t honch_queue_flush_limited_locked(honch_client_t *client, size_t max_batches)
 {
     honch_status_t final_status = HONCH_OK;
+    size_t batches_flushed = 0u;
 
     for (;;) {
         size_t depth = 0u;
@@ -860,9 +861,13 @@ honch_status_t honch_queue_flush_locked(honch_client_t *client)
         if (depth == 0u) {
             return final_status;
         }
+        if (batches_flushed >= max_batches) {
+            return final_status;
+        }
 
         bool progressed = false;
         status = honch_queue_flush_one_locked(client, &progressed);
+        batches_flushed++;
         if (status == HONCH_ERROR_REJECTED && progressed) {
             final_status = HONCH_ERROR_REJECTED;
             continue;
@@ -871,4 +876,9 @@ honch_status_t honch_queue_flush_locked(honch_client_t *client)
             return status;
         }
     }
+}
+
+honch_status_t honch_queue_flush_locked(honch_client_t *client)
+{
+    return honch_queue_flush_limited_locked(client, SIZE_MAX);
 }

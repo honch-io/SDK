@@ -328,6 +328,8 @@ honch_err_t honch_init(const honch_config_t *config)
     }
     core_config.flush_interval_seconds = config->flush_interval_seconds;
     core_config.flush_event_threshold = config->flush_event_threshold;
+    core_config.flush_max_batches = config->flush_max_batches;
+    core_config.shutdown_flush_max_batches = config->shutdown_flush_max_batches;
     core_config.transport_timeout_ms = config->transport_timeout_ms;
     core_config.battery_callback = config->battery_callback;
     core_config.battery_low_threshold = g_honch_battery_low_threshold;

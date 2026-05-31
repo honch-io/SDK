@@ -137,6 +137,8 @@ idf.py flash monitor
 | `event_buffer_size`      | Yes      | —              | Size of the buffer (recommend >= 8192)     |
 | `flush_interval_seconds` | No       | 60             | How often to flush events                  |
 | `flush_event_threshold`  | No       | 30             | Flush when this many events are queued     |
+| `flush_max_batches`      | No       | 1              | Max batches sent by one `honch_flush()`    |
+| `shutdown_flush_max_batches` | No   | 1              | Max batches sent during `honch_shutdown()` |
 | `transport_timeout_ms`   | No       | 3000           | Per HTTP request timeout                   |
 | `battery_callback`       | No       | NULL           | Function returning 0-100 or -1             |
 | `battery_low_threshold`  | No       | 15             | Battery level that triggers `$battery_low` |
@@ -151,10 +153,15 @@ loop, or other customer-critical path. Keep `honch_track()` on product paths and
 run delivery from a background task that your firmware can afford to block for
 up to `transport_timeout_ms`.
 
-`honch_flush()` drains synchronously and can perform multiple HTTP requests.
-Use it only for explicit maintenance/shutdown moments where blocking is
-acceptable. `honch_shutdown()` emits `$device_shutdown` and then flushes
-synchronously, so call it from the same kind of non-critical context.
+`honch_flush()` is synchronous and bounded by `flush_max_batches`. By default it
+sends at most one compact batch per call; additional events may remain queued
+for later ticks or explicit flush calls. Use it only for explicit maintenance
+moments where blocking is acceptable.
+
+`honch_shutdown()` emits `$device_shutdown` and then performs a synchronous
+flush bounded by `shutdown_flush_max_batches`. By default shutdown sends at most
+one compact batch and then completes; unsent events may remain queued and, with
+the default RAM queue, are lost when the device resets or powers off.
 
 The ESP-IDF port does not start an SDK-owned worker task. Use an
 application-owned FreeRTOS task so task priority, stack size, CPU affinity,

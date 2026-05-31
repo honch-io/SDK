@@ -1051,6 +1051,30 @@ static void test_flush_uses_storage_batch_read_when_available(void)
     assert(storage.events[1].consumed);
 }
 
+static void test_limited_flush_stops_after_one_batch(void)
+{
+    fake_storage_t storage;
+    setup_storage(&storage);
+    fake_transport_t transport = {
+        .result = HONCH_TRANSPORT_ACCEPTED,
+        .status = HONCH_OK
+    };
+    honch_event_queue_ops_t storage_ops = {0};
+    honch_transport_ops_t transport_ops = {0};
+    honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
+    client.batch_size = 1u;
+
+    assert(honch_queue_flush_limited_locked(&client, 1u) == HONCH_OK);
+
+    assert(transport.chunk_calls == 1u);
+    assert(storage.read_batch_calls == 1u);
+    assert(storage.consume_batch_calls == 1u);
+    assert(storage.events[0].consumed);
+    assert(storage.events[1].pending);
+    assert(!storage.events[1].consumed);
+    assert(client.queued_event_count == 1u);
+}
+
 static void test_flush_rejects_overreported_storage_batch_count(void)
 {
     fake_storage_t storage;
@@ -1225,6 +1249,7 @@ int main(void)
     test_v2_final_chunk_stored_response_preserves_event();
     test_v2_multi_frame_flush_passes_stream_id_to_transport();
     test_flush_uses_storage_batch_read_when_available();
+    test_limited_flush_stops_after_one_batch();
     test_flush_rejects_overreported_storage_batch_count();
     test_v2_flush_splits_batches_by_distinct_id();
     test_v2_flush_dead_letters_semantically_invalid_event();

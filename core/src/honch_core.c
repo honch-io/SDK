@@ -902,6 +902,12 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     next->flush_event_threshold = config->flush_event_threshold == 0u ?
         HONCH_DEFAULT_FLUSH_EVENT_THRESHOLD :
         config->flush_event_threshold;
+    next->flush_max_batches = config->flush_max_batches == 0u ?
+        HONCH_DEFAULT_FLUSH_MAX_BATCHES :
+        config->flush_max_batches;
+    next->shutdown_flush_max_batches = config->shutdown_flush_max_batches == 0u ?
+        HONCH_DEFAULT_SHUTDOWN_FLUSH_MAX_BATCHES :
+        config->shutdown_flush_max_batches;
     next->flush_retry_initial_ms = config->flush_retry_initial_ms == 0u ?
         HONCH_DEFAULT_FLUSH_RETRY_INITIAL_MS :
         config->flush_retry_initial_ms;
@@ -1383,7 +1389,7 @@ honch_status_t honch_core_flush(honch_client_t *client)
     }
 
     client->flush_in_progress = true;
-    status = honch_queue_flush_locked(client);
+    status = honch_queue_flush_limited_locked(client, client->flush_max_batches);
     uint64_t now = honch_client_now_millis(client);
     honch_scheduler_record_flush_result(client, status, now);
     client->flush_in_progress = false;
@@ -1461,7 +1467,7 @@ honch_status_t honch_core_shutdown(honch_client_t *client)
         true,
         &event_context.auto_properties,
         NULL);
-    honch_status_t flush_status = honch_queue_flush_locked(client);
+    honch_status_t flush_status = honch_queue_flush_limited_locked(client, client->shutdown_flush_max_batches);
     if (status == HONCH_OK) {
         status = flush_status;
     }
