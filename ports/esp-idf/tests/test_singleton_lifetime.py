@@ -55,6 +55,9 @@ class EspIdfSingletonLifetimeTests(unittest.TestCase):
         compat = read("ports/esp-idf/honch/src/esp_compat.c")
 
         self.assertIn("static SemaphoreHandle_t s_client_mutex", compat)
+        self.assertIn("HONCH_ESP_CLIENT_LOCK_TIMEOUT_MS", compat)
+        self.assertIn("static honch_err_t honch_esp_client_lock(void)", compat)
+        self.assertIn("return HONCH_ERR_BUSY;", c_function_body(compat, "honch_esp_client_lock"))
         self.assertIn("honch_esp_client_acquire", compat)
         self.assertIn("honch_client_enter(client)", compat)
         self.assertIn("honch_esp_client_release", compat)

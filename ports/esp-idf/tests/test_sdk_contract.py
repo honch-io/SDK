@@ -248,6 +248,48 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("bounded", readme)
         self.assertIn("may remain queued", readme)
 
+    def test_esp_idf_sdk_lock_waits_are_bounded_and_fail_open(self) -> None:
+        platform = read("ports/esp-idf/honch/src/esp_platform.c")
+        compat = read("ports/esp-idf/honch/src/esp_compat.c")
+        gpio_adapter = read("ports/esp-idf/honch/src/esp_gpio_adapter.c")
+        gpio_public = read("ports/esp-idf/honch/src/esp_gpio_public.c")
+        combined = platform + compat + gpio_adapter + gpio_public
+
+        self.assertNotIn("portMAX_DELAY", combined)
+
+        platform_lock = c_function_body(platform, "honch_esp_mutex_lock")
+        self.assertIn("HONCH_ESP_MUTEX_LOCK_TIMEOUT_MS", platform)
+        self.assertIn("honch_esp_lock_ticks(HONCH_ESP_MUTEX_LOCK_TIMEOUT_MS)", platform_lock)
+        self.assertIn("HONCH_STATUS_ERROR_BUSY", platform_lock)
+
+        client_lock = c_function_body(compat, "honch_esp_client_lock")
+        client_acquire = c_function_body(compat, "honch_esp_client_acquire")
+        client_detach = c_function_body(compat, "honch_esp_client_detach")
+        init_begin = c_function_body(compat, "honch_esp_init_begin")
+        self.assertIn("static honch_err_t honch_esp_client_lock(void)", compat)
+        self.assertIn("HONCH_ESP_CLIENT_LOCK_TIMEOUT_MS", compat)
+        self.assertIn("honch_esp_lock_ticks(HONCH_ESP_CLIENT_LOCK_TIMEOUT_MS)", client_lock)
+        self.assertIn("return HONCH_ERR_BUSY;", client_lock)
+        self.assertIn("honch_err_t err = honch_esp_client_lock();", client_acquire)
+        self.assertIn("return err;", client_acquire)
+        self.assertIn("honch_err_t err = honch_esp_client_lock();", client_detach)
+        self.assertIn("return err;", client_detach)
+        self.assertIn("honch_err_t err = honch_esp_client_lock();", init_begin)
+        self.assertIn("return err;", init_begin)
+
+        self.assertIn("HONCH_ESP_GPIO_LOCK_TIMEOUT_MS", gpio_adapter + gpio_public)
+        self.assertIn("HONCH_ESP_GPIO_SHUTDOWN_TIMEOUT_MS", gpio_adapter)
+        self.assertIn(
+            "honch_gpio_mapping_lock(honch_gpio_ticks(HONCH_ESP_GPIO_LOCK_TIMEOUT_MS))",
+            gpio_adapter,
+        )
+        self.assertIn(
+            "xSemaphoreTake(s_gpio_exit_sem, honch_gpio_ticks(HONCH_ESP_GPIO_SHUTDOWN_TIMEOUT_MS))",
+            gpio_adapter,
+        )
+        self.assertIn("return HONCH_ERR_BUSY;", gpio_adapter)
+        self.assertIn("return HONCH_ERR_BUSY;", gpio_public)
+
     def test_readme_only_documents_implemented_automatic_esp_properties(self) -> None:
         readme = read("ports/esp-idf/README.md")
         automatic = readme.split("## What gets sent automatically", 1)[1].split("## Configuration options", 1)[0]
