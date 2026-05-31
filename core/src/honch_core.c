@@ -706,6 +706,14 @@ static unsigned int honch_next_retry_delay_ms(honch_client_t *client)
     return (delay - quarter) + jitter;
 }
 
+static uint64_t honch_transport_retry_after_ms(honch_client_t *client)
+{
+    if (client == NULL || client->transport == NULL || client->transport->retry_after_ms == NULL) {
+        return 0u;
+    }
+    return client->transport->retry_after_ms(client->transport->ctx);
+}
+
 static void honch_grow_retry_delay(honch_client_t *client)
 {
     unsigned int next = client->current_retry_delay_ms == 0u ?
@@ -732,6 +740,13 @@ static void honch_scheduler_record_flush_result(honch_client_t *client, honch_st
         client->next_retry_flush_ms = 0u;
     } else if (honch_status_is_retryable(status)) {
         uint64_t wait_ms = honch_next_retry_delay_ms(client);
+        uint64_t retry_after_ms = honch_transport_retry_after_ms(client);
+        if (retry_after_ms > wait_ms) {
+            wait_ms = retry_after_ms;
+        }
+        if (UINT64_MAX - now < wait_ms) {
+            wait_ms = UINT64_MAX - now;
+        }
         client->next_retry_flush_ms = now + wait_ms;
         client->scheduler_flush_requested = true;
         honch_grow_retry_delay(client);

@@ -11,6 +11,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
+#include <time.h>
 
 #include "esp_crt_bundle.h"
 #include "esp_event.h"
@@ -20,6 +22,142 @@
 #include "esp_timer.h"
 
 static const char *TAG = "honch";
+
+static int honch_esp_month_index(const char *month)
+{
+    static const char *months[] = {
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    };
+    if (month == NULL) {
+        return -1;
+    }
+    for (int i = 0; i < 12; i++) {
+        if (strcasecmp(month, months[i]) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static bool honch_esp_parse_retry_after_seconds(const char *value, uint64_t *delay_ms)
+{
+    if (value == NULL || delay_ms == NULL) {
+        return false;
+    }
+    while (*value == ' ' || *value == '\t') {
+        value++;
+    }
+    if (*value < '0' || *value > '9') {
+        return false;
+    }
+
+    uint64_t seconds = 0u;
+    while (*value >= '0' && *value <= '9') {
+        uint64_t digit = (uint64_t)(*value - '0');
+        if (seconds > (UINT64_MAX - digit) / 10u) {
+            seconds = UINT64_MAX / 1000u;
+            break;
+        }
+        seconds = (seconds * 10u) + digit;
+        value++;
+    }
+    while (*value == ' ' || *value == '\t') {
+        value++;
+    }
+    if (*value != '\0') {
+        return false;
+    }
+
+    *delay_ms = seconds > UINT64_MAX / 1000u ? UINT64_MAX : seconds * 1000u;
+    return true;
+}
+
+static int64_t honch_esp_days_from_civil(int year, unsigned month, unsigned day)
+{
+    year -= month <= 2u;
+    int era = (year >= 0 ? year : year - 399) / 400;
+    unsigned year_of_era = (unsigned)(year - era * 400);
+    int adjusted_month = (int)month + ((int)month > 2 ? -3 : 9);
+    unsigned day_of_year = (unsigned)((153 * adjusted_month + 2) / 5) + day - 1u;
+    unsigned day_of_era = year_of_era * 365u + year_of_era / 4u - year_of_era / 100u + day_of_year;
+    return (int64_t)era * 146097 + (int64_t)day_of_era - 719468;
+}
+
+static bool honch_esp_parse_retry_after_http_date(const char *value, uint64_t now_ms, uint64_t *delay_ms)
+{
+    if (value == NULL || delay_ms == NULL || now_ms == 0u) {
+        return false;
+    }
+
+    char weekday[4] = {0};
+    char month_name[4] = {0};
+    char gmt[4] = {0};
+    int day = 0;
+    int year = 0;
+    int hour = 0;
+    int minute = 0;
+    int second = 0;
+    int consumed = 0;
+    int matched = sscanf(
+        value,
+        "%3[A-Za-z], %d %3[A-Za-z] %d %d:%d:%d %3[A-Za-z]%n",
+        weekday,
+        &day,
+        month_name,
+        &year,
+        &hour,
+        &minute,
+        &second,
+        gmt,
+        &consumed);
+    if (matched != 8 || value[consumed] != '\0' || strcasecmp(gmt, "GMT") != 0) {
+        return false;
+    }
+
+    int month = honch_esp_month_index(month_name);
+    if (year < 1970 || month < 0 || day < 1 || day > 31 ||
+        hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 60) {
+        return false;
+    }
+
+    int64_t days = honch_esp_days_from_civil(year, (unsigned)month + 1u, (unsigned)day);
+    if (days < 0) {
+        return false;
+    }
+    uint64_t target_ms = ((uint64_t)days * 86400u + (uint64_t)hour * 3600u +
+        (uint64_t)minute * 60u + (uint64_t)second) * 1000u;
+    if (target_ms <= now_ms) {
+        *delay_ms = 0u;
+        return true;
+    }
+    *delay_ms = target_ms - now_ms;
+    return true;
+}
+
+static bool honch_esp_parse_retry_after(const char *value, uint64_t now_ms, uint64_t *delay_ms)
+{
+    return honch_esp_parse_retry_after_seconds(value, delay_ms) ||
+        honch_esp_parse_retry_after_http_date(value, now_ms, delay_ms);
+}
+
+static esp_err_t honch_esp_http_event_handler(esp_http_client_event_t *event)
+{
+    if (event == NULL || event->user_data == NULL || event->event_id != HTTP_EVENT_ON_HEADER ||
+        event->header_key == NULL || event->header_value == NULL ||
+        strcasecmp(event->header_key, "Retry-After") != 0) {
+        return ESP_OK;
+    }
+
+    honch_esp_transport_t *transport = (honch_esp_transport_t *)event->user_data;
+    time_t now_seconds = time(NULL);
+    uint64_t now_ms = now_seconds > 0 ? (uint64_t)now_seconds * 1000u : 0u;
+    uint64_t delay_ms = 0u;
+    if (honch_esp_parse_retry_after(event->header_value, now_ms, &delay_ms)) {
+        transport->retry_after_ms = delay_ms;
+    }
+    return ESP_OK;
+}
 
 static char *honch_esp_endpoint_url(const char *endpoint_url, const char *suffix)
 {
@@ -137,6 +275,8 @@ static honch_status_t honch_esp_transport_prepare_client(
         .timeout_ms = timeout_ms,
         .crt_bundle_attach = esp_crt_bundle_attach,
         .keep_alive_enable = true,
+        .event_handler = honch_esp_http_event_handler,
+        .user_data = transport,
     };
     transport->http_client = esp_http_client_init(&config);
     if (transport->http_client == NULL) {
@@ -166,6 +306,7 @@ static honch_status_t honch_esp_post_chunk(
     }
 
     *result = HONCH_TRANSPORT_RETRY;
+    transport->retry_after_ms = 0u;
 
 #ifdef HONCH_FLUSH_TIMING
     int64_t total_start_us = esp_timer_get_time();
@@ -308,6 +449,12 @@ static honch_status_t honch_esp_post_chunk(
     return return_status;
 }
 
+static uint64_t honch_esp_retry_after_ms(void *ctx)
+{
+    honch_esp_transport_t *transport = (honch_esp_transport_t *)ctx;
+    return transport == NULL ? 0u : transport->retry_after_ms;
+}
+
 honch_status_t honch_esp_transport_ops_init(
     honch_transport_ops_t *ops,
     honch_esp_transport_t *ctx,
@@ -330,6 +477,7 @@ honch_status_t honch_esp_transport_ops_init(
     }
     *ops = (honch_transport_ops_t) {
         .post_chunk = honch_esp_post_chunk,
+        .retry_after_ms = honch_esp_retry_after_ms,
         .ctx = ctx
     };
     return HONCH_STATUS_OK;
@@ -344,4 +492,5 @@ void honch_esp_transport_ops_deinit(honch_esp_transport_t *ctx)
     honch_esp_transport_clear_urls(ctx);
     ctx->timeout_ms = 0;
     ctx->configured_timeout_ms = 0;
+    ctx->retry_after_ms = 0u;
 }

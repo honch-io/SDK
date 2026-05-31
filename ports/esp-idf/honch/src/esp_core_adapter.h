@@ -34,6 +34,7 @@ typedef struct honch_esp_transport {
     char *capture_url;
     int timeout_ms;
     int configured_timeout_ms;
+    uint64_t retry_after_ms;
 } honch_esp_transport_t;
 
 honch_status_t honch_esp_platform_ops_init(honch_platform_ops_t *ops, honch_esp_platform_t *ctx);
