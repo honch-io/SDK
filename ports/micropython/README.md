@@ -26,6 +26,9 @@ make BOARD=MYBOARD \
 ```
 
 `mip` can install wrapper files from package metadata, but those files require firmware that already contains `_honch_core`.
+Do not install the `honch/` wrapper into `/lib` when it is already frozen into
+the firmware. Keeping both copies wastes the board filesystem and can make
+MicroPython import an older `/lib/honch` package instead of the frozen SDK.
 
 ## Basic Usage
 
