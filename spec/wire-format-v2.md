@@ -1,6 +1,6 @@
 # Compact Wire Format
 
-Status: Draft for the breaking compact wire format.
+Status: Current active compact upload contract for official Honch SDKs and Capture.
 
 The compact wire format is a strict binary upload contract. The goals are:
 
@@ -494,12 +494,11 @@ rather than normalize them silently.
 
 ## Capture Implementation Requirements
 
-Capture accepts this format on `POST /capture`. `POST /e` and `POST /chunks`
-are aliases for the same ingest path.
+Capture accepts this format on `POST /capture`.
 
 Required capture units:
 
-- HTTP route for `POST /capture` plus `/e` and `/chunks` aliases;
+- HTTP route for `POST /capture`;
 - project-key authentication using `X-Honch-Project-Key`;
 - chunk frame parser;
 - partial chunk store with TTL and duplicate detection;

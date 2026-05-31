@@ -1,17 +1,17 @@
 # Honch Arduino ESP32 SDK
 
-Arduino ESP32 wrapper around the canonical Honch C core.
+Preview Arduino ESP32 wrapper around the canonical Honch C core.
 
 ## Status
 
-In progress. The first milestone targets ESP32 boards using the Arduino
-framework and has not yet been end-to-end tested on ESP32 hardware.
+Preview `0.1.0`. Use for evaluation or controlled pilots until your product has passed hardware, TLS, offline queue, flush, retry, and power-cycle validation on the target ESP32 board.
 
 ## Support
 
 - Board family: ESP32 Arduino.
-- Required dependencies: ESP32 Arduino core, WiFi, Preferences, HTTPClient.
-- Upload endpoint: `POST /capture` with compact chunks produced by the canonical Honch C core.
+- Required dependencies: ESP32 Arduino core, `WiFi`, `Preferences`, `HTTPClient`, and `WiFiClientSecure`.
+- Upload endpoint: `POST /capture` with compact chunks produced by the shared Honch C core.
+- Not supported: non-ESP32 Arduino boards, BLE relay, and OTA integration.
 
 ## Minimal Use
 
@@ -44,12 +44,12 @@ void setup() {
     .insecureSkipTlsVerify = false,
   };
 
-  Honch.begin(config);
-
-  const honch_property_t properties[] = {
-    honch_prop("source", honch_str("setup")),
-  };
-  Honch.track("boot", properties, 1);
+  if (Honch.begin(config)) {
+    const honch_property_t properties[] = {
+      honch_prop("source", honch_str("setup")),
+    };
+    Honch.track("app_started", properties, 1);
+  }
 }
 
 void loop() {
@@ -57,23 +57,17 @@ void loop() {
 }
 ```
 
-`Honch.tick()` performs scheduled flush work when `flushIntervalSeconds` has
-elapsed or `flushEventThreshold` queued events have been reached. It does not
-start a hidden background task; call it from `loop()` or your own firmware task.
-Use `Honch.loop()` as an alias if that reads better in your sketch.
+`Honch.tick()` performs scheduled flush work when the interval elapses or the event threshold is reached. It does not start a hidden background task. Use `Honch.loop()` as an alias if that fits the sketch.
+
+## Security
+
+Use HTTPS in production. Configure `rootCaPem` for the Capture endpoint. `insecureSkipTlsVerify` exists only for intentional local testing and should remain `false` in production.
 
 ## Examples
 
-Compile the included examples with Arduino CLI:
-
-```sh
+```bash
 arduino-cli compile --fqbn esp32:esp32:esp32 ports/arduino/examples/HonchBasic
 arduino-cli compile --fqbn esp32:esp32:esp32 ports/arduino/examples/HonchOfflineQueue
-```
-
-Or compile the PlatformIO example project:
-
-```sh
 pio run -d ports/arduino/examples/platformio
 ```
 
@@ -81,29 +75,14 @@ pio run -d ports/arduino/examples/platformio
 
 From the repository root:
 
-```sh
+```bash
 ports/arduino/scripts/verify-arduino.sh
 ```
 
-The script always runs the host wrapper test. If `arduino-cli` is installed, it
-also compiles the ESP32 examples; otherwise it reports that the Arduino compile
-checks were skipped.
+For release-style verification, require Arduino CLI:
 
-For release-style verification, require `arduino-cli` and keep Arduino CLI data
-on an external/cache volume:
-
-```sh
-HONCH_ARDUINO_HOME="/Volumes/X9 Pro/honch-arduino-verify" \
-  ports/arduino/scripts/verify-arduino.sh --require-arduino-cli
+```bash
+ports/arduino/scripts/verify-arduino.sh --require-arduino-cli
 ```
 
-## Limitations
-
-- ESP32 Arduino is the only supported Arduino board family.
-- BLE relay, OTA integration, and non-ESP32 boards are not part of this milestone.
-- Event properties use the typed `honch_value_t`/`honch_property_t` API shared
-  with the portable C core.
-- TLS root CA PEM configuration is application-owned via `rootCaPem`.
-  `insecureSkipTlsVerify` exists for local testing only.
-- Scheduled flushing is cooperative. It runs only when the sketch calls
-  `Honch.tick()` or `Honch.loop()`.
+Before production, record board, Arduino core version, TLS setup, queue behavior before Wi-Fi, retry behavior, reset/power-cycle behavior, and Capture acceptance.

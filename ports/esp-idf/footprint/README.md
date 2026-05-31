@@ -1,15 +1,15 @@
 # Honch ESP-IDF Footprint
 
-This app measures landing-page-safe Honch SDK footprint numbers. Optional
-features, such as GPIO tracking, are excluded from the default claim and can be
-measured explicitly.
+This app measures Honch SDK footprint numbers for release evidence. Optional
+features, such as GPIO tracking, are excluded from the default measurement and
+can be measured explicitly.
 
 ## Current ESP32 Build-Size Numbers
 
 Build-size numbers were measured for ESP32 with ESP-IDF v6.0.1 using the
 default footprint configuration, which excludes optional GPIO tracking.
 
-| Metric | Current value | Landing-safe claim |
+| Metric | Current value | Public claim ceiling |
 | --- | ---: | --- |
 | Linked Honch SDK code/data (`libhonch.a`) | 32,230 bytes | `<32 KB flash` |
 | Honch static RAM (`DRAM + IRAM`) | 621 bytes | `<1 KB static RAM` |

@@ -1,6 +1,7 @@
 # Honch React Native Relay Example
 
-This directory is reserved for the internal mobile E2E harness.
+This directory contains a host-app example shape for validating the preview
+React Native Relay package inside a consuming mobile app.
 
 `App.tsx` wires the package to `NativeModules.HonchReactNativeRelay`, subscribes
 to native `HonchRelayFrame` events, stores relay queue state in MMKV, displays

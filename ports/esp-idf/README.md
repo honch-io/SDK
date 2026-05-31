@@ -1,17 +1,22 @@
 # Honch ESP-IDF SDK
 
-Product analytics for connected hardware. Drop this component into your ESP-IDF project and get device lifecycle events, custom tracking, and GPIO-triggered events flowing to Honch in minutes.
+Stable ESP-IDF component for Honch product analytics on connected hardware.
 
 Events are queued locally and sent to Capture as compact chunk wire frames.
 The default ESP-IDF integration uses a RAM-first queue for low `honch_track()`
 latency. NVS is used for overflow, while permanently rejected events are dropped
 instead of dead-lettered to protect the shared Wi-Fi/NVS partition.
 
+## Status
+
+Stable `0.2.0`.
+
 ## Requirements
 
 - ESP-IDF >= 5.0
 - An ESP32 dev board (ESP32, ESP32-S2, ESP32-S3, ESP32-C3, etc.)
-- A Honch API key (get one from your project settings at [honch.io](https://honch.io))
+- A Honch project key.
+- Wi-Fi, time, and TLS trust configured before expecting HTTPS delivery.
 
 ## Add to your project
 
@@ -129,8 +134,10 @@ flushes after `flush_interval_seconds` or when the queue reaches
 
 Flush sends compact chunk wire frames to `POST /capture` with
 `Content-Type: application/vnd.honch.chunk`, `X-Honch-Project-Key`, and
-`X-Honch-Stream-Id`. Capture also accepts the same format on `/e` and
-`/chunks`.
+`X-Honch-Stream-Id`.
+
+Use HTTPS in production. Verify device time and certificate trust before
+debugging event encoding. Do not disable certificate verification in production.
 
 ## Queue storage policy
 
