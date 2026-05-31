@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct fake_state_storage {
@@ -29,6 +30,9 @@ typedef struct fake_state_storage {
     const char *state_size_fault_key;
     const char *state_read_overreport_key;
     int fail_distinct_id_set;
+    honch_client_t *nested_flush_client;
+    honch_status_t nested_flush_status;
+    int nested_flush_attempts;
 } fake_state_storage_t;
 
 static honch_core_config_t fake_config(
@@ -272,6 +276,42 @@ static honch_status_t fake_queue_depth(void *ctx, size_t *depth)
     return HONCH_OK;
 }
 
+static honch_status_t fake_queue_read_batch(
+    void *ctx,
+    honch_storage_event_t *events,
+    size_t batch_size,
+    size_t max_event_bytes,
+    size_t *event_count)
+{
+    (void)max_event_bytes;
+    fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
+    if (storage == NULL || events == NULL || event_count == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    *event_count = 0u;
+    size_t count = storage->queued_sequence_count < batch_size ? storage->queued_sequence_count : batch_size;
+    for (size_t i = 0u; i < count; i++) {
+        uint8_t *copy = (uint8_t *)malloc(storage->last_queued_size);
+        if (copy == NULL) {
+            for (size_t j = 0u; j < i; j++) {
+                free(events[j].data);
+                events[j].data = NULL;
+            }
+            *event_count = 0u;
+            return HONCH_ERROR_OUT_OF_MEMORY;
+        }
+        memcpy(copy, storage->last_queued_data, storage->last_queued_size);
+        events[i] = (honch_storage_event_t) {
+            .sequence = storage->queued_sequences[i],
+            .data = copy,
+            .length = storage->last_queued_size
+        };
+        (*event_count)++;
+    }
+    return count == 0u ? HONCH_ERROR_NOT_INITIALIZED : HONCH_OK;
+}
+
 static honch_status_t fake_post_chunk(
     void *ctx,
     const char *endpoint_url,
@@ -287,6 +327,11 @@ static honch_status_t fake_post_chunk(
     (void)stream_id;
     (void)body;
     (void)body_size;
+    fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
+    if (storage != NULL && storage->nested_flush_client != NULL && storage->nested_flush_attempts == 0) {
+        storage->nested_flush_attempts++;
+        storage->nested_flush_status = honch_core_flush(storage->nested_flush_client);
+    }
     *result = HONCH_TRANSPORT_ACCEPTED;
     return HONCH_OK;
 }
@@ -367,6 +412,7 @@ static honch_core_config_t fake_config(
         .queue_drop_oldest = fake_queue_drop_oldest,
         .queue_clear = fake_queue_clear,
         .queue_depth = fake_queue_depth,
+        .queue_read_batch = fake_queue_read_batch,
         .ctx = storage
     };
     *transport = (honch_transport_ops_t) {
@@ -809,6 +855,30 @@ static void test_auto_property_buffer_exhaustion_returns_busy(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
+static void test_nested_flush_during_transport_returns_busy(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .track_queue_depth = 1,
+        .nested_flush_status = HONCH_OK
+    };
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(honch_core_track(client, "nested_flush_probe", NULL, 0u) == HONCH_OK);
+    storage.nested_flush_client = client;
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(storage.nested_flush_attempts == 1);
+    assert(storage.nested_flush_status == HONCH_ERROR_BUSY);
+    storage.nested_flush_client = NULL;
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
 int main(void)
 {
     test_queue_push_uses_honch_event_record_format();
@@ -832,5 +902,6 @@ int main(void)
     test_battery_callback_runs_outside_client_mutex();
     test_auto_properties_callback_runs_outside_client_mutex();
     test_auto_property_buffer_exhaustion_returns_busy();
+    test_nested_flush_during_transport_returns_busy();
     return 0;
 }
