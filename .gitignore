@@ -42,14 +42,14 @@ __pycache__/
 
 # JavaScript dependencies
 node_modules/
-!ports/react-native-relay/package.json
-!ports/react-native-relay/tsconfig.json
+!mobile/react-native-relay/package.json
+!mobile/react-native-relay/tsconfig.json
 !spec/conformance/wire-v2/
 !spec/conformance/wire-v2/*.json
 
 # Android local/generated project state
-ports/react-native-relay/android/.gradle/
-ports/react-native-relay/android/local.properties
+mobile/react-native-relay/android/.gradle/
+mobile/react-native-relay/android/local.properties
 
 # Logs/temp files
 *.log
