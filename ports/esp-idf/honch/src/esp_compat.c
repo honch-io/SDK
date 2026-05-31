@@ -306,8 +306,8 @@ honch_err_t honch_init(const honch_config_t *config)
     }
     status = honch_esp_transport_ops_init(&transport_ops, &s_transport_ctx);
     if (status != HONCH_STATUS_OK) {
-            honch_esp_event_queue_ops_deinit(&s_storage_ctx);
-            honch_esp_platform_ops_deinit(&s_platform_ctx);
+        honch_esp_event_queue_ops_deinit(&s_storage_ctx);
+        honch_esp_platform_ops_deinit(&s_platform_ctx);
         honch_esp_clear_legacy_globals();
         honch_esp_init_finish(NULL);
         return honch_esp_status_to_err(status);
@@ -338,6 +338,7 @@ honch_err_t honch_init(const honch_config_t *config)
     honch_client_t *next = NULL;
     status = honch_core_init(&next, &core_config);
     if (status != HONCH_STATUS_OK) {
+        honch_esp_transport_ops_deinit(&s_transport_ctx);
         honch_esp_event_queue_ops_deinit(&s_storage_ctx);
         honch_esp_platform_ops_deinit(&s_platform_ctx);
         honch_esp_clear_legacy_globals();
@@ -366,6 +367,7 @@ honch_err_t honch_shutdown(void)
     if (honch_esp_gpio_shutdown_hook != NULL) {
         honch_esp_gpio_shutdown_hook();
     }
+    honch_esp_transport_ops_deinit(&s_transport_ctx);
     honch_esp_event_queue_ops_deinit(&s_storage_ctx);
     honch_esp_platform_ops_deinit(&s_platform_ctx);
     honch_esp_clear_legacy_globals();

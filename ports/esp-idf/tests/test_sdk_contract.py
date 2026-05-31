@@ -12,6 +12,28 @@ def read(relative_path: str) -> str:
     return (ROOT / relative_path).read_text()
 
 
+def c_function_body(source: str, name: str) -> str:
+    marker = f"{name}("
+    signature_start = source.find(marker)
+    if signature_start < 0:
+        raise AssertionError(f"function {name} not found")
+
+    open_brace = source.find("{", signature_start)
+    if open_brace < 0:
+        raise AssertionError(f"function {name} body not found")
+
+    depth = 0
+    for index in range(open_brace, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[open_brace + 1:index]
+
+    raise AssertionError(f"function {name} body is not closed")
+
+
 class EspIdfChunkWireTest(unittest.TestCase):
     def test_esp_idf_component_uses_repo_root_package_layout(self) -> None:
         root_cmake = read("CMakeLists.txt")
@@ -35,27 +57,70 @@ class EspIdfChunkWireTest(unittest.TestCase):
         transport = read("ports/esp-idf/honch/src/esp_transport_http.c")
         adapter = read("ports/esp-idf/honch/src/esp_core_adapter.h")
         cmake = read("ports/esp-idf/honch/CMakeLists.txt")
+        post_chunk = c_function_body(transport, "honch_esp_post_chunk")
+        ops_init = c_function_body(transport, "honch_esp_transport_ops_init")
+        ensure_ready = c_function_body(transport, "honch_esp_ensure_transport_ready")
 
         self.assertIn('"src/esp_transport_http.c"', cmake)
         self.assertIn("#include \"honch/core/transport.h\"", adapter)
         self.assertIn("esp_http_client_init", transport)
+        self.assertIn("esp_http_client_handle_t http_client", adapter)
+        self.assertIn("char *capture_url", adapter)
+        self.assertIn("keep_alive_enable = true", transport)
         self.assertIn("#include \"esp_event.h\"", transport)
         self.assertIn("#include \"esp_netif.h\"", transport)
-        self.assertIn("esp_event_loop_create_default()", transport)
-        self.assertIn("esp_netif_init()", transport)
+        self.assertIn("honch_esp_ensure_transport_ready()", ops_init)
+        self.assertIn("esp_event_loop_create_default()", ensure_ready)
+        self.assertIn("esp_netif_init()", ensure_ready)
+        self.assertNotIn("esp_event_loop_create_default()", post_chunk)
+        self.assertNotIn("esp_netif_init()", post_chunk)
         self.assertIn('"/capture"', transport)
         self.assertIn('"Content-Type", "application/vnd.honch.chunk"', transport)
         self.assertIn('"X-Honch-Project-Key"', transport)
         self.assertIn('"X-Honch-Stream-Id"', transport)
         self.assertIn("HONCH_TRANSPORT_CHUNK_STORED", transport)
         self.assertIn("HONCH_HTTP_TIMING", transport)
+        self.assertIn("reused_client", transport)
+        self.assertIn("client_reset", transport)
         self.assertIn(".post_chunk = honch_esp_post_chunk", transport)
-        self.assertIn(".ctx = NULL", transport)
-        self.assertNotIn(".ctx = ctx", transport)
+        self.assertIn(".ctx = ctx", transport)
+        self.assertNotIn(".ctx = NULL", transport)
         self.assertNotIn("post_batch", transport)
         self.assertNotIn("application/cbor", transport)
         self.assertNotIn("Content-Encoding", transport)
         self.assertNotIn("tdefl_compress_mem_to_heap", transport)
+
+    def test_esp_transport_reuses_http_client_and_deinitializes_it(self) -> None:
+        transport = read("ports/esp-idf/honch/src/esp_transport_http.c")
+        compat = read("ports/esp-idf/honch/src/esp_compat.c")
+        adapter = read("ports/esp-idf/honch/src/esp_core_adapter.h")
+
+        prepare_client = c_function_body(transport, "honch_esp_transport_prepare_client")
+        reset_client = c_function_body(transport, "honch_esp_transport_reset_http_client")
+        post_chunk = c_function_body(transport, "honch_esp_post_chunk")
+        deinit = c_function_body(transport, "honch_esp_transport_ops_deinit")
+        shutdown = c_function_body(compat, "honch_shutdown")
+
+        self.assertIn("honch_esp_transport_ops_deinit", adapter)
+        self.assertIn("if (transport->http_client != NULL && transport->timeout_ms == timeout_ms)", prepare_client)
+        self.assertIn("*reused_client = true;", prepare_client)
+        self.assertIn("honch_esp_transport_reset_http_client(transport);", prepare_client)
+        self.assertIn("esp_http_client_cleanup(transport->http_client);", reset_client)
+        self.assertIn("transport->http_client = NULL;", reset_client)
+        self.assertIn("esp_http_client_set_post_field(http_client, NULL, 0)", post_chunk)
+        self.assertNotIn("esp_http_client_cleanup(http_client);", post_chunk)
+        self.assertIn("honch_esp_transport_reset_http_client(ctx);", deinit)
+        self.assertIn("honch_esp_transport_clear_urls(ctx);", deinit)
+        self.assertIn("honch_esp_transport_ops_deinit(&s_transport_ctx);", shutdown)
+        self.assertLess(
+            shutdown.find("honch_core_shutdown(client)"),
+            shutdown.find("honch_esp_transport_ops_deinit(&s_transport_ctx);"),
+        )
+        busy_block = shutdown[
+            shutdown.find("if (status == HONCH_STATUS_ERROR_BUSY)") :
+            shutdown.find("if (honch_esp_gpio_shutdown_hook != NULL)")
+        ]
+        self.assertNotIn("honch_esp_transport_ops_deinit", busy_block)
 
     def test_esp_compat_layer_delegates_public_api_to_core(self) -> None:
         compat = read("ports/esp-idf/honch/src/esp_compat.c")
@@ -72,6 +137,7 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("honch_esp_event_queue_ops_init(", compat)
         self.assertIn("config->event_queue_ops", compat)
         self.assertIn("honch_esp_transport_ops_init(&transport_ops", compat)
+        self.assertIn("honch_esp_transport_ops_deinit(&s_transport_ctx)", compat)
         self.assertIn("honch_core_init(&next", compat)
         self.assertIn("honch_esp_client_acquire(&client)", compat)
         self.assertIn("honch_core_track(client", compat)
