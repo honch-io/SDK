@@ -17,6 +17,7 @@
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
 #include "honch.h"
+#include "nvs_flash.h"
 
 static const char *TAG = "honch_benchtest";
 
@@ -85,6 +86,16 @@ static int current_rssi(void)
     return 0;
 }
 
+static void init_nvs_for_wifi(void)
+{
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
+}
+
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data)
 {
@@ -110,6 +121,7 @@ static bool wifi_init_sta(void)
 {
     s_wifi_event_group = xEventGroupCreate();
 
+    init_nvs_for_wifi();
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_create_default_wifi_sta();
