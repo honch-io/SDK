@@ -33,6 +33,7 @@ typedef struct honch_esp_transport {
     char *endpoint_url;
     char *capture_url;
     int timeout_ms;
+    int configured_timeout_ms;
 } honch_esp_transport_t;
 
 honch_status_t honch_esp_platform_ops_init(honch_platform_ops_t *ops, honch_esp_platform_t *ctx);
@@ -44,5 +45,8 @@ honch_status_t honch_esp_event_queue_ops_init(
     uint8_t *buffer,
     size_t buffer_size);
 void honch_esp_event_queue_ops_deinit(honch_esp_storage_t *ctx);
-honch_status_t honch_esp_transport_ops_init(honch_transport_ops_t *ops, honch_esp_transport_t *ctx);
+honch_status_t honch_esp_transport_ops_init(
+    honch_transport_ops_t *ops,
+    honch_esp_transport_t *ctx,
+    unsigned int transport_timeout_ms);
 void honch_esp_transport_ops_deinit(honch_esp_transport_t *ctx);

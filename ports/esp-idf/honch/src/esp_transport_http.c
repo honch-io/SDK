@@ -170,9 +170,12 @@ static honch_status_t honch_esp_post_chunk(
 #ifdef HONCH_FLUSH_TIMING
     int64_t total_start_us = esp_timer_get_time();
 #endif
-    int timeout_ms = HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS > (unsigned int)INT_MAX ?
+    unsigned int configured_timeout_ms = transport->configured_timeout_ms > 0 ?
+        (unsigned int)transport->configured_timeout_ms :
+        HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS;
+    int timeout_ms = configured_timeout_ms > (unsigned int)INT_MAX ?
         INT_MAX :
-        (int)HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS;
+        (int)configured_timeout_ms;
 
 #ifdef HONCH_FLUSH_TIMING
     int64_t init_start_us = esp_timer_get_time();
@@ -305,13 +308,22 @@ static honch_status_t honch_esp_post_chunk(
     return return_status;
 }
 
-honch_status_t honch_esp_transport_ops_init(honch_transport_ops_t *ops, honch_esp_transport_t *ctx)
+honch_status_t honch_esp_transport_ops_init(
+    honch_transport_ops_t *ops,
+    honch_esp_transport_t *ctx,
+    unsigned int transport_timeout_ms)
 {
     if (ops == NULL || ctx == NULL) {
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
 
     *ctx = (honch_esp_transport_t) {0};
+    unsigned int effective_timeout_ms = transport_timeout_ms == 0u ?
+        HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS :
+        transport_timeout_ms;
+    ctx->configured_timeout_ms = effective_timeout_ms > (unsigned int)INT_MAX ?
+        INT_MAX :
+        (int)effective_timeout_ms;
     honch_status_t ready_status = honch_esp_ensure_transport_ready();
     if (ready_status != HONCH_STATUS_OK) {
         return ready_status;
@@ -331,4 +343,5 @@ void honch_esp_transport_ops_deinit(honch_esp_transport_t *ctx)
     honch_esp_transport_reset_http_client(ctx);
     honch_esp_transport_clear_urls(ctx);
     ctx->timeout_ms = 0;
+    ctx->configured_timeout_ms = 0;
 }

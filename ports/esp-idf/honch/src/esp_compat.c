@@ -304,7 +304,7 @@ honch_err_t honch_init(const honch_config_t *config)
             return honch_esp_status_to_err(status);
         }
     }
-    status = honch_esp_transport_ops_init(&transport_ops, &s_transport_ctx);
+    status = honch_esp_transport_ops_init(&transport_ops, &s_transport_ctx, config->transport_timeout_ms);
     if (status != HONCH_STATUS_OK) {
         honch_esp_event_queue_ops_deinit(&s_storage_ctx);
         honch_esp_platform_ops_deinit(&s_platform_ctx);
@@ -328,6 +328,7 @@ honch_err_t honch_init(const honch_config_t *config)
     }
     core_config.flush_interval_seconds = config->flush_interval_seconds;
     core_config.flush_event_threshold = config->flush_event_threshold;
+    core_config.transport_timeout_ms = config->transport_timeout_ms;
     core_config.battery_callback = config->battery_callback;
     core_config.battery_low_threshold = g_honch_battery_low_threshold;
     core_config.platform = &platform_ops;

@@ -40,8 +40,19 @@ repository as `components/honch`.
 
 ```c
 #include "honch.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 static uint8_t event_buffer[8192];
+
+static void honch_telemetry_task(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        honch_tick();
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
 
 void app_main(void)
 {
@@ -57,6 +68,8 @@ void app_main(void)
     };
 
     honch_init(&config);
+
+    xTaskCreate(honch_telemetry_task, "honch_telemetry", 4096, NULL, 2, NULL);
 
     // Track custom events
     honch_property_t button_props[] = {
@@ -124,14 +137,30 @@ idf.py flash monitor
 | `event_buffer_size`      | Yes      | —              | Size of the buffer (recommend >= 8192)     |
 | `flush_interval_seconds` | No       | 60             | How often to flush events                  |
 | `flush_event_threshold`  | No       | 30             | Flush when this many events are queued     |
+| `transport_timeout_ms`   | No       | 3000           | Per HTTP request timeout                   |
 | `battery_callback`       | No       | NULL           | Function returning 0-100 or -1             |
 | `battery_low_threshold`  | No       | 15             | Battery level that triggers `$battery_low` |
 | `state_storage_ops`      | No       | NULL           | Durable state storage for identity/version |
 | `event_queue_ops`        | No       | NULL           | Durable/custom event queue implementation  |
 
-Call `honch_tick()` periodically from your main loop or scheduler. The SDK
+Call `honch_tick()` periodically from a low-priority telemetry task. The SDK
 flushes after `flush_interval_seconds` or when the queue reaches
-`flush_event_threshold`.
+`flush_event_threshold`, and the flush path can perform blocking network I/O.
+Do not call `honch_tick()` or `honch_flush()` from an ISR, control loop, UI
+loop, or other customer-critical path. Keep `honch_track()` on product paths and
+run delivery from a background task that your firmware can afford to block for
+up to `transport_timeout_ms`.
+
+`honch_flush()` drains synchronously and can perform multiple HTTP requests.
+Use it only for explicit maintenance/shutdown moments where blocking is
+acceptable. `honch_shutdown()` emits `$device_shutdown` and then flushes
+synchronously, so call it from the same kind of non-critical context.
+
+The ESP-IDF port does not start an SDK-owned worker task. Use an
+application-owned FreeRTOS task so task priority, stack size, CPU affinity,
+watchdog policy, and shutdown ordering stay under firmware control. A future
+SDK-owned worker task should be opt-in only, after flush and shutdown drain
+budgets are explicit.
 
 Flush sends compact chunk wire frames to `POST /capture` with
 `Content-Type: application/vnd.honch.chunk`, `X-Honch-Project-Key`, and

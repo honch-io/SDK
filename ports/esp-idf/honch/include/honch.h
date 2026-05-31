@@ -53,6 +53,7 @@ typedef struct {
     size_t event_buffer_size;            // required, recommend >= 8192
     uint32_t flush_interval_seconds;     // optional, default 60
     uint32_t flush_event_threshold;      // optional, default 30
+    uint32_t transport_timeout_ms;       // optional, default 3000
     int (*battery_callback)(void);       // optional, returns 0-100 or -1 if unknown
     int battery_low_threshold;           // optional, default 15
     const honch_state_storage_ops_t *state_storage_ops; // optional, enables durable identity/version state
