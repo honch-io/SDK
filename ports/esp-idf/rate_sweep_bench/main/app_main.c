@@ -39,7 +39,7 @@ static const char *TAG = "honch_rate_sweep";
 
 typedef struct {
     uint64_t idle_runtime;
-    uint64_t total_runtime;
+    uint64_t wall_time_us;
     bool available;
 } cpu_snapshot_t;
 
@@ -114,6 +114,7 @@ static cpu_snapshot_t cpu_snapshot(void)
 {
     cpu_snapshot_t snapshot = {0};
 #if CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS && CONFIG_FREERTOS_USE_TRACE_FACILITY
+    snapshot.wall_time_us = (uint64_t)esp_timer_get_time();
     configRUN_TIME_COUNTER_TYPE total_runtime = 0;
     UBaseType_t count = uxTaskGetSystemState(
         s_task_status,
@@ -129,24 +130,28 @@ static cpu_snapshot_t cpu_snapshot(void)
             snapshot.idle_runtime += (uint64_t)s_task_status[i].ulRunTimeCounter;
         }
     }
-    snapshot.total_runtime = (uint64_t)total_runtime;
-    snapshot.available = snapshot.total_runtime > 0;
+    snapshot.available = total_runtime > 0 && snapshot.wall_time_us > 0;
 #endif
     return snapshot;
 }
 
 static uint32_t cpu_percent_x100(cpu_snapshot_t before, cpu_snapshot_t after)
 {
-    if (!before.available || !after.available || after.total_runtime <= before.total_runtime) {
+    if (!before.available || !after.available || after.wall_time_us <= before.wall_time_us) {
         return CPU_PERCENT_UNAVAILABLE;
     }
 
-    uint64_t total_delta = after.total_runtime - before.total_runtime;
+    uint64_t wall_delta_us = after.wall_time_us - before.wall_time_us;
+    uint64_t capacity_delta = wall_delta_us * (uint64_t)configNUMBER_OF_CORES;
     uint64_t idle_delta = after.idle_runtime >= before.idle_runtime
         ? after.idle_runtime - before.idle_runtime
         : 0;
-    uint64_t busy_delta = total_delta > idle_delta ? total_delta - idle_delta : 0;
-    return fixed_x100(busy_delta * 100u, total_delta);
+    if (idle_delta > capacity_delta) {
+        return CPU_PERCENT_UNAVAILABLE;
+    }
+
+    uint64_t busy_delta = capacity_delta - idle_delta;
+    return fixed_x100(busy_delta * 100u, capacity_delta);
 }
 
 static void window_add_track_sample(bench_window_t *window, uint32_t elapsed_us)
