@@ -16,6 +16,8 @@
 #define HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS 3000u
 #define HONCH_DEFAULT_FLUSH_INTERVAL_SECONDS 60u
 #define HONCH_DEFAULT_FLUSH_EVENT_THRESHOLD 30u
+#define HONCH_DEFAULT_FLUSH_MAX_BATCHES 1u
+#define HONCH_DEFAULT_SHUTDOWN_FLUSH_MAX_BATCHES 1u
 #define HONCH_DEFAULT_BATTERY_LOW_THRESHOLD 15
 #define HONCH_DEFAULT_FLUSH_RETRY_INITIAL_MS 1000u
 #define HONCH_DEFAULT_FLUSH_RETRY_MAX_MS 300000u
@@ -90,6 +92,8 @@ struct honch_client {
     unsigned int transport_timeout_ms;
     unsigned int flush_interval_seconds;
     size_t flush_event_threshold;
+    size_t flush_max_batches;
+    size_t shutdown_flush_max_batches;
     unsigned int flush_retry_initial_ms;
     unsigned int flush_retry_max_ms;
     uint32_t wire_v2_message_id_seed;
@@ -175,6 +179,7 @@ honch_status_t honch_queue_enqueue(honch_client_t *client, const unsigned char *
 honch_status_t honch_queue_clear(honch_client_t *client);
 honch_status_t honch_queue_count_pending(honch_client_t *client, size_t *count);
 honch_status_t honch_queue_flush_one_locked(honch_client_t *client, bool *progressed);
+honch_status_t honch_queue_flush_limited_locked(honch_client_t *client, size_t max_batches);
 honch_status_t honch_queue_flush_locked(honch_client_t *client);
 
 honch_status_t honch_client_enter(honch_client_t *client);

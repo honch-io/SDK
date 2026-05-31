@@ -43,6 +43,8 @@ typedef struct honch_core_config {
     unsigned int transport_timeout_ms;
     unsigned int flush_interval_seconds;
     size_t flush_event_threshold;
+    size_t flush_max_batches;
+    size_t shutdown_flush_max_batches;
     unsigned int flush_retry_initial_ms;
     unsigned int flush_retry_max_ms;
     int (*battery_callback)(void);

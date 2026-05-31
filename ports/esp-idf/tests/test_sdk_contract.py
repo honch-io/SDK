@@ -214,6 +214,40 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("3000", readme)
         self.assertNotIn("disable_background_flush", compat + public_header + readme)
 
+    def test_core_flush_and_shutdown_drains_are_bounded(self) -> None:
+        core = read("core/src/honch_core.c")
+        internal = read("core/src/honch_internal.h")
+        config = read("core/include/honch/core/config.h")
+        compat = read("ports/esp-idf/honch/src/esp_compat.c")
+        public_header = read("ports/esp-idf/honch/include/honch.h")
+        readme = read("ports/esp-idf/README.md")
+
+        core_flush = c_function_body(core, "honch_core_flush")
+        core_tick = c_function_body(core, "honch_core_tick")
+        shutdown = c_function_body(core, "honch_core_shutdown")
+
+        self.assertIn("#define HONCH_DEFAULT_FLUSH_MAX_BATCHES 1u", internal)
+        self.assertIn("#define HONCH_DEFAULT_SHUTDOWN_FLUSH_MAX_BATCHES 1u", internal)
+        self.assertIn("size_t flush_max_batches", config)
+        self.assertIn("size_t shutdown_flush_max_batches", config)
+        self.assertIn("size_t flush_max_batches", internal)
+        self.assertIn("size_t shutdown_flush_max_batches", internal)
+        self.assertIn("honch_queue_flush_limited_locked(client, client->flush_max_batches)", core_flush)
+        self.assertIn(
+            "honch_queue_flush_limited_locked(client, client->shutdown_flush_max_batches)",
+            shutdown,
+        )
+        self.assertIn("honch_queue_flush_one_locked(client, &progressed)", core_tick)
+        self.assertNotIn("honch_queue_flush_limited_locked", core_tick)
+        self.assertIn("uint32_t flush_max_batches", public_header)
+        self.assertIn("uint32_t shutdown_flush_max_batches", public_header)
+        self.assertIn("core_config.flush_max_batches = config->flush_max_batches", compat)
+        self.assertIn("core_config.shutdown_flush_max_batches = config->shutdown_flush_max_batches", compat)
+        self.assertIn("flush_max_batches", readme)
+        self.assertIn("shutdown_flush_max_batches", readme)
+        self.assertIn("bounded", readme)
+        self.assertIn("may remain queued", readme)
+
     def test_readme_only_documents_implemented_automatic_esp_properties(self) -> None:
         readme = read("ports/esp-idf/README.md")
         automatic = readme.split("## What gets sent automatically", 1)[1].split("## Configuration options", 1)[0]
