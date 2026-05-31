@@ -4,6 +4,7 @@
 #include "esp_core_adapter.h"
 
 #include <stddef.h>
+#include <stdint.h>
 #include <sys/time.h>
 
 #include "esp_log.h"
@@ -15,6 +16,13 @@
 
 static const char *TAG = "honch";
 static const int64_t HONCH_MIN_UNIX_TIME_SECONDS = 1577836800;
+#define HONCH_ESP_MUTEX_LOCK_TIMEOUT_MS 10u
+
+static TickType_t honch_esp_lock_ticks(uint32_t timeout_ms)
+{
+    TickType_t ticks = pdMS_TO_TICKS(timeout_ms);
+    return ticks == 0 ? 1 : ticks;
+}
 
 static uint64_t honch_esp_now_ms(void *ctx)
 {
@@ -96,9 +104,9 @@ static honch_status_t honch_esp_mutex_lock(void *ctx, void *mutex)
     if (mutex == NULL) {
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
-    return xSemaphoreTake((SemaphoreHandle_t)mutex, portMAX_DELAY) == pdTRUE ?
+    return xSemaphoreTake((SemaphoreHandle_t)mutex, honch_esp_lock_ticks(HONCH_ESP_MUTEX_LOCK_TIMEOUT_MS)) == pdTRUE ?
         HONCH_STATUS_OK :
-        HONCH_STATUS_ERROR_IO;
+        HONCH_STATUS_ERROR_BUSY;
 }
 
 static void honch_esp_mutex_unlock(void *ctx, void *mutex)

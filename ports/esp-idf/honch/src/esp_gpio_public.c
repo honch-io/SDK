@@ -6,9 +6,12 @@
 #include "esp_gpio_adapter.h"
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+
+#define HONCH_ESP_GPIO_LOCK_TIMEOUT_MS 10u
 
 static bool s_gpio_initialized = false;
 static StaticSemaphore_t s_gpio_lifecycle_mutex_storage;
@@ -16,6 +19,12 @@ static SemaphoreHandle_t s_gpio_lifecycle_mutex = NULL;
 static portMUX_TYPE s_gpio_lifecycle_mutex_init_lock = portMUX_INITIALIZER_UNLOCKED;
 
 extern bool honch_esp_is_initialized(void);
+
+static TickType_t honch_gpio_ticks(uint32_t timeout_ms)
+{
+    TickType_t ticks = pdMS_TO_TICKS(timeout_ms);
+    return ticks == 0 ? 1 : ticks;
+}
 
 static honch_err_t honch_gpio_lifecycle_lock(void)
 {
@@ -29,7 +38,10 @@ static honch_err_t honch_gpio_lifecycle_lock(void)
     if (s_gpio_lifecycle_mutex == NULL) {
         return HONCH_ERR_INTERNAL;
     }
-    return xSemaphoreTake(s_gpio_lifecycle_mutex, portMAX_DELAY) == pdTRUE ? HONCH_OK : HONCH_ERR_INTERNAL;
+    if (xSemaphoreTake(s_gpio_lifecycle_mutex, honch_gpio_ticks(HONCH_ESP_GPIO_LOCK_TIMEOUT_MS)) != pdTRUE) {
+        return HONCH_ERR_BUSY;
+    }
+    return HONCH_OK;
 }
 
 static void honch_gpio_lifecycle_unlock(void)

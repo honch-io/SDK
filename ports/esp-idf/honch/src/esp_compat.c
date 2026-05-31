@@ -10,6 +10,7 @@
 #include "honch_internal.h"
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -18,6 +19,7 @@
 #include "freertos/semphr.h"
 
 static const char *TAG = "honch";
+#define HONCH_ESP_CLIENT_LOCK_TIMEOUT_MS 10u
 
 static honch_client_t *s_client = NULL;
 static bool s_client_initializing = false;
@@ -47,7 +49,13 @@ extern void honch_esp_gpio_shutdown_hook(void) __attribute__((weak));
 
 static honch_err_t honch_esp_status_to_err(honch_status_t status);
 
-static void honch_esp_client_lock(void)
+static TickType_t honch_esp_lock_ticks(uint32_t timeout_ms)
+{
+    TickType_t ticks = pdMS_TO_TICKS(timeout_ms);
+    return ticks == 0 ? 1 : ticks;
+}
+
+static honch_err_t honch_esp_client_lock(void)
 {
     if (s_client_mutex == NULL) {
         portENTER_CRITICAL(&s_client_mutex_init_lock);
@@ -56,9 +64,13 @@ static void honch_esp_client_lock(void)
         }
         portEXIT_CRITICAL(&s_client_mutex_init_lock);
     }
-    if (s_client_mutex != NULL) {
-        (void)xSemaphoreTake(s_client_mutex, portMAX_DELAY);
+    if (s_client_mutex == NULL) {
+        return HONCH_ERR_INTERNAL;
     }
+    if (xSemaphoreTake(s_client_mutex, honch_esp_lock_ticks(HONCH_ESP_CLIENT_LOCK_TIMEOUT_MS)) != pdTRUE) {
+        return HONCH_ERR_BUSY;
+    }
+    return HONCH_OK;
 }
 
 static void honch_esp_client_unlock(void)
@@ -75,7 +87,10 @@ static honch_err_t honch_esp_client_acquire(honch_client_t **out)
     }
     *out = NULL;
 
-    honch_esp_client_lock();
+    honch_err_t err = honch_esp_client_lock();
+    if (err != HONCH_OK) {
+        return err;
+    }
 
     honch_client_t *client = s_client;
     if (client == NULL) {
@@ -106,7 +121,10 @@ static honch_err_t honch_esp_client_detach(honch_client_t **out)
     }
     *out = NULL;
 
-    honch_esp_client_lock();
+    honch_err_t err = honch_esp_client_lock();
+    if (err != HONCH_OK) {
+        return err;
+    }
 
     if (s_client == NULL) {
         honch_esp_client_unlock();
@@ -122,7 +140,10 @@ static honch_err_t honch_esp_client_detach(honch_client_t **out)
 
 static honch_err_t honch_esp_init_begin(void)
 {
-    honch_esp_client_lock();
+    honch_err_t err = honch_esp_client_lock();
+    if (err != HONCH_OK) {
+        return err;
+    }
 
     if (s_client != NULL || s_client_initializing || s_client_shutting_down) {
         honch_esp_client_unlock();
@@ -134,24 +155,32 @@ static honch_err_t honch_esp_init_begin(void)
     return HONCH_OK;
 }
 
-static void honch_esp_init_finish(honch_client_t *client)
+static honch_err_t honch_esp_init_finish(honch_client_t *client)
 {
-    honch_esp_client_lock();
+    honch_err_t err = honch_esp_client_lock();
+    if (err != HONCH_OK) {
+        return err;
+    }
     s_client = client;
     s_client_initializing = false;
     honch_esp_client_unlock();
+    return HONCH_OK;
 }
 
 static void honch_esp_shutdown_finish(void)
 {
-    honch_esp_client_lock();
+    if (honch_esp_client_lock() != HONCH_OK) {
+        return;
+    }
     s_client_shutting_down = false;
     honch_esp_client_unlock();
 }
 
 static void honch_esp_shutdown_restore(honch_client_t *client)
 {
-    honch_esp_client_lock();
+    if (honch_esp_client_lock() != HONCH_OK) {
+        return;
+    }
     s_client = client;
     s_client_shutting_down = false;
     honch_esp_client_unlock();
@@ -160,7 +189,9 @@ static void honch_esp_shutdown_restore(honch_client_t *client)
 bool honch_esp_is_initialized(void)
 {
     bool initialized = false;
-    honch_esp_client_lock();
+    if (honch_esp_client_lock() != HONCH_OK) {
+        return false;
+    }
     initialized = s_client != NULL;
     honch_esp_client_unlock();
     return initialized;

@@ -21,6 +21,9 @@ static const char *TAG = "honch";
 #define MAX_GPIO_PINS 8
 #define DEBOUNCE_MS 50
 #define HONCH_GPIO_SHUTDOWN_SENTINEL UINT32_MAX
+#define HONCH_ESP_GPIO_LOCK_TIMEOUT_MS 10u
+#define HONCH_ESP_GPIO_WORKER_LOCK_TIMEOUT_MS 1000u
+#define HONCH_ESP_GPIO_SHUTDOWN_TIMEOUT_MS 100u
 
 typedef struct {
     gpio_num_t pin;
@@ -36,6 +39,12 @@ static SemaphoreHandle_t s_gpio_exit_sem = NULL;
 static SemaphoreHandle_t s_mapping_mutex = NULL;
 static volatile bool s_running = false;
 static bool s_isr_service_installed = false;
+
+static TickType_t honch_gpio_ticks(uint32_t timeout_ms)
+{
+    TickType_t ticks = pdMS_TO_TICKS(timeout_ms);
+    return ticks == 0 ? 1 : ticks;
+}
 
 static bool honch_gpio_mapping_lock(TickType_t timeout)
 {
@@ -92,7 +101,7 @@ static void gpio_worker_task(void *arg)
             char event_name[sizeof(s_mappings[0].event_name)] = {0};
 
             // Find the mapping
-            if (honch_gpio_mapping_lock(pdMS_TO_TICKS(1000))) {
+            if (honch_gpio_mapping_lock(honch_gpio_ticks(HONCH_ESP_GPIO_WORKER_LOCK_TIMEOUT_MS))) {
                 for (int i = 0; i < s_mapping_count; i++) {
                     if (s_mappings[i].pin == (gpio_num_t)pin) {
                         // Debounce check
@@ -172,7 +181,7 @@ void honch_gpio_deinit(void)
     s_running = false;
 
     // Remove ISR handlers
-    if (honch_gpio_mapping_lock(portMAX_DELAY)) {
+    if (honch_gpio_mapping_lock(honch_gpio_ticks(HONCH_ESP_GPIO_LOCK_TIMEOUT_MS))) {
         for (int i = 0; i < s_mapping_count; i++) {
             gpio_isr_handler_remove(s_mappings[i].pin);
         }
@@ -185,9 +194,19 @@ void honch_gpio_deinit(void)
         (void)xQueueSend(s_gpio_queue, &sentinel, 0);
     }
 
+    bool worker_stopped = true;
     if (gpio_task && s_gpio_exit_sem) {
-        (void)xSemaphoreTake(s_gpio_exit_sem, portMAX_DELAY);
-        s_gpio_task = NULL;
+        worker_stopped =
+            xSemaphoreTake(s_gpio_exit_sem, honch_gpio_ticks(HONCH_ESP_GPIO_SHUTDOWN_TIMEOUT_MS)) == pdTRUE;
+        if (worker_stopped) {
+            s_gpio_task = NULL;
+        } else {
+            ESP_LOGW(TAG, "Timed out waiting for GPIO worker shutdown");
+        }
+    }
+
+    if (!worker_stopped) {
+        return;
     }
 
     if (s_gpio_queue) {
@@ -200,7 +219,7 @@ void honch_gpio_deinit(void)
         s_gpio_exit_sem = NULL;
     }
 
-    if (honch_gpio_mapping_lock(portMAX_DELAY)) {
+    if (honch_gpio_mapping_lock(honch_gpio_ticks(HONCH_ESP_GPIO_LOCK_TIMEOUT_MS))) {
         s_mapping_count = 0;
         memset(s_mappings, 0, sizeof(s_mappings));
         honch_gpio_mapping_unlock();
@@ -251,8 +270,8 @@ honch_err_t honch_gpio_register(gpio_num_t pin, const char *event_name,
     strncpy(next_mapping.event_name, event_name, sizeof(next_mapping.event_name) - 1);
     next_mapping.event_name[sizeof(next_mapping.event_name) - 1] = '\0';
 
-    if (!honch_gpio_mapping_lock(portMAX_DELAY)) {
-        return HONCH_ERR_INTERNAL;
+    if (!honch_gpio_mapping_lock(honch_gpio_ticks(HONCH_ESP_GPIO_LOCK_TIMEOUT_MS))) {
+        return HONCH_ERR_BUSY;
     }
 
     // Check if pin is already registered, replace if so
