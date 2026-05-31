@@ -61,6 +61,26 @@ class ArduinoTLSConfigTests(unittest.TestCase):
 
         self.assertIn("arduino_post_chunk,\n      nullptr,\n      ctx,", transport)
 
+    def test_arduino_shared_locks_are_bounded_and_fail_open(self) -> None:
+        platform = read("ports/arduino/src/honch_arduino_platform.cpp")
+
+        self.assertNotIn("portMAX_DELAY", platform)
+        self.assertIn("HONCH_ARDUINO_MUTEX_LOCK_TIMEOUT_MS", platform)
+        self.assertIn("pdMS_TO_TICKS(HONCH_ARDUINO_MUTEX_LOCK_TIMEOUT_MS)", platform)
+        self.assertIn("try_lock_for(", platform)
+        self.assertIn("std::chrono::milliseconds(HONCH_ARDUINO_MUTEX_LOCK_TIMEOUT_MS)", platform)
+        self.assertIn("HONCH_ERROR_BUSY", platform)
+
+    def test_vendored_core_hides_atomic_storage_from_cxx_builds(self) -> None:
+        internal = read("ports/arduino/src/honch_internal.h")
+        core = read("ports/arduino/src/honch_core.c")
+
+        self.assertNotIn("#include <stdatomic.h>", internal)
+        self.assertNotIn("atomic_bool auto_property_buffer_in_use", internal)
+        self.assertIn("honch_atomic_bool_t auto_property_buffer_in_use", internal)
+        self.assertIn("honch_atomic_bool_compare_exchange", core)
+        self.assertIn("honch_atomic_bool_store", core)
+
 
 if __name__ == "__main__":
     unittest.main()

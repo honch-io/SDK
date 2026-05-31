@@ -18,6 +18,9 @@ class ArduinoCIWorkflowTests(unittest.TestCase):
         self.assertIn("check-core-sync.sh", script)
         self.assertIn("--build-path", script)
         self.assertIn("arduino-cli not found; install arduino-cli or omit --require-arduino-cli", script)
+        self.assertIn("arduino-cli core list", script)
+        self.assertIn("Arduino ESP32 platform not installed; skipped Arduino example compile checks", script)
+        self.assertIn("arduino-cli core install esp32:esp32", script)
 
     def test_vendored_core_sync_script_checks_sources_and_headers(self) -> None:
         script = read("ports/arduino/scripts/check-core-sync.sh")

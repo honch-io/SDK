@@ -132,5 +132,14 @@ int main() {
   assert(platformOps.now_ms(platformOps.ctx) == 1700000012000ULL);
   assert(platformOps.uptime_ms(platformOps.ctx) == 12000);
   honch_arduino_host_clear_epoch_millis();
+
+  void *mutex = NULL;
+  assert(platformOps.mutex_create(platformOps.ctx, &mutex) == HONCH_OK);
+  assert(mutex != NULL);
+  assert(platformOps.mutex_lock(platformOps.ctx, mutex) == HONCH_OK);
+  assert(platformOps.mutex_lock(platformOps.ctx, mutex) == HONCH_ERROR_BUSY);
+  platformOps.mutex_unlock(platformOps.ctx, mutex);
+  platformOps.mutex_destroy(platformOps.ctx, mutex);
+
   return 0;
 }

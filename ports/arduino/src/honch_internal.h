@@ -4,7 +4,6 @@
 #include "honch/core/honch.h"
 #include "honch/core/wire_v2.h"
 
-#include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -45,6 +44,34 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef struct honch_atomic_bool {
+    bool value;
+} honch_atomic_bool_t;
+
+static inline void honch_atomic_bool_init(honch_atomic_bool_t *target, bool value)
+{
+    __atomic_store_n(&target->value, value, __ATOMIC_RELAXED);
+}
+
+static inline bool honch_atomic_bool_compare_exchange(
+    honch_atomic_bool_t *target,
+    bool *expected,
+    bool desired)
+{
+    return __atomic_compare_exchange_n(
+        &target->value,
+        expected,
+        desired,
+        false,
+        __ATOMIC_ACQ_REL,
+        __ATOMIC_ACQUIRE);
+}
+
+static inline void honch_atomic_bool_store(honch_atomic_bool_t *target, bool value)
+{
+    __atomic_store_n(&target->value, value, __ATOMIC_RELEASE);
+}
 
 typedef struct honch_buffer {
     char *data;
@@ -103,7 +130,7 @@ struct honch_client {
     char *session_id;
     honch_wire_v2_property_t build_properties[HONCH_MAX_EVENT_PROPERTIES];
     honch_wire_v2_property_t auto_property_buffers[HONCH_AUTO_PROPERTY_BUFFER_COUNT][HONCH_MAX_EVENT_PROPERTIES];
-    atomic_bool auto_property_buffer_in_use[HONCH_AUTO_PROPERTY_BUFFER_COUNT];
+    honch_atomic_bool_t auto_property_buffer_in_use[HONCH_AUTO_PROPERTY_BUFFER_COUNT];
     honch_payload_t flush_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
     uint64_t flush_sequences[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
     honch_storage_event_t flush_storage_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
