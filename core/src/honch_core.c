@@ -121,7 +121,7 @@ static honch_status_t honch_acquire_auto_property_buffer(
 
     for (size_t i = 0u; i < HONCH_AUTO_PROPERTY_BUFFER_COUNT; i++) {
         bool expected = false;
-        if (atomic_compare_exchange_strong(
+        if (honch_atomic_bool_compare_exchange(
                 &client->auto_property_buffer_in_use[i],
                 &expected,
                 true)) {
@@ -145,7 +145,7 @@ static void honch_auto_properties_snapshot_free(honch_auto_properties_snapshot_t
 
     if (snapshot->buffer_acquired && snapshot->client != NULL &&
         snapshot->buffer_index < HONCH_AUTO_PROPERTY_BUFFER_COUNT) {
-        atomic_store(
+        honch_atomic_bool_store(
             &snapshot->client->auto_property_buffer_in_use[snapshot->buffer_index],
             false);
     }
@@ -990,7 +990,7 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
         return HONCH_ERROR_OUT_OF_MEMORY;
     }
     for (size_t i = 0u; i < HONCH_AUTO_PROPERTY_BUFFER_COUNT; i++) {
-        atomic_init(&next->auto_property_buffer_in_use[i], false);
+        honch_atomic_bool_init(&next->auto_property_buffer_in_use[i], false);
     }
     if (config->platform != NULL) {
         next->platform_ops = *config->platform;

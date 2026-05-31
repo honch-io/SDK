@@ -34,6 +34,15 @@ cmake --build "$ROOT_DIR/build/arduino-host"
 "$ROOT_DIR/build/arduino-host/honch_arduino_wrapper_test"
 
 if command -v arduino-cli >/dev/null 2>&1; then
+  if ! arduino-cli core list | grep -q '^esp32:esp32 '; then
+    if [[ "$HONCH_REQUIRE_ARDUINO_CLI" -eq 1 ]]; then
+      echo "Arduino ESP32 platform not installed; run: arduino-cli core install esp32:esp32" >&2
+      exit 1
+    fi
+    echo "Arduino ESP32 platform not installed; skipped Arduino example compile checks" >&2
+    exit 0
+  fi
+
   IFS=' ' read -r -a HONCH_ARDUINO_FQBNS <<< "${HONCH_ARDUINO_FQBNS:-esp32:esp32:esp32 esp32:esp32:esp32s2 esp32:esp32:esp32s3 esp32:esp32:esp32c3 esp32:esp32:esp32c6}"
   HONCH_ARDUINO_EXAMPLES=(
     "$ROOT_DIR/ports/arduino/examples/HonchBasic"

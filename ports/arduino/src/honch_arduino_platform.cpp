@@ -13,9 +13,12 @@
 #include <freertos/semphr.h>
 #include <time.h>
 #else
+#include <chrono>
 #include <mutex>
 #include <new>
 #endif
+
+#define HONCH_ARDUINO_MUTEX_LOCK_TIMEOUT_MS 10u
 
 #ifndef ARDUINO
 namespace {
@@ -111,7 +114,7 @@ honch_status_t honch_arduino_mutex_create(void *ctx, void **mutex) {
   }
   *mutex = handle;
 #else
-  std::mutex *handle = new (std::nothrow) std::mutex();
+  std::timed_mutex *handle = new (std::nothrow) std::timed_mutex();
   if (handle == nullptr) {
     return HONCH_ERROR_OUT_OF_MEMORY;
   }
@@ -128,7 +131,7 @@ void honch_arduino_mutex_destroy(void *ctx, void *mutex) {
 #ifdef ARDUINO
   vSemaphoreDelete((SemaphoreHandle_t)mutex);
 #else
-  delete static_cast<std::mutex *>(mutex);
+  delete static_cast<std::timed_mutex *>(mutex);
 #endif
 }
 
@@ -138,10 +141,14 @@ honch_status_t honch_arduino_mutex_lock(void *ctx, void *mutex) {
     return HONCH_ERROR_INVALID_ARGUMENT;
   }
 #ifdef ARDUINO
-  return xSemaphoreTake((SemaphoreHandle_t)mutex, portMAX_DELAY) == pdTRUE ? HONCH_OK : HONCH_ERROR_IO;
+  return xSemaphoreTake((SemaphoreHandle_t)mutex, pdMS_TO_TICKS(HONCH_ARDUINO_MUTEX_LOCK_TIMEOUT_MS)) == pdTRUE ?
+      HONCH_OK :
+      HONCH_ERROR_BUSY;
 #else
-  static_cast<std::mutex *>(mutex)->lock();
-  return HONCH_OK;
+  return static_cast<std::timed_mutex *>(mutex)->try_lock_for(
+      std::chrono::milliseconds(HONCH_ARDUINO_MUTEX_LOCK_TIMEOUT_MS)) ?
+      HONCH_OK :
+      HONCH_ERROR_BUSY;
 #endif
 }
 
@@ -153,7 +160,7 @@ void honch_arduino_mutex_unlock(void *ctx, void *mutex) {
 #ifdef ARDUINO
   (void)xSemaphoreGive((SemaphoreHandle_t)mutex);
 #else
-  static_cast<std::mutex *>(mutex)->unlock();
+  static_cast<std::timed_mutex *>(mutex)->unlock();
 #endif
 }
 
