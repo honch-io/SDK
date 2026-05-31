@@ -12,6 +12,7 @@
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
+#include "nvs_flash.h"
 #include "esp_sntp.h"
 #include "honch.h"
 
@@ -24,6 +25,18 @@ static const char *TAG = "honch_example";
 
 static EventGroupHandle_t s_wifi_event_group;
 static int s_retry_num = 0;
+
+static void init_wifi_nvs(void)
+{
+    // ESP-IDF Wi-Fi opens NVS during esp_wifi_init(), even when the station
+    // configuration is later stored in RAM only.
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+}
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                 int32_t event_id, void *event_data)
@@ -48,6 +61,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
 
 static void wifi_init_sta(void)
 {
+    init_wifi_nvs();
+
     s_wifi_event_group = xEventGroupCreate();
 
     ESP_ERROR_CHECK(esp_netif_init());
