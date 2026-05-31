@@ -38,6 +38,9 @@ typedef struct fake_state_storage {
     int post_chunk_calls;
     uint64_t retry_after_ms;
     int retry_after_calls;
+    int force_connectivity;
+    int connectivity_available;
+    int connectivity_calls;
 } fake_state_storage_t;
 
 static honch_core_config_t fake_config(
@@ -358,6 +361,16 @@ static uint64_t fake_retry_after_ms(void *ctx)
     return storage->retry_after_ms;
 }
 
+static int fake_connectivity_available(void *ctx)
+{
+    fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
+    if (storage == NULL) {
+        return 1;
+    }
+    storage->connectivity_calls++;
+    return storage->force_connectivity ? storage->connectivity_available : 1;
+}
+
 static honch_client_t *g_callback_lock_client = NULL;
 static int g_battery_callback_saw_unlocked_mutex = 0;
 static int g_auto_properties_callback_saw_unlocked_mutex = 0;
@@ -450,6 +463,8 @@ static honch_core_config_t fake_config(
         .environment = "test",
         .queue_directory = "fake",
         .durability_mode = HONCH_DURABILITY_OS_BUFFERED,
+        .connectivity_callback = fake_connectivity_available,
+        .connectivity_userdata = storage,
         .platform = platform,
         .state_storage = state_ops,
         .event_queue = queue_ops,
@@ -1038,6 +1053,73 @@ static void test_empty_flush_is_not_rate_limited_during_min_spacing(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
+static void test_tick_skips_transport_while_connectivity_unavailable(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .track_queue_depth = 1,
+        .now_ms = 10000u,
+        .force_now_ms = 1,
+        .force_connectivity = 1,
+        .connectivity_available = 0
+    };
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    config.flush_event_threshold = 1u;
+    config.flush_min_interval_ms = HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(honch_core_track(client, "offline_tick", NULL, 0u) == HONCH_OK);
+    assert(honch_core_tick(client) == HONCH_OK);
+    assert(storage.connectivity_calls == 1);
+    assert(storage.post_chunk_calls == 0);
+    assert(client->scheduler_flush_requested);
+
+    storage.connectivity_available = 1;
+    assert(honch_core_tick(client) == HONCH_OK);
+    assert(storage.connectivity_calls == 2);
+    assert(storage.post_chunk_calls == 1);
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+static void test_flush_returns_offline_without_transport_attempt(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .track_queue_depth = 1,
+        .now_ms = 20000u,
+        .force_now_ms = 1,
+        .force_connectivity = 1,
+        .connectivity_available = 0
+    };
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    config.flush_event_threshold = 1u;
+    config.flush_min_interval_ms = HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(honch_core_track(client, "offline_flush", NULL, 0u) == HONCH_OK);
+    assert(honch_core_flush(client) == HONCH_ERROR_OFFLINE);
+    assert(storage.connectivity_calls == 1);
+    assert(storage.post_chunk_calls == 0);
+    assert(client->scheduler_flush_requested);
+    assert(client->current_retry_delay_ms == client->flush_retry_initial_ms);
+
+    storage.connectivity_available = 1;
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(storage.connectivity_calls == 2);
+    assert(storage.post_chunk_calls == 1);
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
 static void test_zero_min_spacing_allows_back_to_back_flushes(void)
 {
     fake_state_storage_t storage = {
@@ -1092,6 +1174,8 @@ int main(void)
     test_tick_preserves_requested_flush_during_min_spacing();
     test_flush_returns_rate_limited_during_min_spacing();
     test_empty_flush_is_not_rate_limited_during_min_spacing();
+    test_tick_skips_transport_while_connectivity_unavailable();
+    test_flush_returns_offline_without_transport_attempt();
     test_zero_min_spacing_allows_back_to_back_flushes();
     return 0;
 }

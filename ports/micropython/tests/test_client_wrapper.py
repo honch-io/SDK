@@ -37,6 +37,9 @@ class FakeCoreClient:
     def flush(self):
         self.calls.append(("flush",))
 
+    def tick(self):
+        self.calls.append(("tick",))
+
     def reset(self):
         self.calls.append(("reset",))
 
@@ -69,6 +72,7 @@ class ClientWrapperTests(unittest.TestCase):
         fake.ERROR_NOT_INITIALIZED = 8
         fake.ERROR_QUEUE_FULL = 10
         fake.ERROR_TIMEOUT = 11
+        fake.ERROR_OFFLINE = 15
         sys.modules["_honch_core"] = fake
 
     def tearDown(self):
@@ -150,6 +154,29 @@ class ClientWrapperTests(unittest.TestCase):
 
         self.assertFalse(hasattr(client.config, "enable_wire_v2"))
         self.assertNotIn("enable_wire_v2", client._core.config)
+
+    def test_connectivity_callback_skips_tick_and_blocks_flush(self):
+        honch = importlib.import_module("honch")
+        state = {"connected": False}
+
+        client = honch.Honch(
+            api_key="key",
+            endpoint_url="http://collector.local",
+            device_model="model",
+            firmware_version="1.0",
+            event_buffer=bytearray(8192),
+            connectivity_callback=lambda: state["connected"],
+        )
+
+        client.tick()
+        with self.assertRaises(honch.OfflineError):
+            client.flush()
+        self.assertEqual(client._core.calls, [])
+
+        state["connected"] = True
+        client.tick()
+        client.flush()
+        self.assertEqual(client._core.calls, [("tick",), ("flush",)])
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ from .errors import (
     HonchError,
     InvalidArgumentError,
     NotInitializedError,
+    OfflineError,
     RateLimitedError,
     RejectedError,
     ServerError,
@@ -76,9 +77,13 @@ class Honch:
         self.connectivity_changed(False)
 
     def flush(self):
+        if not self._connectivity_available():
+            raise OfflineError("offline")
         self._call("flush")
 
     def tick(self):
+        if not self._connectivity_available():
+            return
         self._call("tick")
 
     def reset(self):
@@ -93,6 +98,12 @@ class Honch:
             return getattr(self._core, name)(*args)
         except Exception as exc:
             _raise_mapped(exc)
+
+    def _connectivity_available(self):
+        callback = self.config.connectivity_callback
+        if callback is None:
+            return True
+        return bool(callback())
 
 
 def _config_to_dict(config):
@@ -134,6 +145,8 @@ def _raise_mapped(exc):
         raise StorageError(str(exc))
     if status == getattr(_honch_core, "ERROR_RATE_LIMITED", None):
         raise RateLimitedError(str(exc))
+    if status == getattr(_honch_core, "ERROR_OFFLINE", None):
+        raise OfflineError(str(exc))
     if status == getattr(_honch_core, "ERROR_SERVER", None):
         raise ServerError(str(exc))
     if status == getattr(_honch_core, "ERROR_REJECTED", None):
@@ -163,4 +176,5 @@ _STATUS_BY_MESSAGE = {
     "timeout": getattr(_honch_core, "ERROR_TIMEOUT", None),
     "busy": getattr(_honch_core, "ERROR_BUSY", None),
     "not supported": getattr(_honch_core, "ERROR_NOT_SUPPORTED", None),
+    "offline": getattr(_honch_core, "ERROR_OFFLINE", None),
 } if _honch_core is not None else {}

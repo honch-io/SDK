@@ -25,6 +25,8 @@ typedef honch_status_t (*honch_auto_properties_fn)(
     honch_property_sink_fn sink,
     void *sink_ctx);
 
+typedef int (*honch_connectivity_fn)(void *userdata);
+
 typedef enum honch_durability_mode {
     HONCH_DURABILITY_SYNC_ALWAYS = 0,
     HONCH_DURABILITY_OS_BUFFERED = 1
@@ -54,6 +56,8 @@ typedef struct honch_core_config {
     int battery_low_threshold;
     honch_auto_properties_fn auto_properties_callback;
     void *auto_properties_userdata;
+    honch_connectivity_fn connectivity_callback;
+    void *connectivity_userdata;
     honch_durability_mode_t durability_mode;
     const honch_platform_ops_t *platform;
     const honch_state_storage_ops_t *state_storage;

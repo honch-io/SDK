@@ -14,6 +14,10 @@ class TransportError(HonchError):
     pass
 
 
+class OfflineError(TransportError):
+    pass
+
+
 class RateLimitedError(TransportError):
     pass
 

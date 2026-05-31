@@ -255,6 +255,23 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("10000", readme)
         self.assertIn("HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS", readme)
 
+    def test_esp_idf_connectivity_gate_is_configurable(self) -> None:
+        compat = read("ports/esp-idf/honch/src/esp_compat.c")
+        public_header = read("ports/esp-idf/honch/include/honch.h")
+        readme = read("ports/esp-idf/README.md")
+        config = read("core/include/honch/core/config.h")
+        core = read("core/src/honch_core.c")
+
+        self.assertIn("honch_connectivity_fn connectivity_callback", config)
+        self.assertIn("void *connectivity_userdata", config)
+        self.assertIn("bool (*connectivity_callback)(void)", public_header)
+        self.assertIn("core_config.connectivity_callback = honch_esp_connectivity_callback", compat)
+        self.assertIn("core_config.connectivity_userdata = NULL", compat)
+        self.assertIn("HONCH_STATUS_ERROR_OFFLINE", compat)
+        self.assertIn("honch_scheduler_connectivity_ready_locked", core)
+        self.assertIn("connectivity_callback", readme)
+        self.assertIn("Do not call `honch_tick()` while connectivity is unavailable", readme)
+
     def test_esp_idf_benchmarks_disable_flush_spacing(self) -> None:
         benchtest = read("ports/esp-idf/benchtest/main/app_main.c")
         rate_sweep = read("ports/esp-idf/rate_sweep_bench/main/app_main.c")

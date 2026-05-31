@@ -55,3 +55,4 @@ class HonchConfig:
         self.battery_callback = kwargs.get("battery_callback")
         self.battery_low_threshold = int(kwargs.get("battery_low_threshold") or DEFAULT_BATTERY_LOW_THRESHOLD)
         self.auto_properties_callback = kwargs.get("auto_properties_callback")
+        self.connectivity_callback = kwargs.get("connectivity_callback")

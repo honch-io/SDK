@@ -140,6 +140,8 @@ struct honch_client {
     int battery_low_threshold;
     honch_auto_properties_fn auto_properties_callback;
     void *auto_properties_userdata;
+    honch_connectivity_fn connectivity_callback;
+    void *connectivity_userdata;
     bool battery_low_emitted;
     uint64_t sequence;
     size_t queued_event_count;

@@ -193,6 +193,8 @@ Optional config:
 - `battery_low_threshold`: defaults to `15`
 - `auto_properties_callback`: optional platform adapter hook for automatic event properties
 - `auto_properties_userdata`: caller-owned context passed to `auto_properties_callback`
+- `connectivity_callback`: optional fast callback; return `0` while offline or the radio is off
+- `connectivity_userdata`: caller-owned context passed to `connectivity_callback`
 - `durability_mode`: defaults to `HONCH_DURABILITY_SYNC_ALWAYS`; set
   `HONCH_DURABILITY_OS_BUFFERED` to skip per-event fsyncs for lower enqueue
   latency when power-loss durability is not required
@@ -257,6 +259,11 @@ queued events. Successful outbound uploads are spaced by
 `flush_min_interval_ms`, which defaults to 10000 ms. Retryable transport
 failures use exponential backoff with jitter. Shutdown always attempts a
 synchronous best-effort flush for a valid client.
+
+Do not call `honch_tick()` while connectivity is unavailable. If your scheduler
+cannot guarantee that, provide `connectivity_callback`; offline ticks keep the
+flush pending, and explicit `honch_flush()` returns `HONCH_ERROR_OFFLINE`
+without DNS/TLS work or retry backoff growth.
 
 Flushes use the compact wire encoder in the shared core and send chunk frames to
 `POST /capture` with `Content-Type: application/vnd.honch.chunk`. The project

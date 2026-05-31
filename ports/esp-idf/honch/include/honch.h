@@ -33,6 +33,7 @@ typedef enum {
     HONCH_ERR_TIMEOUT,
     HONCH_ERR_BUSY,
     HONCH_ERR_NOT_SUPPORTED,
+    HONCH_ERR_OFFLINE,
     HONCH_ERR_INTERNAL,
 } honch_err_t;
 
@@ -56,6 +57,7 @@ typedef struct {
     uint32_t transport_timeout_ms;       // optional, default 3000
     int (*battery_callback)(void);       // optional, returns 0-100 or -1 if unknown
     int battery_low_threshold;           // optional, default 15
+    bool (*connectivity_callback)(void); // optional, return false while offline/radio off
     const honch_state_storage_ops_t *state_storage_ops; // optional, enables durable identity/version state
     const honch_event_queue_ops_t *event_queue_ops;     // optional, replaces default RAM event queue
 } honch_config_t;

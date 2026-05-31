@@ -822,6 +822,39 @@ static honch_status_t honch_scheduler_check_outbound_spacing_locked(
     return HONCH_OK;
 }
 
+static bool honch_scheduler_connectivity_ready_locked(honch_client_t *client)
+{
+    if (client == NULL || client->connectivity_callback == NULL) {
+        return true;
+    }
+    return client->connectivity_callback(client->connectivity_userdata) > 0;
+}
+
+static honch_status_t honch_scheduler_check_connectivity_locked(honch_client_t *client, bool *offline)
+{
+    if (offline == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    *offline = false;
+
+    size_t pending_count = 0u;
+    honch_status_t status = honch_client_queue_depth(client, &pending_count);
+    if (status != HONCH_OK) {
+        return status;
+    }
+    client->queued_event_count = pending_count;
+    if (pending_count == 0u) {
+        client->scheduler_flush_requested = false;
+        return HONCH_OK;
+    }
+
+    if (!honch_scheduler_connectivity_ready_locked(client)) {
+        client->scheduler_flush_requested = true;
+        *offline = true;
+    }
+    return HONCH_OK;
+}
+
 static void honch_scheduler_notify_after_enqueue_locked(honch_client_t *client)
 {
     if (client == NULL || client->flush_event_threshold == 0u) {
@@ -1033,6 +1066,8 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
         HONCH_DEFAULT_BATTERY_LOW_THRESHOLD;
     next->auto_properties_callback = config->auto_properties_callback;
     next->auto_properties_userdata = config->auto_properties_userdata;
+    next->connectivity_callback = config->connectivity_callback;
+    next->connectivity_userdata = config->connectivity_userdata;
 
     honch_status_t status = HONCH_OK;
     bool lifetime_mutex_initialized = false;
@@ -1461,6 +1496,13 @@ honch_status_t honch_core_tick(honch_client_t *client)
         honch_client_leave(client);
         return status == HONCH_OK ? HONCH_OK : status;
     }
+    bool offline = false;
+    status = honch_scheduler_check_connectivity_locked(client, &offline);
+    if (status != HONCH_OK || offline) {
+        honch_client_unlock(client);
+        honch_client_leave(client);
+        return status == HONCH_OK ? HONCH_OK : status;
+    }
     if (client->flush_in_progress) {
         honch_client_unlock(client);
         honch_client_leave(client);
@@ -1511,6 +1553,13 @@ honch_status_t honch_core_flush(honch_client_t *client)
         honch_client_unlock(client);
         honch_client_leave(client);
         return status == HONCH_OK ? HONCH_ERROR_RATE_LIMITED : status;
+    }
+    bool offline = false;
+    status = honch_scheduler_check_connectivity_locked(client, &offline);
+    if (status != HONCH_OK || offline) {
+        honch_client_unlock(client);
+        honch_client_leave(client);
+        return status == HONCH_OK ? HONCH_ERROR_OFFLINE : status;
     }
 
     client->flush_in_progress = true;
@@ -1698,6 +1747,8 @@ const char *honch_status_string(honch_status_t status)
             return "busy";
         case HONCH_ERROR_NOT_SUPPORTED:
             return "not supported";
+        case HONCH_ERROR_OFFLINE:
+            return "offline";
         default:
             return "unknown";
     }

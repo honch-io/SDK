@@ -45,6 +45,17 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         self.assertIn("flushMinIntervalMs", readme)
         self.assertIn("HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS", readme)
 
+    def test_public_config_exposes_connectivity_gate(self) -> None:
+        header = read("ports/arduino/src/Honch.h")
+        adapter = read("ports/arduino/src/Honch.cpp")
+        readme = read("ports/arduino/README.md")
+
+        self.assertIn("bool (*connectivityCallback)();", header)
+        self.assertIn("honch_arduino_connectivity_callback", adapter)
+        self.assertIn("coreConfig.connectivity_callback = honch_arduino_connectivity_callback;", adapter)
+        self.assertIn("connectivityCallback", readme)
+        self.assertIn("offline", readme)
+
     def test_transport_initializer_matches_core_ops_shape(self) -> None:
         transport = read("ports/arduino/src/honch_arduino_transport.cpp")
 

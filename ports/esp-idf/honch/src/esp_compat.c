@@ -36,6 +36,7 @@ static char s_endpoint_url[280];
 static char s_device_model[64];
 static char s_firmware_version[32];
 static char s_environment[32];
+static bool (*s_connectivity_callback)(void) = NULL;
 
 const char *g_honch_api_key = NULL;
 const char *g_honch_device_model = NULL;
@@ -46,6 +47,12 @@ int g_honch_battery_low_threshold = 15;
 volatile bool g_honch_connected = false;
 
 static honch_err_t honch_esp_status_to_err(honch_status_t status);
+
+static int honch_esp_connectivity_callback(void *userdata)
+{
+    (void)userdata;
+    return s_connectivity_callback == NULL || s_connectivity_callback() ? 1 : 0;
+}
 
 static TickType_t honch_esp_lock_ticks(uint32_t timeout_ms)
 {
@@ -223,6 +230,8 @@ static honch_err_t honch_esp_status_to_err(honch_status_t status)
             return HONCH_ERR_BUSY;
         case HONCH_STATUS_ERROR_NOT_SUPPORTED:
             return HONCH_ERR_NOT_SUPPORTED;
+        case HONCH_STATUS_ERROR_OFFLINE:
+            return HONCH_ERR_OFFLINE;
         case HONCH_STATUS_ERROR_INTERNAL:
         default:
             return HONCH_ERR_INTERNAL;
@@ -238,6 +247,7 @@ static void honch_esp_clear_legacy_globals(void)
     g_honch_battery_callback = NULL;
     g_honch_battery_low_threshold = 15;
     g_honch_connected = false;
+    s_connectivity_callback = NULL;
 }
 
 static honch_err_t honch_esp_copy_static_config_string(char *dest, size_t dest_size, const char *value)
@@ -285,6 +295,7 @@ static honch_err_t honch_esp_copy_config(const honch_config_t *config)
     g_honch_battery_callback = config->battery_callback;
     g_honch_battery_low_threshold =
         config->battery_low_threshold > 0 ? config->battery_low_threshold : 15;
+    s_connectivity_callback = config->connectivity_callback;
     return HONCH_OK;
 }
 
@@ -363,6 +374,8 @@ honch_err_t honch_init(const honch_config_t *config)
     core_config.transport_timeout_ms = config->transport_timeout_ms;
     core_config.battery_callback = config->battery_callback;
     core_config.battery_low_threshold = g_honch_battery_low_threshold;
+    core_config.connectivity_callback = honch_esp_connectivity_callback;
+    core_config.connectivity_userdata = NULL;
     core_config.platform = &platform_ops;
     core_config.state_storage = config->state_storage_ops;
     core_config.event_queue = &event_queue_ops;
