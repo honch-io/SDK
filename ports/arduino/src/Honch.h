@@ -16,6 +16,7 @@ struct HonchConfig {
   uint8_t *eventBuffer;
   size_t eventBufferSize;
   uint32_t flushIntervalSeconds;
+  uint32_t flushMinIntervalMs;
   uint32_t flushEventThreshold;
   bool insecureSkipTlsVerify;
   const honch_state_storage_ops_t *stateStorageOps;

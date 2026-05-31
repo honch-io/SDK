@@ -35,6 +35,21 @@ class ArduinoTLSConfigTests(unittest.TestCase):
             self.assertIn("config.rootCaPem = HONCH_ROOT_CA_PEM;", sketch)
             self.assertIn("config.insecureSkipTlsVerify = false;", sketch)
 
+    def test_public_config_exposes_flush_spacing(self) -> None:
+        header = read("ports/arduino/src/Honch.h")
+        adapter = read("ports/arduino/src/Honch.cpp")
+        readme = read("ports/arduino/README.md")
+
+        self.assertIn("uint32_t flushMinIntervalMs;", header)
+        self.assertIn("coreConfig.flush_min_interval_ms = config.flushMinIntervalMs;", adapter)
+        self.assertIn("flushMinIntervalMs", readme)
+        self.assertIn("HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS", readme)
+
+    def test_transport_initializer_matches_core_ops_shape(self) -> None:
+        transport = read("ports/arduino/src/honch_arduino_transport.cpp")
+
+        self.assertIn("arduino_post_chunk,\n      nullptr,\n      ctx,", transport)
+
 
 if __name__ == "__main__":
     unittest.main()

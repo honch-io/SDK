@@ -185,6 +185,7 @@ Optional config:
 - `max_event_bytes`
 - `transport_timeout_ms`
 - `flush_interval_seconds`: defaults to `60`
+- `flush_min_interval_ms`: defaults to `10000`; use `HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS` for benchmarks
 - `flush_event_threshold`: defaults to `30`
 - `flush_retry_initial_ms`: defaults to `1000`
 - `flush_retry_max_ms`: defaults to `300000`
@@ -251,10 +252,11 @@ callback should return quickly because event enqueueing waits for it to finish.
 
 Call `honch_tick()` periodically from your main loop or scheduler to perform
 bounded cooperative flush work. When `flush_interval_seconds` or
-`flush_event_threshold` are zero, the SDK uses the ESP-IDF defaults of 60
-seconds and 30 queued events. Retryable transport failures use exponential
-backoff with jitter. Shutdown always attempts a synchronous best-effort flush
-for a valid client.
+`flush_event_threshold` are zero, the SDK uses defaults of 60 seconds and 30
+queued events. Successful outbound uploads are spaced by
+`flush_min_interval_ms`, which defaults to 10000 ms. Retryable transport
+failures use exponential backoff with jitter. Shutdown always attempts a
+synchronous best-effort flush for a valid client.
 
 Flushes use the compact wire encoder in the shared core and send chunk frames to
 `POST /capture` with `Content-Type: application/vnd.honch.chunk`. The project
@@ -289,6 +291,7 @@ int main(void)
         .max_event_bytes = 8192,
         .transport_timeout_ms = 10000,
         .flush_interval_seconds = 60,
+        .flush_min_interval_ms = 10000,
         .flush_event_threshold = 30,
         .battery_callback = NULL,
         .battery_low_threshold = 15,

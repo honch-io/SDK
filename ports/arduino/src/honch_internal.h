@@ -4,24 +4,43 @@
 #include "honch/core/honch.h"
 #include "honch/core/wire_v2.h"
 
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
 #define HONCH_SDK_VERSION "0.2.0"
 #define HONCH_DEFAULT_BATCH_SIZE 20u
+#ifndef HONCH_MAX_BATCH_SIZE
 #define HONCH_MAX_BATCH_SIZE 50u
+#endif
 #define HONCH_DEFAULT_MAX_QUEUED_EVENTS 1000u
 #define HONCH_DEFAULT_MAX_EVENT_BYTES 16384u
-#define HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS 10000u
+#define HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS 3000u
 #define HONCH_DEFAULT_FLUSH_INTERVAL_SECONDS 60u
+#define HONCH_DEFAULT_FLUSH_MIN_INTERVAL_MS 10000u
 #define HONCH_DEFAULT_FLUSH_EVENT_THRESHOLD 30u
+#define HONCH_DEFAULT_FLUSH_MAX_BATCHES 1u
+#define HONCH_DEFAULT_SHUTDOWN_FLUSH_MAX_BATCHES 1u
 #define HONCH_DEFAULT_BATTERY_LOW_THRESHOLD 15
 #define HONCH_DEFAULT_FLUSH_RETRY_INITIAL_MS 1000u
 #define HONCH_DEFAULT_FLUSH_RETRY_MAX_MS 300000u
 #define HONCH_MAX_EVENT_NAME 128u
 #define HONCH_MAX_DISTINCT_ID 256u
 #define HONCH_MAX_EVENT_PROPERTIES 64u
+#define HONCH_AUTO_PROPERTY_BUFFER_COUNT 4u
+#ifndef HONCH_WIRE_V2_MAX_FRAME_BYTES
+#define HONCH_WIRE_V2_MAX_FRAME_BYTES 4096u
+#endif
+#ifndef HONCH_FLUSH_SCRATCH_MAX_EVENTS
+#define HONCH_FLUSH_SCRATCH_MAX_EVENTS HONCH_DEFAULT_BATCH_SIZE
+#endif
+#if HONCH_FLUSH_SCRATCH_MAX_EVENTS == 0u
+#error "HONCH_FLUSH_SCRATCH_MAX_EVENTS must be greater than zero"
+#endif
+#if HONCH_FLUSH_SCRATCH_MAX_EVENTS > HONCH_MAX_BATCH_SIZE
+#error "HONCH_FLUSH_SCRATCH_MAX_EVENTS cannot exceed HONCH_MAX_BATCH_SIZE"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -83,13 +102,25 @@ struct honch_client {
     char *distinct_id;
     char *session_id;
     honch_wire_v2_property_t build_properties[HONCH_MAX_EVENT_PROPERTIES];
+    honch_wire_v2_property_t auto_property_buffers[HONCH_AUTO_PROPERTY_BUFFER_COUNT][HONCH_MAX_EVENT_PROPERTIES];
+    atomic_bool auto_property_buffer_in_use[HONCH_AUTO_PROPERTY_BUFFER_COUNT];
+    honch_payload_t flush_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
+    uint64_t flush_sequences[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
+    honch_storage_event_t flush_storage_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
+    honch_event_record_t flush_parsed_records[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
+    honch_wire_v2_event_t flush_compact_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
+    uint8_t flush_message_buffer[HONCH_WIRE_V2_MAX_FRAME_BYTES];
+    uint8_t flush_frame_buffer[HONCH_WIRE_V2_MAX_FRAME_BYTES];
     bool configured_device_id;
     size_t batch_size;
     size_t max_queued_events;
     size_t max_event_bytes;
     unsigned int transport_timeout_ms;
     unsigned int flush_interval_seconds;
+    unsigned int flush_min_interval_ms;
     size_t flush_event_threshold;
+    size_t flush_max_batches;
+    size_t shutdown_flush_max_batches;
     unsigned int flush_retry_initial_ms;
     unsigned int flush_retry_max_ms;
     uint32_t wire_v2_message_id_seed;
@@ -97,10 +128,12 @@ struct honch_client {
     honch_durability_mode_t durability_mode;
     uint64_t next_interval_flush_ms;
     uint64_t next_retry_flush_ms;
+    uint64_t next_outbound_flush_ms;
     unsigned int current_retry_delay_ms;
     uint64_t active_storage_reader_sequence;
     bool scheduler_flush_requested;
     bool flush_in_progress;
+    bool outbound_upload_attempted;
     bool closing;
     size_t active_calls;
     int (*battery_callback)(void);
@@ -175,6 +208,7 @@ honch_status_t honch_queue_enqueue(honch_client_t *client, const unsigned char *
 honch_status_t honch_queue_clear(honch_client_t *client);
 honch_status_t honch_queue_count_pending(honch_client_t *client, size_t *count);
 honch_status_t honch_queue_flush_one_locked(honch_client_t *client, bool *progressed);
+honch_status_t honch_queue_flush_limited_locked(honch_client_t *client, size_t max_batches);
 honch_status_t honch_queue_flush_locked(honch_client_t *client);
 
 honch_status_t honch_client_enter(honch_client_t *client);

@@ -134,6 +134,7 @@ idf.py flash monitor
 | `event_buffer`           | Yes      | —              | Caller-owned buffer for queue staging      |
 | `event_buffer_size`      | Yes      | —              | Size of the buffer (recommend >= 8192)     |
 | `flush_interval_seconds` | No       | 60             | How often to flush events                  |
+| `flush_min_interval_ms`  | No       | 10000          | Minimum spacing between outbound uploads   |
 | `flush_event_threshold`  | No       | 30             | Flush when this many events are queued     |
 | `flush_max_batches`      | No       | 1              | Max batches sent by one `honch_flush()`    |
 | `shutdown_flush_max_batches` | No   | 1              | Max batches sent during `honch_shutdown()` |
@@ -151,10 +152,19 @@ loop, or other customer-critical path. Keep `honch_track()` on product paths and
 run delivery from a background task that your firmware can afford to block for
 up to `transport_timeout_ms`.
 
+Successful outbound uploads are spaced by `flush_min_interval_ms`, which
+defaults to 10000 ms so telemetry does not continuously share the radio with
+product traffic. If events remain queued during the quiet window, `honch_tick()`
+keeps the flush request pending and sends later. For benchmark, factory, or
+explicit high-throughput modes, set `flush_min_interval_ms` to
+`HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS`.
+
 `honch_flush()` is synchronous and bounded by `flush_max_batches`. By default it
 sends at most one compact batch per call; additional events may remain queued
-for later ticks or explicit flush calls. Use it only for explicit maintenance
-moments where blocking is acceptable.
+for later ticks or explicit flush calls. It also honors `flush_min_interval_ms`;
+when called during the quiet window it returns `HONCH_ERR_TRANSPORT` without
+sleeping or performing network I/O. Use it only for
+explicit maintenance moments where blocking is acceptable.
 
 `honch_shutdown()` emits `$device_shutdown` and then performs a synchronous
 flush bounded by `shutdown_flush_max_batches`. By default shutdown sends at most

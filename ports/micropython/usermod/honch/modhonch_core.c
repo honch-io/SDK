@@ -302,6 +302,7 @@ static mp_obj_t honch_client_make_new(
         .max_event_bytes = honch_mp_map_get_size(args[0], MP_QSTR_max_event_bytes, 0),
         .transport_timeout_ms = honch_mp_map_get_uint(args[0], MP_QSTR_transport_timeout_ms, 0),
         .flush_interval_seconds = honch_mp_map_get_uint(args[0], MP_QSTR_flush_interval_seconds, 0),
+        .flush_min_interval_ms = honch_mp_map_get_uint(args[0], MP_QSTR_flush_min_interval_ms, 0),
         .flush_event_threshold = honch_mp_map_get_size(args[0], MP_QSTR_flush_event_threshold, 0),
         .flush_retry_initial_ms = honch_mp_map_get_uint(args[0], MP_QSTR_flush_retry_initial_ms, 0),
         .flush_retry_max_ms = honch_mp_map_get_uint(args[0], MP_QSTR_flush_retry_max_ms, 0),

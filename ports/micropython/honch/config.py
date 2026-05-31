@@ -10,6 +10,8 @@ DEFAULT_MAX_QUEUED_EVENTS = 1000
 DEFAULT_MAX_EVENT_BYTES = 16384
 DEFAULT_TRANSPORT_TIMEOUT_MS = 10000
 DEFAULT_FLUSH_INTERVAL_SECONDS = 60
+DEFAULT_FLUSH_MIN_INTERVAL_MS = 10000
+FLUSH_MIN_INTERVAL_DISABLED_MS = 0xFFFFFFFF
 DEFAULT_FLUSH_EVENT_THRESHOLD = 30
 DEFAULT_FLUSH_RETRY_INITIAL_MS = 1000
 DEFAULT_FLUSH_RETRY_MAX_MS = 300000
@@ -44,6 +46,7 @@ class HonchConfig:
         self.max_event_bytes = int(kwargs.get("max_event_bytes") or DEFAULT_MAX_EVENT_BYTES)
         self.transport_timeout_ms = int(kwargs.get("transport_timeout_ms") or DEFAULT_TRANSPORT_TIMEOUT_MS)
         self.flush_interval_seconds = int(kwargs.get("flush_interval_seconds") or DEFAULT_FLUSH_INTERVAL_SECONDS)
+        self.flush_min_interval_ms = int(kwargs.get("flush_min_interval_ms") or DEFAULT_FLUSH_MIN_INTERVAL_MS)
         self.flush_event_threshold = int(kwargs.get("flush_event_threshold") or DEFAULT_FLUSH_EVENT_THRESHOLD)
         self.flush_retry_initial_ms = int(kwargs.get("flush_retry_initial_ms") or DEFAULT_FLUSH_RETRY_INITIAL_MS)
         self.flush_retry_max_ms = int(kwargs.get("flush_retry_max_ms") or DEFAULT_FLUSH_RETRY_MAX_MS)

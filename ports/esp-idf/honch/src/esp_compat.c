@@ -356,6 +356,7 @@ honch_err_t honch_init(const honch_config_t *config)
             config->flush_event_threshold;
     }
     core_config.flush_interval_seconds = config->flush_interval_seconds;
+    core_config.flush_min_interval_ms = config->flush_min_interval_ms;
     core_config.flush_event_threshold = config->flush_event_threshold;
     core_config.flush_max_batches = config->flush_max_batches;
     core_config.shutdown_flush_max_batches = config->shutdown_flush_max_batches;

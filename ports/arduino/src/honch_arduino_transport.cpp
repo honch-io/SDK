@@ -154,6 +154,7 @@ honch_status_t honch_arduino_transport_ops_init(
   ctx->insecureSkipTlsVerify = config.insecureSkipTlsVerify;
   *ops = honch_transport_ops_t{
       arduino_post_chunk,
+      nullptr,
       ctx,
   };
   return HONCH_OK;

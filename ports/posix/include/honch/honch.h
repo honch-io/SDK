@@ -35,6 +35,7 @@ typedef struct honch_config {
     size_t max_event_bytes;
     unsigned int transport_timeout_ms;
     unsigned int flush_interval_seconds;
+    unsigned int flush_min_interval_ms;
     size_t flush_event_threshold;
     unsigned int flush_retry_initial_ms;
     unsigned int flush_retry_max_ms;

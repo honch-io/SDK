@@ -9,6 +9,8 @@
 #include "honch/core/transport.h"
 #include "honch/core/wire_v2.h"
 
+#define HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS 0xffffffffu
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -42,6 +44,7 @@ typedef struct honch_core_config {
     size_t max_event_bytes;
     unsigned int transport_timeout_ms;
     unsigned int flush_interval_seconds;
+    unsigned int flush_min_interval_ms;
     size_t flush_event_threshold;
     size_t flush_max_batches;
     size_t shutdown_flush_max_batches;
