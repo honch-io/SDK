@@ -11,7 +11,9 @@
 
 #define HONCH_SDK_VERSION "0.2.0"
 #define HONCH_DEFAULT_BATCH_SIZE 20u
+#ifndef HONCH_MAX_BATCH_SIZE
 #define HONCH_MAX_BATCH_SIZE 50u
+#endif
 #define HONCH_DEFAULT_MAX_QUEUED_EVENTS 1000u
 #define HONCH_DEFAULT_MAX_EVENT_BYTES 16384u
 #define HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS 3000u
@@ -26,6 +28,18 @@
 #define HONCH_MAX_DISTINCT_ID 256u
 #define HONCH_MAX_EVENT_PROPERTIES 64u
 #define HONCH_AUTO_PROPERTY_BUFFER_COUNT 4u
+#ifndef HONCH_WIRE_V2_MAX_FRAME_BYTES
+#define HONCH_WIRE_V2_MAX_FRAME_BYTES 4096u
+#endif
+#ifndef HONCH_FLUSH_SCRATCH_MAX_EVENTS
+#define HONCH_FLUSH_SCRATCH_MAX_EVENTS HONCH_DEFAULT_BATCH_SIZE
+#endif
+#if HONCH_FLUSH_SCRATCH_MAX_EVENTS == 0u
+#error "HONCH_FLUSH_SCRATCH_MAX_EVENTS must be greater than zero"
+#endif
+#if HONCH_FLUSH_SCRATCH_MAX_EVENTS > HONCH_MAX_BATCH_SIZE
+#error "HONCH_FLUSH_SCRATCH_MAX_EVENTS cannot exceed HONCH_MAX_BATCH_SIZE"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -89,6 +103,13 @@ struct honch_client {
     honch_wire_v2_property_t build_properties[HONCH_MAX_EVENT_PROPERTIES];
     honch_wire_v2_property_t auto_property_buffers[HONCH_AUTO_PROPERTY_BUFFER_COUNT][HONCH_MAX_EVENT_PROPERTIES];
     atomic_bool auto_property_buffer_in_use[HONCH_AUTO_PROPERTY_BUFFER_COUNT];
+    honch_payload_t flush_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
+    uint64_t flush_sequences[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
+    honch_storage_event_t flush_storage_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
+    honch_event_record_t flush_parsed_records[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
+    honch_wire_v2_event_t flush_compact_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
+    uint8_t flush_message_buffer[HONCH_WIRE_V2_MAX_FRAME_BYTES];
+    uint8_t flush_frame_buffer[HONCH_WIRE_V2_MAX_FRAME_BYTES];
     bool configured_device_id;
     size_t batch_size;
     size_t max_queued_events;

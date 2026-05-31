@@ -295,6 +295,31 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertNotIn("malloc", collect)
         self.assertNotIn("free(", release)
 
+    def test_flush_uses_client_owned_scratch_buffers(self) -> None:
+        core = read("core/src/honch_queue_policy.c")
+        internal = read("core/src/honch_internal.h")
+        read_batch = c_function_body(core, "honch_core_read_queue_batch")
+        build_message = c_function_body(core, "honch_core_build_wire_v2_message")
+        post_message = c_function_body(core, "honch_core_post_wire_v2_message")
+        flush_one = c_function_body(core, "honch_queue_flush_one_locked")
+        core_flush = c_function_body(read("core/src/honch_core.c"), "honch_core_flush")
+
+        self.assertIn("#define HONCH_FLUSH_SCRATCH_MAX_EVENTS HONCH_DEFAULT_BATCH_SIZE", internal)
+        self.assertIn("flush_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS]", internal)
+        self.assertIn("flush_sequences[HONCH_FLUSH_SCRATCH_MAX_EVENTS]", internal)
+        self.assertIn("flush_storage_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS]", internal)
+        self.assertIn("flush_parsed_records[HONCH_FLUSH_SCRATCH_MAX_EVENTS]", internal)
+        self.assertIn("flush_compact_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS]", internal)
+        self.assertIn("flush_message_buffer[HONCH_WIRE_V2_MAX_FRAME_BYTES]", internal)
+        self.assertIn("flush_frame_buffer[HONCH_WIRE_V2_MAX_FRAME_BYTES]", internal)
+        self.assertIn("batch_size > HONCH_FLUSH_SCRATCH_MAX_EVENTS", flush_one)
+        self.assertIn("client->flush_in_progress", core_flush)
+        self.assertNotIn("calloc", read_batch)
+        self.assertNotIn("calloc", build_message)
+        self.assertNotIn("malloc(HONCH_WIRE_V2_MAX_FRAME_BYTES)", build_message)
+        self.assertNotIn("malloc(HONCH_WIRE_V2_MAX_FRAME_BYTES)", post_message)
+        self.assertNotIn("calloc(batch_size", flush_one)
+
     def test_readme_only_documents_implemented_automatic_esp_properties(self) -> None:
         readme = read("ports/esp-idf/README.md")
         automatic = readme.split("## What gets sent automatically", 1)[1].split("## Configuration options", 1)[0]
