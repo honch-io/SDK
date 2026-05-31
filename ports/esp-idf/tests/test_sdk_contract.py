@@ -116,11 +116,11 @@ class EspIdfChunkWireTest(unittest.TestCase):
             shutdown.find("honch_core_shutdown(client)"),
             shutdown.find("honch_esp_transport_ops_deinit(&s_transport_ctx);"),
         )
-        busy_block = shutdown[
-            shutdown.find("if (status == HONCH_STATUS_ERROR_BUSY)") :
-            shutdown.find("if (honch_esp_gpio_shutdown_hook != NULL)")
-        ]
-        self.assertNotIn("honch_esp_transport_ops_deinit", busy_block)
+        busy_index = shutdown.find("if (status == HONCH_STATUS_ERROR_BUSY)")
+        busy_return_index = shutdown.find("return HONCH_ERR_BUSY;", busy_index)
+        deinit_index = shutdown.find("honch_esp_transport_ops_deinit(&s_transport_ctx);")
+        self.assertLess(busy_index, busy_return_index)
+        self.assertLess(busy_return_index, deinit_index)
 
     def test_esp_compat_layer_delegates_public_api_to_core(self) -> None:
         compat = read("ports/esp-idf/honch/src/esp_compat.c")
@@ -251,9 +251,8 @@ class EspIdfChunkWireTest(unittest.TestCase):
     def test_esp_idf_sdk_lock_waits_are_bounded_and_fail_open(self) -> None:
         platform = read("ports/esp-idf/honch/src/esp_platform.c")
         compat = read("ports/esp-idf/honch/src/esp_compat.c")
-        gpio_adapter = read("ports/esp-idf/honch/src/esp_gpio_adapter.c")
-        gpio_public = read("ports/esp-idf/honch/src/esp_gpio_public.c")
-        combined = platform + compat + gpio_adapter + gpio_public
+        component_cmake = read("ports/esp-idf/honch/CMakeLists.txt")
+        combined = platform + compat + component_cmake
 
         self.assertNotIn("portMAX_DELAY", combined)
 
@@ -277,18 +276,9 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("honch_err_t err = honch_esp_client_lock();", init_begin)
         self.assertIn("return err;", init_begin)
 
-        self.assertIn("HONCH_ESP_GPIO_LOCK_TIMEOUT_MS", gpio_adapter + gpio_public)
-        self.assertIn("HONCH_ESP_GPIO_SHUTDOWN_TIMEOUT_MS", gpio_adapter)
-        self.assertIn(
-            "honch_gpio_mapping_lock(honch_gpio_ticks(HONCH_ESP_GPIO_LOCK_TIMEOUT_MS))",
-            gpio_adapter,
-        )
-        self.assertIn(
-            "xSemaphoreTake(s_gpio_exit_sem, honch_gpio_ticks(HONCH_ESP_GPIO_SHUTDOWN_TIMEOUT_MS))",
-            gpio_adapter,
-        )
-        self.assertIn("return HONCH_ERR_BUSY;", gpio_adapter)
-        self.assertIn("return HONCH_ERR_BUSY;", gpio_public)
+        self.assertNotIn("honch_esp_gpio_shutdown_hook", compat)
+        self.assertNotIn("esp_gpio_adapter", component_cmake)
+        self.assertNotIn("esp_gpio_public", component_cmake)
 
     def test_readme_only_documents_implemented_automatic_esp_properties(self) -> None:
         readme = read("ports/esp-idf/README.md")
@@ -322,14 +312,14 @@ class EspIdfChunkWireTest(unittest.TestCase):
             "esp_netif",
             "esp-tls",
             "esp_timer",
-            "esp_driver_gpio",
-            "driver",
             "freertos",
         ):
             self.assertIn(f"        {dependency}", cmake)
 
         for unused_dependency in (
             "        esp_wifi",
+            "        esp_driver_gpio",
+            "        driver",
             "        cbor",
             "        espressif__cjson",
         ):

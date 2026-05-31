@@ -20,6 +20,10 @@ Minimal example that connects to Wi-Fi and sends events to Honch.
    idf.py flash monitor
    ```
 
-3. Press the BOOT button on your dev board — each press sends a `button_pressed` event.
+3. Watch the example send startup and heartbeat events.
 
 4. Watch events appear in your Honch dashboard.
+
+For GPIO/button tracking, use the separate `ports/esp-idf/example_gpio`
+example. The core SDK does not configure GPIO pins or install GPIO ISR
+handlers.

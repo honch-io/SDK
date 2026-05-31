@@ -45,8 +45,6 @@ int (*g_honch_battery_callback)(void) = NULL;
 int g_honch_battery_low_threshold = 15;
 volatile bool g_honch_connected = false;
 
-extern void honch_esp_gpio_shutdown_hook(void) __attribute__((weak));
-
 static honch_err_t honch_esp_status_to_err(honch_status_t status);
 
 static TickType_t honch_esp_lock_ticks(uint32_t timeout_ms)
@@ -397,9 +395,6 @@ honch_err_t honch_shutdown(void)
     if (status == HONCH_STATUS_ERROR_BUSY) {
         honch_esp_shutdown_restore(client);
         return HONCH_ERR_BUSY;
-    }
-    if (honch_esp_gpio_shutdown_hook != NULL) {
-        honch_esp_gpio_shutdown_hook();
     }
     honch_esp_transport_ops_deinit(&s_transport_ctx);
     honch_esp_event_queue_ops_deinit(&s_storage_ctx);
