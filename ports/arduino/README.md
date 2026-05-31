@@ -40,6 +40,7 @@ void setup() {
     .eventBuffer = eventBuffer,
     .eventBufferSize = sizeof(eventBuffer),
     .flushIntervalSeconds = 60,
+    .flushMinIntervalMs = 10000,
     .flushEventThreshold = 30,
     .insecureSkipTlsVerify = false,
   };
@@ -57,7 +58,12 @@ void loop() {
 }
 ```
 
-`Honch.tick()` performs scheduled flush work when the interval elapses or the event threshold is reached. It does not start a hidden background task. Use `Honch.loop()` as an alias if that fits the sketch.
+`Honch.tick()` performs scheduled flush work when the interval elapses or the
+event threshold is reached. Successful outbound uploads are spaced by
+`flushMinIntervalMs`; leave it at the 10000 ms default for consumer firmware, or
+set it to `HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS` for benchmark or explicit
+high-throughput modes. The SDK does not start a hidden background task. Use
+`Honch.loop()` as an alias if that fits the sketch.
 
 The default queue uses only the caller-provided RAM buffer. Events and
 `identify()` state are lost across reset or power loss unless you provide

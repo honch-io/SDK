@@ -27,6 +27,7 @@ typedef struct honch_transport_ops {
         const uint8_t *body,
         size_t body_size,
         honch_transport_result_t *result);
+    uint64_t (*retry_after_ms)(void *ctx);
     void *ctx;
 } honch_transport_ops_t;
 

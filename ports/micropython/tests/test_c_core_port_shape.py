@@ -94,6 +94,19 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertIn("mp_call_function_n_kw(post, 1, 3, args)", transport)
         self.assertIn("transport->timeout_ms", transport)
 
+    def test_micropython_exposes_flush_spacing_config(self):
+        module = self.read("ports/micropython/usermod/honch/modhonch_core.c")
+        client = self.read("ports/micropython/honch/client.py")
+        config = self.read("ports/micropython/honch/config.py")
+        readme = self.read("ports/micropython/README.md")
+
+        self.assertIn("DEFAULT_FLUSH_MIN_INTERVAL_MS = 10000", config)
+        self.assertIn("FLUSH_MIN_INTERVAL_DISABLED_MS = 0xFFFFFFFF", config)
+        self.assertIn("self.flush_min_interval_ms", config)
+        self.assertIn('"flush_min_interval_ms": config.flush_min_interval_ms', client)
+        self.assertIn(".flush_min_interval_ms = honch_mp_map_get_uint", module)
+        self.assertIn("flush_min_interval_ms", readme)
+
     def test_python_client_is_thin_wrapper_over_c_module(self):
         client = self.read("ports/micropython/honch/client.py")
 

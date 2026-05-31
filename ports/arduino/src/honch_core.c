@@ -50,6 +50,9 @@ typedef struct honch_auto_property_sink_context {
 typedef struct honch_auto_properties_snapshot {
     honch_wire_v2_property_t *properties;
     size_t property_count;
+    honch_client_t *client;
+    size_t buffer_index;
+    bool buffer_acquired;
 } honch_auto_properties_snapshot_t;
 
 typedef struct honch_event_context {
@@ -108,12 +111,44 @@ static honch_status_t honch_auto_property_sink(
         true);
 }
 
+static honch_status_t honch_acquire_auto_property_buffer(
+    honch_client_t *client,
+    honch_auto_properties_snapshot_t *snapshot)
+{
+    if (client == NULL || snapshot == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (size_t i = 0u; i < HONCH_AUTO_PROPERTY_BUFFER_COUNT; i++) {
+        bool expected = false;
+        if (atomic_compare_exchange_strong(
+                &client->auto_property_buffer_in_use[i],
+                &expected,
+                true)) {
+            snapshot->properties = client->auto_property_buffers[i];
+            snapshot->client = client;
+            snapshot->buffer_index = i;
+            snapshot->buffer_acquired = true;
+            memset(snapshot->properties, 0, sizeof(client->auto_property_buffers[i]));
+            return HONCH_OK;
+        }
+    }
+
+    return HONCH_ERROR_BUSY;
+}
+
 static void honch_auto_properties_snapshot_free(honch_auto_properties_snapshot_t *snapshot)
 {
     if (snapshot == NULL) {
         return;
     }
-    free(snapshot->properties);
+
+    if (snapshot->buffer_acquired && snapshot->client != NULL &&
+        snapshot->buffer_index < HONCH_AUTO_PROPERTY_BUFFER_COUNT) {
+        atomic_store(
+            &snapshot->client->auto_property_buffer_in_use[snapshot->buffer_index],
+            false);
+    }
     memset(snapshot, 0, sizeof(*snapshot));
 }
 
@@ -130,11 +165,9 @@ static honch_status_t honch_collect_auto_properties(
         return HONCH_OK;
     }
 
-    snapshot->properties = (honch_wire_v2_property_t *)calloc(
-        HONCH_MAX_EVENT_PROPERTIES,
-        sizeof(*snapshot->properties));
-    if (snapshot->properties == NULL) {
-        return HONCH_ERROR_OUT_OF_MEMORY;
+    honch_status_t status = honch_acquire_auto_property_buffer(client, snapshot);
+    if (status != HONCH_OK) {
+        return status;
     }
 
     honch_auto_property_sink_context_t sink_context = {
@@ -142,7 +175,7 @@ static honch_status_t honch_collect_auto_properties(
         .property_count = &snapshot->property_count
     };
 
-    honch_status_t status = client->auto_properties_callback(
+    status = client->auto_properties_callback(
         client->auto_properties_userdata,
         honch_auto_property_sink,
         &sink_context);
@@ -656,6 +689,25 @@ static uint64_t honch_scheduler_interval_ms(honch_client_t *client)
     return (uint64_t)client->flush_interval_seconds * 1000u;
 }
 
+static bool honch_scheduler_outbound_ready_locked(honch_client_t *client, uint64_t now)
+{
+    return client->flush_min_interval_ms == 0u || client->next_outbound_flush_ms <= now;
+}
+
+static void honch_scheduler_record_outbound_attempt(honch_client_t *client, uint64_t now)
+{
+    if (client->flush_min_interval_ms == 0u) {
+        client->next_outbound_flush_ms = 0u;
+        return;
+    }
+
+    uint64_t wait_ms = client->flush_min_interval_ms;
+    if (UINT64_MAX - now < wait_ms) {
+        wait_ms = UINT64_MAX - now;
+    }
+    client->next_outbound_flush_ms = now + wait_ms;
+}
+
 static unsigned int honch_next_retry_delay_ms(honch_client_t *client)
 {
     unsigned int delay = client->current_retry_delay_ms;
@@ -671,6 +723,14 @@ static unsigned int honch_next_retry_delay_ms(honch_client_t *client)
     uint64_t now = honch_client_now_millis(client);
     unsigned int jitter = (unsigned int)(now % ((uint64_t)(quarter * 2u) + 1u));
     return (delay - quarter) + jitter;
+}
+
+static uint64_t honch_transport_retry_after_ms(honch_client_t *client)
+{
+    if (client == NULL || client->transport == NULL || client->transport->retry_after_ms == NULL) {
+        return 0u;
+    }
+    return client->transport->retry_after_ms(client->transport->ctx);
 }
 
 static void honch_grow_retry_delay(honch_client_t *client)
@@ -692,13 +752,27 @@ static bool honch_status_is_retryable(honch_status_t status)
            status == HONCH_ERROR_SERVER;
 }
 
-static void honch_scheduler_record_flush_result(honch_client_t *client, honch_status_t status, uint64_t now)
+static void honch_scheduler_record_flush_result(
+    honch_client_t *client,
+    honch_status_t status,
+    uint64_t now,
+    bool outbound_upload_attempted)
 {
     if (status == HONCH_OK) {
         client->current_retry_delay_ms = client->flush_retry_initial_ms;
         client->next_retry_flush_ms = 0u;
+        if (outbound_upload_attempted) {
+            honch_scheduler_record_outbound_attempt(client, now);
+        }
     } else if (honch_status_is_retryable(status)) {
         uint64_t wait_ms = honch_next_retry_delay_ms(client);
+        uint64_t retry_after_ms = honch_transport_retry_after_ms(client);
+        if (retry_after_ms > wait_ms) {
+            wait_ms = retry_after_ms;
+        }
+        if (UINT64_MAX - now < wait_ms) {
+            wait_ms = UINT64_MAX - now;
+        }
         client->next_retry_flush_ms = now + wait_ms;
         client->scheduler_flush_requested = true;
         honch_grow_retry_delay(client);
@@ -718,6 +792,34 @@ static bool honch_scheduler_due_locked(honch_client_t *client, uint64_t now)
         return true;
     }
     return client->flush_interval_seconds > 0u && now >= client->next_interval_flush_ms;
+}
+
+static honch_status_t honch_scheduler_check_outbound_spacing_locked(
+    honch_client_t *client,
+    uint64_t now,
+    bool *delayed)
+{
+    if (delayed == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    *delayed = false;
+    if (honch_scheduler_outbound_ready_locked(client, now)) {
+        return HONCH_OK;
+    }
+
+    size_t pending_count = 0u;
+    honch_status_t status = honch_client_queue_depth(client, &pending_count);
+    if (status != HONCH_OK) {
+        return status;
+    }
+    client->queued_event_count = pending_count;
+    if (pending_count > 0u) {
+        client->scheduler_flush_requested = true;
+        *delayed = true;
+    } else {
+        client->scheduler_flush_requested = false;
+    }
+    return HONCH_OK;
 }
 
 static void honch_scheduler_notify_after_enqueue_locked(honch_client_t *client)
@@ -854,6 +956,9 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     if (next == NULL) {
         return HONCH_ERROR_OUT_OF_MEMORY;
     }
+    for (size_t i = 0u; i < HONCH_AUTO_PROPERTY_BUFFER_COUNT; i++) {
+        atomic_init(&next->auto_property_buffer_in_use[i], false);
+    }
     if (config->platform != NULL) {
         next->platform_ops = *config->platform;
         if (next->platform_ops.ctx == NULL) {
@@ -899,9 +1004,18 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     next->flush_interval_seconds = config->flush_interval_seconds == 0u ?
         HONCH_DEFAULT_FLUSH_INTERVAL_SECONDS :
         config->flush_interval_seconds;
+    next->flush_min_interval_ms = config->flush_min_interval_ms == HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS ?
+        0u :
+        (config->flush_min_interval_ms == 0u ? HONCH_DEFAULT_FLUSH_MIN_INTERVAL_MS : config->flush_min_interval_ms);
     next->flush_event_threshold = config->flush_event_threshold == 0u ?
         HONCH_DEFAULT_FLUSH_EVENT_THRESHOLD :
         config->flush_event_threshold;
+    next->flush_max_batches = config->flush_max_batches == 0u ?
+        HONCH_DEFAULT_FLUSH_MAX_BATCHES :
+        config->flush_max_batches;
+    next->shutdown_flush_max_batches = config->shutdown_flush_max_batches == 0u ?
+        HONCH_DEFAULT_SHUTDOWN_FLUSH_MAX_BATCHES :
+        config->shutdown_flush_max_batches;
     next->flush_retry_initial_ms = config->flush_retry_initial_ms == 0u ?
         HONCH_DEFAULT_FLUSH_RETRY_INITIAL_MS :
         config->flush_retry_initial_ms;
@@ -1340,6 +1454,13 @@ honch_status_t honch_core_tick(honch_client_t *client)
         honch_client_leave(client);
         return HONCH_OK;
     }
+    bool delayed = false;
+    status = honch_scheduler_check_outbound_spacing_locked(client, now, &delayed);
+    if (status != HONCH_OK || delayed) {
+        honch_client_unlock(client);
+        honch_client_leave(client);
+        return status == HONCH_OK ? HONCH_OK : status;
+    }
     if (client->flush_in_progress) {
         honch_client_unlock(client);
         honch_client_leave(client);
@@ -1347,6 +1468,7 @@ honch_status_t honch_core_tick(honch_client_t *client)
     }
 
     client->flush_in_progress = true;
+    client->outbound_upload_attempted = false;
     client->scheduler_flush_requested = false;
     bool progressed = false;
     status = honch_queue_flush_one_locked(client, &progressed);
@@ -1354,7 +1476,8 @@ honch_status_t honch_core_tick(honch_client_t *client)
     if (status == HONCH_ERROR_REJECTED && progressed) {
         status = HONCH_OK;
     }
-    honch_scheduler_record_flush_result(client, status, now);
+    honch_scheduler_record_flush_result(client, status, now, client->outbound_upload_attempted);
+    client->outbound_upload_attempted = false;
     if (status == HONCH_OK) {
         honch_scheduler_refresh_queue_request_locked(client);
     }
@@ -1381,11 +1504,21 @@ honch_status_t honch_core_flush(honch_client_t *client)
         honch_client_leave(client);
         return HONCH_ERROR_BUSY;
     }
+    uint64_t now = honch_client_now_millis(client);
+    bool delayed = false;
+    status = honch_scheduler_check_outbound_spacing_locked(client, now, &delayed);
+    if (status != HONCH_OK || delayed) {
+        honch_client_unlock(client);
+        honch_client_leave(client);
+        return status == HONCH_OK ? HONCH_ERROR_RATE_LIMITED : status;
+    }
 
     client->flush_in_progress = true;
-    status = honch_queue_flush_locked(client);
-    uint64_t now = honch_client_now_millis(client);
-    honch_scheduler_record_flush_result(client, status, now);
+    client->outbound_upload_attempted = false;
+    status = honch_queue_flush_limited_locked(client, client->flush_max_batches);
+    now = honch_client_now_millis(client);
+    honch_scheduler_record_flush_result(client, status, now, client->outbound_upload_attempted);
+    client->outbound_upload_attempted = false;
     client->flush_in_progress = false;
     honch_client_unlock(client);
     honch_client_leave(client);
@@ -1461,7 +1594,7 @@ honch_status_t honch_core_shutdown(honch_client_t *client)
         true,
         &event_context.auto_properties,
         NULL);
-    honch_status_t flush_status = honch_queue_flush_locked(client);
+    honch_status_t flush_status = honch_queue_flush_limited_locked(client, client->shutdown_flush_max_batches);
     if (status == HONCH_OK) {
         status = flush_status;
     }

@@ -36,6 +36,10 @@ typedef enum {
     HONCH_ERR_INTERNAL,
 } honch_err_t;
 
+#ifndef HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS
+#define HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS 0xffffffffu
+#endif
+
 typedef struct {
     const char *api_key;                 // required
     const char *host;                    // required, e.g. "https://capture.honch.io"
@@ -45,6 +49,7 @@ typedef struct {
     uint8_t *event_buffer;               // required, caller-owned, used for queue
     size_t event_buffer_size;            // required, recommend >= 8192
     uint32_t flush_interval_seconds;     // optional, default 60
+    uint32_t flush_min_interval_ms;      // optional, default 10000
     uint32_t flush_event_threshold;      // optional, default 30
     uint32_t flush_max_batches;          // optional, default 1
     uint32_t shutdown_flush_max_batches; // optional, default 1

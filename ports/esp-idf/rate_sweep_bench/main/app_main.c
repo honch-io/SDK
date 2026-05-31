@@ -617,6 +617,7 @@ void app_main(void)
         .firmware_version = "rate-sweep-bench-0.1.0",
         .event_buffer = s_event_buffer,
         .event_buffer_size = sizeof(s_event_buffer),
+        .flush_min_interval_ms = HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS,
         .flush_event_threshold = CONFIG_RATE_SWEEP_FLUSH_EVERY,
     };
 

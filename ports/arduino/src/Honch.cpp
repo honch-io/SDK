@@ -42,6 +42,7 @@ honch_core_config_t honch_arduino_make_core_config(const HonchConfig &config) {
   coreConfig.max_queued_events = 1000;
   coreConfig.max_event_bytes = config.eventBufferSize;
   coreConfig.flush_interval_seconds = config.flushIntervalSeconds;
+  coreConfig.flush_min_interval_ms = config.flushMinIntervalMs;
   coreConfig.flush_event_threshold = config.flushEventThreshold;
   coreConfig.platform = &g_platformOps;
   coreConfig.state_storage = config.stateStorageOps;

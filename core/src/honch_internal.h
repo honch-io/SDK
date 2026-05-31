@@ -18,6 +18,7 @@
 #define HONCH_DEFAULT_MAX_EVENT_BYTES 16384u
 #define HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS 3000u
 #define HONCH_DEFAULT_FLUSH_INTERVAL_SECONDS 60u
+#define HONCH_DEFAULT_FLUSH_MIN_INTERVAL_MS 10000u
 #define HONCH_DEFAULT_FLUSH_EVENT_THRESHOLD 30u
 #define HONCH_DEFAULT_FLUSH_MAX_BATCHES 1u
 #define HONCH_DEFAULT_SHUTDOWN_FLUSH_MAX_BATCHES 1u
@@ -116,6 +117,7 @@ struct honch_client {
     size_t max_event_bytes;
     unsigned int transport_timeout_ms;
     unsigned int flush_interval_seconds;
+    unsigned int flush_min_interval_ms;
     size_t flush_event_threshold;
     size_t flush_max_batches;
     size_t shutdown_flush_max_batches;
@@ -126,10 +128,12 @@ struct honch_client {
     honch_durability_mode_t durability_mode;
     uint64_t next_interval_flush_ms;
     uint64_t next_retry_flush_ms;
+    uint64_t next_outbound_flush_ms;
     unsigned int current_retry_delay_ms;
     uint64_t active_storage_reader_sequence;
     bool scheduler_flush_requested;
     bool flush_in_progress;
+    bool outbound_upload_attempted;
     bool closing;
     size_t active_calls;
     int (*battery_callback)(void);

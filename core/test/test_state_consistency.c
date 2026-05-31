@@ -35,6 +35,7 @@ typedef struct fake_state_storage {
     int nested_flush_attempts;
     honch_status_t post_chunk_status;
     honch_transport_result_t post_chunk_result;
+    int post_chunk_calls;
     uint64_t retry_after_ms;
     int retry_after_calls;
 } fake_state_storage_t;
@@ -332,6 +333,9 @@ static honch_status_t fake_post_chunk(
     (void)body;
     (void)body_size;
     fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
+    if (storage != NULL) {
+        storage->post_chunk_calls++;
+    }
     if (storage != NULL && storage->nested_flush_client != NULL && storage->nested_flush_attempts == 0) {
         storage->nested_flush_attempts++;
         storage->nested_flush_status = honch_core_flush(storage->nested_flush_client);
@@ -936,6 +940,130 @@ static void test_retry_after_extends_scheduler_delay(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
+static void test_tick_preserves_requested_flush_during_min_spacing(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .track_queue_depth = 1,
+        .now_ms = 1000u,
+        .force_now_ms = 1
+    };
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    config.flush_event_threshold = 1u;
+    config.flush_min_interval_ms = 10000u;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(honch_core_track(client, "first_flush", NULL, 0u) == HONCH_OK);
+    assert(honch_core_tick(client) == HONCH_OK);
+    assert(storage.post_chunk_calls == 1);
+
+    assert(honch_core_track(client, "second_flush", NULL, 0u) == HONCH_OK);
+    storage.now_ms = 5000u;
+    assert(honch_core_tick(client) == HONCH_OK);
+    assert(storage.post_chunk_calls == 1);
+    assert(client->scheduler_flush_requested);
+
+    storage.now_ms = 11000u;
+    assert(honch_core_tick(client) == HONCH_OK);
+    assert(storage.post_chunk_calls == 2);
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+static void test_flush_returns_rate_limited_during_min_spacing(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .track_queue_depth = 1,
+        .now_ms = 2000u,
+        .force_now_ms = 1
+    };
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    config.flush_event_threshold = 1u;
+    config.flush_min_interval_ms = 10000u;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(honch_core_track(client, "first_explicit_flush", NULL, 0u) == HONCH_OK);
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(storage.post_chunk_calls == 1);
+
+    assert(honch_core_track(client, "second_explicit_flush", NULL, 0u) == HONCH_OK);
+    storage.now_ms = 6000u;
+    assert(honch_core_flush(client) == HONCH_ERROR_RATE_LIMITED);
+    assert(storage.post_chunk_calls == 1);
+    assert(client->scheduler_flush_requested);
+
+    storage.now_ms = 12000u;
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(storage.post_chunk_calls == 2);
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+static void test_empty_flush_is_not_rate_limited_during_min_spacing(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .track_queue_depth = 1,
+        .now_ms = 4000u,
+        .force_now_ms = 1
+    };
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    config.flush_event_threshold = 1u;
+    config.flush_min_interval_ms = 10000u;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(honch_core_track(client, "only_flush", NULL, 0u) == HONCH_OK);
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(storage.post_chunk_calls == 1);
+
+    storage.now_ms = 5000u;
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(storage.post_chunk_calls == 1);
+    assert(!client->scheduler_flush_requested);
+
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+static void test_zero_min_spacing_allows_back_to_back_flushes(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .track_queue_depth = 1,
+        .now_ms = 3000u,
+        .force_now_ms = 1
+    };
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    config.flush_event_threshold = 1u;
+    config.flush_min_interval_ms = HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(honch_core_track(client, "first_uncapped_flush", NULL, 0u) == HONCH_OK);
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(honch_core_track(client, "second_uncapped_flush", NULL, 0u) == HONCH_OK);
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(storage.post_chunk_calls == 2);
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
 int main(void)
 {
     test_queue_push_uses_honch_event_record_format();
@@ -961,5 +1089,9 @@ int main(void)
     test_auto_property_buffer_exhaustion_returns_busy();
     test_nested_flush_during_transport_returns_busy();
     test_retry_after_extends_scheduler_delay();
+    test_tick_preserves_requested_flush_during_min_spacing();
+    test_flush_returns_rate_limited_during_min_spacing();
+    test_empty_flush_is_not_rate_limited_during_min_spacing();
+    test_zero_min_spacing_allows_back_to_back_flushes();
     return 0;
 }

@@ -722,6 +722,7 @@ honch_status_t honch_queue_flush_one_locked(honch_client_t *client, bool *progre
         message_id,
         flush_context.stream_id,
         &result);
+    client->outbound_upload_attempted = true;
 #ifdef HONCH_FLUSH_TIMING
     uint64_t post_message_elapsed_ms = honch_flush_timing_now_ms(client) - post_message_start_ms;
     snprintf(

@@ -109,6 +109,7 @@ def _config_to_dict(config):
         "max_event_bytes": config.max_event_bytes,
         "transport_timeout_ms": config.transport_timeout_ms,
         "flush_interval_seconds": config.flush_interval_seconds,
+        "flush_min_interval_ms": config.flush_min_interval_ms,
         "flush_event_threshold": config.flush_event_threshold,
         "flush_retry_initial_ms": config.flush_retry_initial_ms,
         "flush_retry_max_ms": config.flush_retry_max_ms,

@@ -240,6 +240,28 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("3000", readme)
         self.assertNotIn("disable_background_flush", compat + public_header + readme)
 
+    def test_esp_idf_flush_spacing_is_configurable(self) -> None:
+        compat = read("ports/esp-idf/honch/src/esp_compat.c")
+        public_header = read("ports/esp-idf/honch/include/honch.h")
+        readme = read("ports/esp-idf/README.md")
+        internal = read("core/src/honch_internal.h")
+        config = read("core/include/honch/core/config.h")
+
+        self.assertIn("#define HONCH_DEFAULT_FLUSH_MIN_INTERVAL_MS 10000u", internal)
+        self.assertIn("unsigned int flush_min_interval_ms", config)
+        self.assertIn("uint32_t flush_min_interval_ms", public_header)
+        self.assertIn("core_config.flush_min_interval_ms = config->flush_min_interval_ms", compat)
+        self.assertIn("flush_min_interval_ms", readme)
+        self.assertIn("10000", readme)
+        self.assertIn("HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS", readme)
+
+    def test_esp_idf_benchmarks_disable_flush_spacing(self) -> None:
+        benchtest = read("ports/esp-idf/benchtest/main/app_main.c")
+        rate_sweep = read("ports/esp-idf/rate_sweep_bench/main/app_main.c")
+
+        self.assertIn(".flush_min_interval_ms = HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS", benchtest)
+        self.assertIn(".flush_min_interval_ms = HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS", rate_sweep)
+
     def test_core_flush_and_shutdown_drains_are_bounded(self) -> None:
         core = read("core/src/honch_core.c")
         internal = read("core/src/honch_internal.h")

@@ -310,6 +310,7 @@ static honch_config_t bench_config(const char *queue_dir)
         .max_event_bytes = 65536u,
         .transport_timeout_ms = 1000u,
         .flush_interval_seconds = 60u,
+        .flush_min_interval_ms = HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS,
         .flush_event_threshold = 30u,
         .flush_retry_initial_ms = 1000u,
         .flush_retry_max_ms = 300000u,
