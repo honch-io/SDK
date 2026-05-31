@@ -1,13 +1,13 @@
 # Honch ESP-IDF Footprint
 
-This app measures Honch SDK footprint numbers for release evidence. Optional
-features, such as GPIO tracking, are excluded from the default measurement and
-can be measured explicitly.
+This app measures Honch SDK footprint numbers for release evidence. GPIO
+tracking is not part of the core ESP-IDF SDK; measure host-owned GPIO adapter
+code in the application that implements it.
 
 ## Current ESP32 Build-Size Numbers
 
 Build-size numbers were measured for ESP32 with ESP-IDF v6.0.1 using the
-default footprint configuration, which excludes optional GPIO tracking.
+default footprint configuration.
 
 | Metric | Current value | Public claim ceiling |
 | --- | ---: | --- |
@@ -42,12 +42,6 @@ From the SDK repo root:
 ```bash
 source /Users/morgana/.espressif/tools/activate_idf_v6.0.1.sh
 ./tools/measure_esp_idf_footprint.py --target esp32
-```
-
-To include optional GPIO tracking in the Honch footprint sample:
-
-```bash
-./tools/measure_esp_idf_footprint.py --target esp32 --include-gpio
 ```
 
 The script writes:

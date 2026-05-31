@@ -6,7 +6,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include "driver/gpio.h"
 
 #ifndef HONCH_CORE_NO_SHORT_STATUS_NAMES
 #define HONCH_CORE_NO_SHORT_STATUS_NAMES
@@ -36,12 +35,6 @@ typedef enum {
     HONCH_ERR_NOT_SUPPORTED,
     HONCH_ERR_INTERNAL,
 } honch_err_t;
-
-typedef enum {
-    HONCH_GPIO_RISING_EDGE,
-    HONCH_GPIO_FALLING_EDGE,
-    HONCH_GPIO_BOTH_EDGES,
-} honch_gpio_mode_t;
 
 typedef struct {
     const char *api_key;                 // required
@@ -78,8 +71,6 @@ honch_err_t honch_reset(void);
 
 const char *honch_get_device_id(void);
 honch_err_t honch_get_queue_stats(honch_queue_stats_t *stats);
-
-honch_err_t honch_track_gpio(gpio_num_t pin, const char *event_name, honch_gpio_mode_t mode);
 
 #ifdef __cplusplus
 }

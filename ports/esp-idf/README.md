@@ -85,8 +85,6 @@ void app_main(void)
     honch_track("screen_viewed", screen_props, 1u);
     honch_session_end();
 
-    // Track GPIO pins (e.g., a button)
-    honch_track_gpio(GPIO_NUM_0, "boot_button", HONCH_GPIO_FALLING_EDGE);
 }
 ```
 
@@ -168,6 +166,26 @@ application-owned FreeRTOS task so task priority, stack size, CPU affinity,
 watchdog policy, and shutdown ordering stay under firmware control. A future
 SDK-owned worker task should be opt-in only, after flush and shutdown drain
 budgets are explicit.
+
+## GPIO tracking
+
+The core ESP-IDF SDK does not configure GPIO pins, install the shared GPIO ISR
+service, register GPIO ISR handlers, or spawn GPIO worker tasks. GPIO ownership
+stays with your firmware because pin mode, pull configuration, interrupt type,
+debounce, ISR service ownership, task priority, and shutdown ordering are
+product-specific.
+
+To track button or GPIO events, handle GPIO in your own ISR handoff path and
+call `honch_track()` from normal task context:
+
+```c
+const honch_property_t props[] = {
+    honch_prop("pin", honch_i64(0)),
+};
+honch_track("button_pressed", props, 1u);
+```
+
+See `ports/esp-idf/example_gpio` for a host-owned GPIO example.
 
 Flush sends compact chunk wire frames to `POST /capture` with
 `Content-Type: application/vnd.honch.chunk`, `X-Honch-Project-Key`, and

@@ -7,8 +7,6 @@ set(HONCH_ESP_PORT_SOURCES
     "src/esp_platform.c"
     "src/esp_storage.c"
     "src/esp_transport_http.c"
-    "src/esp_gpio_adapter.c"
-    "src/esp_gpio_public.c"
 )
 list(TRANSFORM HONCH_ESP_PORT_SOURCES PREPEND "${HONCH_ESP_COMPONENT_DIR}/")
 
@@ -39,9 +37,7 @@ idf_component_register(
         esp_netif
         esp-tls
         esp_timer
-        esp_driver_gpio
         efuse
-        driver
         freertos
 )
 

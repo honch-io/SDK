@@ -475,11 +475,6 @@ void app_main(void)
 
     ESP_LOGI(TAG, "Honch initialized, device_id=%s", honch_get_device_id());
 
-    err = honch_track_gpio(GPIO_NUM_0, "bench_button", HONCH_GPIO_FALLING_EDGE);
-    if (err != HONCH_OK) {
-        ESP_LOGW(TAG, "Failed to register GPIO benchmark marker: %d", err);
-    }
-
     if (CONFIG_BENCH_OFFLINE_QUEUE_PROOF) {
         run_offline_queue_proof();
         ESP_LOGI(TAG, "Offline queue proof complete. Verify bench_offline_queue_proof rows in ClickHouse.");

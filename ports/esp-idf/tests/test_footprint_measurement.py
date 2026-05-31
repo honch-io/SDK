@@ -165,7 +165,7 @@ I (300) honch_footprint: HONCH_FOOTPRINT_CPU samples=100 avg_us=76 min_us=40 p50
         self.assertIn("static uint8_t s_event_buffer[32768];", app)
         self.assertLess(app.index("run_honch_cpu_sample();"), app.index("run_representative_api_sample();"))
 
-    def test_footprint_gpio_tracking_is_optional(self):
+    def test_footprint_app_does_not_reference_core_gpio_tracking(self):
         root_cmake = (REPO_ROOT / "ports" / "esp-idf" / "footprint" / "CMakeLists.txt").read_text(
             encoding="utf-8"
         )
@@ -176,10 +176,11 @@ I (300) honch_footprint: HONCH_FOOTPRINT_CPU samples=100 avg_us=76 min_us=40 p50
             encoding="utf-8"
         )
 
-        self.assertIn("HONCH_FOOTPRINT_INCLUDE_GPIO OFF", root_cmake)
-        self.assertIn("FOOTPRINT_INCLUDE_GPIO=1", main_cmake)
-        self.assertIn("#if FOOTPRINT_INCLUDE_GPIO", app)
-        self.assertIn("honch_track_gpio(GPIO_NUM_0", app)
+        combined = root_cmake + main_cmake + app
+        self.assertNotIn("HONCH_FOOTPRINT_INCLUDE_GPIO", combined)
+        self.assertNotIn("FOOTPRINT_INCLUDE_GPIO", combined)
+        self.assertNotIn("honch_track_gpio", combined)
+        self.assertNotIn("HONCH_GPIO_", combined)
 
     def test_esp_ram_queue_metadata_uses_event_buffer_not_static_bss(self):
         header = (REPO_ROOT / "ports" / "esp-idf" / "honch" / "src" / "esp_core_adapter.h").read_text(

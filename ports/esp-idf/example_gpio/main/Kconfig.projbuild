@@ -1,0 +1,33 @@
+menu "Honch GPIO Example Configuration"
+
+    config HONCH_API_KEY
+        string "Honch API Key"
+        default ""
+        help
+            Your Honch project API key.
+
+    config HONCH_HOST
+        string "Honch Host"
+        default "https://capture.honch.io"
+        help
+            The Honch capture endpoint URL.
+
+    config WIFI_SSID
+        string "Wi-Fi SSID"
+        default ""
+        help
+            SSID of the Wi-Fi network to connect to.
+
+    config WIFI_PASSWORD
+        string "Wi-Fi Password"
+        default ""
+        help
+            Password for the Wi-Fi network.
+
+    config HONCH_GPIO_BUTTON
+        int "Button GPIO"
+        default 0
+        help
+            GPIO number to track. GPIO 0 is the BOOT button on many ESP32 dev boards.
+
+endmenu
