@@ -13,21 +13,22 @@ try:
 except ImportError:
     sys = None
 
-import honch
+try:
+    import secrets
+except ImportError:
+    secrets = None
 
-honch.__path__ = "/lib/honch"
-from honch.client import Honch
+from honch import Honch
 
-API_KEY = "honch_e2e_test_key"
-ENDPOINT_URL = "http://192.168.1.244:8001"
+API_KEY = getattr(secrets, "HONCH_API_KEY", "")
+ENDPOINT_URL = getattr(secrets, "HONCH_ENDPOINT_URL", "")
 DEVICE_MODEL = "MicroPython E2E"
 FIRMWARE_VERSION = "e2e-fw-1"
 ENVIRONMENT = "e2e"
 BATTERY_LOW_THRESHOLD = 20
 
-# Real Pico W network credentials from the Desktop test script.
-WIFI_SSID = "BT-Q2AT9P"
-WIFI_PASSWORD = "eDeNEKq6PmcPLg"
+WIFI_SSID = getattr(secrets, "WIFI_SSID", "")
+WIFI_PASSWORD = getattr(secrets, "WIFI_PASSWORD", "")
 
 
 def connect_wifi(ssid, password, timeout_s=20):
@@ -95,8 +96,6 @@ def main():
             "source": "micropython-e2e",
             "nested": {"mode": "hdr", "frames": [1, 2, 3]},
             "quote": 'say "hi"',
-            "$device_id": "spoofed-device",
-            "$sdk_platform": "spoofed-platform",
         },
     )
     print("DEBUG: identify", user_id)
