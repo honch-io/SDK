@@ -139,6 +139,16 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertNotIn("CBOR", readme)
         self.assertNotIn("JSON-compatible", readme)
 
+    def test_pico_w_example_uses_frozen_or_normal_imports(self):
+        example = self.read("ports/micropython/examples/pico_w_main.py")
+
+        self.assertIn("from honch import Honch", example)
+        self.assertIn("import secrets", example)
+        self.assertNotIn('honch.__path__ = "/lib/honch"', example)
+        self.assertNotIn("WIFI_PASSWORD = \"", example)
+        self.assertNotIn('"$device_id"', example)
+        self.assertNotIn('"$sdk_platform"', example)
+
     def test_auto_properties_spec_matches_core_lifecycle_behavior(self):
         spec = self.read("spec/auto-properties.md")
         compact_spec = " ".join(spec.split())
