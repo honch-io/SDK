@@ -22,6 +22,9 @@ static const char *TAG = "honch_example";
 #define WIFI_FAIL_BIT      BIT1
 #define WIFI_MAX_RETRY     5
 #define HEARTBEAT_INTERVAL_SECONDS 5
+#define HONCH_TELEMETRY_TASK_STACK_WORDS 4096
+#define HONCH_TELEMETRY_TASK_PRIORITY 2
+#define HONCH_TICK_INTERVAL_MS 1000
 
 static EventGroupHandle_t s_wifi_event_group;
 static int s_retry_num = 0;
@@ -130,6 +133,18 @@ static void sync_time(void)
 
 static uint8_t s_event_buffer[16384];
 
+static void honch_telemetry_task(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        honch_err_t err = honch_tick();
+        if (err != HONCH_OK && err != HONCH_ERR_TRANSPORT && err != HONCH_ERR_TIMEOUT) {
+            ESP_LOGW(TAG, "honch_tick: %d", err);
+        }
+        vTaskDelay(pdMS_TO_TICKS(HONCH_TICK_INTERVAL_MS));
+    }
+}
+
 void app_main(void)
 {
     bool offline_smoke = strlen(CONFIG_WIFI_SSID) == 0;
@@ -159,6 +174,16 @@ void app_main(void)
 
     ESP_LOGI(TAG, "Honch initialized, device_id: %s", honch_get_device_id());
 
+    BaseType_t task_created = xTaskCreate(honch_telemetry_task,
+        "honch_telemetry",
+        HONCH_TELEMETRY_TASK_STACK_WORDS,
+        NULL,
+        HONCH_TELEMETRY_TASK_PRIORITY,
+        NULL);
+    if (task_created != pdPASS) {
+        ESP_LOGE(TAG, "Failed to start Honch telemetry task");
+    }
+
     // Register BOOT button (GPIO 0) for tracking
     err = honch_track_gpio(GPIO_NUM_0, "button_pressed", HONCH_GPIO_FALLING_EDGE);
     if (err != HONCH_OK) {
@@ -184,8 +209,6 @@ void app_main(void)
         };
         err = honch_track("heartbeat", heartbeat, 1u);
         ESP_LOGI(TAG, "honch_track heartbeat: %d", err);
-        err = honch_tick();
-        ESP_LOGI(TAG, "honch_tick: %d", err);
         ESP_LOGI(TAG, "Free heap: %u bytes", (unsigned)esp_get_free_heap_size());
         vTaskDelay(pdMS_TO_TICKS(HEARTBEAT_INTERVAL_SECONDS * 1000));
     }

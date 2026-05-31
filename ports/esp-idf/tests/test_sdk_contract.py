@@ -184,9 +184,15 @@ class EspIdfChunkWireTest(unittest.TestCase):
         compat = read("ports/esp-idf/honch/src/esp_compat.c")
         public_header = read("ports/esp-idf/honch/include/honch.h")
         readme = read("ports/esp-idf/README.md")
+        internal = read("core/src/honch_internal.h")
+        example = read("ports/esp-idf/example/main/app_main.c")
+        app_main = c_function_body(example, "app_main")
+        honch_task = c_function_body(example, "honch_telemetry_task")
 
+        self.assertIn("#define HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS 3000u", internal)
         self.assertIn("flush_interval_seconds", public_header)
         self.assertIn("flush_event_threshold", public_header)
+        self.assertIn("uint32_t transport_timeout_ms", public_header)
         self.assertIn("honch_tick", public_header)
         self.assertIn("honch_core_tick(client)", compat)
         self.assertIn("if (config->flush_event_threshold > 0u)", compat)
@@ -194,10 +200,19 @@ class EspIdfChunkWireTest(unittest.TestCase):
             "core_config.batch_size = config->flush_event_threshold > HONCH_MAX_BATCH_SIZE",
             compat,
         )
+        self.assertIn("core_config.transport_timeout_ms = config->transport_timeout_ms", compat)
         self.assertIn("core_config.flush_interval_seconds = config->flush_interval_seconds", compat)
         self.assertIn("core_config.flush_event_threshold = config->flush_event_threshold", compat)
+        self.assertIn("xTaskCreate(honch_telemetry_task", example)
+        self.assertIn("honch_tick();", honch_task)
+        self.assertNotIn("honch_tick();", app_main)
+        self.assertIn("low-priority telemetry task", readme)
+        self.assertIn("can perform blocking network I/O", readme)
+        self.assertIn("SDK-owned worker task", readme)
+        self.assertIn("application-owned FreeRTOS task", readme)
+        self.assertIn("transport_timeout_ms", readme)
+        self.assertIn("3000", readme)
         self.assertNotIn("disable_background_flush", compat + public_header + readme)
-        self.assertNotIn("flush worker", readme)
 
     def test_readme_only_documents_implemented_automatic_esp_properties(self) -> None:
         readme = read("ports/esp-idf/README.md")
