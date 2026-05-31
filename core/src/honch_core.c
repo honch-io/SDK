@@ -1546,6 +1546,13 @@ honch_status_t honch_core_flush(honch_client_t *client)
         honch_client_leave(client);
         return HONCH_ERROR_BUSY;
     }
+    bool offline = false;
+    status = honch_scheduler_check_connectivity_locked(client, &offline);
+    if (status != HONCH_OK || offline) {
+        honch_client_unlock(client);
+        honch_client_leave(client);
+        return status == HONCH_OK ? HONCH_ERROR_OFFLINE : status;
+    }
     uint64_t now = honch_client_now_millis(client);
     bool delayed = false;
     status = honch_scheduler_check_outbound_spacing_locked(client, now, &delayed);
@@ -1553,13 +1560,6 @@ honch_status_t honch_core_flush(honch_client_t *client)
         honch_client_unlock(client);
         honch_client_leave(client);
         return status == HONCH_OK ? HONCH_ERROR_RATE_LIMITED : status;
-    }
-    bool offline = false;
-    status = honch_scheduler_check_connectivity_locked(client, &offline);
-    if (status != HONCH_OK || offline) {
-        honch_client_unlock(client);
-        honch_client_leave(client);
-        return status == HONCH_OK ? HONCH_ERROR_OFFLINE : status;
     }
 
     client->flush_in_progress = true;

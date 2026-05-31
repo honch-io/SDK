@@ -1120,6 +1120,42 @@ static void test_flush_returns_offline_without_transport_attempt(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
+static void test_flush_returns_offline_before_min_spacing_rate_limit(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .track_queue_depth = 1,
+        .now_ms = 2000u,
+        .force_now_ms = 1
+    };
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    config.flush_event_threshold = 1u;
+    config.flush_min_interval_ms = 10000u;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(honch_core_track(client, "first_online_flush", NULL, 0u) == HONCH_OK);
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(storage.post_chunk_calls == 1);
+
+    assert(honch_core_track(client, "offline_during_min_spacing", NULL, 0u) == HONCH_OK);
+    storage.now_ms = 6000u;
+    storage.force_connectivity = 1;
+    storage.connectivity_available = 0;
+    assert(honch_core_flush(client) == HONCH_ERROR_OFFLINE);
+    assert(storage.connectivity_calls == 2);
+    assert(storage.post_chunk_calls == 1);
+    assert(client->current_retry_delay_ms == client->flush_retry_initial_ms);
+    assert(client->next_retry_flush_ms == 0u);
+    assert(client->scheduler_flush_requested);
+
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
 static void test_zero_min_spacing_allows_back_to_back_flushes(void)
 {
     fake_state_storage_t storage = {
@@ -1176,6 +1212,7 @@ int main(void)
     test_empty_flush_is_not_rate_limited_during_min_spacing();
     test_tick_skips_transport_while_connectivity_unavailable();
     test_flush_returns_offline_without_transport_attempt();
+    test_flush_returns_offline_before_min_spacing_rate_limit();
     test_zero_min_spacing_allows_back_to_back_flushes();
     return 0;
 }
