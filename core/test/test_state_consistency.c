@@ -33,6 +33,10 @@ typedef struct fake_state_storage {
     honch_client_t *nested_flush_client;
     honch_status_t nested_flush_status;
     int nested_flush_attempts;
+    honch_status_t post_chunk_status;
+    honch_transport_result_t post_chunk_result;
+    uint64_t retry_after_ms;
+    int retry_after_calls;
 } fake_state_storage_t;
 
 static honch_core_config_t fake_config(
@@ -332,8 +336,22 @@ static honch_status_t fake_post_chunk(
         storage->nested_flush_attempts++;
         storage->nested_flush_status = honch_core_flush(storage->nested_flush_client);
     }
-    *result = HONCH_TRANSPORT_ACCEPTED;
-    return HONCH_OK;
+    *result = storage != NULL && storage->post_chunk_result != 0 ?
+        storage->post_chunk_result :
+        HONCH_TRANSPORT_ACCEPTED;
+    return storage != NULL && storage->post_chunk_status != 0 ?
+        storage->post_chunk_status :
+        HONCH_OK;
+}
+
+static uint64_t fake_retry_after_ms(void *ctx)
+{
+    fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
+    if (storage == NULL) {
+        return 0u;
+    }
+    storage->retry_after_calls++;
+    return storage->retry_after_ms;
 }
 
 static honch_client_t *g_callback_lock_client = NULL;
@@ -417,6 +435,7 @@ static honch_core_config_t fake_config(
     };
     *transport = (honch_transport_ops_t) {
         .post_chunk = fake_post_chunk,
+        .retry_after_ms = fake_retry_after_ms,
         .ctx = storage
     };
     return (honch_core_config_t) {
@@ -879,6 +898,44 @@ static void test_nested_flush_during_transport_returns_busy(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
+static void test_retry_after_extends_scheduler_delay(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .track_queue_depth = 1,
+        .now_ms = 10000u,
+        .force_now_ms = 1,
+        .post_chunk_status = HONCH_ERROR_RATE_LIMITED,
+        .post_chunk_result = HONCH_TRANSPORT_RETRY,
+        .retry_after_ms = 7000u
+    };
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    config.flush_retry_initial_ms = 1000u;
+    config.flush_retry_max_ms = 10000u;
+    config.flush_max_batches = 1u;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(honch_core_track(client, "retry_after_probe", NULL, 0u) == HONCH_OK);
+    assert(honch_core_flush(client) == HONCH_ERROR_RATE_LIMITED);
+    assert(storage.retry_after_calls == 1);
+    assert(client->next_retry_flush_ms == 17000u);
+    assert(client->scheduler_flush_requested);
+    assert(client->current_retry_delay_ms == 2000u);
+
+    storage.post_chunk_status = HONCH_OK;
+    storage.post_chunk_result = HONCH_TRANSPORT_ACCEPTED;
+    storage.retry_after_ms = 0u;
+    storage.now_ms = 17000u;
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(client->next_retry_flush_ms == 0u);
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
 int main(void)
 {
     test_queue_push_uses_honch_event_record_format();
@@ -903,5 +960,6 @@ int main(void)
     test_auto_properties_callback_runs_outside_client_mutex();
     test_auto_property_buffer_exhaustion_returns_busy();
     test_nested_flush_during_transport_returns_busy();
+    test_retry_after_extends_scheduler_delay();
     return 0;
 }
