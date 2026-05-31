@@ -497,13 +497,13 @@ static mp_obj_t honch_client_queue_stats(mp_obj_t self_in)
         honch_micropython_raise_status(status);
     }
     mp_obj_t dict = mp_obj_new_dict(7);
-    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_depth), mp_obj_new_int_from_ull(stats.depth));
-    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_bytes_used), mp_obj_new_int_from_ull(stats.bytes_used));
-    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_bytes_capacity), mp_obj_new_int_from_ull(stats.bytes_capacity));
+    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_depth), mp_obj_new_int_from_ull(stats.queued_events));
+    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_bytes_used), mp_obj_new_int_from_ull(stats.queued_bytes));
+    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_bytes_capacity), mp_obj_new_int_from_ull(stats.buffer_bytes));
     mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_capacity_dropped_events), mp_obj_new_int_from_ull(stats.capacity_dropped_events));
     mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_oversized_rejected_events), mp_obj_new_int_from_ull(stats.oversized_rejected_events));
     mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_dead_lettered_events), mp_obj_new_int_from_ull(stats.dead_lettered_events));
-    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_high_watermark_depth), mp_obj_new_int_from_ull(stats.high_watermark_depth));
+    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_high_watermark_depth), mp_obj_new_int_from_ull(stats.high_water_events));
     return dict;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(honch_client_queue_stats_obj, honch_client_queue_stats);
