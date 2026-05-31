@@ -280,6 +280,21 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertNotIn("esp_gpio_adapter", component_cmake)
         self.assertNotIn("esp_gpio_public", component_cmake)
 
+    def test_auto_property_collection_uses_client_owned_buffers(self) -> None:
+        core = read("core/src/honch_core.c")
+        internal = read("core/src/honch_internal.h")
+        collect = c_function_body(core, "honch_collect_auto_properties")
+        acquire = c_function_body(core, "honch_acquire_auto_property_buffer")
+        release = c_function_body(core, "honch_auto_properties_snapshot_free")
+
+        self.assertIn("auto_property_buffers", internal)
+        self.assertIn("auto_property_buffer_in_use", internal)
+        self.assertIn("honch_acquire_auto_property_buffer", core)
+        self.assertIn("HONCH_ERROR_BUSY", acquire)
+        self.assertNotIn("calloc", collect)
+        self.assertNotIn("malloc", collect)
+        self.assertNotIn("free(", release)
+
     def test_readme_only_documents_implemented_automatic_esp_properties(self) -> None:
         readme = read("ports/esp-idf/README.md")
         automatic = readme.split("## What gets sent automatically", 1)[1].split("## Configuration options", 1)[0]

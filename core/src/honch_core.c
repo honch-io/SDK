@@ -50,6 +50,9 @@ typedef struct honch_auto_property_sink_context {
 typedef struct honch_auto_properties_snapshot {
     honch_wire_v2_property_t *properties;
     size_t property_count;
+    honch_client_t *client;
+    size_t buffer_index;
+    bool buffer_acquired;
 } honch_auto_properties_snapshot_t;
 
 typedef struct honch_event_context {
@@ -108,12 +111,44 @@ static honch_status_t honch_auto_property_sink(
         true);
 }
 
+static honch_status_t honch_acquire_auto_property_buffer(
+    honch_client_t *client,
+    honch_auto_properties_snapshot_t *snapshot)
+{
+    if (client == NULL || snapshot == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (size_t i = 0u; i < HONCH_AUTO_PROPERTY_BUFFER_COUNT; i++) {
+        bool expected = false;
+        if (atomic_compare_exchange_strong(
+                &client->auto_property_buffer_in_use[i],
+                &expected,
+                true)) {
+            snapshot->properties = client->auto_property_buffers[i];
+            snapshot->client = client;
+            snapshot->buffer_index = i;
+            snapshot->buffer_acquired = true;
+            memset(snapshot->properties, 0, sizeof(client->auto_property_buffers[i]));
+            return HONCH_OK;
+        }
+    }
+
+    return HONCH_ERROR_BUSY;
+}
+
 static void honch_auto_properties_snapshot_free(honch_auto_properties_snapshot_t *snapshot)
 {
     if (snapshot == NULL) {
         return;
     }
-    free(snapshot->properties);
+
+    if (snapshot->buffer_acquired && snapshot->client != NULL &&
+        snapshot->buffer_index < HONCH_AUTO_PROPERTY_BUFFER_COUNT) {
+        atomic_store(
+            &snapshot->client->auto_property_buffer_in_use[snapshot->buffer_index],
+            false);
+    }
     memset(snapshot, 0, sizeof(*snapshot));
 }
 
@@ -130,11 +165,9 @@ static honch_status_t honch_collect_auto_properties(
         return HONCH_OK;
     }
 
-    snapshot->properties = (honch_wire_v2_property_t *)calloc(
-        HONCH_MAX_EVENT_PROPERTIES,
-        sizeof(*snapshot->properties));
-    if (snapshot->properties == NULL) {
-        return HONCH_ERROR_OUT_OF_MEMORY;
+    honch_status_t status = honch_acquire_auto_property_buffer(client, snapshot);
+    if (status != HONCH_OK) {
+        return status;
     }
 
     honch_auto_property_sink_context_t sink_context = {
@@ -142,7 +175,7 @@ static honch_status_t honch_collect_auto_properties(
         .property_count = &snapshot->property_count
     };
 
-    honch_status_t status = client->auto_properties_callback(
+    status = client->auto_properties_callback(
         client->auto_properties_userdata,
         honch_auto_property_sink,
         &sink_context);
@@ -853,6 +886,9 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     honch_client_t *next = (honch_client_t *)calloc(1u, sizeof(*next));
     if (next == NULL) {
         return HONCH_ERROR_OUT_OF_MEMORY;
+    }
+    for (size_t i = 0u; i < HONCH_AUTO_PROPERTY_BUFFER_COUNT; i++) {
+        atomic_init(&next->auto_property_buffer_in_use[i], false);
     }
     if (config->platform != NULL) {
         next->platform_ops = *config->platform;

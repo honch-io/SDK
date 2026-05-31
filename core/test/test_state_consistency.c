@@ -294,6 +294,9 @@ static honch_status_t fake_post_chunk(
 static honch_client_t *g_callback_lock_client = NULL;
 static int g_battery_callback_saw_unlocked_mutex = 0;
 static int g_auto_properties_callback_saw_unlocked_mutex = 0;
+static honch_client_t *g_recursive_auto_client = NULL;
+static int g_recursive_auto_depth = 0;
+static int g_recursive_auto_max_depth = 0;
 
 static int lock_observing_battery_callback(void)
 {
@@ -314,6 +317,28 @@ static honch_status_t lock_observing_auto_properties_callback(
     }
 
     return sink(sink_ctx, "$wifi_rssi", honch_i64(-42));
+}
+
+static honch_status_t recursive_auto_properties_callback(
+    void *userdata,
+    honch_property_sink_fn sink,
+    void *sink_ctx)
+{
+    (void)userdata;
+    g_recursive_auto_depth++;
+    if (g_recursive_auto_depth < g_recursive_auto_max_depth) {
+        char event_name[32];
+        snprintf(event_name, sizeof(event_name), "recursive_auto_%d", g_recursive_auto_depth);
+        honch_status_t nested_status = honch_core_track(g_recursive_auto_client, event_name, NULL, 0u);
+        if (nested_status != HONCH_OK) {
+            g_recursive_auto_depth--;
+            return nested_status;
+        }
+    }
+
+    honch_status_t status = sink(sink_ctx, "$wifi_rssi", honch_i64(-40 - g_recursive_auto_depth));
+    g_recursive_auto_depth--;
+    return status;
 }
 
 static honch_core_config_t fake_config(
@@ -759,6 +784,31 @@ static void test_auto_properties_callback_runs_outside_client_mutex(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
+static void test_auto_property_buffer_exhaustion_returns_busy(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    config.auto_properties_callback = recursive_auto_properties_callback;
+
+    g_recursive_auto_client = NULL;
+    g_recursive_auto_depth = 0;
+    g_recursive_auto_max_depth = 1;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    g_recursive_auto_client = client;
+    g_recursive_auto_max_depth = 8;
+    assert(honch_core_track(client, "recursive_auto_root", NULL, 0u) == HONCH_ERROR_BUSY);
+    assert(g_recursive_auto_depth == 0);
+    g_recursive_auto_client = NULL;
+    g_recursive_auto_max_depth = 1;
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
 int main(void)
 {
     test_queue_push_uses_honch_event_record_format();
@@ -781,5 +831,6 @@ int main(void)
     test_state_get_rejects_inconsistent_read_size();
     test_battery_callback_runs_outside_client_mutex();
     test_auto_properties_callback_runs_outside_client_mutex();
+    test_auto_property_buffer_exhaustion_returns_busy();
     return 0;
 }
