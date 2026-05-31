@@ -4,6 +4,7 @@
 #include "honch/core/honch.h"
 #include "honch/core/wire_v2.h"
 
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -24,6 +25,7 @@
 #define HONCH_MAX_EVENT_NAME 128u
 #define HONCH_MAX_DISTINCT_ID 256u
 #define HONCH_MAX_EVENT_PROPERTIES 64u
+#define HONCH_AUTO_PROPERTY_BUFFER_COUNT 4u
 
 #ifdef __cplusplus
 extern "C" {
@@ -85,6 +87,8 @@ struct honch_client {
     char *distinct_id;
     char *session_id;
     honch_wire_v2_property_t build_properties[HONCH_MAX_EVENT_PROPERTIES];
+    honch_wire_v2_property_t auto_property_buffers[HONCH_AUTO_PROPERTY_BUFFER_COUNT][HONCH_MAX_EVENT_PROPERTIES];
+    atomic_bool auto_property_buffer_in_use[HONCH_AUTO_PROPERTY_BUFFER_COUNT];
     bool configured_device_id;
     size_t batch_size;
     size_t max_queued_events;
