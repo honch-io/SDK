@@ -62,6 +62,91 @@ static honch_status_t honch_esp_ensure_transport_ready(void)
     return HONCH_STATUS_ERROR_TRANSPORT;
 }
 
+static void honch_esp_transport_reset_http_client(honch_esp_transport_t *transport)
+{
+    if (transport != NULL && transport->http_client != NULL) {
+        esp_http_client_cleanup(transport->http_client);
+        transport->http_client = NULL;
+    }
+}
+
+static void honch_esp_transport_clear_urls(honch_esp_transport_t *transport)
+{
+    if (transport == NULL) {
+        return;
+    }
+    free(transport->endpoint_url);
+    free(transport->capture_url);
+    transport->endpoint_url = NULL;
+    transport->capture_url = NULL;
+}
+
+static honch_status_t honch_esp_transport_prepare_url(
+    honch_esp_transport_t *transport,
+    const char *endpoint_url,
+    bool *client_reset)
+{
+    if (transport == NULL || endpoint_url == NULL || client_reset == NULL) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    if (transport->endpoint_url != NULL && strcmp(transport->endpoint_url, endpoint_url) == 0 &&
+        transport->capture_url != NULL) {
+        return HONCH_STATUS_OK;
+    }
+
+    honch_esp_transport_reset_http_client(transport);
+    *client_reset = true;
+    honch_esp_transport_clear_urls(transport);
+
+    transport->endpoint_url = honch_strdup(endpoint_url);
+    transport->capture_url = honch_esp_chunk_url(endpoint_url);
+    if (transport->endpoint_url == NULL || transport->capture_url == NULL) {
+        honch_esp_transport_clear_urls(transport);
+        return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
+    }
+    return HONCH_STATUS_OK;
+}
+
+static honch_status_t honch_esp_transport_prepare_client(
+    honch_esp_transport_t *transport,
+    const char *endpoint_url,
+    int timeout_ms,
+    bool *reused_client,
+    bool *client_reset)
+{
+    if (transport == NULL || endpoint_url == NULL || reused_client == NULL || client_reset == NULL) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+
+    honch_status_t status = honch_esp_transport_prepare_url(transport, endpoint_url, client_reset);
+    if (status != HONCH_STATUS_OK) {
+        return status;
+    }
+
+    if (transport->http_client != NULL && transport->timeout_ms == timeout_ms) {
+        *reused_client = true;
+        return HONCH_STATUS_OK;
+    }
+
+    honch_esp_transport_reset_http_client(transport);
+    *client_reset = true;
+
+    esp_http_client_config_t config = {
+        .url = transport->capture_url,
+        .method = HTTP_METHOD_POST,
+        .timeout_ms = timeout_ms,
+        .crt_bundle_attach = esp_crt_bundle_attach,
+        .keep_alive_enable = true,
+    };
+    transport->http_client = esp_http_client_init(&config);
+    if (transport->http_client == NULL) {
+        return HONCH_STATUS_ERROR_TRANSPORT;
+    }
+    transport->timeout_ms = timeout_ms;
+    *reused_client = false;
+    return HONCH_STATUS_OK;
+}
+
 static honch_status_t honch_esp_post_chunk(
     void *ctx,
     const char *endpoint_url,
@@ -71,8 +156,8 @@ static honch_status_t honch_esp_post_chunk(
     size_t body_size,
     honch_transport_result_t *result)
 {
-    honch_client_t *core_client = (honch_client_t *)ctx;
-    if (core_client == NULL || endpoint_url == NULL || api_key == NULL || body == NULL || body_size == 0u ||
+    honch_esp_transport_t *transport = (honch_esp_transport_t *)ctx;
+    if (transport == NULL || endpoint_url == NULL || api_key == NULL || body == NULL || body_size == 0u ||
         result == NULL) {
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
@@ -81,51 +166,48 @@ static honch_status_t honch_esp_post_chunk(
     }
 
     *result = HONCH_TRANSPORT_RETRY;
-    honch_status_t ready_status = honch_esp_ensure_transport_ready();
-    if (ready_status != HONCH_STATUS_OK) {
-        return ready_status;
-    }
 
 #ifdef HONCH_FLUSH_TIMING
     int64_t total_start_us = esp_timer_get_time();
 #endif
-    char *url = honch_esp_chunk_url(endpoint_url);
-    if (url == NULL) {
-        return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
-    }
-
-    int timeout_ms = core_client->transport_timeout_ms > (unsigned int)INT_MAX ?
+    int timeout_ms = HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS > (unsigned int)INT_MAX ?
         INT_MAX :
-        (int)core_client->transport_timeout_ms;
-
-    esp_http_client_config_t config = {
-        .url = url,
-        .method = HTTP_METHOD_POST,
-        .timeout_ms = timeout_ms == 0 ? 10000 : timeout_ms,
-        .crt_bundle_attach = esp_crt_bundle_attach,
-    };
+        (int)HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS;
 
 #ifdef HONCH_FLUSH_TIMING
     int64_t init_start_us = esp_timer_get_time();
 #endif
-    esp_http_client_handle_t http_client = esp_http_client_init(&config);
+    bool reused_client = false;
+    bool client_reset = false;
+    honch_status_t prepare_status = honch_esp_transport_prepare_client(
+        transport,
+        endpoint_url,
+        timeout_ms,
+        &reused_client,
+        &client_reset);
 #ifdef HONCH_FLUSH_TIMING
     int64_t init_us = esp_timer_get_time() - init_start_us;
 #endif
-    if (http_client == NULL) {
-        free(url);
-        return HONCH_STATUS_ERROR_TRANSPORT;
+    if (prepare_status != HONCH_STATUS_OK) {
+        return prepare_status;
     }
 
 #ifdef HONCH_FLUSH_TIMING
     int64_t setup_start_us = esp_timer_get_time();
 #endif
-    esp_err_t err = esp_http_client_set_header(http_client, "Content-Type", "application/vnd.honch.chunk");
+    esp_http_client_handle_t http_client = transport->http_client;
+    esp_err_t err = esp_http_client_set_method(http_client, HTTP_METHOD_POST);
+    if (err == ESP_OK) {
+        err = esp_http_client_set_header(http_client, "Content-Type", "application/vnd.honch.chunk");
+    }
     if (err == ESP_OK) {
         err = esp_http_client_set_header(http_client, "X-Honch-Project-Key", api_key);
     }
-    if (err == ESP_OK && stream_id != NULL && stream_id[0] != '\0') {
-        err = esp_http_client_set_header(http_client, "X-Honch-Stream-Id", stream_id);
+    if (err == ESP_OK) {
+        err = esp_http_client_set_header(
+            http_client,
+            "X-Honch-Stream-Id",
+            stream_id == NULL || stream_id[0] == '\0' ? NULL : stream_id);
     }
     if (err == ESP_OK) {
         err = esp_http_client_set_post_field(http_client, (const char *)body, (int)body_size);
@@ -139,7 +221,7 @@ static honch_status_t honch_esp_post_chunk(
             TAG,
             "HONCH_HTTP_PAYLOAD format=chunk bytes=%u url=%s stream_id=%s",
             (unsigned)body_size,
-            url,
+            transport->capture_url,
             stream_id == NULL || stream_id[0] == '\0' ? "<none>" : stream_id);
 #ifdef HONCH_FLUSH_TIMING
         int64_t perform_start_us = esp_timer_get_time();
@@ -151,14 +233,13 @@ static honch_status_t honch_esp_post_chunk(
     }
 
     int status = err == ESP_OK ? esp_http_client_get_status_code(http_client) : 0;
+    esp_err_t clear_err = esp_http_client_set_post_field(http_client, NULL, 0);
+    if (err == ESP_OK && clear_err != ESP_OK) {
+        err = clear_err;
+    }
 #ifdef HONCH_FLUSH_TIMING
-    int64_t cleanup_start_us = esp_timer_get_time();
+    int64_t cleanup_us = 0;
 #endif
-    esp_http_client_cleanup(http_client);
-#ifdef HONCH_FLUSH_TIMING
-    int64_t cleanup_us = esp_timer_get_time() - cleanup_start_us;
-#endif
-    free(url);
 
     honch_status_t return_status = HONCH_STATUS_OK;
     if (err != ESP_OK) {
@@ -189,15 +270,28 @@ static honch_status_t honch_esp_post_chunk(
         return_status = HONCH_STATUS_ERROR_SERVER;
     }
 
+    if (err != ESP_OK || status == 0 || status == 408 || status == 409) {
+#ifdef HONCH_FLUSH_TIMING
+        int64_t cleanup_start_us = esp_timer_get_time();
+#endif
+        honch_esp_transport_reset_http_client(transport);
+        client_reset = true;
+#ifdef HONCH_FLUSH_TIMING
+        cleanup_us = esp_timer_get_time() - cleanup_start_us;
+#endif
+    }
+
 #ifdef HONCH_FLUSH_TIMING
     ESP_LOGI(
         TAG,
-        "HONCH_HTTP_TIMING bytes=%u status=%d result=%d return_status=%d err=%s init_us=%lld setup_us=%lld perform_us=%lld cleanup_us=%lld total_us=%lld",
+        "HONCH_HTTP_TIMING bytes=%u status=%d result=%d return_status=%d err=%s reused_client=%u client_reset=%u init_us=%lld setup_us=%lld perform_us=%lld cleanup_us=%lld total_us=%lld",
         (unsigned)body_size,
         status,
         (int)*result,
         (int)return_status,
         err == ESP_OK ? "ESP_OK" : esp_err_to_name(err),
+        reused_client ? 1u : 0u,
+        client_reset ? 1u : 0u,
         (long long)init_us,
         (long long)setup_us,
         (long long)perform_us,
@@ -218,9 +312,23 @@ honch_status_t honch_esp_transport_ops_init(honch_transport_ops_t *ops, honch_es
     }
 
     *ctx = (honch_esp_transport_t) {0};
+    honch_status_t ready_status = honch_esp_ensure_transport_ready();
+    if (ready_status != HONCH_STATUS_OK) {
+        return ready_status;
+    }
     *ops = (honch_transport_ops_t) {
         .post_chunk = honch_esp_post_chunk,
-        .ctx = NULL
+        .ctx = ctx
     };
     return HONCH_STATUS_OK;
+}
+
+void honch_esp_transport_ops_deinit(honch_esp_transport_t *ctx)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    honch_esp_transport_reset_http_client(ctx);
+    honch_esp_transport_clear_urls(ctx);
+    ctx->timeout_ms = 0;
 }
