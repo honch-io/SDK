@@ -6,8 +6,8 @@ after durable receipt.
 
 ## BLE Constants
 
-These product constants are reserved for relay implementations until
-product-assigned UUIDs are finalized:
+These UUIDs define the current relay service and characteristics used by Honch
+relay implementations:
 
 ```text
 Service UUID: 484f4e43-482d-5245-4c41-592d53445631

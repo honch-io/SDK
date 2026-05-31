@@ -1,45 +1,31 @@
 # Honch MicroPython SDK
 
-MicroPython wrapper for the canonical Honch C core. The Python package keeps the
-small `honch.Honch` API, while SDK behavior comes from the same `core/` sources
-used by the ESP-IDF and POSIX ports: event semantics, identity, lifecycle,
-typed event values, HQR1 queue records, compact wire encoding, queue policy,
-retry classification, and packetization.
+Stable MicroPython wrapper for the canonical Honch C core. The Python package keeps a small `honch.Honch` API while behavior comes from the same shared sources used by the ESP-IDF and POSIX ports.
 
 ## Status
 
-The MicroPython port is now C-core-derived. It is not a standalone pure-Python
-SDK and must be built into firmware with the `_honch_core` user C module.
+Stable `0.2.0`. The SDK is not standalone pure Python; firmware must be built with the `_honch_core` user C module.
 
-This port targets MicroPython. CircuitPython is not covered by the current
-implementation because it does not use this MicroPython user C module build
-flow or guarantee the same native module ABI.
+This port targets MicroPython. CircuitPython is not covered by the current user C module build flow.
 
 ## Build Into MicroPython
 
-From a MicroPython checkout, build a port with this repository's user module:
+From a MicroPython checkout, build a port with the Honch user module:
 
-```sh
-make -C ports/unix USER_C_MODULES=/path/to/SDK/ports/micropython/usermod
+```bash
+make -C ports/unix \
+  USER_C_MODULES=/path/to/SDK/ports/micropython/usermod/honch/micropython.cmake
 ```
 
-For CMake-based board firmware, pass the module CMake file to the target port
-build. Freeze the thin Python wrapper with `manifest.py`:
+For board firmware, pass the same user module path and freeze the wrapper:
 
-```sh
+```bash
 make BOARD=MYBOARD \
   USER_C_MODULES=/path/to/SDK/ports/micropython/usermod/honch/micropython.cmake \
   FROZEN_MANIFEST=/path/to/SDK/ports/micropython/manifest.py
 ```
 
-`mip` can install the wrapper files from `package.json`, but those files require
-firmware that already contains `_honch_core`.
-
-The module reserves a 64 KiB C heap by default for ports such as `rp2`, where
-runtime `malloc`/`free` is unavailable unless firmware sets
-`MICROPY_C_HEAP_SIZE`. The shared Honch C core uses C allocation for client
-state, typed event values, HQR1 queue records, compact wire-v2 packetization,
-and queue processing.
+`mip` can install wrapper files from package metadata, but those files require firmware that already contains `_honch_core`.
 
 ## Basic Usage
 
@@ -47,7 +33,7 @@ and queue processing.
 import honch
 
 client = honch.Honch(
-    api_key="your-api-key",
+    api_key="project-key",
     endpoint_url="https://capture.honch.io",
     device_model="ActionCam X1",
     firmware_version="1.2.3",
@@ -86,9 +72,7 @@ Optional:
 - `flush_retry_max_ms`
 - `battery_low_threshold`
 
-Python `platform=`, `transport=`, `battery_callback=`, and
-`auto_properties_callback=` hooks are not supported by the C-core-derived port.
-Board behavior belongs in the C user-module adapters.
+Python `platform=`, `transport=`, `battery_callback=`, and `auto_properties_callback=` hooks are not supported by the C-core-derived port. Board behavior belongs in the user module adapters.
 
 ## Public API
 
@@ -108,21 +92,11 @@ client.shutdown()
 client.get_device_id()
 ```
 
-`properties` and `traits` must be dictionaries containing typed wire-v2 values:
-`None`, `bool`, `int`, `float`, `str`, `bytes`, lists, and dictionaries with
-string keys. Capture may reject bytes unless the project enables binary
-properties. SDK-owned auto property keys supplied by users are rejected before
-queueing.
-
-Call `client.tick()` periodically from the device main loop to run scheduled
-flush work for `flush_interval_seconds` and `flush_event_threshold`.
-`client.flush()` remains the explicit drain-the-queue call.
+Call `client.tick()` periodically from the device main loop for scheduled flush work. Use `client.flush()` when you want an immediate drain attempt.
 
 ## Storage And Transport
 
-The C user module owns the MicroPython storage and transport adapters. It stores
-state and queue files below `queue_directory` using the same logical layout as
-the other C-core ports:
+The user C module stores state and queue files below `queue_directory`:
 
 ```text
 pending/
@@ -133,31 +107,17 @@ state/
   firmware_version
 ```
 
-Flush sends compact chunk wire frames to `POST <endpoint_url>/capture` with
-`Content-Type: application/vnd.honch.chunk`, `X-Honch-Project-Key`, and
-`X-Honch-Stream-Id`. Retry and dead-letter behavior is inherited from the
-canonical C core. Capture also accepts the same format on `/e` and `/chunks`.
+Flush sends compact chunk frames to `POST <endpoint_url>/capture` with `Content-Type: application/vnd.honch.chunk`, `X-Honch-Project-Key`, and `X-Honch-Stream-Id`.
+
+## Security
+
+Use HTTPS in production. Verify the board has network, time, and trust setup needed for certificate validation. Keep project keys out of source control, logs, and event properties.
 
 ## Tests
 
-Host-side tests verify the wrapper and user-module source shape:
-
-```sh
+```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=ports/micropython python3 -m unittest discover \
   -s ports/micropython/tests -t . -v
 ```
 
-Full runtime validation requires building MicroPython with
-`ports/micropython/usermod/honch/micropython.cmake` and running the wrapper on
-that interpreter or firmware.
-
-After building the MicroPython unix port with `_honch_core`, run the runtime
-smoke test with:
-
-```sh
-MICROPYTHON_BIN=/path/to/micropython/ports/unix/build-standard/micropython \
-  ports/micropython/scripts/run-unix-tests.sh
-```
-
-The runner first imports `_honch_core`, then executes a MicroPython-compatible
-smoke test against the real `honch.Honch` wrapper.
+Full runtime validation requires building MicroPython with `_honch_core` and running the wrapper on that interpreter or firmware.

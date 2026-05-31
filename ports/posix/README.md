@@ -1,6 +1,6 @@
 # Honch C/POSIX SDK
 
-C/POSIX SDK foundation for Honch analytics on connected hardware and embedded Linux-style systems.
+Stable C/POSIX SDK for Honch analytics on connected hardware and embedded Linux-style systems.
 
 This package is intended for:
 
@@ -11,7 +11,11 @@ This package is intended for:
 
 The shared cross-SDK contract lives in [`../../spec/`](../../spec/). C/POSIX sends the same compact chunk wire payloads as the ESP-IDF SDK.
 
-## Current Status
+## Status
+
+Stable `0.2.0`.
+
+## Current Capabilities
 
 Implemented:
 
@@ -255,8 +259,10 @@ for a valid client.
 Flushes use the compact wire encoder in the shared core and send chunk frames to
 `POST /capture` with `Content-Type: application/vnd.honch.chunk`. The project
 key is sent as `X-Honch-Project-Key`; a boot-scoped stream ID is sent as
-`X-Honch-Stream-Id`. Capture also accepts the same format on `/e` and
-`/chunks`.
+`X-Honch-Stream-Id`.
+
+Use HTTPS in production. Local HTTP should only be used for intentional local
+Capture testing.
 
 GPIO tracking is intentionally kept out of the reusable C core. Use a platform
 adapter, like `example/posix_gpio`, to debounce platform-specific GPIO edge

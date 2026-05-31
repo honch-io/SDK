@@ -1,60 +1,45 @@
 # Honch SDKs
 
-Product analytics for connected hardware. This repository contains the shared
-SDK contract plus platform SDKs for embedded and connected-device targets.
+Product analytics SDKs for connected hardware. This repository contains the shared SDK contract plus platform SDKs for embedded, MicroPython, Arduino ESP32, and mobile relay targets.
 
-## Available SDKs
+## SDK Status
 
-| Platform | Status | Path |
-|----------|--------|------|
-| **ESP-IDF** | v0.1.0 | [`ports/esp-idf/`](ports/esp-idf/) |
-| **Arduino ESP32** | In progress | [`ports/arduino/`](ports/arduino/) |
-| **C/POSIX** | v0.2.0 | [`ports/posix/`](ports/posix/) |
-| **MicroPython** | v0.2.0 | [`ports/micropython/`](ports/micropython/) |
-| **React Native Relay** | In progress | [`ports/react-native-relay/`](ports/react-native-relay/) |
+| Platform | Public status | Version | Path |
+| --- | --- | --- | --- |
+| ESP-IDF | Stable | `0.2.0` | [`ports/esp-idf/`](ports/esp-idf/) |
+| C/POSIX | Stable | `0.2.0` | [`ports/posix/`](ports/posix/) |
+| MicroPython | Stable | `0.2.0` | [`ports/micropython/`](ports/micropython/) |
+| Arduino ESP32 | Preview | `0.1.0` | [`ports/arduino/`](ports/arduino/) |
+| React Native Relay | Preview | `0.1.0` | [`ports/react-native-relay/`](ports/react-native-relay/) |
 
-## Repository layout
+Stable SDKs are supported integration paths for product work. Preview SDKs are usable for evaluation and controlled pilots, but production rollout should wait for product-specific validation on the target hardware or host app.
 
-- [`core/`](core/) — canonical portable C SDK behavior: typed event
-  properties, HQR1 queue records, compact wire encoding, identity, lifecycle,
-  queue policy, retry classification, and packetization.
-- [`ports/arduino/`](ports/arduino/) — Arduino ESP32 SDK wrapper around the
-  canonical core.
-- [`ports/posix/`](ports/posix/) — C/POSIX SDK and local development port for
-  the canonical core.
-- [`ports/esp-idf/`](ports/esp-idf/) — ESP-IDF component, example app,
-  RAM-first/NVS-configurable storage adapter, and ESP-focused tests.
-- [`ports/micropython/`](ports/micropython/) — MicroPython SDK validated against
-  the same wire-format and lifecycle contract.
-- [`ports/react-native-relay/`](ports/react-native-relay/) — relay package for
-  forwarding device-originated SDK payloads through mobile apps.
-- [`spec/`](spec/) — shared cross-platform SDK contract and conformance data.
+## Repository Layout
 
-## Build and test
+- [`core/`](core/) — canonical portable SDK behavior: typed event properties, HQR1 queue records, compact encoding, identity, lifecycle events, queue policy, retry classification, and packetization.
+- [`ports/esp-idf/`](ports/esp-idf/) — ESP-IDF component for ESP32-family firmware.
+- [`ports/posix/`](ports/posix/) — C/POSIX SDK for embedded Linux and local validation.
+- [`ports/micropython/`](ports/micropython/) — MicroPython wrapper and `_honch_core` user module.
+- [`ports/arduino/`](ports/arduino/) — preview Arduino ESP32 wrapper around the shared C core.
+- [`ports/react-native-relay/`](ports/react-native-relay/) — preview relay package for forwarding device-originated payloads through companion apps.
+- [`spec/`](spec/) — shared SDK/Capture contracts and conformance fixtures.
+- [`docs/`](docs/) — maintainer notes, production-readiness records, ADRs, and release evidence.
 
-### Production release E2E
+## Build And Test
 
-Use the release campaign runner before release candidates. It runs the
-automatable production gates, writes per-step logs, and generates a readiness
-report under `/private/tmp/honch-production-e2e-*`.
+### Production Release E2E
+
+Use the release campaign runner before release candidates. Missing services, toolchains, or hardware inputs are reported as `BLOCKED`, not passed.
 
 ```bash
 python3 tools/release_e2e.py --profile release --continue-on-fail
 ```
 
-Profiles:
+Start the local sandbox before profiles that require local services:
 
-- `smoke`: fastest deterministic host gate.
-- `host`: deterministic host checks only, no local services or hardware.
-- `services`: local sandbox/capture E2E checks only.
-- `toolchains`: ESP-IDF, Arduino CLI, and PlatformIO compile gates.
-- `hardware`: configured board preflights.
-- `release`: host + services + toolchains.
-- `full`: release + hardware.
-
-Missing required services, toolchains, or hardware inputs are reported as
-`BLOCKED`, not passed. Start the local sandbox with `./honch --plain sandbox`
-before the `services`, `release`, or `full` profiles.
+```bash
+./honch --plain sandbox
+```
 
 ### C/POSIX
 
@@ -65,19 +50,9 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-To build the POSIX benchmark target:
-
-```bash
-cd ports/posix
-cmake -S . -B build-bench -DCMAKE_BUILD_TYPE=Release \
-  -DHONCH_BUILD_TESTS=OFF -DHONCH_BUILD_EXAMPLES=OFF \
-  -DHONCH_BUILD_BENCHMARKS=ON
-cmake --build build-bench --target honch_posix_bench
-```
-
 ### ESP-IDF
 
-Activate your ESP-IDF environment first, then build the example app:
+Activate ESP-IDF first, then build the example app:
 
 ```bash
 cd ports/esp-idf/example
@@ -85,27 +60,13 @@ idf.py set-target esp32
 idf.py build
 ```
 
-Run the ESP-IDF SDK contract guard from the repository root:
-
-```bash
-python3 ports/esp-idf/tests/test_sdk_contract.py
-```
-
 ### Arduino ESP32
-
-Run the Arduino host wrapper test and, when `arduino-cli` is installed, compile
-the ESP32 examples:
 
 ```bash
 ports/arduino/scripts/verify-arduino.sh
 ```
 
-### Compact wire fixtures
-
-```bash
-python3 tools/generate_wire_v2_fixtures.py
-python3 -m unittest spec.conformance.test_wire_v2_fixtures
-```
+If `arduino-cli` is missing, local verification can skip compile checks. Release verification should require Arduino CLI.
 
 ### MicroPython
 
@@ -114,25 +75,30 @@ PYTHONPATH=ports/micropython python3 -m unittest discover \
   -s ports/micropython/tests -t .
 ```
 
+### Compact Wire Fixtures
+
+```bash
+python3 tools/generate_wire_v2_fixtures.py
+python3 -m unittest spec.conformance.test_wire_v2_fixtures
+```
+
 ## Spec
 
-The [`spec/`](spec/) directory defines the cross-platform contract that all SDKs implement:
+The [`spec/`](spec/) directory defines contracts that official SDKs and Capture implement:
 
-- [Compact Wire Format](spec/wire-format-v2.md) — active compact binary chunk
-  endpoint, frame format, event message grammar, retry behavior, and
-  conformance fixtures
-- [Auto Properties](spec/auto-properties.md) — required properties, lifecycle events
-- [Conformance Fixtures](spec/conformance/) — shared test data for cross-SDK validation
-- [Archived Specs](spec/archive/) — superseded wire-format overview and
-  historical relay envelope notes
+- [Compact Wire Format](spec/wire-format-v2.md) — active compact binary chunk upload contract.
+- [Auto Properties](spec/auto-properties.md) — required SDK-owned properties and lifecycle events.
+- [Relay Chunks](spec/relay-chunks.md) — relay frame contract for offline device forwarding.
+- [Conformance Fixtures](spec/conformance/) — shared test data for cross-SDK validation.
+- [Archived Specs](spec/archive/) — superseded historical material.
 
-## Adding a new SDK
+## Adding A New SDK
 
-1. Create a directory under `ports/` (e.g. `ports/ios/`, `ports/android/`)
-2. Implement the compact wire format from `spec/wire-format-v2.md`
-3. Stamp all properties from `spec/auto-properties.md`
-4. Validate against the conformance fixtures in `spec/conformance/`
-5. Add a CI workflow in `.github/workflows/<platform>.yml`
+1. Create a directory under `ports/`.
+2. Implement the compact upload contract from `spec/wire-format-v2.md`.
+3. Stamp properties from `spec/auto-properties.md`.
+4. Validate against conformance fixtures in `spec/conformance/`.
+5. Add build, test, and release-readiness evidence before public production claims.
 
 ## License
 
