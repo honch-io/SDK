@@ -4,7 +4,7 @@
 idf_component_register(
     SRCS "app_main.c"
     INCLUDE_DIRS "."
-    PRIV_REQUIRES honch esp_event esp_http_client esp_netif esp_timer esp_wifi heap nvs_flash
+    PRIV_REQUIRES honch esp_event esp_http_client esp_netif esp_timer esp_wifi heap
 )
 
 if(HONCH_FOOTPRINT_WITH_SDK)

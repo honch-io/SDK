@@ -150,9 +150,9 @@ class ConformanceFixtureTests(unittest.TestCase):
             ],
         )
         self.assertIn("client->configured_device_id = true", adapter)
-        self.assertIn("if (client->configured_device_id)", adapter)
+        self.assertIn("client->distinct_id = distinct_id;", adapter)
 
-    def test_persisted_identity_reboot_fixture_uses_identified_distinct_id_before_next_identify(self):
+    def test_identity_is_volatile_without_state_storage(self):
         fixture = load_fixture("spec/conformance/events/persisted-identity-reboot.json")
         adapter = (ROOT / "ports/micropython/usermod/honch/mphal_adapter.c").read_text()
         module = (ROOT / "ports/micropython/usermod/honch/modhonch_core.c").read_text()
@@ -162,9 +162,9 @@ class ConformanceFixtureTests(unittest.TestCase):
             [op["op"] for op in fixture["operations"]],
             ["identify", "reboot", "track"],
         )
-        self.assertIn('state_get(client->storage->ctx, "distinct_id"', adapter)
-        self.assertIn('state_get(client->storage->ctx, "distinct_id", (uint8_t *)client->distinct_id', adapter)
-        self.assertIn("client->distinct_id[distinct_size] = '\\0'", adapter)
+        self.assertIn("client->distinct_id = honch_micropython_strdup(client->device_id);", adapter)
+        self.assertNotIn("state_get", adapter)
+        self.assertNotIn("state_set", adapter)
         self.assertIn("honch_core_identify(self->client", module)
         self.assertIn("honch_core_track(self->client", module)
 
@@ -236,7 +236,7 @@ class ConformanceFixtureTests(unittest.TestCase):
             device_model=config["device_model"],
             firmware_version=config["firmware_version"],
             environment=config["environment"],
-            queue_directory="/honch",
+            event_buffer=bytearray(8192),
         )
 
 

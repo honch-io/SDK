@@ -438,11 +438,12 @@ static honch_status_t honch_posix_queue_depth(void *ctx, size_t *depth)
 }
 
 honch_status_t honch_posix_storage_ops_init(
-    honch_storage_ops_t *ops,
+    honch_state_storage_ops_t *state_ops,
+    honch_event_queue_ops_t *queue_ops,
     honch_posix_storage_t *ctx,
     const char *queue_directory)
 {
-    if (ops == NULL || ctx == NULL || honch_is_blank(queue_directory)) {
+    if (state_ops == NULL || queue_ops == NULL || ctx == NULL || honch_is_blank(queue_directory)) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
@@ -450,10 +451,13 @@ honch_status_t honch_posix_storage_ops_init(
         .client = NULL,
         .queue_directory = queue_directory
     };
-    *ops = (honch_storage_ops_t) {
+    *state_ops = (honch_state_storage_ops_t) {
         .state_get = honch_posix_state_get,
         .state_set = honch_posix_state_set,
         .state_delete = honch_posix_state_delete,
+        .ctx = NULL
+    };
+    *queue_ops = (honch_event_queue_ops_t) {
         .queue_push = honch_posix_queue_push,
         .queue_peek = honch_posix_queue_peek,
         .queue_read_batch = honch_posix_queue_read_batch,

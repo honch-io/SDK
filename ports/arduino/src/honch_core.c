@@ -224,8 +224,8 @@ static honch_status_t honch_client_enforce_custom_queue_limit(honch_client_t *cl
         return HONCH_OK;
     }
 
-    if (client == NULL || client->storage == NULL ||
-        client->storage->queue_depth == NULL || client->storage->queue_drop_oldest == NULL) {
+    if (client == NULL || client->event_queue == NULL ||
+        client->event_queue->queue_depth == NULL || client->event_queue->queue_drop_oldest == NULL) {
         return HONCH_OK;
     }
 
@@ -237,7 +237,7 @@ static honch_status_t honch_client_enforce_custom_queue_limit(honch_client_t *cl
     client->queued_event_count = depth;
 
     while (depth >= client->max_queued_events) {
-        status = client->storage->queue_drop_oldest(client->storage->ctx);
+        status = client->event_queue->queue_drop_oldest(client->event_queue->ctx);
         if (status != HONCH_OK) {
             return status;
         }
@@ -414,14 +414,14 @@ static honch_status_t honch_client_queue_push_recorded(
         return HONCH_ERROR_QUEUE_FULL;
     }
 
-    if (client != NULL && client->storage != NULL && client->storage->queue_push != NULL) {
+    if (client != NULL && client->event_queue != NULL && client->event_queue->queue_push != NULL) {
         honch_status_t status = honch_client_enforce_custom_queue_limit(client);
         if (status != HONCH_OK) {
             return status;
         }
 
         uint64_t sequence = client->sequence;
-        status = client->storage->queue_push(client->storage->ctx, event, event_size, sequence);
+        status = client->event_queue->queue_push(client->event_queue->ctx, event, event_size, sequence);
         if (status == HONCH_OK) {
             client->sequence++;
             if (sequence_out != NULL) {
@@ -444,8 +444,8 @@ static honch_status_t honch_client_queue_push_recorded(
 
 static honch_status_t honch_client_queue_consume(honch_client_t *client, uint64_t sequence)
 {
-    if (client != NULL && client->storage != NULL && client->storage->queue_consume != NULL) {
-        return client->storage->queue_consume(client->storage->ctx, sequence);
+    if (client != NULL && client->event_queue != NULL && client->event_queue->queue_consume != NULL) {
+        return client->event_queue->queue_consume(client->event_queue->ctx, sequence);
     }
 
     return HONCH_ERROR_INVALID_ARGUMENT;
@@ -509,8 +509,8 @@ static honch_status_t honch_lifecycle_queue_tracker_rollback(
 
 static honch_status_t honch_client_queue_depth(honch_client_t *client, size_t *depth)
 {
-    if (client != NULL && client->storage != NULL && client->storage->queue_depth != NULL) {
-        return client->storage->queue_depth(client->storage->ctx, depth);
+    if (client != NULL && client->event_queue != NULL && client->event_queue->queue_depth != NULL) {
+        return client->event_queue->queue_depth(client->event_queue->ctx, depth);
     }
 
     return honch_queue_count_pending(client, depth);
@@ -518,7 +518,7 @@ static honch_status_t honch_client_queue_depth(honch_client_t *client, size_t *d
 
 static honch_status_t honch_core_sync_sequence_from_storage(honch_client_t *client, size_t depth)
 {
-    if (client == NULL || depth == 0u || client->storage == NULL || client->storage->queue_peek == NULL) {
+    if (client == NULL || depth == 0u || client->event_queue == NULL || client->event_queue->queue_peek == NULL) {
         return HONCH_OK;
     }
 
@@ -526,7 +526,7 @@ static honch_status_t honch_core_sync_sequence_from_storage(honch_client_t *clie
     bool saw_sequence = false;
     for (size_t i = 0u; i < depth; i++) {
         honch_storage_reader_t reader = {0};
-        honch_status_t status = client->storage->queue_peek(client->storage->ctx, &reader);
+        honch_status_t status = client->event_queue->queue_peek(client->event_queue->ctx, &reader);
         if (status == HONCH_ERROR_NOT_INITIALIZED) {
             break;
         }
@@ -553,8 +553,8 @@ static honch_status_t honch_core_sync_sequence_from_storage(honch_client_t *clie
 
 static honch_status_t honch_client_queue_clear(honch_client_t *client)
 {
-    if (client != NULL && client->storage != NULL && client->storage->queue_clear != NULL) {
-        return client->storage->queue_clear(client->storage->ctx);
+    if (client != NULL && client->event_queue != NULL && client->event_queue->queue_clear != NULL) {
+        return client->event_queue->queue_clear(client->event_queue->ctx);
     }
 
     return honch_queue_clear(client);
@@ -844,9 +844,7 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
 {
     if (client == NULL || config == NULL || honch_is_blank(config->api_key) ||
         honch_is_blank(config->endpoint_url) || honch_is_blank(config->device_model) ||
-        honch_is_blank(config->firmware_version) || honch_is_blank(config->queue_directory) ||
-        (config->durability_mode != HONCH_DURABILITY_SYNC_ALWAYS &&
-            config->durability_mode != HONCH_DURABILITY_OS_BUFFERED)) {
+        honch_is_blank(config->firmware_version)) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
@@ -863,12 +861,19 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
         }
         next->platform = &next->platform_ops;
     }
-    if (config->storage != NULL) {
-        next->storage_ops = *config->storage;
-        if (next->storage_ops.ctx == NULL) {
-            next->storage_ops.ctx = next;
+    if (config->state_storage != NULL) {
+        next->state_storage_ops = *config->state_storage;
+        if (next->state_storage_ops.ctx == NULL) {
+            next->state_storage_ops.ctx = next;
         }
-        next->storage = &next->storage_ops;
+        next->state_storage = &next->state_storage_ops;
+    }
+    if (config->event_queue != NULL) {
+        next->event_queue_ops = *config->event_queue;
+        if (next->event_queue_ops.ctx == NULL) {
+            next->event_queue_ops.ctx = next;
+        }
+        next->event_queue = &next->event_queue_ops;
     }
     if (config->transport != NULL) {
         next->transport_ops = *config->transport;
@@ -880,7 +885,7 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
 
     next->api_key = honch_strdup(config->api_key);
     next->endpoint_url = honch_strdup(config->endpoint_url);
-    next->queue_directory = honch_strdup(config->queue_directory);
+    next->queue_directory = honch_strdup(honch_is_blank(config->queue_directory) ? "" : config->queue_directory);
     next->sdk_platform = honch_strdup(honch_is_blank(config->sdk_platform) ? "c-posix" : config->sdk_platform);
     next->batch_size = config->batch_size == 0u ? HONCH_DEFAULT_BATCH_SIZE : config->batch_size;
     if (next->batch_size > HONCH_MAX_BATCH_SIZE) {
@@ -906,7 +911,8 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     if (next->flush_retry_max_ms < next->flush_retry_initial_ms) {
         next->flush_retry_max_ms = next->flush_retry_initial_ms;
     }
-    next->durability_mode = config->durability_mode;
+    next->durability_mode =
+        config->durability_mode == HONCH_DURABILITY_SYNC_ALWAYS ? HONCH_DURABILITY_SYNC_ALWAYS : HONCH_DURABILITY_OS_BUFFERED;
     next->battery_callback = config->battery_callback;
     next->battery_low_threshold = config->battery_low_threshold > 0 ?
         config->battery_low_threshold :
@@ -1515,6 +1521,17 @@ honch_status_t honch_core_copy_device_id(honch_client_t *client, char *buffer, s
     return status;
 }
 
+honch_status_t honch_core_get_queue_stats(honch_client_t *client, honch_queue_stats_t *stats)
+{
+    if (client == NULL || stats == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    if (client->event_queue == NULL || client->event_queue->queue_get_stats == NULL) {
+        return HONCH_ERROR_NOT_SUPPORTED;
+    }
+    return client->event_queue->queue_get_stats(client->event_queue->ctx, stats);
+}
+
 const char *honch_status_string(honch_status_t status)
 {
     switch (status) {
@@ -1546,6 +1563,8 @@ const char *honch_status_string(honch_status_t status)
             return "internal error";
         case HONCH_ERROR_BUSY:
             return "busy";
+        case HONCH_ERROR_NOT_SUPPORTED:
+            return "not supported";
         default:
             return "unknown";
     }

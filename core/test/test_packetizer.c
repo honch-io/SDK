@@ -100,9 +100,9 @@ static honch_status_t fake_queue_dead_letter(void *ctx, uint64_t sequence)
     return HONCH_OK;
 }
 
-static void fake_client_with_storage(honch_client_t *client, fake_storage_t *storage, honch_storage_ops_t *ops)
+static void fake_client_with_storage(honch_client_t *client, fake_storage_t *storage, honch_event_queue_ops_t *ops)
 {
-    *ops = (honch_storage_ops_t) {
+    *ops = (honch_event_queue_ops_t) {
         .queue_peek = fake_queue_peek,
         .queue_consume = fake_queue_consume,
         .queue_dead_letter = fake_queue_dead_letter,
@@ -110,7 +110,7 @@ static void fake_client_with_storage(honch_client_t *client, fake_storage_t *sto
     };
 
     *client = (honch_client_t){0};
-    client->storage = ops;
+    client->event_queue = ops;
     client->device_id = "device-1";
     client->device_model = "model-x";
     client->firmware_version = "1.0.0";
@@ -208,7 +208,7 @@ static void test_tiny_buffer_rejected(void)
         .sequence = HONCH_TEST_SEQUENCE,
         .has_message = true
     };
-    honch_storage_ops_t ops = {0};
+    honch_event_queue_ops_t ops = {0};
     honch_client_t client = {0};
     fake_client_with_storage(&client, &storage, &ops);
     honch_packetizer_t packetizer = {0};
@@ -235,7 +235,7 @@ static void test_begin_rejects_queued_record_larger_than_max_event_bytes(void)
         .sequence = HONCH_TEST_SEQUENCE,
         .has_message = true
     };
-    honch_storage_ops_t ops = {0};
+    honch_event_queue_ops_t ops = {0};
     honch_client_t client = {0};
     fake_client_with_storage(&client, &storage, &ops);
     client.max_event_bytes = message.length - 1u;
@@ -259,7 +259,7 @@ static void test_single_chunk_message_has_first_and_final_flags(void)
         .sequence = HONCH_TEST_SEQUENCE,
         .has_message = true
     };
-    honch_storage_ops_t ops = {0};
+    honch_event_queue_ops_t ops = {0};
     honch_client_t client = {0};
     fake_client_with_storage(&client, &storage, &ops);
     honch_packetizer_t packetizer = {0};
@@ -296,7 +296,7 @@ static void test_multi_chunk_message_offsets_increase(void)
         .sequence = HONCH_TEST_SEQUENCE,
         .has_message = true
     };
-    honch_storage_ops_t ops = {0};
+    honch_event_queue_ops_t ops = {0};
     honch_client_t client = {0};
     fake_client_with_storage(&client, &storage, &ops);
     honch_packetizer_t packetizer = {0};
@@ -332,7 +332,7 @@ static void test_abort_does_not_consume_storage(void)
         .sequence = HONCH_TEST_SEQUENCE,
         .has_message = true
     };
-    honch_storage_ops_t ops = {0};
+    honch_event_queue_ops_t ops = {0};
     honch_client_t client = {0};
     fake_client_with_storage(&client, &storage, &ops);
     honch_packetizer_t packetizer = {0};
@@ -355,7 +355,7 @@ static void test_confirm_consumes_storage(void)
         .sequence = HONCH_TEST_SEQUENCE,
         .has_message = true
     };
-    honch_storage_ops_t ops = {0};
+    honch_event_queue_ops_t ops = {0};
     honch_client_t client = {0};
     fake_client_with_storage(&client, &storage, &ops);
     honch_packetizer_t packetizer = {0};
@@ -384,7 +384,7 @@ static void test_confirm_failure_invalidates_packetizer_after_releasing_client(v
         .has_message = true,
         .consume_status = HONCH_ERROR_IO
     };
-    honch_storage_ops_t ops = {0};
+    honch_event_queue_ops_t ops = {0};
     honch_client_t client = {0};
     fake_client_with_storage(&client, &storage, &ops);
     honch_packetizer_t packetizer = {0};
@@ -413,7 +413,7 @@ static void test_packetizer_peek_runs_under_client_lock(void)
         .has_message = true,
         .require_client_lock_on_peek = true
     };
-    honch_storage_ops_t ops = {0};
+    honch_event_queue_ops_t ops = {0};
     honch_client_t client = {0};
     fake_client_with_storage(&client, &storage, &ops);
     honch_packetizer_t packetizer = {0};
@@ -439,7 +439,7 @@ static void test_packetizer_reconstructs_boot_relative_timestamps_when_wall_cloc
         .sequence = HONCH_TEST_SEQUENCE,
         .has_message = true
     };
-    honch_storage_ops_t ops = {0};
+    honch_event_queue_ops_t ops = {0};
     honch_client_t client = {0};
     fake_client_with_storage(&client, &storage, &ops);
     fake_clock_t clock = {

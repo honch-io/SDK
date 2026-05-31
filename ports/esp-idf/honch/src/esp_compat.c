@@ -176,7 +176,7 @@ static honch_err_t honch_esp_status_to_err(honch_status_t status)
         case HONCH_STATUS_ERROR_OUT_OF_MEMORY:
             return HONCH_ERR_NO_MEM;
         case HONCH_STATUS_ERROR_IO:
-            return HONCH_ERR_NVS;
+            return HONCH_ERR_IO;
         case HONCH_STATUS_ERROR_TRANSPORT:
         case HONCH_STATUS_ERROR_RATE_LIMITED:
         case HONCH_STATUS_ERROR_SERVER:
@@ -192,20 +192,11 @@ static honch_err_t honch_esp_status_to_err(honch_status_t status)
             return HONCH_ERR_TIMEOUT;
         case HONCH_STATUS_ERROR_BUSY:
             return HONCH_ERR_BUSY;
+        case HONCH_STATUS_ERROR_NOT_SUPPORTED:
+            return HONCH_ERR_NOT_SUPPORTED;
         case HONCH_STATUS_ERROR_INTERNAL:
         default:
             return HONCH_ERR_INTERNAL;
-    }
-}
-
-static honch_durability_mode_t honch_esp_resolve_durability_mode(honch_durability_mode_t durability_mode)
-{
-    switch (durability_mode) {
-        case HONCH_DURABILITY_SYNC_ALWAYS:
-        case HONCH_DURABILITY_OS_BUFFERED:
-            return durability_mode;
-        default:
-            return HONCH_DURABILITY_OS_BUFFERED;
     }
 }
 
@@ -277,7 +268,7 @@ honch_err_t honch_init(const honch_config_t *config)
 
     if (config == NULL || config->api_key == NULL || config->host == NULL ||
         config->device_model == NULL || config->firmware_version == NULL ||
-        config->event_buffer == NULL || config->event_buffer_size == 0u) {
+        (config->event_queue_ops == NULL && (config->event_buffer == NULL || config->event_buffer_size == 0u))) {
         honch_esp_init_finish(NULL);
         return HONCH_ERR_INVALID_ARG;
     }
@@ -289,7 +280,7 @@ honch_err_t honch_init(const honch_config_t *config)
     }
 
     honch_platform_ops_t platform_ops;
-    honch_storage_ops_t storage_ops;
+    honch_event_queue_ops_t event_queue_ops;
     honch_transport_ops_t transport_ops;
 
     honch_status_t status = honch_esp_platform_ops_init(&platform_ops, &s_platform_ctx);
@@ -298,26 +289,25 @@ honch_err_t honch_init(const honch_config_t *config)
         honch_esp_init_finish(NULL);
         return honch_esp_status_to_err(status);
     }
-    status = honch_esp_storage_ops_init(&storage_ops, &s_storage_ctx);
-    if (status != HONCH_STATUS_OK) {
-        honch_esp_platform_ops_deinit(&s_platform_ctx);
-        honch_esp_clear_legacy_globals();
-        honch_esp_init_finish(NULL);
-        return honch_esp_status_to_err(status);
-    }
-    status = honch_esp_storage_use_ram_queue(
-        &s_storage_ctx,
-        config->event_buffer,
-        config->event_buffer_size);
-    if (status != HONCH_STATUS_OK) {
-        honch_esp_platform_ops_deinit(&s_platform_ctx);
-        honch_esp_clear_legacy_globals();
-        honch_esp_init_finish(NULL);
-        return honch_esp_status_to_err(status);
+    if (config->event_queue_ops != NULL) {
+        event_queue_ops = *config->event_queue_ops;
+    } else {
+        status = honch_esp_event_queue_ops_init(
+            &event_queue_ops,
+            &s_storage_ctx,
+            config->event_buffer,
+            config->event_buffer_size);
+        if (status != HONCH_STATUS_OK) {
+            honch_esp_platform_ops_deinit(&s_platform_ctx);
+            honch_esp_clear_legacy_globals();
+            honch_esp_init_finish(NULL);
+            return honch_esp_status_to_err(status);
+        }
     }
     status = honch_esp_transport_ops_init(&transport_ops, &s_transport_ctx);
     if (status != HONCH_STATUS_OK) {
-        honch_esp_platform_ops_deinit(&s_platform_ctx);
+            honch_esp_event_queue_ops_deinit(&s_storage_ctx);
+            honch_esp_platform_ops_deinit(&s_platform_ctx);
         honch_esp_clear_legacy_globals();
         honch_esp_init_finish(NULL);
         return honch_esp_status_to_err(status);
@@ -330,7 +320,7 @@ honch_err_t honch_init(const honch_config_t *config)
     core_config.firmware_version = s_firmware_version;
     core_config.environment = s_environment;
     core_config.sdk_platform = "esp-idf";
-    core_config.queue_directory = "nvs";
+    core_config.queue_directory = "";
     if (config->flush_event_threshold > 0u) {
         core_config.batch_size = config->flush_event_threshold > HONCH_MAX_BATCH_SIZE ?
             HONCH_MAX_BATCH_SIZE :
@@ -340,14 +330,15 @@ honch_err_t honch_init(const honch_config_t *config)
     core_config.flush_event_threshold = config->flush_event_threshold;
     core_config.battery_callback = config->battery_callback;
     core_config.battery_low_threshold = g_honch_battery_low_threshold;
-    core_config.durability_mode = honch_esp_resolve_durability_mode(config->durability_mode);
     core_config.platform = &platform_ops;
-    core_config.storage = &storage_ops;
+    core_config.state_storage = config->state_storage_ops;
+    core_config.event_queue = &event_queue_ops;
     core_config.transport = &transport_ops;
 
     honch_client_t *next = NULL;
     status = honch_core_init(&next, &core_config);
     if (status != HONCH_STATUS_OK) {
+        honch_esp_event_queue_ops_deinit(&s_storage_ctx);
         honch_esp_platform_ops_deinit(&s_platform_ctx);
         honch_esp_clear_legacy_globals();
         honch_esp_init_finish(NULL);
@@ -375,6 +366,7 @@ honch_err_t honch_shutdown(void)
     if (honch_esp_gpio_shutdown_hook != NULL) {
         honch_esp_gpio_shutdown_hook();
     }
+    honch_esp_event_queue_ops_deinit(&s_storage_ctx);
     honch_esp_platform_ops_deinit(&s_platform_ctx);
     honch_esp_clear_legacy_globals();
     honch_esp_shutdown_finish();
@@ -486,4 +478,16 @@ const char *honch_get_device_id(void)
     const char *device_id = honch_core_get_device_id(client);
     honch_esp_client_release(client);
     return device_id;
+}
+
+honch_err_t honch_get_queue_stats(honch_queue_stats_t *stats)
+{
+    honch_client_t *client = NULL;
+    honch_err_t err = honch_esp_client_acquire(&client);
+    if (err != HONCH_OK) {
+        return err;
+    }
+    honch_status_t status = honch_core_get_queue_stats(client, stats);
+    honch_esp_client_release(client);
+    return honch_esp_status_to_err(status);
 }

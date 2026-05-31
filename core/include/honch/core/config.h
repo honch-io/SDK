@@ -51,7 +51,8 @@ typedef struct honch_core_config {
     void *auto_properties_userdata;
     honch_durability_mode_t durability_mode;
     const honch_platform_ops_t *platform;
-    const honch_storage_ops_t *storage;
+    const honch_state_storage_ops_t *state_storage;
+    const honch_event_queue_ops_t *event_queue;
     const honch_transport_ops_t *transport;
 } honch_core_config_t;
 

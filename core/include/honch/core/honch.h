@@ -34,6 +34,7 @@ honch_status_t honch_core_reset(honch_client_t *client);
 honch_status_t honch_core_shutdown(honch_client_t *client);
 const char *honch_core_get_device_id(honch_client_t *client);
 honch_status_t honch_core_copy_device_id(honch_client_t *client, char *buffer, size_t buffer_size);
+honch_status_t honch_core_get_queue_stats(honch_client_t *client, honch_queue_stats_t *stats);
 const char *honch_status_string(honch_status_t status);
 
 #ifdef __cplusplus

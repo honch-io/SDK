@@ -23,6 +23,10 @@
 #define HONCH_MAX_DISTINCT_ID 256u
 #define HONCH_MAX_EVENT_PROPERTIES 64u
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct honch_buffer {
     char *data;
     size_t length;
@@ -59,8 +63,10 @@ struct honch_client {
     void *state_mutex;
     honch_platform_ops_t platform_ops;
     const honch_platform_ops_t *platform;
-    honch_storage_ops_t storage_ops;
-    const honch_storage_ops_t *storage;
+    honch_state_storage_ops_t state_storage_ops;
+    const honch_state_storage_ops_t *state_storage;
+    honch_event_queue_ops_t event_queue_ops;
+    const honch_event_queue_ops_t *event_queue;
     honch_transport_ops_t transport_ops;
     const honch_transport_ops_t *transport;
     char *api_key;
@@ -179,5 +185,9 @@ honch_status_t honch_client_lock_create(honch_client_t *client, void **mutex);
 void honch_client_lock_destroy(honch_client_t *client, void *mutex);
 honch_status_t honch_client_state_lock(honch_client_t *client);
 void honch_client_state_unlock(honch_client_t *client);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

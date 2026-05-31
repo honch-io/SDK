@@ -37,6 +37,9 @@ class Honch:
     def get_device_id(self):
         return self._call("get_device_id")
 
+    def queue_stats(self):
+        return self._call("queue_stats")
+
     def track(self, event_name, properties=None):
         require_event_name(event_name)
         self._call("track", event_name, require_properties(properties))
@@ -100,7 +103,7 @@ def _config_to_dict(config):
         "device_model": config.device_model,
         "firmware_version": config.firmware_version,
         "environment": config.environment,
-        "queue_directory": config.queue_directory,
+        "event_buffer": config.event_buffer,
         "batch_size": config.batch_size,
         "max_queued_events": config.max_queued_events,
         "max_event_bytes": config.max_event_bytes,
@@ -142,6 +145,8 @@ def _raise_mapped(exc):
         raise StorageError(str(exc))
     if status == getattr(_honch_core, "ERROR_BUSY", None):
         raise HonchError(str(exc))
+    if status == getattr(_honch_core, "ERROR_NOT_SUPPORTED", None):
+        raise HonchError(str(exc))
     raise HonchError(str(exc))
 
 
@@ -156,4 +161,5 @@ _STATUS_BY_MESSAGE = {
     "queue full": getattr(_honch_core, "ERROR_QUEUE_FULL", None),
     "timeout": getattr(_honch_core, "ERROR_TIMEOUT", None),
     "busy": getattr(_honch_core, "ERROR_BUSY", None),
+    "not supported": getattr(_honch_core, "ERROR_NOT_SUPPORTED", None),
 } if _honch_core is not None else {}

@@ -1015,8 +1015,9 @@ static void test_packetizer_sets_monotonic_time_source(void)
         .ctx = &clock
     };
     honch_posix_storage_t storage_ctx;
-    honch_storage_ops_t storage;
-    EXPECT_EQ_INT(honch_posix_storage_ops_init(&storage, &storage_ctx, queue_dir), HONCH_OK);
+    honch_state_storage_ops_t state_storage;
+    honch_event_queue_ops_t event_queue;
+    EXPECT_EQ_INT(honch_posix_storage_ops_init(&state_storage, &event_queue, &storage_ctx, queue_dir), HONCH_OK);
     honch_transport_ops_t transport = {
         .post_chunk = lifecycle_transport
     };
@@ -1032,7 +1033,8 @@ static void test_packetizer_sets_monotonic_time_source(void)
         .max_queued_events = 10u,
         .max_event_bytes = 8192u,
         .platform = &platform,
-        .storage = &storage,
+        .state_storage = &state_storage,
+        .event_queue = &event_queue,
         .transport = &transport
     };
 
@@ -1701,8 +1703,9 @@ static void test_core_state_lock_works_without_platform_lock_callbacks(void)
         .post_chunk = lifecycle_transport
     };
     honch_posix_storage_t storage_ctx;
-    honch_storage_ops_t storage;
-    EXPECT_EQ_INT(honch_posix_storage_ops_init(&storage, &storage_ctx, queue_dir), HONCH_OK);
+    honch_state_storage_ops_t state_storage;
+    honch_event_queue_ops_t event_queue;
+    EXPECT_EQ_INT(honch_posix_storage_ops_init(&state_storage, &event_queue, &storage_ctx, queue_dir), HONCH_OK);
     honch_core_config_t config = {
         .api_key = "test-key",
         .endpoint_url = "http://collector.local/",
@@ -1715,7 +1718,8 @@ static void test_core_state_lock_works_without_platform_lock_callbacks(void)
         .max_queued_events = 10u,
         .max_event_bytes = 8192u,
         .platform = &platform,
-        .storage = &storage,
+        .state_storage = &state_storage,
+        .event_queue = &event_queue,
         .transport = &transport
     };
 
@@ -1765,8 +1769,9 @@ static void test_flush_marks_monotonic_time_source_after_clock_sync(void)
         .ctx = &transport_ctx
     };
     honch_posix_storage_t storage_ctx;
-    honch_storage_ops_t storage;
-    EXPECT_EQ_INT(honch_posix_storage_ops_init(&storage, &storage_ctx, queue_dir), HONCH_OK);
+    honch_state_storage_ops_t state_storage;
+    honch_event_queue_ops_t event_queue;
+    EXPECT_EQ_INT(honch_posix_storage_ops_init(&state_storage, &event_queue, &storage_ctx, queue_dir), HONCH_OK);
     honch_core_config_t config = {
         .api_key = "test-key",
         .endpoint_url = "http://collector.local/",
@@ -1779,7 +1784,8 @@ static void test_flush_marks_monotonic_time_source_after_clock_sync(void)
         .max_queued_events = 10u,
         .max_event_bytes = 8192u,
         .platform = &platform,
-        .storage = &storage,
+        .state_storage = &state_storage,
+        .event_queue = &event_queue,
         .transport = &transport
     };
 
@@ -1815,8 +1821,9 @@ static void test_flush_marks_unknown_time_source_without_clock_sync(void)
         .ctx = &transport_ctx
     };
     honch_posix_storage_t storage_ctx;
-    honch_storage_ops_t storage;
-    EXPECT_EQ_INT(honch_posix_storage_ops_init(&storage, &storage_ctx, queue_dir), HONCH_OK);
+    honch_state_storage_ops_t state_storage;
+    honch_event_queue_ops_t event_queue;
+    EXPECT_EQ_INT(honch_posix_storage_ops_init(&state_storage, &event_queue, &storage_ctx, queue_dir), HONCH_OK);
     honch_core_config_t config = {
         .api_key = "test-key",
         .endpoint_url = "http://collector.local/",
@@ -1829,7 +1836,8 @@ static void test_flush_marks_unknown_time_source_without_clock_sync(void)
         .max_queued_events = 10u,
         .max_event_bytes = 8192u,
         .platform = &platform,
-        .storage = &storage,
+        .state_storage = &state_storage,
+        .event_queue = &event_queue,
         .transport = &transport
     };
 

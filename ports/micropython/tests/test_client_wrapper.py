@@ -46,6 +46,9 @@ class FakeCoreClient:
     def get_device_id(self):
         return self.device_id
 
+    def queue_stats(self):
+        return {"depth": 0}
+
 
 class ClientWrapperTests(unittest.TestCase):
     def setUp(self):
@@ -82,11 +85,12 @@ class ClientWrapperTests(unittest.TestCase):
             endpoint_url="http://collector.local",
             device_model="model",
             firmware_version="1.0",
-            queue_directory="/honch",
+            event_buffer=bytearray(8192),
             batch_size=3,
         )
 
         self.assertEqual(client.get_device_id(), "device-from-core")
+        self.assertEqual(client.queue_stats(), {"depth": 0})
         self.assertEqual(client._core.config["api_key"], "key")
         self.assertEqual(client._core.config["batch_size"], 3)
         self.assertNotIn("enable_wire_v2", client._core.config)
@@ -126,7 +130,7 @@ class ClientWrapperTests(unittest.TestCase):
             endpoint_url="http://collector.local",
             device_model="model",
             firmware_version="1.0",
-            queue_directory="/honch",
+            event_buffer=bytearray(8192),
         )
         client._core.flush = lambda: (_ for _ in ()).throw(RuntimeError("transport error"))
 
@@ -141,7 +145,7 @@ class ClientWrapperTests(unittest.TestCase):
             endpoint_url="http://collector.local",
             device_model="model",
             firmware_version="1.0",
-            queue_directory="/honch",
+            event_buffer=bytearray(8192),
         )
 
         self.assertFalse(hasattr(client.config, "enable_wire_v2"))

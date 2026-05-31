@@ -146,7 +146,7 @@ I (300) honch_footprint: HONCH_FOOTPRINT_CPU samples=100 avg_us=76 min_us=40 p50
         )
 
         self.assertIn("component requirements are collected during early expansion", cmake)
-        self.assertIn("PRIV_REQUIRES honch esp_event esp_http_client esp_netif esp_timer esp_wifi heap nvs_flash", cmake)
+        self.assertIn("PRIV_REQUIRES honch esp_event esp_http_client esp_netif esp_timer esp_wifi heap", cmake)
         self.assertLess(cmake.index("idf_component_register("), cmake.index("if(HONCH_FOOTPRINT_WITH_SDK)"))
 
     def test_footprint_app_uses_honch_component_directory_for_archive_attribution(self):
@@ -185,15 +185,13 @@ I (300) honch_footprint: HONCH_FOOTPRINT_CPU samples=100 avg_us=76 min_us=40 p50
         header = (REPO_ROOT / "ports" / "esp-idf" / "honch" / "src" / "esp_core_adapter.h").read_text(
             encoding="utf-8"
         )
-        storage = (REPO_ROOT / "ports" / "esp-idf" / "honch" / "src" / "esp_storage_nvs.c").read_text(
+        storage = (REPO_ROOT / "ports" / "esp-idf" / "honch" / "src" / "esp_storage.c").read_text(
             encoding="utf-8"
         )
 
-        self.assertIn("honch_esp_ram_queue_entry_t *ram_entries;", header)
-        self.assertIn("size_t ram_entry_capacity;", header)
-        self.assertIn("#define HONCH_ESP_RAM_QUEUE_MAX_EVENTS 256u", header)
-        self.assertNotIn("ram_entries[HONCH_ESP_RAM_QUEUE_MAX_EVENTS]", header)
-        self.assertIn("ctx->ram_entries = (honch_esp_ram_queue_entry_t *)entries_start;", storage)
+        self.assertIn("honch_ram_queue_t ram_queue;", header)
+        self.assertIn("honch_ram_queue_init", storage)
+        self.assertNotIn("HONCH_ESP_RAM_QUEUE_MAX_EVENTS", header)
 
 
 if __name__ == "__main__":

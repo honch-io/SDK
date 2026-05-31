@@ -97,26 +97,26 @@ static uint64_t honch_packetizer_device_time_source(uint64_t queued_timestamp_ms
 
 static honch_status_t honch_packetizer_peek(honch_client_t *client, honch_storage_reader_t *reader)
 {
-    if (client == NULL || reader == NULL || client->storage == NULL || client->storage->queue_peek == NULL) {
+    if (client == NULL || reader == NULL || client->event_queue == NULL || client->event_queue->queue_peek == NULL) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    return client->storage->queue_peek(client->storage->ctx, reader);
+    return client->event_queue->queue_peek(client->event_queue->ctx, reader);
 }
 
 static honch_status_t honch_packetizer_reset_peek_cursor(honch_client_t *client)
 {
-    if (client == NULL || client->storage == NULL) {
+    if (client == NULL || client->event_queue == NULL) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
     client->active_storage_reader_sequence = UINT64_MAX;
-    if (client->storage->queue_depth == NULL) {
+    if (client->event_queue->queue_depth == NULL) {
         return HONCH_OK;
     }
 
     size_t depth = 0u;
-    return client->storage->queue_depth(client->storage->ctx, &depth);
+    return client->event_queue->queue_depth(client->event_queue->ctx, &depth);
 }
 
 static honch_status_t honch_packetizer_read_event(
@@ -236,13 +236,13 @@ bool honch_core_data_available(honch_client_t *client, uint32_t source_mask)
     }
 
     if (!honch_packetizer_source_supported(source_mask) ||
-        client->storage == NULL || client->storage->queue_depth == NULL) {
+        client->event_queue == NULL || client->event_queue->queue_depth == NULL) {
         honch_client_leave(client);
         return false;
     }
 
     size_t depth = 0u;
-    bool available = client->storage->queue_depth(client->storage->ctx, &depth) == HONCH_OK && depth > 0u;
+    bool available = client->event_queue->queue_depth(client->event_queue->ctx, &depth) == HONCH_OK && depth > 0u;
     honch_client_leave(client);
     return available;
 }
@@ -391,14 +391,14 @@ honch_status_t honch_packetizer_next(
 honch_status_t honch_packetizer_confirm(honch_packetizer_t *packetizer)
 {
     if (packetizer == NULL || !packetizer->active || packetizer->client == NULL ||
-        packetizer->offset < packetizer->total_size || packetizer->client->storage == NULL ||
-        packetizer->client->storage->queue_consume == NULL) {
+        packetizer->offset < packetizer->total_size || packetizer->client->event_queue == NULL ||
+        packetizer->client->event_queue->queue_consume == NULL) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
     honch_client_t *client = packetizer->client;
-    honch_status_t status = packetizer->client->storage->queue_consume(
-        packetizer->client->storage->ctx,
+    honch_status_t status = packetizer->client->event_queue->queue_consume(
+        packetizer->client->event_queue->ctx,
         packetizer->sequence);
     packetizer->active = false;
     packetizer->client = NULL;

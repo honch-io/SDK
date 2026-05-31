@@ -16,7 +16,7 @@ default footprint configuration, which excludes optional GPIO tracking.
 
 Do not market the whole app delta as the SDK size. From a minimal ESP-IDF app,
 the default Honch footprint app adds 419,632 bytes because it pulls in normal ESP-IDF
-networking, TLS, HTTP, Wi-Fi, NVS, and CBOR dependencies. That is a worst-case
+networking, TLS, HTTP, and Wi-Fi dependencies. That is a worst-case
 "starting from empty firmware" number, not the size of Honch's own code.
 
 ## Method

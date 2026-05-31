@@ -69,7 +69,8 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("#include \"honch/core/honch.h\"", compat)
         self.assertIn("static honch_client_t *s_client", compat)
         self.assertIn("honch_esp_platform_ops_init(&platform_ops", compat)
-        self.assertIn("honch_esp_storage_ops_init(&storage_ops", compat)
+        self.assertIn("honch_esp_event_queue_ops_init(", compat)
+        self.assertIn("config->event_queue_ops", compat)
         self.assertIn("honch_esp_transport_ops_init(&transport_ops", compat)
         self.assertIn("honch_core_init(&next", compat)
         self.assertIn("honch_esp_client_acquire(&client)", compat)
@@ -80,45 +81,20 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("honch_client_t", adapter)
         self.assertIn("honch_state_prepare", shims)
 
-    def test_esp_storage_ops_use_nvs_peek_confirm_contract(self) -> None:
-        storage = read("ports/esp-idf/honch/src/esp_storage_nvs.c")
+    def test_esp_default_storage_is_ram_queue_only(self) -> None:
+        storage = read("ports/esp-idf/honch/src/esp_storage.c")
         adapter = read("ports/esp-idf/honch/src/esp_core_adapter.h")
         cmake = read("ports/esp-idf/honch/CMakeLists.txt")
 
-        self.assertIn('"src/esp_storage_nvs.c"', cmake)
+        self.assertIn('"src/esp_storage.c"', cmake)
+        self.assertIn('"core/src/honch_ram_queue.c"', cmake)
         self.assertIn("#include \"honch/core/storage.h\"", adapter)
-        self.assertIn('HONCH_ESP_STATE_NAMESPACE "honch_state"', storage)
-        self.assertIn('HONCH_ESP_QUEUE_NAMESPACE "honch_q"', storage)
-        self.assertNotIn("HONCH_ESP_DEAD_NAMESPACE", storage)
-        self.assertIn("honch_esp_queue_peek", storage)
-        self.assertIn("honch_esp_queue_consume", storage)
-        self.assertIn("honch_esp_queue_dead_letter", storage)
-        self.assertIn("return honch_esp_queue_erase_sequence(sequence);", storage)
-        self.assertIn("honch_esp_nvs_queue_read_batch", storage)
-        self.assertIn("honch_esp_nvs_queue_consume_batch", storage)
-        self.assertIn("return honch_esp_nvs_queue_read_batch(events, max_events, max_event_bytes, event_count)", storage)
-        self.assertIn("ESP_ERR_NVS_NOT_ENOUGH_SPACE", storage)
-        self.assertIn("HONCH_STATUS_ERROR_QUEUE_FULL", storage)
-        self.assertIn("honch_core_sync_sequence_from_storage", read("core/src/honch_core.c"))
-        self.assertNotIn("stored_sequence = sequence < head ? head : sequence", storage)
-        self.assertIn("if (sequence < head && tail != head)", storage)
-        self.assertIn("tail = sequence;", storage)
-        self.assertIn("honch_esp_sequence_key(sequence, key);", storage)
-        self.assertIn("head = sequence + 1u;", storage)
-        self.assertIn(".queue_peek = honch_esp_queue_peek", storage)
-        self.assertIn(".queue_consume = honch_esp_queue_consume", storage)
-        self.assertIn(".queue_dead_letter = honch_esp_queue_dead_letter", storage)
-
-    def test_esp_ram_queue_drop_oldest_removes_ram_entries_first(self) -> None:
-        storage = read("ports/esp-idf/honch/src/esp_storage_nvs.c")
-        drop_oldest = storage.split("static honch_status_t honch_esp_queue_drop_oldest(void *ctx)", 1)[1].split(
-            "\n}\n", 1
-        )[0]
-
-        self.assertIn("honch_esp_storage_t *storage = (honch_esp_storage_t *)ctx;", drop_oldest)
-        self.assertIn("honch_esp_ram_queue_has_events(storage)", drop_oldest)
-        self.assertIn("honch_esp_ram_queue_remove_at(storage, 0u);", drop_oldest)
-        self.assertNotIn("(void)ctx", drop_oldest)
+        self.assertIn("#include \"honch/core/ram_queue.h\"", adapter)
+        self.assertIn("honch_ram_queue_init", storage)
+        self.assertIn("honch_ram_queue_ops_init", storage)
+        self.assertNotIn("nvs_", storage.lower())
+        self.assertNotIn("nvs_flash", cmake)
+        self.assertNotIn("esp_storage_nvs", cmake)
 
     def test_public_config_has_no_legacy_wire_toggles(self) -> None:
         compat = read("ports/esp-idf/honch/src/esp_compat.c")
@@ -161,8 +137,8 @@ class EspIdfChunkWireTest(unittest.TestCase):
         readme = read("ports/esp-idf/README.md")
         automatic = readme.split("## What gets sent automatically", 1)[1].split("## Configuration options", 1)[0]
 
-        self.assertIn("$device_id` — stable generated identifier persisted by the SDK", automatic)
-        self.assertNotIn("derived from MAC", automatic)
+        self.assertIn("$device_id` — from config or derived from the ESP MAC address", automatic)
+        self.assertIn("derived from the ESP MAC address", automatic)
         self.assertNotIn("$wifi_rssi", automatic)
         self.assertIn("$device_boot` — on init, with `reset_reason` property", automatic)
         self.assertNotIn("$connectivity_change", automatic)
@@ -184,7 +160,6 @@ class EspIdfChunkWireTest(unittest.TestCase):
         component_manifest = read("ports/esp-idf/honch/idf_component.yml")
 
         for dependency in (
-            "nvs_flash",
             "esp_event",
             "esp_http_client",
             "esp_netif",
@@ -200,7 +175,6 @@ class EspIdfChunkWireTest(unittest.TestCase):
             "        esp_wifi",
             "        cbor",
             "        espressif__cjson",
-            "        efuse",
         ):
             self.assertNotIn(unused_dependency, cmake)
 

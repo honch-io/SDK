@@ -7,6 +7,7 @@
 #include <sys/time.h>
 
 #include "esp_log.h"
+#include "esp_mac.h"
 #include "esp_random.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -132,4 +133,33 @@ honch_status_t honch_esp_platform_ops_init(honch_platform_ops_t *ops, honch_esp_
 void honch_esp_platform_ops_deinit(honch_esp_platform_t *ctx)
 {
     (void)ctx;
+}
+
+honch_status_t honch_esp_default_device_id(char *buffer, size_t buffer_size)
+{
+    if (buffer == NULL || buffer_size == 0u) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+
+    uint8_t mac[6];
+    esp_err_t err = esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    if (err != ESP_OK) {
+        return HONCH_STATUS_ERROR_INTERNAL;
+    }
+
+    int written = snprintf(
+        buffer,
+        buffer_size,
+        "esp32-%02X%02X%02X%02X%02X%02X",
+        mac[0],
+        mac[1],
+        mac[2],
+        mac[3],
+        mac[4],
+        mac[5]);
+    if (written < 0 || (size_t)written >= buffer_size) {
+        buffer[0] = '\0';
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    return HONCH_STATUS_OK;
 }

@@ -3,6 +3,7 @@
 #include "Honch.h"
 #include "honch/core/config.h"
 #include "honch/core/platform.h"
+#include "honch/core/ram_queue.h"
 #include "honch/core/storage.h"
 #include "honch/core/transport.h"
 
@@ -11,10 +12,7 @@ struct honch_arduino_platform {
 };
 
 struct honch_arduino_storage {
-  uint8_t *eventBuffer;
-  size_t eventBufferSize;
-  uint64_t peekSequence;
-  uint64_t readSequence;
+  honch_ram_queue_t ramQueue;
 };
 
 struct honch_arduino_transport {
@@ -40,9 +38,10 @@ honch_status_t honch_arduino_platform_ops_init(
     honch_platform_ops_t *ops,
     honch_arduino_platform_t *ctx);
 honch_status_t honch_arduino_storage_ops_init(
-    honch_storage_ops_t *ops,
+    honch_event_queue_ops_t *ops,
     honch_arduino_storage_t *ctx,
     const HonchConfig &config);
+void honch_arduino_storage_ops_deinit(honch_arduino_storage_t *ctx);
 honch_status_t honch_arduino_transport_ops_init(
     honch_transport_ops_t *ops,
     honch_arduino_transport_t *ctx,

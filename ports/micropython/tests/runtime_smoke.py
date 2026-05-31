@@ -1,19 +1,4 @@
-try:
-    import os
-except ImportError:
-    os = None
-
 import honch
-
-
-def getenv(name, fallback):
-    if os is None or not hasattr(os, "getenv"):
-        return fallback
-    value = os.getenv(name)
-    return value or fallback
-
-
-queue_directory = getenv("HONCH_MICROPYTHON_QUEUE_DIR", "/tmp/honch-micropython-runtime-smoke")
 
 client = honch.Honch(
     api_key="runtime-smoke-key",
@@ -21,7 +6,7 @@ client = honch.Honch(
     device_model="MicroPython Unix",
     firmware_version="runtime-smoke",
     environment="test",
-    queue_directory=queue_directory,
+    event_buffer=bytearray(8192),
     batch_size=2,
     max_queued_events=8,
     max_event_bytes=4096,

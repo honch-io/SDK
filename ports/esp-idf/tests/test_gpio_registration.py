@@ -101,7 +101,7 @@ class EspGpioRegistrationTests(unittest.TestCase):
         self.assertIn("honch_gpio_mapping_lock(portMAX_DELAY)", deinit)
         self.assertIn("honch_gpio_mapping_lock(pdMS_TO_TICKS(1000))", worker)
 
-        track_index = worker.find("honch_track(event_name, props)")
+        track_index = worker.find("honch_track(event_name, properties, 1u)")
         unlock_index = worker.rfind("honch_gpio_mapping_unlock()", 0, track_index)
         event_copy_index = worker.find("strncpy(event_name, s_mappings[i].event_name")
 

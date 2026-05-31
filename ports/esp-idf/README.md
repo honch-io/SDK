@@ -3,9 +3,9 @@
 Stable ESP-IDF component for Honch product analytics on connected hardware.
 
 Events are queued locally and sent to Capture as compact chunk wire frames.
-The default ESP-IDF integration uses a RAM-first queue for low `honch_track()`
-latency. NVS is used for overflow, while permanently rejected events are dropped
-instead of dead-lettered to protect the shared Wi-Fi/NVS partition.
+The default ESP-IDF integration is RAM-only by default for low `honch_track()`
+latency. Events are not preserved across reset or power loss unless the
+integrator supplies durable queue storage through `event_queue_ops`.
 
 ## Status
 
@@ -45,7 +45,7 @@ static uint8_t event_buffer[8192];
 
 void app_main(void)
 {
-    // ... Wi-Fi + NVS init ...
+    // ... Wi-Fi/time/TLS setup ...
 
     honch_config_t config = {
         .api_key = "your-api-key",
@@ -95,7 +95,7 @@ idf.py flash monitor
 ## What gets sent automatically
 
 **Auto-stamped properties** (on every event):
-- `$device_id` — stable generated identifier persisted by the SDK
+- `$device_id` — from config or derived from the ESP MAC address
 - `$device_model` — from your config
 - `$firmware_version` — from your config
 - `$sdk_platform` — `"esp-idf"`
@@ -107,7 +107,7 @@ idf.py flash monitor
 **Lifecycle events** (emitted automatically):
 - `$device_boot` — on init, with `reset_reason` property
 - `$device_shutdown` — on `honch_shutdown()`, followed by a synchronous flush
-- `$firmware_update` — on boot if firmware version changed, with `previous_version` and `new_version`
+- `$firmware_update` — on boot if firmware version changed and durable state storage is supplied
 - `$battery_low` — when battery drops below threshold (default 15%), emitted once until recovery
 - `$session_start` / `$session_end` — when you call the session API
 
@@ -126,7 +126,8 @@ idf.py flash monitor
 | `flush_event_threshold`  | No       | 30             | Flush when this many events are queued     |
 | `battery_callback`       | No       | NULL           | Function returning 0-100 or -1             |
 | `battery_low_threshold`  | No       | 15             | Battery level that triggers `$battery_low` |
-| `durability_mode`        | No       | `HONCH_DURABILITY_OS_BUFFERED` | Queue write durability mode |
+| `state_storage_ops`      | No       | NULL           | Durable state storage for identity/version |
+| `event_queue_ops`        | No       | NULL           | Durable/custom event queue implementation  |
 
 Call `honch_tick()` periodically from your main loop or scheduler. The SDK
 flushes after `flush_interval_seconds` or when the queue reaches
@@ -141,23 +142,17 @@ debugging event encoding. Do not disable certificate verification in production.
 
 ## Queue storage policy
 
-The public `honch_init()` path is optimized for device hot paths: new events are
-queued into the caller-provided RAM buffer first, then flushed in compact batches.
-This keeps tracking calls fast and avoids NVS writes for every event.
+The public `honch_init()` path queues events in the caller-provided RAM buffer,
+then flushes them in compact batches. When the buffer is full, the SDK drops the
+oldest queued events to make room for newer telemetry. Oversized events are
+rejected.
 
-Tradeoff: events still in RAM can be lost on reset or power loss. NVS remains in
-the storage adapter for overflow, and any NVS-backed events already present at
-boot are drained before the SDK returns to RAM-only operation. Permanent
-rejections are discarded on ESP-IDF because persisting unused dead-letter
-payloads can exhaust the small default NVS partition shared with Wi-Fi
-calibration data.
-
-If your product needs stricter reboot durability for NVS-backed queue writes, set
-`durability_mode` to `HONCH_DURABILITY_SYNC_ALWAYS`. The default
-`HONCH_DURABILITY_OS_BUFFERED` mode favors normal platform buffering. With the
-default public init path, new events still enter the caller-provided RAM queue
-first; strict durability only applies once events use the persistent storage
-adapter.
+This keeps tracking calls fast and avoids hidden flash writes. The tradeoff is
+explicit: queued events, `identify()` state, and firmware-version state are
+volatile unless you provide custom storage. Use `event_queue_ops` for a durable
+event queue and `state_storage_ops` for durable identity/version state. Those
+hooks can be backed by NVS, a filesystem, external flash, FRAM, or a product
+specific queue.
 
 ## Troubleshooting
 
@@ -173,13 +168,9 @@ adapter.
 - The SDK waits for an IP address before attempting any flushes
 - Capture must support `POST /capture` with `Content-Type:
   application/vnd.honch.chunk`
-- With the default RAM-first queue, unsent events may be lost across reset or
-  power loss. Use an NVS-only storage integration when reboot durability matters
-  more than enqueue latency.
-
-**NVS errors at init?**
-- Make sure you call `nvs_flash_init()` before `honch_init()`
-- If NVS is corrupted, erase and reinit: `nvs_flash_erase()` then `nvs_flash_init()`
+- With the default RAM-only queue, unsent events are lost across reset or power
+  loss. Use `event_queue_ops` when reboot durability matters more than enqueue
+  latency.
 
 ## License
 

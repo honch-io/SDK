@@ -219,6 +219,28 @@ static unsigned int honch_mp_map_get_uint(mp_obj_t dict_obj, qstr key, unsigned 
     return value < 0 ? fallback : (unsigned int)value;
 }
 
+static honch_status_t honch_mp_map_get_writable_buffer(mp_obj_t dict_obj, qstr key, uint8_t **buffer, size_t *buffer_size)
+{
+    if (buffer == NULL || buffer_size == NULL) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    *buffer = NULL;
+    *buffer_size = 0u;
+    mp_map_t *map = mp_obj_dict_get_map(dict_obj);
+    mp_map_elem_t *elem = mp_map_lookup(map, MP_OBJ_NEW_QSTR(key), MP_MAP_LOOKUP);
+    if (elem == NULL || elem->value == mp_const_none) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    mp_buffer_info_t info;
+    mp_get_buffer_raise(elem->value, &info, MP_BUFFER_WRITE);
+    if (info.buf == NULL || info.len == 0u) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    *buffer = (uint8_t *)info.buf;
+    *buffer_size = info.len;
+    return HONCH_STATUS_OK;
+}
+
 static mp_obj_t honch_client_make_new(
     const mp_obj_type_t *type,
     size_t n_args,
@@ -236,17 +258,21 @@ static mp_obj_t honch_client_make_new(
     memset(&self->transport_ctx, 0, sizeof(self->transport_ctx));
     self->client = NULL;
 
-    const char *queue_directory = honch_mp_map_get_str(args[0], MP_QSTR_queue_directory, NULL);
     honch_platform_ops_t platform_ops;
-    honch_storage_ops_t storage_ops;
+    honch_event_queue_ops_t event_queue_ops;
     honch_transport_ops_t transport_ops;
+    uint8_t *event_buffer = NULL;
+    size_t event_buffer_size = 0u;
 
     HONCH_MP_DEBUG_INIT("platform_ops_begin");
     honch_status_t status = honch_micropython_platform_ops_init(&platform_ops, &self->platform_ctx);
     HONCH_MP_DEBUG_INIT("platform_ops_done");
     if (status == HONCH_STATUS_OK) {
+        status = honch_mp_map_get_writable_buffer(args[0], MP_QSTR_event_buffer, &event_buffer, &event_buffer_size);
+    }
+    if (status == HONCH_STATUS_OK) {
         HONCH_MP_DEBUG_INIT("storage_ops_begin");
-        status = honch_micropython_storage_ops_init(&storage_ops, &self->storage_ctx, queue_directory);
+        status = honch_micropython_storage_ops_init(&event_queue_ops, &self->storage_ctx, event_buffer, event_buffer_size);
         HONCH_MP_DEBUG_INIT("storage_ops_done");
     }
     if (status == HONCH_STATUS_OK) {
@@ -270,7 +296,7 @@ static mp_obj_t honch_client_make_new(
         .firmware_version = honch_mp_map_get_str(args[0], MP_QSTR_firmware_version, NULL),
         .environment = honch_mp_map_get_str(args[0], MP_QSTR_environment, NULL),
         .sdk_platform = "micropython",
-        .queue_directory = queue_directory,
+        .queue_directory = "",
         .batch_size = honch_mp_map_get_size(args[0], MP_QSTR_batch_size, 0),
         .max_queued_events = honch_mp_map_get_size(args[0], MP_QSTR_max_queued_events, 0),
         .max_event_bytes = honch_mp_map_get_size(args[0], MP_QSTR_max_event_bytes, 0),
@@ -281,9 +307,9 @@ static mp_obj_t honch_client_make_new(
         .flush_retry_max_ms = honch_mp_map_get_uint(args[0], MP_QSTR_flush_retry_max_ms, 0),
         .battery_callback = NULL,
         .battery_low_threshold = honch_mp_map_get_uint(args[0], MP_QSTR_battery_low_threshold, 0),
-        .durability_mode = HONCH_DURABILITY_OS_BUFFERED,
         .platform = &platform_ops,
-        .storage = &storage_ops,
+        .state_storage = NULL,
+        .event_queue = &event_queue_ops,
         .transport = &transport_ops,
     };
 
@@ -462,6 +488,26 @@ static mp_obj_t honch_client_get_device_id(mp_obj_t self_in)
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(honch_client_get_device_id_obj, honch_client_get_device_id);
 
+static mp_obj_t honch_client_queue_stats(mp_obj_t self_in)
+{
+    honch_micropython_client_t *self = honch_get_self(self_in);
+    honch_queue_stats_t stats = {0};
+    honch_status_t status = honch_core_get_queue_stats(self->client, &stats);
+    if (status != HONCH_STATUS_OK) {
+        honch_micropython_raise_status(status);
+    }
+    mp_obj_t dict = mp_obj_new_dict(7);
+    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_depth), mp_obj_new_int_from_ull(stats.depth));
+    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_bytes_used), mp_obj_new_int_from_ull(stats.bytes_used));
+    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_bytes_capacity), mp_obj_new_int_from_ull(stats.bytes_capacity));
+    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_capacity_dropped_events), mp_obj_new_int_from_ull(stats.capacity_dropped_events));
+    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_oversized_rejected_events), mp_obj_new_int_from_ull(stats.oversized_rejected_events));
+    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_dead_lettered_events), mp_obj_new_int_from_ull(stats.dead_lettered_events));
+    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_high_watermark_depth), mp_obj_new_int_from_ull(stats.high_watermark_depth));
+    return dict;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(honch_client_queue_stats_obj, honch_client_queue_stats);
+
 static const mp_rom_map_elem_t honch_client_locals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_track), MP_ROM_PTR(&honch_client_track_obj) },
     { MP_ROM_QSTR(MP_QSTR_identify), MP_ROM_PTR(&honch_client_identify_obj) },
@@ -474,6 +520,7 @@ static const mp_rom_map_elem_t honch_client_locals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_reset), MP_ROM_PTR(&honch_client_reset_obj) },
     { MP_ROM_QSTR(MP_QSTR_shutdown), MP_ROM_PTR(&honch_client_shutdown_obj) },
     { MP_ROM_QSTR(MP_QSTR_get_device_id), MP_ROM_PTR(&honch_client_get_device_id_obj) },
+    { MP_ROM_QSTR(MP_QSTR_queue_stats), MP_ROM_PTR(&honch_client_queue_stats_obj) },
 };
 static MP_DEFINE_CONST_DICT(honch_client_locals_dict, honch_client_locals_table);
 
@@ -498,6 +545,7 @@ static const mp_rom_map_elem_t honch_core_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_ERROR_QUEUE_FULL), MP_ROM_INT(HONCH_STATUS_ERROR_QUEUE_FULL) },
     { MP_ROM_QSTR(MP_QSTR_ERROR_TIMEOUT), MP_ROM_INT(HONCH_STATUS_ERROR_TIMEOUT) },
     { MP_ROM_QSTR(MP_QSTR_ERROR_BUSY), MP_ROM_INT(HONCH_STATUS_ERROR_BUSY) },
+    { MP_ROM_QSTR(MP_QSTR_ERROR_NOT_SUPPORTED), MP_ROM_INT(HONCH_STATUS_ERROR_NOT_SUPPORTED) },
 };
 static MP_DEFINE_CONST_DICT(honch_core_module_globals, honch_core_module_globals_table);
 

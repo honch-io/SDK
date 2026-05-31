@@ -14,6 +14,7 @@ target_sources(honch_micropython INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_lifecycle.c
     ${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_packetizer.c
     ${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_queue_policy.c
+    ${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_ram_queue.c
     ${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_support.c
     ${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_wire_v2.c
 )

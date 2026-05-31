@@ -29,9 +29,9 @@ static honch_status_t honch_read_optional_state_file(
     char **out)
 {
     *out = NULL;
-    if (client->storage != NULL && client->storage->state_get != NULL) {
+    if (client->state_storage != NULL && client->state_storage->state_get != NULL) {
         size_t value_size = 0u;
-        honch_status_t status = client->storage->state_get(client->storage->ctx, name, NULL, &value_size);
+        honch_status_t status = client->state_storage->state_get(client->state_storage->ctx, name, NULL, &value_size);
         if (status != HONCH_OK || value_size == 0u) {
             return status;
         }
@@ -47,7 +47,7 @@ static honch_status_t honch_read_optional_state_file(
         }
 
         size_t read_size = value_size;
-        status = client->storage->state_get(client->storage->ctx, name, (uint8_t *)value, &read_size);
+        status = client->state_storage->state_get(client->state_storage->ctx, name, (uint8_t *)value, &read_size);
         if (status != HONCH_OK) {
             free(value);
             return status;
@@ -93,9 +93,9 @@ static honch_status_t honch_read_optional_state_file(
 
 static honch_status_t honch_write_state_file(honch_client_t *client, const char *name, const char *content)
 {
-    if (client->storage != NULL && client->storage->state_set != NULL) {
-        return client->storage->state_set(
-            client->storage->ctx,
+    if (client->state_storage != NULL && client->state_storage->state_set != NULL) {
+        return client->state_storage->state_set(
+            client->state_storage->ctx,
             name,
             (const uint8_t *)content,
             strlen(content));

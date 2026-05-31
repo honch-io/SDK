@@ -9,7 +9,7 @@ Preview `0.1.0`. Use for evaluation or controlled pilots until your product has 
 ## Support
 
 - Board family: ESP32 Arduino.
-- Required dependencies: ESP32 Arduino core, `WiFi`, `Preferences`, `HTTPClient`, and `WiFiClientSecure`.
+- Required dependencies: ESP32 Arduino core, `WiFi`, `HTTPClient`, and `WiFiClientSecure`.
 - Upload endpoint: `POST /capture` with compact chunks produced by the shared Honch C core.
 - Not supported: non-ESP32 Arduino boards, BLE relay, and OTA integration.
 
@@ -58,6 +58,10 @@ void loop() {
 ```
 
 `Honch.tick()` performs scheduled flush work when the interval elapses or the event threshold is reached. It does not start a hidden background task. Use `Honch.loop()` as an alias if that fits the sketch.
+
+The default queue uses only the caller-provided RAM buffer. Events and
+`identify()` state are lost across reset or power loss unless you provide
+`eventQueueOps` and/or `stateStorageOps` backed by durable storage.
 
 ## Security
 

@@ -9,6 +9,7 @@ struct HonchConfig {
   const char *apiKey;
   const char *host;
   const char *rootCaPem;
+  const char *deviceId;
   const char *deviceModel;
   const char *firmwareVersion;
   const char *environment;
@@ -17,6 +18,8 @@ struct HonchConfig {
   uint32_t flushIntervalSeconds;
   uint32_t flushEventThreshold;
   bool insecureSkipTlsVerify;
+  const honch_state_storage_ops_t *stateStorageOps;
+  const honch_event_queue_ops_t *eventQueueOps;
 };
 
 class HonchClass {
@@ -34,6 +37,7 @@ public:
   bool shutdown();
   bool reset();
   const char *deviceId();
+  bool queueStats(honch_queue_stats_t *stats);
   const char *lastError();
 
 private:
