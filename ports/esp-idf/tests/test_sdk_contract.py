@@ -354,7 +354,7 @@ class EspIdfChunkWireTest(unittest.TestCase):
 
         self.assertIn("auto_property_buffers", internal)
         self.assertIn("auto_property_buffer_in_use", internal)
-        self.assertIn("#define HONCH_AUTO_PROPERTY_BUFFER_COUNT 1u", internal)
+        self.assertIn("#define HONCH_AUTO_PROPERTY_BUFFER_COUNT 2u", internal)
         self.assertIn("honch_acquire_auto_property_buffer", core)
         self.assertIn("HONCH_ERROR_BUSY", acquire)
         self.assertNotIn("calloc", collect)
