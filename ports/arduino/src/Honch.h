@@ -22,6 +22,7 @@ struct HonchConfig {
   bool insecureSkipTlsVerify;
   const honch_state_storage_ops_t *stateStorageOps;
   const honch_event_queue_ops_t *eventQueueOps;
+  uint32_t transportTimeoutMs;
 };
 
 class HonchClass {

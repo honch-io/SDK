@@ -19,6 +19,7 @@ struct honch_arduino_transport {
   const char *apiKey;
   const char *host;
   const char *rootCaPem;
+  uint32_t transportTimeoutMs;
   bool insecureSkipTlsVerify;
 };
 
