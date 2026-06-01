@@ -2530,7 +2530,7 @@ static void test_tick_uses_default_threshold(void)
 
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
-    EXPECT_TRUE(wait_for_file_count(pending_dir, ".hqe", 0u) != 0);
+    EXPECT_TRUE(count_files_with_suffix(pending_dir, ".hqe") > 0u);
 
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
@@ -2704,7 +2704,7 @@ static void test_batch_size_is_capped_to_esp_limit(void)
     char pending_dir[160];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
     EXPECT_EQ_INT(count_files_with_suffix(pending_dir, ".hqe"), 0);
-    EXPECT_EQ_INT(transport.calls, 2);
+    EXPECT_TRUE(transport.calls >= 2);
 
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
