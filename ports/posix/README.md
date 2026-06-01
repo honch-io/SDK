@@ -265,6 +265,8 @@ HTTP POST is synchronous and runs on the caller's thread. Do not call
 honch_tick() from a latency-sensitive control loop, GPIO edge path, camera frame
 path, UI thread, or watchdog-sensitive section. If the host has work with
 tighter latency requirements, pump Honch from a dedicated low-priority thread:
+Each scheduled tick posts at most one wire chunk, so large queued uploads may
+need several pump iterations to finish.
 
 ```c
 #include <pthread.h>

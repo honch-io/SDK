@@ -85,6 +85,8 @@ request is in progress. Do not call tick() from a latency-sensitive control
 loop, timing-critical sensor loop, UI refresh path, or watchdog-sensitive
 section. Schedule it from a low-priority part of the program where a stalled
 interpreter is acceptable for the configured timeout.
+Each scheduled tick posts at most one wire chunk, so large queued uploads may
+need several pump iterations to finish.
 
 Do not call `tick()` while WLAN is disconnected or the radio is intentionally
 off. If your loop cannot guarantee that, pass `connectivity_callback`; it should

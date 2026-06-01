@@ -70,6 +70,8 @@ from a latency-sensitive control loop, motor-control path, sensor sampling
 deadline, UI refresh path, or watchdog-sensitive section. The SDK does not start
 a hidden background task. Use `Honch.loop()` as an alias only when the sketch's
 `loop()` can tolerate upload latency.
+Each scheduled tick posts at most one wire chunk, so large queued uploads may
+need several pump iterations to finish.
 
 For firmware with latency-sensitive `loop()` work, pump Honch from a dedicated
 low-priority FreeRTOS task:

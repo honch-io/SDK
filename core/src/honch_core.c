@@ -1513,7 +1513,7 @@ honch_status_t honch_core_tick(honch_client_t *client)
     client->outbound_upload_attempted = false;
     client->scheduler_flush_requested = false;
     bool progressed = false;
-    status = honch_queue_flush_one_locked(client, &progressed);
+    status = honch_queue_flush_one_chunk_locked(client, &progressed);
     now = honch_client_now_millis(client);
     if (status == HONCH_ERROR_REJECTED && progressed) {
         status = HONCH_OK;
