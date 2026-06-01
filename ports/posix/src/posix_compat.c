@@ -19,6 +19,8 @@ static void honch_posix_config_to_core(const honch_config_t *config, honch_core_
         .flush_interval_seconds = config->flush_interval_seconds,
         .flush_min_interval_ms = config->flush_min_interval_ms,
         .flush_event_threshold = config->flush_event_threshold,
+        .flush_max_batches = (size_t)-1,
+        .shutdown_flush_max_batches = (size_t)-1,
         .flush_retry_initial_ms = config->flush_retry_initial_ms,
         .flush_retry_max_ms = config->flush_retry_max_ms,
         .battery_callback = config->battery_callback,

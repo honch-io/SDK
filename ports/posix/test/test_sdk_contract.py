@@ -154,6 +154,12 @@ class PosixChunkWireTest(unittest.TestCase):
 
         self.assertIn(".flush_min_interval_ms = HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS", tests)
 
+    def test_posix_adapter_preserves_explicit_flush_drain_contract(self) -> None:
+        compat = read_sdk("ports/posix/src/posix_compat.c")
+
+        self.assertIn(".flush_max_batches = (size_t)-1", compat)
+        self.assertIn(".shutdown_flush_max_batches = (size_t)-1", compat)
+
     def test_client_state_machine_lives_in_core_with_posix_wrappers(self) -> None:
         core = read_sdk("core/src/honch_core.c")
         compat = read_sdk("ports/posix/src/posix_compat.c")
