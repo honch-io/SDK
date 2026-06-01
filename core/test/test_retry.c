@@ -34,6 +34,9 @@ typedef struct fake_storage {
 typedef struct fake_transport {
     honch_transport_result_t result;
     honch_status_t status;
+    size_t reject_on_chunk_call;
+    honch_transport_result_t reject_result;
+    honch_status_t reject_status;
     size_t calls;
     size_t chunk_calls;
     char last_stream_id[32];
@@ -200,10 +203,11 @@ static honch_status_t fake_queue_depth(void *ctx, size_t *depth)
     return HONCH_OK;
 }
 
-static void build_heavy_event(
+static void build_heavy_event_with_final_array(
     const char *event_name,
     size_t property_count,
     size_t array_length,
+    size_t final_array_length,
     uint8_t **out_data,
     size_t *out_size)
 {
@@ -217,13 +221,14 @@ static void build_heavy_event(
         int key_length = snprintf(key, sizeof(key), "p%02zu", i);
         assert(key_length > 0 && (size_t)key_length < sizeof(key));
         char *stored_key = honch_strdup(key);
-        honch_wire_v2_value_t *items = (honch_wire_v2_value_t *)calloc(array_length, sizeof(*items));
+        size_t item_count = i + 1u == property_count ? final_array_length : array_length;
+        honch_wire_v2_value_t *items = (honch_wire_v2_value_t *)calloc(item_count, sizeof(*items));
         assert(stored_key != NULL);
         assert(items != NULL);
-        for (size_t j = 0u; j < array_length; j++) {
+        for (size_t j = 0u; j < item_count; j++) {
             items[j] = honch_u64((uint64_t)(i + j));
         }
-        properties[i] = honch_prop(stored_key, honch_array(items, array_length));
+        properties[i] = honch_prop(stored_key, honch_array(items, item_count));
     }
 
     honch_payload_t payload = {0};
@@ -236,6 +241,22 @@ static void build_heavy_event(
     free(properties);
     *out_data = payload.data;
     *out_size = payload.length;
+}
+
+static void build_heavy_event(
+    const char *event_name,
+    size_t property_count,
+    size_t array_length,
+    uint8_t **out_data,
+    size_t *out_size)
+{
+    build_heavy_event_with_final_array(
+        event_name,
+        property_count,
+        array_length,
+        array_length,
+        out_data,
+        out_size);
 }
 
 static honch_status_t fake_post_chunk(
@@ -267,6 +288,11 @@ static honch_status_t fake_post_chunk(
     }
     transport->last_chunk_size = body_size < sizeof(transport->last_chunk) ? body_size : sizeof(transport->last_chunk);
     memcpy(transport->last_chunk, body, transport->last_chunk_size);
+    if (transport->reject_on_chunk_call > 0u &&
+        transport->chunk_calls == transport->reject_on_chunk_call) {
+        *result = transport->reject_result;
+        return transport->reject_status;
+    }
     *result = transport->result;
     return transport->status;
 }
@@ -1030,6 +1056,51 @@ static void test_v2_multi_frame_flush_passes_stream_id_to_transport(void)
     assert(!storage.events[0].consumed);
 }
 
+static void test_v2_pending_chunk_rejection_dead_letters_event(void)
+{
+    uint8_t *event = NULL;
+    size_t event_size = 0u;
+    build_heavy_event_with_final_array("pending_reject", 64u, 28u, 11u, &event, &event_size);
+
+    fake_storage_t storage = {0};
+    storage.event_count = 1u;
+    storage.events[0] = (fake_event_t) {
+        .data = event,
+        .size = event_size,
+        .sequence = 1u,
+        .pending = true
+    };
+
+    fake_transport_t transport = {
+        .result = HONCH_TRANSPORT_CHUNK_STORED,
+        .status = HONCH_OK,
+        .reject_on_chunk_call = 2u,
+        .reject_result = HONCH_TRANSPORT_REJECTED,
+        .reject_status = HONCH_ERROR_REJECTED
+    };
+    honch_event_queue_ops_t storage_ops = {0};
+    honch_transport_ops_t transport_ops = {0};
+    honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
+    client.batch_size = 1u;
+    client.max_event_bytes = 8192u;
+    transport_ops.post_chunk = fake_post_chunk;
+
+    bool progressed = false;
+    assert(honch_queue_flush_one_chunk_locked(&client, &progressed) == HONCH_OK);
+    assert(!progressed);
+    assert(client.pending_flush_active);
+    assert(storage.events[0].pending);
+
+    assert(honch_queue_flush_one_chunk_locked(&client, &progressed) == HONCH_ERROR_REJECTED);
+    assert(progressed);
+    assert(!client.pending_flush_active);
+    assert(!storage.events[0].pending);
+    assert(storage.events[0].dead_lettered);
+    assert(!storage.events[0].consumed);
+
+    free(event);
+}
+
 static void test_flush_uses_storage_batch_read_when_available(void)
 {
     fake_storage_t storage;
@@ -1248,6 +1319,7 @@ int main(void)
     test_v2_flush_reconstructs_boot_relative_timestamps_when_wall_clock_is_valid();
     test_v2_final_chunk_stored_response_preserves_event();
     test_v2_multi_frame_flush_passes_stream_id_to_transport();
+    test_v2_pending_chunk_rejection_dead_letters_event();
     test_flush_uses_storage_batch_read_when_available();
     test_limited_flush_stops_after_one_batch();
     test_flush_rejects_overreported_storage_batch_count();

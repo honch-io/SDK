@@ -864,6 +864,18 @@ static honch_status_t honch_queue_post_pending_flush_locked(
         &result);
     client->outbound_upload_attempted = true;
     if (status != HONCH_OK) {
+        if (result == HONCH_TRANSPORT_REJECTED || result == HONCH_TRANSPORT_AUTH_ERROR) {
+            honch_status_t dead_status = honch_core_queue_dead_letter_batch(
+                client,
+                client->flush_sequences,
+                client->pending_flush_event_count);
+            if (dead_status == HONCH_OK) {
+                honch_pending_flush_clear(client);
+                *progressed = true;
+                return status;
+            }
+            return dead_status;
+        }
         return status;
     }
     if (!complete) {
