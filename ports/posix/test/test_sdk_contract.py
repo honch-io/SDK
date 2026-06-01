@@ -142,6 +142,13 @@ class PosixChunkWireTest(unittest.TestCase):
         self.assertIn("client->durability_mode", queue)
         self.assertIn("HONCH_DURABILITY_SYNC_ALWAYS ? HONCH_DURABILITY_SYNC_ALWAYS : HONCH_DURABILITY_OS_BUFFERED", core)
 
+    def test_posix_platform_enables_posix_declarations_before_headers(self) -> None:
+        platform = read_sdk("ports/posix/src/posix_platform.c")
+
+        self.assertTrue(platform.startswith("#define _POSIX_C_SOURCE 200809L\n"))
+        self.assertLess(platform.index("#define _POSIX_C_SOURCE"), platform.index("#include"))
+        self.assertIn("fileno(file)", platform)
+
     def test_client_state_machine_lives_in_core_with_posix_wrappers(self) -> None:
         core = read_sdk("core/src/honch_core.c")
         compat = read_sdk("ports/posix/src/posix_compat.c")

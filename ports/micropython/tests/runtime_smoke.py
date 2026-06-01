@@ -22,4 +22,7 @@ client.identify("runtime-user", {"plan": "test"})
 client.set_property("runtime", True)
 client.session_start("runtime")
 client.session_end()
-client.shutdown()
+try:
+    client.shutdown()
+except honch.TransportError:
+    pass

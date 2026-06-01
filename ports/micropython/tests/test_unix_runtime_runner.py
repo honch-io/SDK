@@ -32,6 +32,7 @@ class MicroPythonUnixRuntimeRunnerTests(unittest.TestCase):
         self.assertIn("import honch", smoke)
         self.assertIn("honch.Honch(", smoke)
         self.assertIn("client.track(", smoke)
+        self.assertIn("except honch.TransportError", smoke)
         self.assertIn("client.shutdown()", smoke)
 
 
