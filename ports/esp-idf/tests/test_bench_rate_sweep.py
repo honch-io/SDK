@@ -63,6 +63,24 @@ class EspIdfBenchRateSweepTests(unittest.TestCase):
         self.assertNotIn("BENCH_SUITE_START", benchtest)
         self.assertNotIn("BENCH_WINDOW", benchtest)
 
+    def test_legacy_benchtest_uses_real_queue_stats_for_flush_evidence(self) -> None:
+        benchtest = read("ports/esp-idf/benchtest/main/app_main.c")
+
+        self.assertIn("static uint32_t refresh_queued_estimate(void)", benchtest)
+        self.assertIn("honch_get_queue_stats(&stats)", benchtest)
+        self.assertIn("stats.queued_events", benchtest)
+        self.assertNotIn("s_queued_estimate = 0;", benchtest)
+        self.assertIn(".flush_event_threshold = CONFIG_BENCH_FLUSH_EVERY", benchtest)
+        self.assertIn(".flush_max_batches = CONFIG_BENCH_FLUSH_EVERY", benchtest)
+
+    def test_legacy_benchtest_runs_on_dedicated_stack(self) -> None:
+        benchtest = read("ports/esp-idf/benchtest/main/app_main.c")
+
+        self.assertIn("#define BENCH_TASK_STACK_BYTES 16384", benchtest)
+        self.assertIn("static void bench_task(void *arg)", benchtest)
+        self.assertIn("xTaskCreate(", benchtest)
+        self.assertIn("BENCH_TASK_STACK_BYTES", benchtest)
+
 
 if __name__ == "__main__":
     unittest.main()
