@@ -107,16 +107,6 @@ typedef struct honch_event_record {
     size_t property_count;
 } honch_event_record_t;
 
-typedef struct honch_flush_workspace {
-    honch_payload_t flush_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
-    uint64_t flush_sequences[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
-    honch_storage_event_t flush_storage_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
-    honch_event_record_t flush_parsed_records[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
-    honch_wire_v2_event_t flush_compact_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
-    uint8_t flush_message_buffer[HONCH_WIRE_V2_MAX_FRAME_BYTES];
-    uint8_t flush_frame_buffer[HONCH_WIRE_V2_MAX_FRAME_BYTES];
-} honch_flush_workspace_t;
-
 struct honch_client {
     void *lifetime_mutex;
     void *state_mutex;
@@ -144,6 +134,13 @@ struct honch_client {
     honch_wire_v2_property_t build_properties[HONCH_MAX_EVENT_PROPERTIES];
     honch_wire_v2_property_t auto_property_buffers[HONCH_AUTO_PROPERTY_BUFFER_COUNT][HONCH_MAX_EVENT_PROPERTIES];
     honch_atomic_bool_t auto_property_buffer_in_use[HONCH_AUTO_PROPERTY_BUFFER_COUNT];
+    honch_payload_t flush_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
+    uint64_t flush_sequences[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
+    honch_storage_event_t flush_storage_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
+    honch_event_record_t flush_parsed_records[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
+    honch_wire_v2_event_t flush_compact_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
+    uint8_t flush_message_buffer[HONCH_WIRE_V2_MAX_FRAME_BYTES];
+    uint8_t flush_frame_buffer[HONCH_WIRE_V2_MAX_FRAME_BYTES];
     bool configured_device_id;
     size_t batch_size;
     size_t max_queued_events;
