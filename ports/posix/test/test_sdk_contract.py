@@ -149,6 +149,11 @@ class PosixChunkWireTest(unittest.TestCase):
         self.assertLess(platform.index("#define _POSIX_C_SOURCE"), platform.index("#include"))
         self.assertIn("fileno(file)", platform)
 
+    def test_posix_unit_fixture_disables_outbound_spacing_by_default(self) -> None:
+        tests = read_sdk("ports/posix/test/test_honch.c")
+
+        self.assertIn(".flush_min_interval_ms = HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS", tests)
+
     def test_client_state_machine_lives_in_core_with_posix_wrappers(self) -> None:
         core = read_sdk("core/src/honch_core.c")
         compat = read_sdk("ports/posix/src/posix_compat.c")
