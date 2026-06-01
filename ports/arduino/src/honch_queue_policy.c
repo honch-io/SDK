@@ -6,8 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define HONCH_MIN_UNIX_TIME_MS 1577836800000ULL
-
 typedef struct honch_flush_context {
     char *device_id;
     char *device_model;
@@ -52,9 +50,26 @@ size_t honch_test_max_wire_v2_encode_attempts(void)
     return s_honch_test_max_wire_v2_encode_attempts;
 }
 
-static void honch_snapshot_boot_epoch(honch_client_t *client, honch_flush_context_t *context)
+void honch_core_wire_v2_context_from_client(
+    honch_client_t *client,
+    honch_wire_v2_encode_context_t *context)
 {
-    if (client == NULL || context == NULL || client->platform == NULL ||
+    if (context == NULL) {
+        return;
+    }
+    *context = (honch_wire_v2_encode_context_t){0};
+    if (client == NULL) {
+        return;
+    }
+
+    context->device_id = client->device_id;
+    context->device_model = client->device_model;
+    context->firmware_version = client->firmware_version;
+    context->sdk_platform = client->sdk_platform;
+    context->environment = client->environment;
+    context->session_id = client->session_id;
+
+    if (client->platform == NULL ||
         client->platform->now_ms == NULL || client->platform->uptime_ms == NULL) {
         return;
     }
@@ -70,8 +85,8 @@ static void honch_snapshot_boot_epoch(honch_client_t *client, honch_flush_contex
     context->flush_uptime_ms = uptime_ms;
 }
 
-static uint64_t honch_normalize_queued_timestamp(
-    const honch_flush_context_t *context,
+uint64_t honch_core_normalize_wire_v2_timestamp(
+    const honch_wire_v2_encode_context_t *context,
     uint64_t timestamp_ms)
 {
     if (context == NULL || !context->has_boot_epoch_ms ||
@@ -82,6 +97,19 @@ static uint64_t honch_normalize_queued_timestamp(
     }
 
     return context->boot_epoch_ms + timestamp_ms;
+}
+
+static uint64_t honch_device_time_source_for_event(uint64_t queued_timestamp_ms, uint64_t normalized_timestamp_ms)
+{
+    if (normalized_timestamp_ms < HONCH_MIN_UNIX_TIME_MS) {
+        return 0u;
+    }
+    if (queued_timestamp_ms > 0u &&
+        queued_timestamp_ms < HONCH_MIN_UNIX_TIME_MS &&
+        normalized_timestamp_ms >= HONCH_MIN_UNIX_TIME_MS) {
+        return 2u;
+    }
+    return 1u;
 }
 
 static uint64_t honch_device_time_source_for_batch(bool has_unknown_time, bool used_boot_epoch)
@@ -189,7 +217,11 @@ static honch_status_t honch_flush_context_snapshot(honch_client_t *client, honch
     context->session_id = client->session_id == NULL ? NULL : honch_strdup(client->session_id);
     context->message_id_seed = client->wire_v2_message_id_seed;
     memcpy(context->stream_id, client->wire_v2_stream_id, sizeof(context->stream_id));
-    honch_snapshot_boot_epoch(client, context);
+    honch_wire_v2_encode_context_t borrowed_context = {0};
+    honch_core_wire_v2_context_from_client(client, &borrowed_context);
+    context->has_boot_epoch_ms = borrowed_context.has_boot_epoch_ms;
+    context->boot_epoch_ms = borrowed_context.boot_epoch_ms;
+    context->flush_uptime_ms = borrowed_context.flush_uptime_ms;
 
     if (context->device_id == NULL || context->device_model == NULL ||
         context->firmware_version == NULL || context->sdk_platform == NULL ||
@@ -315,6 +347,167 @@ static honch_status_t honch_core_read_queue_batch(
     return *event_count == 0u ? HONCH_ERROR_NOT_INITIALIZED : HONCH_OK;
 }
 
+honch_status_t honch_core_encode_single_wire_v2_event(
+    const honch_wire_v2_encode_context_t *context,
+    const honch_payload_t *event,
+    uint8_t *buffer,
+    size_t buffer_capacity,
+    honch_payload_t *message)
+{
+    if (message == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    message->data = NULL;
+    message->length = 0u;
+
+    if (context == NULL || event == NULL || event->data == NULL || event->length == 0u ||
+        buffer == NULL || buffer_capacity == 0u ||
+        context->device_id == NULL || context->device_model == NULL ||
+        context->firmware_version == NULL || context->sdk_platform == NULL ||
+        context->environment == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    honch_event_record_t record = {0};
+    honch_status_t status = honch_event_record_parse(event->data, event->length, &record);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    honch_event_record_prepare_wire_properties(&record);
+    uint64_t queued_timestamp_ms = record.timestamp_ms;
+    record.timestamp_ms = honch_core_normalize_wire_v2_timestamp(context, record.timestamp_ms);
+
+    honch_wire_v2_event_t compact_event = {
+        .event_name = record.event_name,
+        .timestamp_ms = record.timestamp_ms,
+        .properties = record.properties,
+        .property_count = record.property_count
+    };
+    honch_wire_v2_batch_context_t batch_context = {
+        .distinct_id = record.distinct_id,
+        .device_id = context->device_id,
+        .device_model = context->device_model,
+        .firmware_version = context->firmware_version,
+        .sdk_platform = context->sdk_platform,
+        .sdk_version = HONCH_SDK_VERSION,
+        .environment = context->environment,
+        .session_id = record.session_id != NULL ? record.session_id : context->session_id,
+        .has_device_time_source = true,
+        .device_time_source = honch_device_time_source_for_event(queued_timestamp_ms, record.timestamp_ms)
+    };
+
+    size_t message_size = 0u;
+    status = honch_wire_v2_encode_event_batch(
+        &batch_context,
+        record.timestamp_ms,
+        &compact_event,
+        1u,
+        buffer,
+        buffer_capacity,
+        &message_size);
+    honch_event_record_free(&record);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    message->data = buffer;
+    message->length = message_size;
+    return HONCH_OK;
+}
+
+typedef struct honch_flush_wire_provider_context {
+    const honch_payload_t *events;
+    const honch_wire_v2_encode_context_t *encode_context;
+    honch_event_record_t *record;
+    bool record_active;
+} honch_flush_wire_provider_context_t;
+
+static void honch_flush_wire_provider_clear(honch_flush_wire_provider_context_t *ctx)
+{
+    if (ctx == NULL || ctx->record == NULL || !ctx->record_active) {
+        return;
+    }
+    honch_event_record_free(ctx->record);
+    memset(ctx->record, 0, sizeof(*ctx->record));
+    ctx->record_active = false;
+}
+
+static honch_status_t honch_flush_wire_event_provider(
+    void *ctx,
+    size_t index,
+    honch_wire_v2_event_t *event)
+{
+    honch_flush_wire_provider_context_t *provider_ctx = (honch_flush_wire_provider_context_t *)ctx;
+    if (provider_ctx == NULL || provider_ctx->events == NULL ||
+        provider_ctx->encode_context == NULL || provider_ctx->record == NULL || event == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    honch_flush_wire_provider_clear(provider_ctx);
+    honch_status_t status = honch_event_record_parse(
+        provider_ctx->events[index].data,
+        provider_ctx->events[index].length,
+        provider_ctx->record);
+    if (status != HONCH_OK) {
+        return status;
+    }
+    provider_ctx->record_active = true;
+
+    honch_event_record_prepare_wire_properties(provider_ctx->record);
+    provider_ctx->record->timestamp_ms = honch_core_normalize_wire_v2_timestamp(
+        provider_ctx->encode_context,
+        provider_ctx->record->timestamp_ms);
+
+    *event = (honch_wire_v2_event_t) {
+        .event_name = provider_ctx->record->event_name,
+        .timestamp_ms = provider_ctx->record->timestamp_ms,
+        .properties = provider_ctx->record->properties,
+        .property_count = provider_ctx->record->property_count
+    };
+    return HONCH_OK;
+}
+
+static honch_status_t honch_flush_measure_wire_v2_batch(
+    const honch_wire_v2_batch_context_t *context,
+    uint64_t base_time_ms,
+    honch_flush_wire_provider_context_t *provider_ctx,
+    size_t event_count,
+    size_t *message_size)
+{
+    honch_status_t status = honch_wire_v2_measure_event_batch_provider(
+        context,
+        base_time_ms,
+        honch_flush_wire_event_provider,
+        provider_ctx,
+        event_count,
+        message_size);
+    honch_flush_wire_provider_clear(provider_ctx);
+    return status;
+}
+
+static honch_status_t honch_flush_encode_wire_v2_batch(
+    const honch_wire_v2_batch_context_t *context,
+    uint64_t base_time_ms,
+    honch_flush_wire_provider_context_t *provider_ctx,
+    size_t event_count,
+    uint8_t *buffer,
+    size_t buffer_capacity,
+    size_t *message_size)
+{
+    honch_status_t status = honch_wire_v2_encode_event_batch_provider(
+        context,
+        base_time_ms,
+        honch_flush_wire_event_provider,
+        provider_ctx,
+        event_count,
+        buffer,
+        buffer_capacity,
+        message_size);
+    honch_flush_wire_provider_clear(provider_ctx);
+    return status;
+}
+
 static honch_status_t honch_core_build_wire_v2_message(
     honch_client_t *client,
     const honch_flush_context_t *flush_context,
@@ -335,68 +528,117 @@ static honch_status_t honch_core_build_wire_v2_message(
     }
     *encoded_event_count = 0u;
 
-    honch_event_record_t *parsed = client->flush_parsed_records;
-    honch_wire_v2_event_t *compact_events = client->flush_compact_events;
-    memset(parsed, 0, event_count * sizeof(*parsed));
-    memset(compact_events, 0, event_count * sizeof(*compact_events));
+    honch_wire_v2_encode_context_t encode_context = {
+        .device_id = flush_context->device_id,
+        .device_model = flush_context->device_model,
+        .firmware_version = flush_context->firmware_version,
+        .sdk_platform = flush_context->sdk_platform,
+        .environment = flush_context->environment,
+        .session_id = flush_context->session_id,
+        .has_boot_epoch_ms = flush_context->has_boot_epoch_ms,
+        .boot_epoch_ms = flush_context->boot_epoch_ms,
+        .flush_uptime_ms = flush_context->flush_uptime_ms
+    };
+    if (event_count == 1u) {
+        honch_status_t status = honch_core_encode_single_wire_v2_event(
+            &encode_context,
+            &events[0],
+            client->flush_message_buffer,
+            HONCH_WIRE_V2_MAX_FRAME_BYTES,
+            message);
+        if (status == HONCH_OK) {
+            *encoded_event_count = 1u;
+        }
+        if (status == HONCH_ERROR_OUT_OF_MEMORY) {
+            status = HONCH_ERROR_INVALID_ARGUMENT;
+        }
+        return status;
+    }
+
+    honch_event_record_t *parsed = &client->flush_parsed_record;
+    memset(parsed, 0, sizeof(*parsed));
 
     honch_status_t status = HONCH_OK;
     size_t parsed_count = 0u;
     bool used_boot_epoch = false;
     bool has_unknown_time = false;
+    bool first_has_session_id = false;
+    char *batch_distinct_id = NULL;
+    char *batch_session_id = NULL;
+    uint64_t base_time_ms = 0u;
     for (size_t i = 0u; status == HONCH_OK && i < event_count; i++) {
-        status = honch_event_record_parse(events[i].data, events[i].length, &parsed[i]);
+        honch_event_record_free(parsed);
+        memset(parsed, 0, sizeof(*parsed));
+        status = honch_event_record_parse(events[i].data, events[i].length, parsed);
         if (status != HONCH_OK) {
             *encoded_event_count = i;
             break;
         }
-        honch_event_record_prepare_wire_properties(&parsed[i]);
-        if (status == HONCH_OK && i > 0u && strcmp(parsed[i].distinct_id, parsed[0].distinct_id) != 0) {
+        honch_event_record_prepare_wire_properties(parsed);
+        if (i == 0u) {
+            batch_distinct_id = honch_strdup(parsed->distinct_id);
+            if (batch_distinct_id == NULL) {
+                status = HONCH_ERROR_OUT_OF_MEMORY;
+                break;
+            }
+            first_has_session_id = parsed->session_id != NULL;
+            if (first_has_session_id) {
+                batch_session_id = honch_strdup(parsed->session_id);
+                if (batch_session_id == NULL) {
+                    status = HONCH_ERROR_OUT_OF_MEMORY;
+                    break;
+                }
+            }
+        }
+        if (status == HONCH_OK && i > 0u && strcmp(parsed->distinct_id, batch_distinct_id) != 0) {
             break;
         }
         if (status == HONCH_OK && i > 0u &&
-            ((parsed[i].session_id == NULL) != (parsed[0].session_id == NULL) ||
-                (parsed[i].session_id != NULL && strcmp(parsed[i].session_id, parsed[0].session_id) != 0))) {
+            ((parsed->session_id != NULL) != first_has_session_id ||
+                (parsed->session_id != NULL && strcmp(parsed->session_id, batch_session_id) != 0))) {
             break;
         }
         if (status == HONCH_OK) {
-            uint64_t queued_timestamp_ms = parsed[i].timestamp_ms;
-            parsed[i].timestamp_ms = honch_normalize_queued_timestamp(flush_context, parsed[i].timestamp_ms);
+            uint64_t queued_timestamp_ms = parsed->timestamp_ms;
+            parsed->timestamp_ms = honch_core_normalize_wire_v2_timestamp(&encode_context, parsed->timestamp_ms);
             if (queued_timestamp_ms > 0u &&
                 queued_timestamp_ms < HONCH_MIN_UNIX_TIME_MS &&
-                parsed[i].timestamp_ms >= HONCH_MIN_UNIX_TIME_MS) {
+                parsed->timestamp_ms >= HONCH_MIN_UNIX_TIME_MS) {
                 used_boot_epoch = true;
             }
-            if (parsed[i].timestamp_ms < HONCH_MIN_UNIX_TIME_MS) {
+            if (parsed->timestamp_ms < HONCH_MIN_UNIX_TIME_MS) {
                 has_unknown_time = true;
             }
-            compact_events[i] = (honch_wire_v2_event_t) {
-                .event_name = parsed[i].event_name,
-                .timestamp_ms = parsed[i].timestamp_ms,
-                .properties = parsed[i].properties,
-                .property_count = parsed[i].property_count
-            };
+            if (i == 0u) {
+                base_time_ms = parsed->timestamp_ms;
+            }
             parsed_count = i + 1u;
         }
     }
+    honch_event_record_free(parsed);
+    memset(parsed, 0, sizeof(*parsed));
     if (status != HONCH_OK || parsed_count == 0u) {
-        for (size_t i = 0u; i < event_count; i++) {
-            honch_event_record_free(&parsed[i]);
-        }
+        free(batch_distinct_id);
+        free(batch_session_id);
         return status == HONCH_OK ? HONCH_ERROR_INVALID_ARGUMENT : status;
     }
 
     honch_wire_v2_batch_context_t context = {
-        .distinct_id = parsed[0].distinct_id,
+        .distinct_id = batch_distinct_id,
         .device_id = flush_context->device_id,
         .device_model = flush_context->device_model,
         .firmware_version = flush_context->firmware_version,
         .sdk_platform = flush_context->sdk_platform,
         .sdk_version = HONCH_SDK_VERSION,
         .environment = flush_context->environment,
-        .session_id = parsed[0].session_id != NULL ? parsed[0].session_id : flush_context->session_id,
+        .session_id = first_has_session_id ? batch_session_id : flush_context->session_id,
         .has_device_time_source = true,
         .device_time_source = honch_device_time_source_for_batch(has_unknown_time, used_boot_epoch)
+    };
+    honch_flush_wire_provider_context_t provider_ctx = {
+        .events = events,
+        .encode_context = &encode_context,
+        .record = parsed
     };
 
     uint8_t *buffer = client->flush_message_buffer;
@@ -404,10 +646,10 @@ static honch_status_t honch_core_build_wire_v2_message(
     size_t message_size = 0u;
     size_t encoded_count = 0u;
     size_t encode_attempts = 0u;
-    status = honch_wire_v2_measure_event_batch(
+    status = honch_flush_measure_wire_v2_batch(
         &context,
-        parsed[0].timestamp_ms,
-        compact_events,
+        base_time_ms,
+        &provider_ctx,
         parsed_count,
         &message_size);
     if (status == HONCH_OK && message_size <= HONCH_WIRE_V2_MAX_FRAME_BYTES) {
@@ -418,10 +660,10 @@ static honch_status_t honch_core_build_wire_v2_message(
         size_t high = parsed_count;
         while (low <= high) {
             size_t try_count = low + ((high - low) / 2u);
-            status = honch_wire_v2_measure_event_batch(
+            status = honch_flush_measure_wire_v2_batch(
                 &context,
-                parsed[0].timestamp_ms,
-                compact_events,
+                base_time_ms,
+                &provider_ctx,
                 try_count,
                 &message_size);
             if (status == HONCH_OK && message_size <= HONCH_WIRE_V2_MAX_FRAME_BYTES) {
@@ -440,10 +682,10 @@ static honch_status_t honch_core_build_wire_v2_message(
     }
     if (encoded_count > 0u) {
         encode_attempts++;
-        status = honch_wire_v2_encode_event_batch(
+        status = honch_flush_encode_wire_v2_batch(
             &context,
-            parsed[0].timestamp_ms,
-            compact_events,
+            base_time_ms,
+            &provider_ctx,
             encoded_count,
             buffer,
             HONCH_WIRE_V2_MAX_FRAME_BYTES,
@@ -454,9 +696,9 @@ static honch_status_t honch_core_build_wire_v2_message(
     if (encode_attempts > s_honch_test_max_wire_v2_encode_attempts) {
         s_honch_test_max_wire_v2_encode_attempts = encode_attempts;
     }
-    for (size_t i = 0u; i < event_count; i++) {
-        honch_event_record_free(&parsed[i]);
-    }
+    honch_flush_wire_provider_clear(&provider_ctx);
+    free(batch_distinct_id);
+    free(batch_session_id);
     if (status != HONCH_OK) {
         return status;
     }

@@ -118,6 +118,17 @@ class PosixChunkWireTest(unittest.TestCase):
         self.assertNotIn("honch_packetizer_normalize_timestamp", packetizer)
         self.assertNotIn("honch_packetizer_device_time_source", packetizer)
 
+    def test_flush_uses_single_parsed_record_scratch(self) -> None:
+        internal = read_sdk("core/src/honch_internal.h")
+        queue_policy = read_sdk("core/src/honch_queue_policy.c")
+        wire = read_sdk("core/src/honch_wire_v2.c")
+
+        self.assertIn("flush_parsed_record", internal)
+        self.assertNotIn("flush_parsed_records[HONCH_FLUSH_SCRATCH_MAX_EVENTS]", internal)
+        self.assertIn("honch_wire_v2_encode_event_batch_provider", wire)
+        self.assertIn("honch_wire_v2_measure_event_batch_provider", wire)
+        self.assertIn("honch_flush_wire_event_provider", queue_policy)
+
     def test_queue_supports_configurable_durability_mode(self) -> None:
         public = read("include/honch/honch.h") + read_sdk("core/include/honch/core/config.h")
         queue = read_sdk("ports/posix/src/posix_storage.c")

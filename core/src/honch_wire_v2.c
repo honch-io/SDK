@@ -441,6 +441,108 @@ static honch_status_t honch_wire_v2_build_string_table(
     return HONCH_OK;
 }
 
+static honch_status_t honch_wire_v2_build_string_table_provider(
+    const honch_wire_v2_batch_context_t *context,
+    size_t event_count,
+    honch_wire_v2_event_provider_fn provider,
+    void *provider_ctx,
+    honch_wire_v2_string_table_t *table)
+{
+    if (context == NULL || provider == NULL || table == NULL ||
+        !honch_wire_v2_required_string_valid(context->distinct_id) ||
+        !honch_wire_v2_required_string_valid(context->device_id) ||
+        !honch_wire_v2_required_string_valid(context->device_model) ||
+        !honch_wire_v2_required_string_valid(context->firmware_version) ||
+        !honch_wire_v2_required_string_valid(context->sdk_platform) ||
+        !honch_wire_v2_required_string_valid(context->sdk_version) ||
+        !honch_wire_v2_required_string_valid(context->environment)) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    const char *required_context[] = {
+        context->distinct_id,
+        context->device_id,
+        context->device_model,
+        context->firmware_version,
+        context->sdk_platform,
+        context->sdk_version,
+        context->environment
+    };
+
+    size_t ignored = 0u;
+    for (size_t i = 0u; i < sizeof(required_context) / sizeof(required_context[0]); i++) {
+        honch_status_t status = honch_wire_v2_table_intern(table, required_context[i], SIZE_MAX, false, &ignored);
+        if (status != HONCH_OK) {
+            return status;
+        }
+    }
+    if (context->session_id != NULL) {
+        honch_status_t status = honch_wire_v2_table_intern(table, context->session_id, SIZE_MAX, false, &ignored);
+        if (status != HONCH_OK) {
+            return status;
+        }
+    }
+    if (context->extension_count > 0u && context->extensions == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    for (size_t i = 0u; i < context->extension_count; i++) {
+        if (context->extensions[i].key_id < 128u) {
+            return HONCH_ERROR_INVALID_ARGUMENT;
+        }
+        for (size_t j = 0u; j < i; j++) {
+            if (context->extensions[j].key_id == context->extensions[i].key_id) {
+                return HONCH_ERROR_INVALID_ARGUMENT;
+            }
+        }
+        honch_status_t status = honch_wire_v2_collect_value_strings(
+            table,
+            &context->extensions[i].value,
+            0u,
+            &ignored);
+        if (status != HONCH_OK) {
+            return status;
+        }
+    }
+
+    for (size_t i = 0u; i < event_count; i++) {
+        honch_wire_v2_event_t event = {0};
+        honch_status_t status = provider(provider_ctx, i, &event);
+        if (status != HONCH_OK) {
+            return status;
+        }
+        if (!honch_wire_v2_required_string_valid(event.event_name) ||
+            event.property_count > HONCH_WIRE_V2_MAX_SDK_PROPERTIES ||
+            (event.property_count > 0u && event.properties == NULL)) {
+            return HONCH_ERROR_INVALID_ARGUMENT;
+        }
+        status = honch_wire_v2_table_intern(table, event.event_name, SIZE_MAX, false, &ignored);
+        if (status != HONCH_OK) {
+            return status;
+        }
+        for (size_t j = 0u; j < event.property_count; j++) {
+            const honch_wire_v2_property_t *property = &event.properties[j];
+            if (!honch_wire_v2_required_string_valid(property->key)) {
+                return HONCH_ERROR_INVALID_ARGUMENT;
+            }
+            for (size_t k = 0u; k < j; k++) {
+                if (strcmp(event.properties[k].key, property->key) == 0) {
+                    return HONCH_ERROR_INVALID_ARGUMENT;
+                }
+            }
+            status = honch_wire_v2_collect_key_string(table, property->key, &ignored);
+            if (status != HONCH_OK) {
+                return status;
+            }
+            status = honch_wire_v2_collect_value_strings(table, &property->value, 0u, &ignored);
+            if (status != HONCH_OK) {
+                return status;
+            }
+        }
+    }
+
+    return HONCH_OK;
+}
+
 static honch_status_t honch_wire_v2_append_string_ref_value(
     size_t index,
     uint8_t *out,
@@ -893,6 +995,164 @@ static honch_status_t honch_wire_v2_event_batch_impl(
     return HONCH_OK;
 }
 
+static honch_status_t honch_wire_v2_event_batch_provider_impl(
+    const honch_wire_v2_batch_context_t *context,
+    uint64_t base_time_ms,
+    honch_wire_v2_event_provider_fn provider,
+    void *provider_ctx,
+    size_t event_count,
+    uint8_t *out,
+    size_t out_size,
+    size_t *written)
+{
+    if (written == NULL || provider == NULL || event_count == 0u || event_count > HONCH_WIRE_V2_MAX_SDK_EVENTS) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    *written = 0u;
+
+    honch_wire_v2_string_table_t table = {0};
+    honch_status_t status = honch_wire_v2_build_string_table_provider(
+        context,
+        event_count,
+        provider,
+        provider_ctx,
+        &table);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    size_t offset = 0u;
+    status = honch_wire_v2_append_uvarint(HONCH_WIRE_V2_PROTOCOL_VERSION, out, out_size, &offset);
+    if (status == HONCH_OK) {
+        status = honch_wire_v2_append_uvarint(HONCH_WIRE_V2_MESSAGE_KIND_EVENT_BATCH, out, out_size, &offset);
+    }
+    if (status == HONCH_OK) {
+        status = honch_wire_v2_append_uvarint(HONCH_WIRE_V2_FLAG_CONTEXT_PROMOTES_PROPERTIES, out, out_size, &offset);
+    }
+    if (status == HONCH_OK) {
+        status = honch_wire_v2_append_uvarint(base_time_ms, out, out_size, &offset);
+    }
+    if (status == HONCH_OK) {
+        status = honch_wire_v2_append_uvarint((uint64_t)table.count, out, out_size, &offset);
+    }
+    for (size_t i = 0u; status == HONCH_OK && i < table.count; i++) {
+        size_t string_size = table.sizes[i];
+        status = honch_wire_v2_append_uvarint((uint64_t)string_size, out, out_size, &offset);
+        if (status == HONCH_OK) {
+            status = honch_wire_v2_append_bytes((const uint8_t *)table.items[i], string_size, out, out_size, &offset);
+        }
+    }
+
+    if (status == HONCH_OK && context->has_device_time_source && context->device_time_source > 3u) {
+        status = HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    if (status == HONCH_OK) {
+        uint64_t context_count = 7u;
+        if (context->session_id != NULL) {
+            context_count++;
+        }
+        if (context->has_device_time_source) {
+            context_count++;
+        }
+        if (context->has_capabilities) {
+            context_count++;
+        }
+        context_count += (uint64_t)context->extension_count;
+        status = honch_wire_v2_append_uvarint(context_count, out, out_size, &offset);
+    }
+    if (status == HONCH_OK) {
+        status = honch_wire_v2_append_context_entry(1u, &table, context->distinct_id, out, out_size, &offset);
+    }
+    if (status == HONCH_OK) {
+        status = honch_wire_v2_append_context_entry(2u, &table, context->device_id, out, out_size, &offset);
+    }
+    if (status == HONCH_OK) {
+        status = honch_wire_v2_append_context_entry(3u, &table, context->device_model, out, out_size, &offset);
+    }
+    if (status == HONCH_OK) {
+        status = honch_wire_v2_append_context_entry(4u, &table, context->firmware_version, out, out_size, &offset);
+    }
+    if (status == HONCH_OK) {
+        status = honch_wire_v2_append_context_entry(5u, &table, context->sdk_platform, out, out_size, &offset);
+    }
+    if (status == HONCH_OK) {
+        status = honch_wire_v2_append_context_entry(6u, &table, context->sdk_version, out, out_size, &offset);
+    }
+    if (status == HONCH_OK) {
+        status = honch_wire_v2_append_context_entry(7u, &table, context->environment, out, out_size, &offset);
+    }
+    if (status == HONCH_OK && context->session_id != NULL) {
+        status = honch_wire_v2_append_context_entry(8u, &table, context->session_id, out, out_size, &offset);
+    }
+    if (status == HONCH_OK && context->has_device_time_source) {
+        status = honch_wire_v2_append_uint_context_entry(
+            9u,
+            context->device_time_source,
+            out,
+            out_size,
+            &offset);
+    }
+    if (status == HONCH_OK && context->has_capabilities) {
+        status = honch_wire_v2_append_uint_context_entry(
+            10u,
+            context->capabilities,
+            out,
+            out_size,
+            &offset);
+    }
+    for (size_t i = 0u; status == HONCH_OK && i < context->extension_count; i++) {
+        status = honch_wire_v2_append_uvarint(context->extensions[i].key_id, out, out_size, &offset);
+        if (status == HONCH_OK) {
+            status = honch_wire_v2_append_value(
+                &table,
+                &context->extensions[i].value,
+                out,
+                out_size,
+                &offset,
+                0u);
+        }
+    }
+
+    if (status == HONCH_OK) {
+        status = honch_wire_v2_append_uvarint((uint64_t)event_count, out, out_size, &offset);
+    }
+    for (size_t i = 0u; status == HONCH_OK && i < event_count; i++) {
+        honch_wire_v2_event_t event = {0};
+        size_t name_index = 0u;
+        int64_t delta = 0;
+        status = provider(provider_ctx, i, &event);
+        if (status == HONCH_OK) {
+            status = honch_wire_v2_table_find(&table, event.event_name, SIZE_MAX, &name_index);
+        }
+        if (status == HONCH_OK) {
+            status = honch_wire_v2_time_delta(event.timestamp_ms, base_time_ms, &delta);
+        }
+        if (status == HONCH_OK) {
+            status = honch_wire_v2_append_uvarint((uint64_t)name_index, out, out_size, &offset);
+        }
+        if (status == HONCH_OK) {
+            status = honch_wire_v2_append_svarint(delta, out, out_size, &offset);
+        }
+        if (status == HONCH_OK) {
+            status = honch_wire_v2_append_uvarint((uint64_t)event.property_count, out, out_size, &offset);
+        }
+        for (size_t j = 0u; status == HONCH_OK && j < event.property_count; j++) {
+            status = honch_wire_v2_append_property(&table, &event.properties[j], out, out_size, &offset);
+        }
+    }
+
+    if (status == HONCH_OK && offset > HONCH_WIRE_V2_MAX_SDK_MESSAGE_BYTES) {
+        status = HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    if (status != HONCH_OK) {
+        *written = 0u;
+        return status;
+    }
+
+    *written = offset;
+    return HONCH_OK;
+}
+
 honch_status_t honch_wire_v2_encode_event_batch(
     const honch_wire_v2_batch_context_t *context,
     uint64_t base_time_ms,
@@ -920,6 +1180,50 @@ honch_status_t honch_wire_v2_measure_event_batch(
         context,
         base_time_ms,
         events,
+        event_count,
+        NULL,
+        HONCH_WIRE_V2_MAX_SDK_MESSAGE_BYTES + 1u,
+        written);
+}
+
+honch_status_t honch_wire_v2_encode_event_batch_provider(
+    const honch_wire_v2_batch_context_t *context,
+    uint64_t base_time_ms,
+    honch_wire_v2_event_provider_fn provider,
+    void *provider_ctx,
+    size_t event_count,
+    uint8_t *out,
+    size_t out_size,
+    size_t *written)
+{
+    if (out == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    return honch_wire_v2_event_batch_provider_impl(
+        context,
+        base_time_ms,
+        provider,
+        provider_ctx,
+        event_count,
+        out,
+        out_size,
+        written);
+}
+
+honch_status_t honch_wire_v2_measure_event_batch_provider(
+    const honch_wire_v2_batch_context_t *context,
+    uint64_t base_time_ms,
+    honch_wire_v2_event_provider_fn provider,
+    void *provider_ctx,
+    size_t event_count,
+    size_t *written)
+{
+    return honch_wire_v2_event_batch_provider_impl(
+        context,
+        base_time_ms,
+        provider,
+        provider_ctx,
         event_count,
         NULL,
         HONCH_WIRE_V2_MAX_SDK_MESSAGE_BYTES + 1u,
