@@ -354,6 +354,7 @@ class EspIdfChunkWireTest(unittest.TestCase):
 
         self.assertIn("auto_property_buffers", internal)
         self.assertIn("auto_property_buffer_in_use", internal)
+        self.assertIn("#define HONCH_AUTO_PROPERTY_BUFFER_COUNT 2u", internal)
         self.assertIn("honch_acquire_auto_property_buffer", core)
         self.assertIn("HONCH_ERROR_BUSY", acquire)
         self.assertNotIn("calloc", collect)
@@ -369,7 +370,8 @@ class EspIdfChunkWireTest(unittest.TestCase):
         flush_one = c_function_body(core, "honch_queue_flush_one_locked")
         core_flush = c_function_body(read("core/src/honch_core.c"), "honch_core_flush")
 
-        self.assertIn("#define HONCH_FLUSH_SCRATCH_MAX_EVENTS HONCH_DEFAULT_BATCH_SIZE", internal)
+        self.assertIn("#define HONCH_DEFAULT_FLUSH_SCRATCH_MAX_EVENTS 4u", internal)
+        self.assertIn("#define HONCH_FLUSH_SCRATCH_MAX_EVENTS HONCH_DEFAULT_FLUSH_SCRATCH_MAX_EVENTS", internal)
         self.assertIn("flush_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS]", internal)
         self.assertIn("flush_sequences[HONCH_FLUSH_SCRATCH_MAX_EVENTS]", internal)
         self.assertIn("flush_storage_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS]", internal)
