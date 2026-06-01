@@ -45,6 +45,28 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         self.assertIn("flushMinIntervalMs", readme)
         self.assertIn("HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS", readme)
 
+    def test_transport_applies_configured_timeout(self) -> None:
+        header = read("ports/arduino/src/Honch.h")
+        adapter = read("ports/arduino/src/Honch.cpp")
+        transport_header = read("ports/arduino/src/honch_arduino_adapter.h")
+        transport = read("ports/arduino/src/honch_arduino_transport.cpp")
+        readme = read("ports/arduino/README.md")
+
+        self.assertIn("uint32_t transportTimeoutMs;", header)
+        self.assertIn("coreConfig.transport_timeout_ms = config.transportTimeoutMs;", adapter)
+        self.assertIn("uint32_t transportTimeoutMs;", transport_header)
+        self.assertIn("HONCH_ARDUINO_DEFAULT_TRANSPORT_TIMEOUT_MS 3000u", transport)
+        self.assertIn(
+            "ctx->transportTimeoutMs = config.transportTimeoutMs == 0u ?",
+            transport,
+        )
+        self.assertIn("http.setTimeout(transport->transportTimeoutMs);", transport)
+        self.assertLess(
+            transport.index("http.setTimeout(transport->transportTimeoutMs);"),
+            transport.index("int code = http.POST("),
+        )
+        self.assertIn("transportTimeoutMs", readme)
+
     def test_public_config_exposes_connectivity_gate(self) -> None:
         header = read("ports/arduino/src/Honch.h")
         adapter = read("ports/arduino/src/Honch.cpp")

@@ -14,6 +14,8 @@
 #include <WiFiClientSecure.h>
 #endif
 
+#define HONCH_ARDUINO_DEFAULT_TRANSPORT_TIMEOUT_MS 3000u
+
 namespace {
 
 #ifndef ARDUINO
@@ -117,6 +119,7 @@ honch_status_t arduino_post_chunk(
     }
   }
 
+  http.setTimeout(transport->transportTimeoutMs);
   http.addHeader("Content-Type", "application/vnd.honch.chunk");
   http.addHeader("X-Honch-Project-Key", apiKey);
   if (streamId != nullptr && streamId[0] != '\0') {
@@ -151,6 +154,9 @@ honch_status_t honch_arduino_transport_ops_init(
   ctx->apiKey = config.apiKey;
   ctx->host = config.host;
   ctx->rootCaPem = config.rootCaPem;
+  ctx->transportTimeoutMs = config.transportTimeoutMs == 0u ?
+      HONCH_ARDUINO_DEFAULT_TRANSPORT_TIMEOUT_MS :
+      config.transportTimeoutMs;
   ctx->insecureSkipTlsVerify = config.insecureSkipTlsVerify;
   *ops = honch_transport_ops_t{
       arduino_post_chunk,
