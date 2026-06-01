@@ -34,18 +34,6 @@ def c_function_body(source: str, name: str) -> str:
     raise AssertionError(f"function {name} body is not closed")
 
 
-def c_struct_body(source: str, name: str) -> str:
-    marker = f"struct {name} {{"
-    start = source.find(marker)
-    if start < 0:
-        raise AssertionError(f"struct {name} not found")
-    body_start = start + len(marker)
-    end = source.find("};", body_start)
-    if end < 0:
-        raise AssertionError(f"struct {name} body is not closed")
-    return source[body_start:end]
-
-
 class EspIdfChunkWireTest(unittest.TestCase):
     def test_esp_idf_component_uses_repo_root_package_layout(self) -> None:
         root_cmake = read("CMakeLists.txt")
@@ -373,10 +361,9 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertNotIn("malloc", collect)
         self.assertNotIn("free(", release)
 
-    def test_flush_uses_temporary_bounded_scratch_buffers(self) -> None:
+    def test_flush_uses_client_owned_scratch_buffers(self) -> None:
         core = read("core/src/honch_queue_policy.c")
         internal = read("core/src/honch_internal.h")
-        client_struct = c_struct_body(internal, "honch_client")
         read_batch = c_function_body(core, "honch_core_read_queue_batch")
         build_message = c_function_body(core, "honch_core_build_wire_v2_message")
         post_message = c_function_body(core, "honch_core_post_wire_v2_message")
@@ -385,14 +372,13 @@ class EspIdfChunkWireTest(unittest.TestCase):
 
         self.assertIn("#define HONCH_DEFAULT_FLUSH_SCRATCH_MAX_EVENTS 4u", internal)
         self.assertIn("#define HONCH_FLUSH_SCRATCH_MAX_EVENTS HONCH_DEFAULT_FLUSH_SCRATCH_MAX_EVENTS", internal)
-        self.assertNotIn("flush_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS]", client_struct)
-        self.assertNotIn("flush_sequences[HONCH_FLUSH_SCRATCH_MAX_EVENTS]", client_struct)
-        self.assertNotIn("flush_storage_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS]", client_struct)
-        self.assertNotIn("flush_parsed_records[HONCH_FLUSH_SCRATCH_MAX_EVENTS]", client_struct)
-        self.assertNotIn("flush_compact_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS]", client_struct)
-        self.assertNotIn("flush_message_buffer[HONCH_WIRE_V2_MAX_FRAME_BYTES]", client_struct)
-        self.assertNotIn("flush_frame_buffer[HONCH_WIRE_V2_MAX_FRAME_BYTES]", client_struct)
-        self.assertIn("honch_flush_workspace_t", internal)
+        self.assertIn("flush_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS]", internal)
+        self.assertIn("flush_sequences[HONCH_FLUSH_SCRATCH_MAX_EVENTS]", internal)
+        self.assertIn("flush_storage_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS]", internal)
+        self.assertIn("flush_parsed_records[HONCH_FLUSH_SCRATCH_MAX_EVENTS]", internal)
+        self.assertIn("flush_compact_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS]", internal)
+        self.assertIn("flush_message_buffer[HONCH_WIRE_V2_MAX_FRAME_BYTES]", internal)
+        self.assertIn("flush_frame_buffer[HONCH_WIRE_V2_MAX_FRAME_BYTES]", internal)
         self.assertIn("batch_size > HONCH_FLUSH_SCRATCH_MAX_EVENTS", flush_one)
         self.assertIn("client->flush_in_progress", core_flush)
         self.assertNotIn("calloc", read_batch)
