@@ -100,14 +100,21 @@ runRelayDurableStoreConformance("JSON file relay durable store", async () => {
 
 function fakeMmkv() {
   const values = new Map<string, string>();
+  const setKeys: string[] = [];
+  const removedKeys: string[] = [];
   return {
+    values,
+    setKeys,
+    removedKeys,
     getString(key: string): string | undefined {
       return values.get(key);
     },
     set(key: string, value: string): void {
+      setKeys.push(key);
       values.set(key, value);
     },
     remove(key: string): boolean {
+      removedKeys.push(key);
       const existed = values.has(key);
       values.delete(key);
       return existed;
@@ -118,4 +125,94 @@ function fakeMmkv() {
 runRelayDurableStoreConformance("MMKV relay durable store", () => {
   const mmkv = fakeMmkv();
   return () => createMmkvRelayStore(mmkv);
+});
+
+describe("MMKV relay durable store retention", () => {
+  it("stores chunk and message payloads under append-style keys instead of the legacy queue blob", async () => {
+    const mmkv = fakeMmkv();
+    const store = createMmkvRelayStore(mmkv, { now: () => 1000 });
+
+    await store.putChunk({
+      deviceId: "device-a",
+      sourceType: 1,
+      sequence: "1",
+      offset: 0,
+      frameBytes: new Uint8Array([1, 2]),
+      payload: new Uint8Array([2])
+    });
+    await store.putCompleteMessage({
+      deviceId: "device-a",
+      sourceType: 1,
+      sequence: "1",
+      body: new Uint8Array([2])
+    });
+
+    expect(mmkv.setKeys).toContain("honch.relay.index.v2");
+    expect(mmkv.setKeys).toContain("honch.relay.chunk.device-a.1.0");
+    expect(mmkv.setKeys).toContain("honch.relay.message.device-a.1");
+    expect(mmkv.setKeys).not.toContain("honch.relay.queue.v1");
+  });
+
+  it("migrates the legacy MMKV queue blob without dropping pending uploads", async () => {
+    const mmkv = fakeMmkv();
+    mmkv.set(
+      "honch.relay.queue.v1",
+      JSON.stringify({
+        chunks: [],
+        messages: [
+          {
+            deviceId: "device-a",
+            sourceType: 1,
+            sequence: "7",
+            body: [7]
+          }
+        ]
+      })
+    );
+
+    const store = createMmkvRelayStore(mmkv, { now: () => 1000 });
+
+    expect((await store.completeMessages()).map((message) => message.sequence)).toEqual(["7"]);
+    expect(mmkv.removedKeys).toContain("honch.relay.queue.v1");
+    expect(mmkv.setKeys).toContain("honch.relay.message.device-a.7");
+  });
+
+  it("expires stale MMKV relay entries by TTL", async () => {
+    let now = 1000;
+    const mmkv = fakeMmkv();
+    const store = createMmkvRelayStore(mmkv, { ttlMs: 100, now: () => now });
+
+    await store.putCompleteMessage({
+      deviceId: "device-a",
+      sourceType: 1,
+      sequence: "1",
+      body: new Uint8Array([1])
+    });
+    now = 1200;
+
+    expect(await store.completeMessages()).toEqual([]);
+  });
+
+  it("bounds completed MMKV relay messages by dropping the oldest pending upload", async () => {
+    let now = 1000;
+    const mmkv = fakeMmkv();
+    const store = createMmkvRelayStore(mmkv, { maxCompleteMessages: 1, now: () => now });
+
+    await store.putCompleteMessage({
+      deviceId: "device-a",
+      sourceType: 1,
+      sequence: "1",
+      body: new Uint8Array([1])
+    });
+    now = 1001;
+    await store.putCompleteMessage({
+      deviceId: "device-a",
+      sourceType: 1,
+      sequence: "2",
+      body: new Uint8Array([2])
+    });
+
+    expect((await store.completeMessages()).map((message) => message.sequence)).toEqual(["2"]);
+    expect(mmkv.removedKeys).toContain("honch.relay.message.device-a.1");
+  });
 });

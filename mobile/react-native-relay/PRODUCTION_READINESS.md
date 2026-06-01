@@ -7,6 +7,7 @@ Status: preview. Do not treat the package as production-ready for a customer app
 - TypeScript package tests and type checks are expected release gates.
 - Native bridge syntax/library checks are useful preflights, but they do not replace host-app archive/build and device validation.
 - Offline relay harness coverage proves relay assembly and retry behavior at package level.
+- MMKV package tests cover per-record storage, legacy queue migration, TTL expiry, completed-message caps, and retry scheduling with `Retry-After`.
 
 ## Required Host-App Validation
 
@@ -17,12 +18,15 @@ Status: preview. Do not treat the package as production-ready for a customer app
 - Verify malformed frames are rejected without ACK.
 - Verify complete messages are ACKed only after durable mobile storage.
 - Verify retryable Capture failures preserve MMKV queue state across app restart.
+- Verify `Retry-After` schedules the next drain at the server-requested delay.
+- Verify MMKV retention bounds and TTL match the host app's offline budget.
+- Verify Android `HonchRelayUpload` headless JS task runs from WorkManager in foreground, background, and cold-start conditions.
 - Verify accepted Capture responses remove queue state exactly once.
 - Run live Capture validation and confirm relay metadata reaches ingest.
 
 ## Supported Storage
 
-- Production: `react-native-mmkv` through `createMmkvRelayStore`.
+- Preview production-like validation: `react-native-mmkv` through `createMmkvRelayStore`.
 - Test/local: JSON file store through `createJsonFileRelayStore`.
 
 ## Capture Contract

@@ -45,7 +45,17 @@ import { createMmkvRelayStore } from "@honch/react-native-relay";
 const relayStore = createMmkvRelayStore(createMMKV({ id: "honch-relay" }));
 ```
 
-Completed messages and incomplete assemblies remain pending across app restarts until Capture accepts or permanently rejects them.
+MMKV relay storage uses per-chunk and per-message records with a small index, so receipt no longer rewrites the full queue blob for every chunk. By default it retains up to 4,096 chunks and 1,024 completed messages for seven days, then drops the oldest or expired entries to bound offline growth. Override these limits when the host app has a smaller storage budget:
+
+```ts
+const relayStore = createMmkvRelayStore(createMMKV({ id: "honch-relay" }), {
+  maxChunks: 1024,
+  maxCompleteMessages: 256,
+  ttlMs: 3 * 24 * 60 * 60 * 1000
+});
+```
+
+Completed messages and incomplete assemblies remain pending across app restarts until Capture accepts or permanently rejects them, unless they age out or the configured queue bounds require dropping oldest state.
 
 ## Native Host Requirements
 
@@ -61,6 +71,7 @@ Android:
 - Request `ACCESS_FINE_LOCATION` where required by BLE scan behavior.
 - Keep `androidx.work:work-runtime` available for scheduled upload drains.
 - Register the package through the consuming React Native Android host.
+- Register a headless JS task named `HonchRelayUpload` that calls the same durable queue drain path used by foreground upload drains.
 
 ## Native Frame Events
 
@@ -101,6 +112,17 @@ const subscription = relay.subscribeNativeFrames();
 - `stopUploadScheduler()` to cancel scheduled drain work.
 
 Retryable upload failures keep messages pending and schedule the next native upload attempt with relay backoff.
+If Capture returns `Retry-After` on a retryable response, that delay takes precedence over the local exponential backoff.
+
+Android scheduled drains start the `HonchRelayUpload` headless JS task from WorkManager. Register the task in the host app entrypoint and call the app-owned relay singleton:
+
+```ts
+import { AppRegistry } from "react-native";
+
+AppRegistry.registerHeadlessTask("HonchRelayUpload", () => async () => {
+  await relay.drainUploads();
+});
+```
 
 ## Test And Verification
 
