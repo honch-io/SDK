@@ -30,23 +30,8 @@ Relay packages are not application analytics SDKs. They forward device-originate
 - [`ports/arduino/`](ports/arduino/) — preview Arduino ESP32 wrapper around the shared C core.
 - [`mobile/react-native-relay/`](mobile/react-native-relay/) — preview relay package for forwarding device-originated payloads through companion apps.
 - [`spec/`](spec/) — shared SDK/Capture contracts and conformance fixtures.
-- [`docs/`](docs/) — maintainer notes, production-readiness records, ADRs, and release evidence.
 
 ## Build And Test
-
-### Production Release E2E
-
-Use the release campaign runner before release candidates. Missing services, toolchains, or hardware inputs are reported as `BLOCKED`, not passed.
-
-```bash
-python3 tools/release_e2e.py --profile release --continue-on-fail
-```
-
-Start the local sandbox before profiles that require local services:
-
-```bash
-./honch --plain sandbox
-```
 
 ### C/POSIX
 
@@ -85,7 +70,6 @@ PYTHONPATH=ports/micropython python3 -m unittest discover \
 ### Compact Wire Fixtures
 
 ```bash
-python3 tools/generate_wire_v2_fixtures.py
 python3 -m unittest spec.conformance.test_wire_v2_fixtures
 ```
 
