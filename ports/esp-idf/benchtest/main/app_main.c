@@ -27,6 +27,7 @@ static const char *TAG = "honch_benchtest";
 #define BENCH_NETWORK_READY_RETRIES 12
 #define BENCH_NETWORK_READY_DELAY_MS 1000
 #define BENCH_NETWORK_READY_TIMEOUT_MS 10000
+#define BENCH_TASK_STACK_BYTES 16384
 #define PAD_SOURCE "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 #ifndef CONFIG_BENCH_OFFLINE_QUEUE_PROOF
@@ -52,7 +53,19 @@ typedef struct {
 static EventGroupHandle_t s_wifi_event_group;
 static int s_retry_num = 0;
 static uint8_t s_event_buffer[32768];
-static uint32_t s_queued_estimate = 0;
+static uint32_t s_queued_estimate;
+
+static uint32_t refresh_queued_estimate(void)
+{
+    honch_queue_stats_t stats = {0};
+    honch_err_t err = honch_get_queue_stats(&stats);
+    if (err == HONCH_OK) {
+        s_queued_estimate = stats.queued_events > UINT32_MAX ?
+            UINT32_MAX :
+            (uint32_t)stats.queued_events;
+    }
+    return s_queued_estimate;
+}
 
 static void timer_add(bench_timer_t *timer, int64_t elapsed_us, bool ok)
 {
@@ -288,7 +301,7 @@ static void run_benchmark_once(uint32_t run_id)
             elapsed_us = esp_timer_get_time() - start_us;
             timer_add(&flush_timer, elapsed_us, flush_err == HONCH_OK);
             if (flush_err == HONCH_OK) {
-                s_queued_estimate = 0;
+                refresh_queued_estimate();
             }
 
             ESP_LOGI(TAG,
@@ -311,7 +324,7 @@ static void run_benchmark_once(uint32_t run_id)
     int64_t final_flush_us = esp_timer_get_time() - final_flush_start_us;
     timer_add(&flush_timer, final_flush_us, final_flush_err == HONCH_OK);
     if (final_flush_err == HONCH_OK) {
-        s_queued_estimate = 0;
+        refresh_queued_estimate();
     }
 
     ESP_LOGI(TAG,
@@ -416,7 +429,7 @@ static void run_offline_queue_proof(void)
         honch_err_t flush_err = honch_flush();
         int64_t flush_us = esp_timer_get_time() - start_us;
         if (flush_err == HONCH_OK) {
-            s_queued_estimate = 0;
+            refresh_queued_estimate();
             ESP_LOGI(TAG,
                      "BENCH_OFFLINE_RECOVERY_FLUSH proof_id=%" PRIu32
                      " attempt=%" PRIu32 " err=%d flush_us=%" PRId64
@@ -426,7 +439,9 @@ static void run_offline_queue_proof(void)
                      flush_err,
                      flush_us,
                      s_queued_estimate);
-            break;
+            if (s_queued_estimate == 0u) {
+                break;
+            }
         }
 
         ESP_LOGW(TAG,
@@ -449,13 +464,15 @@ static void run_offline_queue_proof(void)
              s_queued_estimate);
 }
 
-void app_main(void)
+static void bench_task(void *arg)
 {
+    (void)arg;
+
     if (!wifi_init_sta()) {
-        return;
+        vTaskDelete(NULL);
     }
     if (!CONFIG_BENCH_OFFLINE_QUEUE_PROOF && !wait_for_network_ready()) {
-        return;
+        vTaskDelete(NULL);
     }
 
     honch_config_t config = {
@@ -466,12 +483,15 @@ void app_main(void)
         .event_buffer = s_event_buffer,
         .event_buffer_size = sizeof(s_event_buffer),
         .flush_min_interval_ms = HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS,
+        .flush_event_threshold = CONFIG_BENCH_FLUSH_EVERY,
+        .flush_max_batches = CONFIG_BENCH_FLUSH_EVERY,
+        .shutdown_flush_max_batches = CONFIG_BENCH_FLUSH_EVERY,
     };
 
     honch_err_t err = honch_init(&config);
     if (err != HONCH_OK) {
         ESP_LOGE(TAG, "Failed to initialize Honch: %d", err);
-        return;
+        vTaskDelete(NULL);
     }
 
     ESP_LOGI(TAG, "Honch initialized, device_id=%s", honch_get_device_id());
@@ -499,5 +519,19 @@ void app_main(void)
     ESP_LOGI(TAG, "Benchmark complete. Set BENCH_REPEAT to run continuously.");
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(60000));
+    }
+}
+
+void app_main(void)
+{
+    BaseType_t created = xTaskCreate(
+        bench_task,
+        "honch_bench",
+        BENCH_TASK_STACK_BYTES,
+        NULL,
+        tskIDLE_PRIORITY + 1,
+        NULL);
+    if (created != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create benchmark task");
     }
 }
