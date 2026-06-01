@@ -25,6 +25,7 @@
 #define HONCH_DEFAULT_BATTERY_LOW_THRESHOLD 15
 #define HONCH_DEFAULT_FLUSH_RETRY_INITIAL_MS 1000u
 #define HONCH_DEFAULT_FLUSH_RETRY_MAX_MS 300000u
+#define HONCH_MIN_UNIX_TIME_MS 1577836800000ULL
 #define HONCH_MAX_EVENT_NAME 128u
 #define HONCH_MAX_DISTINCT_ID 256u
 #define HONCH_MAX_EVENT_PROPERTIES 64u
@@ -108,6 +109,23 @@ typedef struct honch_event_record {
     size_t property_count;
 } honch_event_record_t;
 
+typedef struct honch_wire_v2_encode_context {
+    const char *device_id;
+    const char *device_model;
+    const char *firmware_version;
+    const char *sdk_platform;
+    const char *environment;
+    const char *session_id;
+    bool has_boot_epoch_ms;
+    uint64_t boot_epoch_ms;
+    uint64_t flush_uptime_ms;
+} honch_wire_v2_encode_context_t;
+
+typedef honch_status_t (*honch_wire_v2_event_provider_fn)(
+    void *ctx,
+    size_t index,
+    honch_wire_v2_event_t *event);
+
 struct honch_client {
     void *lifetime_mutex;
     void *state_mutex;
@@ -138,8 +156,7 @@ struct honch_client {
     honch_payload_t flush_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
     uint64_t flush_sequences[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
     honch_storage_event_t flush_storage_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
-    honch_event_record_t flush_parsed_records[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
-    honch_wire_v2_event_t flush_compact_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
+    honch_event_record_t flush_parsed_record;
     uint8_t flush_message_buffer[HONCH_WIRE_V2_MAX_FRAME_BYTES];
     uint8_t flush_frame_buffer[HONCH_WIRE_V2_MAX_FRAME_BYTES];
     size_t pending_flush_message_size;
@@ -212,6 +229,34 @@ honch_status_t honch_event_record_parse(const uint8_t *data, size_t length, honc
 void honch_event_record_prepare_wire_properties(honch_event_record_t *record);
 void honch_event_record_free(honch_event_record_t *record);
 bool honch_event_record_validate(const uint8_t *data, size_t length);
+void honch_core_wire_v2_context_from_client(
+    honch_client_t *client,
+    honch_wire_v2_encode_context_t *context);
+uint64_t honch_core_normalize_wire_v2_timestamp(
+    const honch_wire_v2_encode_context_t *context,
+    uint64_t timestamp_ms);
+honch_status_t honch_core_encode_single_wire_v2_event(
+    const honch_wire_v2_encode_context_t *context,
+    const honch_payload_t *event,
+    uint8_t *buffer,
+    size_t buffer_capacity,
+    honch_payload_t *message);
+honch_status_t honch_wire_v2_encode_event_batch_provider(
+    const honch_wire_v2_batch_context_t *context,
+    uint64_t base_time_ms,
+    honch_wire_v2_event_provider_fn provider,
+    void *provider_ctx,
+    size_t event_count,
+    uint8_t *out,
+    size_t out_size,
+    size_t *written);
+honch_status_t honch_wire_v2_measure_event_batch_provider(
+    const honch_wire_v2_batch_context_t *context,
+    uint64_t base_time_ms,
+    honch_wire_v2_event_provider_fn provider,
+    void *provider_ctx,
+    size_t event_count,
+    size_t *written);
 
 uint64_t honch_now_millis(void);
 honch_status_t honch_random_hex(char out[33]);
