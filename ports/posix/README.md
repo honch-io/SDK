@@ -195,9 +195,9 @@ Optional config:
 - `auto_properties_userdata`: caller-owned context passed to `auto_properties_callback`
 - `connectivity_callback`: optional fast callback; return `0` while offline or the radio is off
 - `connectivity_userdata`: caller-owned context passed to `connectivity_callback`
-- `durability_mode`: defaults to `HONCH_DURABILITY_SYNC_ALWAYS`; set
-  `HONCH_DURABILITY_OS_BUFFERED` to skip per-event fsyncs for lower enqueue
-  latency when power-loss durability is not required
+- `durability_mode`: defaults to `HONCH_DURABILITY_OS_BUFFERED`, which skips
+  per-event fsyncs for lower enqueue latency and reduced flash wear; set
+  `HONCH_DURABILITY_SYNC_ALWAYS` when power-loss durability is required
 
 `honch_get_device_id` returns a borrowed pointer for single-threaded callers.
 The returned pointer is owned by the SDK and remains valid until `honch_reset`
@@ -302,7 +302,7 @@ int main(void)
         .flush_event_threshold = 30,
         .battery_callback = NULL,
         .battery_low_threshold = 15,
-        .durability_mode = HONCH_DURABILITY_SYNC_ALWAYS
+        .durability_mode = HONCH_DURABILITY_DEFAULT
     };
 
     honch_client_t *client = NULL;
@@ -349,11 +349,11 @@ Queue behavior:
 
 - a queue directory is intended to be owned by one active SDK client/process at a time
 - events are written atomically through temp-file rename
-- by default, each queued event fsyncs the file and queue directory before
-  returning from `honch_track`
 - `HONCH_DURABILITY_OS_BUFFERED` keeps atomic rename behavior but skips
-  per-event fsyncs; this lowers enqueue latency but queued events may be lost
-  after OS crash or power loss before storage is flushed
+  per-event fsyncs by default; this lowers enqueue latency and flash wear, but
+  queued events may be lost after OS crash or power loss before storage is flushed
+- `HONCH_DURABILITY_SYNC_ALWAYS` fsyncs each queued event file and the queue
+  directory before returning from `honch_track`
 - events are stored as `.hqe` files
 - startup removes temporary write files
 - queue length is bounded by `max_queued_events`

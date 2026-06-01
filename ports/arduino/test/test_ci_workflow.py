@@ -59,6 +59,18 @@ class ArduinoCIWorkflowTests(unittest.TestCase):
         self.assertIn('"srcDir": "src"', manifest)
         self.assertIn('"examples"', manifest)
 
+    def test_arduino_events_are_ram_first_and_durability_default_is_buffered(self) -> None:
+        storage = read("ports/arduino/src/honch_arduino_storage.cpp")
+        config = read("ports/arduino/src/honch/core/config.h")
+
+        self.assertIn("honch_ram_queue_init(&ctx->ramQueue", storage)
+        self.assertIn("honch_ram_queue_ops_init(ops, &ctx->ramQueue)", storage)
+        self.assertNotIn("Preferences", storage)
+        self.assertNotIn("nvs_", storage.lower())
+        self.assertIn("HONCH_DURABILITY_OS_BUFFERED = 0", config)
+        self.assertIn("HONCH_DURABILITY_SYNC_ALWAYS = 1", config)
+        self.assertIn("HONCH_DURABILITY_DEFAULT = HONCH_DURABILITY_OS_BUFFERED", config)
+
     def test_platformio_example_build_is_in_ci(self) -> None:
         workflow = read(".github/workflows/arduino.yml")
         platformio = read("ports/arduino/examples/platformio/platformio.ini")
