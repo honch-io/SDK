@@ -260,6 +260,34 @@ queued events. Successful outbound uploads are spaced by
 failures use exponential backoff with jitter. Shutdown always attempts a
 synchronous best-effort flush for a valid client.
 
+honch_tick() may block for up to the configured transport timeout because the
+HTTP POST is synchronous and runs on the caller's thread. Do not call
+honch_tick() from a latency-sensitive control loop, GPIO edge path, camera frame
+path, UI thread, or watchdog-sensitive section. If the host has work with
+tighter latency requirements, pump Honch from a dedicated low-priority thread:
+
+```c
+#include <pthread.h>
+#include <unistd.h>
+
+static void *honch_pump_thread(void *arg)
+{
+    honch_client_t *client = (honch_client_t *)arg;
+    for (;;) {
+        honch_tick(client);
+        usleep(250000);
+    }
+    return NULL;
+}
+
+static void start_honch_pump(honch_client_t *client)
+{
+    pthread_t thread;
+    pthread_create(&thread, NULL, honch_pump_thread, client);
+    pthread_detach(thread);
+}
+```
+
 Do not call `honch_tick()` while connectivity is unavailable. If your scheduler
 cannot guarantee that, provide `connectivity_callback`; offline ticks keep the
 flush pending, and explicit `honch_flush()` returns `HONCH_ERROR_OFFLINE`

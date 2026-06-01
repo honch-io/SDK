@@ -46,6 +46,7 @@ if command -v arduino-cli >/dev/null 2>&1; then
   IFS=' ' read -r -a HONCH_ARDUINO_FQBNS <<< "${HONCH_ARDUINO_FQBNS:-esp32:esp32:esp32 esp32:esp32:esp32s2 esp32:esp32:esp32s3 esp32:esp32:esp32c3 esp32:esp32:esp32c6}"
   HONCH_ARDUINO_EXAMPLES=(
     "$ROOT_DIR/ports/arduino/examples/HonchBasic"
+    "$ROOT_DIR/ports/arduino/examples/HonchDedicatedTask"
     "$ROOT_DIR/ports/arduino/examples/HonchOfflineQueue"
   )
   HONCH_ARDUINO_BUILD_ROOT="${HONCH_ARDUINO_BUILD_ROOT:-${HONCH_ARDUINO_HOME:-$ROOT_DIR/build/arduino-cli}}"
