@@ -32,9 +32,7 @@ idf_component_register(
         "${HONCH_ESP_COMPONENT_DIR}/src"
         "${HONCH_SDK_ROOT}/core/src"
     REQUIRES
-        esp_event
         esp_http_client
-        esp_netif
         esp-tls
         esp_timer
         efuse

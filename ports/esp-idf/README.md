@@ -16,7 +16,9 @@ Stable `0.2.0`.
 - ESP-IDF >= 5.0
 - An ESP32 dev board (ESP32, ESP32-S2, ESP32-S3, ESP32-C3, etc.)
 - A Honch project key.
-- Wi-Fi, time, and TLS trust configured before expecting HTTPS delivery.
+- Host-owned networking initialized before expecting HTTPS delivery:
+  `esp_netif_init()`, the default event loop if your Wi-Fi stack uses it,
+  Wi-Fi, time, and TLS trust.
 
 ## Add to your project
 
@@ -56,7 +58,7 @@ static void honch_telemetry_task(void *arg)
 
 void app_main(void)
 {
-    // ... Wi-Fi/time/TLS setup ...
+    // ... host-owned esp_netif/event loop/Wi-Fi/time/TLS setup ...
 
     honch_config_t config = {
         .api_key = "your-api-key",
@@ -211,6 +213,9 @@ Flush sends compact chunk wire frames to `POST /capture` with
 
 Use HTTPS in production. Verify device time and certificate trust before
 debugging event encoding. Do not disable certificate verification in production.
+Honch does not call `esp_netif_init()` or
+`esp_event_loop_create_default()` during `honch_init()`; those process-global
+networking primitives stay owned by the host firmware.
 
 ## Queue storage policy
 
