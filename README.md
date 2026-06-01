@@ -1,8 +1,8 @@
 # Honch SDKs
 
-Product analytics SDKs for connected hardware. This repository contains the shared SDK contract plus platform SDKs for embedded, MicroPython, Arduino ESP32, and mobile relay targets.
+Product analytics SDKs for connected hardware. This repository contains the shared SDK contract, platform SDKs for firmware and embedded Linux, and companion relay packages for forwarding device-originated payloads.
 
-## SDK Status
+## Device SDK Status
 
 | Platform | Public status | Version | Path |
 | --- | --- | --- | --- |
@@ -10,9 +10,16 @@ Product analytics SDKs for connected hardware. This repository contains the shar
 | C/POSIX | Stable | `0.2.0` | [`ports/posix/`](ports/posix/) |
 | MicroPython | Stable | `0.2.0` | [`ports/micropython/`](ports/micropython/) |
 | Arduino ESP32 | Preview | `0.1.0` | [`ports/arduino/`](ports/arduino/) |
+
+Stable SDKs are supported integration paths for product work. Preview SDKs are usable for evaluation and controlled pilots, but production rollout should wait for product-specific validation on the target hardware.
+
+## Companion Relay Package Status
+
+| Package | Public status | Version | Path |
+| --- | --- | --- | --- |
 | React Native Relay | Preview | `0.1.0` | [`mobile/react-native-relay/`](mobile/react-native-relay/) |
 
-Stable SDKs are supported integration paths for product work. Preview SDKs are usable for evaluation and controlled pilots, but production rollout should wait for product-specific validation on the target hardware or host app.
+Relay packages are not application analytics SDKs. They forward device-originated Honch payloads through companion apps, so production rollout should include host-app and target-device validation.
 
 ## Repository Layout
 
