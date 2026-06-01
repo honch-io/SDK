@@ -302,7 +302,7 @@ class EspIdfChunkWireTest(unittest.TestCase):
             "honch_queue_flush_limited_locked(client, client->shutdown_flush_max_batches)",
             shutdown,
         )
-        self.assertIn("honch_queue_flush_one_locked(client, &progressed)", core_tick)
+        self.assertIn("honch_queue_flush_one_chunk_locked(client, &progressed)", core_tick)
         self.assertNotIn("honch_queue_flush_limited_locked", core_tick)
         self.assertIn("uint32_t flush_max_batches", public_header)
         self.assertIn("uint32_t shutdown_flush_max_batches", public_header)
@@ -366,8 +366,8 @@ class EspIdfChunkWireTest(unittest.TestCase):
         internal = read("core/src/honch_internal.h")
         read_batch = c_function_body(core, "honch_core_read_queue_batch")
         build_message = c_function_body(core, "honch_core_build_wire_v2_message")
-        post_message = c_function_body(core, "honch_core_post_wire_v2_message")
-        flush_one = c_function_body(core, "honch_queue_flush_one_locked")
+        post_message = c_function_body(core, "honch_core_post_wire_v2_message_limited")
+        flush_one = c_function_body(core, "honch_queue_flush_one_with_chunk_limit_locked")
         core_flush = c_function_body(read("core/src/honch_core.c"), "honch_core_flush")
 
         self.assertIn("#define HONCH_DEFAULT_FLUSH_SCRATCH_MAX_EVENTS 4u", internal)
