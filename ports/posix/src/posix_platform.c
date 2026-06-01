@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "honch_internal.h"
 #include "honch/posix/honch.h"
 
