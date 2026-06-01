@@ -40,6 +40,7 @@ describe("React Native relay package shape", () => {
       "android/src/main/java/io/honch/reactnativerelay/HonchReactNativeRelayModule.java",
       "android/src/main/java/io/honch/reactnativerelay/HonchReactNativeRelayPackage.java",
       "android/src/main/java/io/honch/reactnativerelay/HonchRelayUploadWorker.java",
+      "android/src/main/java/io/honch/reactnativerelay/HonchRelayUploadTaskService.java",
       "ios/HonchReactNativeRelay.podspec",
       "ios/HonchReactNativeRelay.h",
       "ios/HonchReactNativeRelay.m",
@@ -135,5 +136,39 @@ describe("React Native relay package shape", () => {
     ]) {
       expect(androidModule).toContain(expected);
     }
+  });
+
+  it("starts a headless JS upload task from the Android upload worker", () => {
+    const androidManifest = readFileSync(new URL("android/src/main/AndroidManifest.xml", packageRoot), "utf8");
+    const worker = readFileSync(
+      new URL(
+        "android/src/main/java/io/honch/reactnativerelay/HonchRelayUploadWorker.java",
+        packageRoot
+      ),
+      "utf8"
+    );
+    const service = readFileSync(
+      new URL(
+        "android/src/main/java/io/honch/reactnativerelay/HonchRelayUploadTaskService.java",
+        packageRoot
+      ),
+      "utf8"
+    );
+
+    expect(androidManifest).toContain("HonchRelayUploadTaskService");
+    expect(worker).toContain("HonchRelayUploadTaskService");
+    expect(worker).toContain("startService");
+    expect(worker).toContain("Result.retry()");
+    expect(service).toContain("HeadlessJsTaskService");
+    expect(service).toContain("HonchRelayUpload");
+    expect(
+      readFileSync(
+        new URL(
+          "android/src/main/java/io/honch/reactnativerelay/HonchReactNativeRelayModule.java",
+          packageRoot
+        ),
+        "utf8"
+      )
+    ).toContain("enqueueUniqueWork");
   });
 });

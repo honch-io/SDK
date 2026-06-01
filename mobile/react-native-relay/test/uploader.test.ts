@@ -136,6 +136,19 @@ describe("uploadRelayMessage", () => {
     });
   });
 
+  it("passes Retry-After through retryable upload outcomes", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 503, headers: { "Retry-After": "7" } }))
+    );
+
+    await expect(uploadRelayMessageOutcome(config, message)).resolves.toMatchObject({
+      action: "retry",
+      status: 503,
+      retryAfterMs: 7000
+    });
+  });
+
   it("builds a capture upload buffer without consuming queue state", async () => {
     const queue = createInMemoryRelayQueue();
     await queue.putChunk(

@@ -6,6 +6,7 @@ export type { RelayQueue, StoredRelayMessage } from "./relayQueue";
 export { createMemoryDurableStore } from "./durableStore";
 export type { DurableRelayChunk, RelayDurableStore } from "./durableStore";
 export { createMmkvRelayStore } from "./storage/mmkvStore";
+export type { MmkvRelayStoreOptions } from "./storage/mmkvStore";
 export { buildRelayUploadBuffer, uploadRelayMessage, uploadRelayMessageOutcome } from "./uploader";
 export type { RelayUploaderConfig, RelayUploadOutcome } from "./uploader";
 export { drainRelayQueue } from "./drain";

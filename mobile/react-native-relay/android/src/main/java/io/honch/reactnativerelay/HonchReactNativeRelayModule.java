@@ -19,6 +19,7 @@ import android.util.Base64;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.work.ExistingWorkPolicy;
 import androidx.work.OneTimeWorkRequest;
 import androidx.work.WorkManager;
 
@@ -270,9 +271,12 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
     public void scheduleUpload(double delayMs, Promise promise) {
         OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(HonchRelayUploadWorker.class)
             .setInitialDelay((long)delayMs, TimeUnit.MILLISECONDS)
+            .setInputData(new androidx.work.Data.Builder().putLong("delayMs", (long)delayMs).build())
             .addTag(HonchRelayUploadWorker.WORK_TAG)
             .build();
-        WorkManager.getInstance(reactContext).enqueue(request);
+        WorkManager
+            .getInstance(reactContext)
+            .enqueueUniqueWork(HonchRelayUploadWorker.WORK_TAG, ExistingWorkPolicy.REPLACE, request);
         promise.resolve(null);
     }
 

@@ -14,6 +14,7 @@ The example app should prove:
 - Relay chunk receipt and CRC validation.
 - Durable mobile-side message assembly.
 - Manual and scheduled upload draining.
+- Android headless `HonchRelayUpload` task registration for scheduled drains.
 - Capture to ClickHouse verification using a unique event name.
 
 Required app configuration:

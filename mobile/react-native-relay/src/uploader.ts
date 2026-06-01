@@ -14,7 +14,7 @@ export type RelayUploaderConfig = {
 export type RelayUploadOutcome =
   | { action: "consume"; status: number }
   | { action: "drop"; status: number }
-  | { action: "retry"; status?: number; error?: unknown };
+  | { action: "retry"; status?: number; retryAfterMs?: number; error?: unknown };
 
 export function buildRelayUploadBuffer(
   config: Pick<RelayUploaderConfig, "messageId">,
@@ -73,5 +73,27 @@ export async function uploadRelayMessageOutcome(
   if (response.status === 400 || response.status === 401 || response.status === 404) {
     return { action: "drop", status: response.status };
   }
-  return { action: "retry", status: response.status };
+  return {
+    action: "retry",
+    status: response.status,
+    retryAfterMs: parseRetryAfterMs(response.headers.get("Retry-After"))
+  };
+}
+
+function parseRetryAfterMs(value: string | null): number | undefined {
+  if (value === null) {
+    return undefined;
+  }
+
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.round(seconds * 1000);
+  }
+
+  const retryAt = Date.parse(value);
+  if (!Number.isFinite(retryAt)) {
+    return undefined;
+  }
+
+  return Math.max(0, retryAt - Date.now());
 }

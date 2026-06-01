@@ -71,4 +71,24 @@ describe("drainRelayQueue", () => {
     expect(relayQueue.dropped).toEqual([]);
     expect(retries).toEqual([{ sequence: "3", delayMs: 1000 }]);
   });
+
+  it("uses Retry-After delay before local exponential backoff", async () => {
+    const relayQueue = queue([message("4")]);
+    const retries: Array<{ sequence: string; delayMs: number }> = [];
+
+    await drainRelayQueue({
+      queue: relayQueue,
+      upload: async (): Promise<RelayUploadOutcome> => ({
+        action: "retry",
+        status: 429,
+        retryAfterMs: 12000
+      }),
+      recordRetry: async (relayMessage, delayMs) => {
+        retries.push({ sequence: relayMessage.sequence, delayMs });
+      },
+      random: () => 0.5
+    });
+
+    expect(retries).toEqual([{ sequence: "4", delayMs: 12000 }]);
+  });
 });

@@ -21,6 +21,6 @@ export async function drainRelayQueue(options: DrainRelayQueueOptions): Promise<
       await options.queue.markDropped(message.deviceId, message.sequence);
       continue;
     }
-    await options.recordRetry(message, nextBackoffDelayMs(0, options.random));
+    await options.recordRetry(message, outcome.retryAfterMs ?? nextBackoffDelayMs(0, options.random));
   }
 }
