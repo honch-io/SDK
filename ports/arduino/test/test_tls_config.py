@@ -111,6 +111,7 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         core = read("ports/arduino/src/honch_core.c")
 
         self.assertNotIn("#include <stdatomic.h>", internal)
+        self.assertIn("#define HONCH_AUTO_PROPERTY_BUFFER_COUNT 1u", internal)
         self.assertNotIn("atomic_bool auto_property_buffer_in_use", internal)
         self.assertIn("honch_atomic_bool_t auto_property_buffer_in_use", internal)
         self.assertIn("honch_atomic_bool_compare_exchange", core)
