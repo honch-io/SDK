@@ -24,7 +24,7 @@ def is_blank(value):
 
 class HonchConfig:
     def __init__(self, **kwargs):
-        required = ("api_key", "endpoint_url", "device_model", "firmware_version", "event_buffer")
+        required = ("api_key", "endpoint_url", "device_id", "device_model", "firmware_version", "event_buffer")
         for key in required:
             if is_blank(kwargs.get(key)):
                 raise InvalidArgumentError("missing required config: " + key)

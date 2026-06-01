@@ -162,6 +162,7 @@ class ConformanceFixtureTests(unittest.TestCase):
             [op["op"] for op in fixture["operations"]],
             ["identify", "reboot", "track"],
         )
+        self.assertIn("return HONCH_STATUS_ERROR_INVALID_ARGUMENT;", adapter)
         self.assertIn("client->distinct_id = honch_micropython_strdup(client->device_id);", adapter)
         self.assertNotIn("state_get", adapter)
         self.assertNotIn("state_set", adapter)
@@ -232,7 +233,7 @@ class ConformanceFixtureTests(unittest.TestCase):
         return honch.Honch(
             api_key=config.get("api_key", "test-key"),
             endpoint_url="http://collector.local",
-            device_id=config.get("device_id"),
+            device_id=config.get("device_id", "test-device"),
             device_model=config["device_model"],
             firmware_version=config["firmware_version"],
             environment=config["environment"],

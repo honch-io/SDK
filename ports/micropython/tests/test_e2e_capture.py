@@ -114,7 +114,7 @@ class HonchCaptureE2ETests(unittest.TestCase):
         return honch.Honch(
             api_key=self.token,
             endpoint_url=self.endpoint,
-            device_id=None,
+            device_id="micropython-e2e-device",
             device_model="MicroPython E2E",
             firmware_version=firmware_version,
             environment="e2e",
