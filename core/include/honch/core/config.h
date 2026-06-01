@@ -28,8 +28,9 @@ typedef honch_status_t (*honch_auto_properties_fn)(
 typedef int (*honch_connectivity_fn)(void *userdata);
 
 typedef enum honch_durability_mode {
-    HONCH_DURABILITY_SYNC_ALWAYS = 0,
-    HONCH_DURABILITY_OS_BUFFERED = 1
+    HONCH_DURABILITY_OS_BUFFERED = 0,
+    HONCH_DURABILITY_SYNC_ALWAYS = 1,
+    HONCH_DURABILITY_DEFAULT = HONCH_DURABILITY_OS_BUFFERED
 } honch_durability_mode_t;
 
 typedef struct honch_core_config {

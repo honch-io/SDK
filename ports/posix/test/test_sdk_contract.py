@@ -110,12 +110,15 @@ class PosixChunkWireTest(unittest.TestCase):
     def test_queue_supports_configurable_durability_mode(self) -> None:
         public = read("include/honch/honch.h") + read_sdk("core/include/honch/core/config.h")
         queue = read_sdk("ports/posix/src/posix_storage.c")
+        core = read_sdk("core/src/honch_core.c")
 
         self.assertIn("honch_durability_mode_t", public)
         self.assertIn("durability_mode", public)
-        self.assertIn("HONCH_DURABILITY_SYNC_ALWAYS", public)
-        self.assertIn("HONCH_DURABILITY_OS_BUFFERED", public)
+        self.assertIn("HONCH_DURABILITY_OS_BUFFERED = 0", public)
+        self.assertIn("HONCH_DURABILITY_SYNC_ALWAYS = 1", public)
+        self.assertIn("HONCH_DURABILITY_DEFAULT = HONCH_DURABILITY_OS_BUFFERED", public)
         self.assertIn("client->durability_mode", queue)
+        self.assertIn("HONCH_DURABILITY_SYNC_ALWAYS ? HONCH_DURABILITY_SYNC_ALWAYS : HONCH_DURABILITY_OS_BUFFERED", core)
 
     def test_client_state_machine_lives_in_core_with_posix_wrappers(self) -> None:
         core = read_sdk("core/src/honch_core.c")
