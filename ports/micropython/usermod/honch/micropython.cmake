@@ -1,7 +1,3 @@
-if(NOT MICROPY_C_HEAP_SIZE)
-    set(MICROPY_C_HEAP_SIZE 65536)
-endif()
-
 add_library(honch_micropython INTERFACE) # MicroPython usermod INTERFACE_LIBRARY
 
 target_sources(honch_micropython INTERFACE
@@ -28,7 +24,6 @@ target_include_directories(honch_micropython INTERFACE
 
 target_compile_definitions(honch_micropython INTERFACE
     MICROPY_PY_HONCH_CORE=1
-    MICROPY_C_HEAP_SIZE=65536
 )
 
 target_link_libraries(usermod INTERFACE honch_micropython)
