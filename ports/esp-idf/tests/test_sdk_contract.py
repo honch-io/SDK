@@ -59,7 +59,6 @@ class EspIdfChunkWireTest(unittest.TestCase):
         cmake = read("ports/esp-idf/honch/CMakeLists.txt")
         post_chunk = c_function_body(transport, "honch_esp_post_chunk")
         ops_init = c_function_body(transport, "honch_esp_transport_ops_init")
-        ensure_ready = c_function_body(transport, "honch_esp_ensure_transport_ready")
 
         self.assertIn('"src/esp_transport_http.c"', cmake)
         self.assertIn("#include \"honch/core/transport.h\"", adapter)
@@ -67,11 +66,13 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("esp_http_client_handle_t http_client", adapter)
         self.assertIn("char *capture_url", adapter)
         self.assertIn("keep_alive_enable = true", transport)
-        self.assertIn("#include \"esp_event.h\"", transport)
-        self.assertIn("#include \"esp_netif.h\"", transport)
-        self.assertIn("honch_esp_ensure_transport_ready()", ops_init)
-        self.assertIn("esp_event_loop_create_default()", ensure_ready)
-        self.assertIn("esp_netif_init()", ensure_ready)
+        self.assertNotIn("#include \"esp_event.h\"", transport)
+        self.assertNotIn("#include \"esp_netif.h\"", transport)
+        self.assertNotIn("honch_esp_ensure_transport_ready", transport)
+        self.assertNotIn("esp_event_loop_create_default()", transport)
+        self.assertNotIn("esp_netif_init()", transport)
+        self.assertNotIn("esp_event_loop_create_default()", ops_init)
+        self.assertNotIn("esp_netif_init()", ops_init)
         self.assertNotIn("esp_event_loop_create_default()", post_chunk)
         self.assertNotIn("esp_netif_init()", post_chunk)
         self.assertIn('"/capture"', transport)
@@ -415,9 +416,7 @@ class EspIdfChunkWireTest(unittest.TestCase):
         component_manifest = read("ports/esp-idf/honch/idf_component.yml")
 
         for dependency in (
-            "esp_event",
             "esp_http_client",
-            "esp_netif",
             "esp-tls",
             "esp_timer",
             "freertos",
@@ -426,6 +425,8 @@ class EspIdfChunkWireTest(unittest.TestCase):
 
         for unused_dependency in (
             "        esp_wifi",
+            "        esp_event",
+            "        esp_netif",
             "        esp_driver_gpio",
             "        driver",
             "        cbor",
