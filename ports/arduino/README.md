@@ -62,12 +62,38 @@ void loop() {
 event threshold is reached. Successful outbound uploads are spaced by
 `flushMinIntervalMs`; leave it at the 10000 ms default for consumer firmware, or
 set it to `HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS` for benchmark or explicit
-high-throughput modes. Do not call `Honch.tick()` while Wi-Fi is unavailable or
-the radio is intentionally off. If the sketch cannot guarantee that, set
+high-throughput modes.
+
+Honch.tick() may block for up to the configured transport timeout because the
+HTTP POST is synchronous and runs on the caller's task. Do not call Honch.tick()
+from a latency-sensitive control loop, motor-control path, sensor sampling
+deadline, UI refresh path, or watchdog-sensitive section. The SDK does not start
+a hidden background task. Use `Honch.loop()` as an alias only when the sketch's
+`loop()` can tolerate upload latency.
+
+For firmware with latency-sensitive `loop()` work, pump Honch from a dedicated
+low-priority FreeRTOS task:
+
+```cpp
+static void honchPumpTask(void *parameter) {
+  (void)parameter;
+  for (;;) {
+    Honch.tick();
+    vTaskDelay(pdMS_TO_TICKS(250));
+  }
+}
+
+void setup() {
+  // Configure Wi-Fi and call Honch.begin(config) first.
+  xTaskCreatePinnedToCore(honchPumpTask, "honch-pump", 4096, nullptr, 1, nullptr, 1);
+}
+```
+
+Do not call `Honch.tick()` while Wi-Fi is unavailable or the radio is
+intentionally off. If the sketch cannot guarantee that, set
 `connectivityCallback`; when it returns false, ticks keep uploads pending and
 `Honch.flush()` returns false with `lastError()` set to `offline` without
-network I/O. The SDK does not start a hidden background task. Use `Honch.loop()`
-as an alias if that fits the sketch.
+network I/O.
 
 The default queue uses only the caller-provided RAM buffer. Events and
 `identify()` state are lost across reset or power loss unless you provide
@@ -81,6 +107,7 @@ Use HTTPS in production. Configure `rootCaPem` for the Capture endpoint. `insecu
 
 ```bash
 arduino-cli compile --fqbn esp32:esp32:esp32 ports/arduino/examples/HonchBasic
+arduino-cli compile --fqbn esp32:esp32:esp32 ports/arduino/examples/HonchDedicatedTask
 arduino-cli compile --fqbn esp32:esp32:esp32 ports/arduino/examples/HonchOfflineQueue
 pio run -d ports/arduino/examples/platformio
 ```

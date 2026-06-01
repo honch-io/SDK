@@ -56,6 +56,19 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         self.assertIn("connectivityCallback", readme)
         self.assertIn("offline", readme)
 
+    def test_tick_contract_warns_about_blocking_and_shows_dedicated_task(self) -> None:
+        readme = read("ports/arduino/README.md")
+        task_example = read("ports/arduino/examples/HonchDedicatedTask/HonchDedicatedTask.ino")
+        normalized_readme = " ".join(readme.split())
+        normalized_example = " ".join(task_example.split())
+
+        self.assertIn("Honch.tick() may block for up to the configured transport timeout", normalized_readme)
+        self.assertIn("Do not call Honch.tick() from a latency-sensitive control loop", normalized_readme)
+        self.assertIn("xTaskCreatePinnedToCore", readme)
+        self.assertRegex(task_example, r"xTaskCreatePinnedToCore\(\s*honchPumpTask")
+        self.assertIn("Honch.tick();", task_example)
+        self.assertIn("vTaskDelay(pdMS_TO_TICKS(250));", task_example)
+
     def test_transport_initializer_matches_core_ops_shape(self) -> None:
         transport = read("ports/arduino/src/honch_arduino_transport.cpp")
 

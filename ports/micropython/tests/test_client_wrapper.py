@@ -1,4 +1,5 @@
 import importlib
+from pathlib import Path
 import sys
 import types
 import unittest
@@ -177,6 +178,14 @@ class ClientWrapperTests(unittest.TestCase):
         client.tick()
         client.flush()
         self.assertEqual(client._core.calls, [("tick",), ("flush",)])
+
+    def test_readme_warns_tick_and_flush_hold_the_interpreter(self):
+        readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+        normalized = " ".join(readme.split())
+
+        self.assertIn("client.tick() and client.flush() may block for up to the configured transport timeout", normalized)
+        self.assertIn("urequests.post holds the MicroPython interpreter", normalized)
+        self.assertIn("Do not call tick() from a latency-sensitive control loop", normalized)
 
 
 if __name__ == "__main__":

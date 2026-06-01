@@ -162,6 +162,16 @@ class PosixChunkWireTest(unittest.TestCase):
         self.assertNotIn("test_cbor_migration.py", production_e2e)
         self.assertNotIn("test_cbor_migration.py", release_runner)
 
+    def test_docs_warn_tick_may_block_and_show_dedicated_pump_thread(self) -> None:
+        readme = read("README.md")
+        normalized = " ".join(readme.split())
+
+        self.assertIn("honch_tick() may block for up to the configured transport timeout", normalized)
+        self.assertIn("Do not call honch_tick() from a latency-sensitive control loop", normalized)
+        self.assertIn("pthread_create", readme)
+        self.assertIn("honch_tick(client);", readme)
+        self.assertIn("usleep(250000);", readme)
+
     def test_generated_ids_fail_closed_when_secure_randomness_is_unavailable(self) -> None:
         platform = read_sdk("ports/posix/src/posix_platform.c")
         random_hex = c_function_body(platform, "honch_random_hex")
