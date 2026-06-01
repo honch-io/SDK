@@ -25,6 +25,11 @@ make BOARD=MYBOARD \
   FROZEN_MANIFEST=/path/to/SDK/ports/micropython/manifest.py
 ```
 
+The Honch user C module does not set firmware-global MicroPython options such
+as `MICROPY_C_HEAP_SIZE`. Keep heap sizing in the board or host firmware
+configuration. If your board needs additional C heap for Honch and other native
+modules, opt into that value in the board config rather than in the user module.
+
 `mip` can install wrapper files from package metadata, but those files require firmware that already contains `_honch_core`.
 Do not install the `honch/` wrapper into `/lib` when it is already frozen into
 the firmware. Keeping both copies wastes the board filesystem and can make

@@ -22,13 +22,12 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertIn("${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_event_record.c", cmake)
         self.assertIn("${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_packetizer.c", cmake)
 
-    def test_rp2_build_reserves_c_heap_for_core_allocations(self):
+    def test_user_c_module_does_not_override_firmware_heap_size(self):
         cmake = self.read("ports/micropython/usermod/honch/micropython.cmake")
         makefile = self.read("ports/micropython/usermod/honch/micropython.mk")
 
-        self.assertIn("set(MICROPY_C_HEAP_SIZE 65536)", cmake)
-        self.assertIn("MICROPY_C_HEAP_SIZE=65536", cmake)
-        self.assertIn("-DMICROPY_C_HEAP_SIZE=65536", makefile)
+        self.assertNotIn("MICROPY_C_HEAP_SIZE", cmake)
+        self.assertNotIn("MICROPY_C_HEAP_SIZE", makefile)
 
     def test_c_binding_registers_honch_core_module_and_delegates_to_c_core(self):
         module = self.read("ports/micropython/usermod/honch/modhonch_core.c")
