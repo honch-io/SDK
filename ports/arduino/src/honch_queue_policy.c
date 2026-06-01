@@ -467,16 +467,34 @@ static honch_status_t honch_core_build_wire_v2_message(
     return HONCH_OK;
 }
 
-static honch_status_t honch_core_post_wire_v2_message(
+static void honch_pending_flush_clear(honch_client_t *client)
+{
+    if (client == NULL) {
+        return;
+    }
+    client->pending_flush_active = false;
+    client->pending_flush_message_size = 0u;
+    client->pending_flush_message_offset = 0u;
+    client->pending_flush_event_count = 0u;
+    client->pending_flush_message_id = 0u;
+    client->pending_flush_stream_id[0] = '\0';
+}
+
+static honch_status_t honch_core_post_wire_v2_message_limited(
     honch_client_t *client,
     const honch_payload_t *message,
     uint32_t message_id,
     const char *stream_id,
+    size_t max_chunks,
+    size_t *message_offset,
+    bool *message_complete,
     honch_transport_result_t *result)
 {
     if (client == NULL || message == NULL || result == NULL ||
         client->transport == NULL || client->transport->post_chunk == NULL ||
-        stream_id == NULL || stream_id[0] == '\0') {
+        stream_id == NULL || stream_id[0] == '\0' ||
+        max_chunks == 0u || message_offset == NULL || message_complete == NULL ||
+        *message_offset >= message->length) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
@@ -493,14 +511,18 @@ static honch_status_t honch_core_post_wire_v2_message(
     if (status != HONCH_OK) {
         return status;
     }
+    chunker.offset = *message_offset;
 
     *result = HONCH_TRANSPORT_RETRY;
     bool complete = false;
+    *message_complete = false;
+    size_t chunks_posted = 0u;
 #ifdef HONCH_FLUSH_TIMING
     size_t chunk_count = 0u;
 #endif
-    while (!complete) {
+    while (!complete && chunks_posted < max_chunks) {
         size_t frame_size = 0u;
+        size_t chunk_offset = chunker.offset;
         status = honch_wire_v2_chunker_next(
             &chunker,
             frame,
@@ -540,22 +562,32 @@ static honch_status_t honch_core_post_wire_v2_message(
         if (status != HONCH_OK) {
             return status;
         }
+        chunks_posted++;
         if (complete) {
             if (*result == HONCH_TRANSPORT_ACCEPTED) {
+                *message_offset = chunker.offset;
+                *message_complete = true;
                 break;
             }
             if (*result == HONCH_TRANSPORT_REJECTED || *result == HONCH_TRANSPORT_AUTH_ERROR) {
+                *message_offset = chunker.offset;
+                *message_complete = true;
                 return HONCH_OK;
             }
+            chunker.offset = chunk_offset;
             *result = HONCH_TRANSPORT_RETRY;
             return HONCH_ERROR_TRANSPORT;
         }
         if (*result == HONCH_TRANSPORT_CHUNK_STORED) {
+            *message_offset = chunker.offset;
             continue;
         }
         if (*result == HONCH_TRANSPORT_REJECTED || *result == HONCH_TRANSPORT_AUTH_ERROR) {
+            *message_offset = chunker.offset;
+            *message_complete = true;
             return HONCH_OK;
         }
+        chunker.offset = chunk_offset;
         *result = HONCH_TRANSPORT_RETRY;
         return HONCH_ERROR_TRANSPORT;
     }
@@ -563,9 +595,77 @@ static honch_status_t honch_core_post_wire_v2_message(
     return HONCH_OK;
 }
 
-honch_status_t honch_queue_flush_one_locked(honch_client_t *client, bool *progressed)
+static honch_status_t honch_queue_post_pending_flush_locked(
+    honch_client_t *client,
+    size_t max_chunks,
+    bool *progressed)
+{
+    if (client == NULL || progressed == NULL || !client->pending_flush_active) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    *progressed = false;
+
+    honch_payload_t compact_message = {
+        .data = client->flush_message_buffer,
+        .length = client->pending_flush_message_size
+    };
+    honch_transport_result_t result = HONCH_TRANSPORT_RETRY;
+    bool complete = false;
+    honch_status_t status = honch_core_post_wire_v2_message_limited(
+        client,
+        &compact_message,
+        client->pending_flush_message_id,
+        client->pending_flush_stream_id,
+        max_chunks,
+        &client->pending_flush_message_offset,
+        &complete,
+        &result);
+    client->outbound_upload_attempted = true;
+    if (status != HONCH_OK) {
+        return status;
+    }
+    if (!complete) {
+        client->scheduler_flush_requested = true;
+        return HONCH_OK;
+    }
+
+    if (result == HONCH_TRANSPORT_ACCEPTED) {
+        status = honch_core_queue_consume_batch(
+            client,
+            client->flush_sequences,
+            client->pending_flush_event_count);
+        *progressed = status == HONCH_OK;
+        if (status == HONCH_OK) {
+            honch_pending_flush_clear(client);
+        }
+        return status;
+    }
+
+    if (result == HONCH_TRANSPORT_REJECTED || result == HONCH_TRANSPORT_AUTH_ERROR) {
+        honch_status_t dead_status = honch_core_queue_dead_letter_batch(
+            client,
+            client->flush_sequences,
+            client->pending_flush_event_count);
+        if (dead_status == HONCH_OK) {
+            honch_pending_flush_clear(client);
+            *progressed = true;
+            return status == HONCH_OK ? HONCH_ERROR_REJECTED : status;
+        }
+        return dead_status;
+    }
+
+    return status == HONCH_OK ? HONCH_ERROR_TRANSPORT : status;
+}
+
+static honch_status_t honch_queue_flush_one_with_chunk_limit_locked(
+    honch_client_t *client,
+    size_t max_chunks,
+    bool *progressed)
 {
     *progressed = false;
+    if (client->pending_flush_active) {
+        return honch_queue_post_pending_flush_locked(client, max_chunks, progressed);
+    }
 
     size_t batch_size = client->batch_size == 0u ? 1u : client->batch_size;
     if (batch_size > HONCH_MAX_BATCH_SIZE) {
@@ -713,14 +813,28 @@ honch_status_t honch_queue_flush_one_locked(honch_client_t *client, bool *progre
 
     honch_transport_result_t result = HONCH_TRANSPORT_RETRY;
     uint32_t message_id = flush_context.message_id_seed + (uint32_t)sequences[0];
+    client->pending_flush_message_size = compact_message.length;
+    client->pending_flush_message_offset = 0u;
+    client->pending_flush_event_count = event_count;
+    client->pending_flush_message_id = message_id;
+    snprintf(
+        client->pending_flush_stream_id,
+        sizeof(client->pending_flush_stream_id),
+        "%s",
+        flush_context.stream_id);
+    client->pending_flush_active = true;
 #ifdef HONCH_FLUSH_TIMING
     uint64_t post_message_start_ms = honch_flush_timing_now_ms(client);
 #endif
-    status = honch_core_post_wire_v2_message(
+    bool message_complete = false;
+    status = honch_core_post_wire_v2_message_limited(
         client,
         &compact_message,
         message_id,
         flush_context.stream_id,
+        max_chunks,
+        &client->pending_flush_message_offset,
+        &message_complete,
         &result);
     client->outbound_upload_attempted = true;
 #ifdef HONCH_FLUSH_TIMING
@@ -741,6 +855,10 @@ honch_status_t honch_queue_flush_one_locked(honch_client_t *client, bool *progre
     if (relock_status != HONCH_OK) {
         return relock_status;
     }
+    if (status == HONCH_OK && !message_complete) {
+        client->scheduler_flush_requested = true;
+        return HONCH_OK;
+    }
 
     if (result == HONCH_TRANSPORT_ACCEPTED && status == HONCH_OK) {
 #ifdef HONCH_FLUSH_TIMING
@@ -759,12 +877,16 @@ honch_status_t honch_queue_flush_one_locked(honch_client_t *client, bool *progre
         honch_flush_timing_log(client, timing_message);
 #endif
         *progressed = status == HONCH_OK;
+        if (status == HONCH_OK) {
+            honch_pending_flush_clear(client);
+        }
         return status;
     }
 
     if (result == HONCH_TRANSPORT_REJECTED || result == HONCH_TRANSPORT_AUTH_ERROR) {
         honch_status_t dead_status = honch_core_queue_dead_letter_batch(client, sequences, event_count);
         if (dead_status == HONCH_OK) {
+            honch_pending_flush_clear(client);
             *progressed = true;
             return status == HONCH_OK ? HONCH_ERROR_REJECTED : status;
         }
@@ -772,6 +894,16 @@ honch_status_t honch_queue_flush_one_locked(honch_client_t *client, bool *progre
     }
 
     return status == HONCH_OK ? HONCH_ERROR_TRANSPORT : status;
+}
+
+honch_status_t honch_queue_flush_one_locked(honch_client_t *client, bool *progressed)
+{
+    return honch_queue_flush_one_with_chunk_limit_locked(client, SIZE_MAX, progressed);
+}
+
+honch_status_t honch_queue_flush_one_chunk_locked(honch_client_t *client, bool *progressed)
+{
+    return honch_queue_flush_one_with_chunk_limit_locked(client, HONCH_TICK_MAX_CHUNKS, progressed);
 }
 
 honch_status_t honch_queue_flush_limited_locked(honch_client_t *client, size_t max_batches)

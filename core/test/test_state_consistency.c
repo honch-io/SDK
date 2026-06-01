@@ -19,6 +19,8 @@ typedef struct fake_state_storage {
     uint8_t last_queued_data[256];
     uint8_t last_queued_prefix[4];
     size_t last_queued_size;
+    const uint8_t *read_batch_data;
+    size_t read_batch_size;
     size_t queued_sequence_count;
     int queue_push_calls;
     int queue_depth_calls;
@@ -35,6 +37,7 @@ typedef struct fake_state_storage {
     int nested_flush_attempts;
     honch_status_t post_chunk_status;
     honch_transport_result_t post_chunk_result;
+    int post_chunk_result_from_frame_flags;
     int post_chunk_calls;
     uint64_t retry_after_ms;
     int retry_after_calls;
@@ -299,8 +302,10 @@ static honch_status_t fake_queue_read_batch(
 
     *event_count = 0u;
     size_t count = storage->queued_sequence_count < batch_size ? storage->queued_sequence_count : batch_size;
+    const uint8_t *source_data = storage->read_batch_data != NULL ? storage->read_batch_data : storage->last_queued_data;
+    size_t source_size = storage->read_batch_data != NULL ? storage->read_batch_size : storage->last_queued_size;
     for (size_t i = 0u; i < count; i++) {
-        uint8_t *copy = (uint8_t *)malloc(storage->last_queued_size);
+        uint8_t *copy = (uint8_t *)malloc(source_size);
         if (copy == NULL) {
             for (size_t j = 0u; j < i; j++) {
                 free(events[j].data);
@@ -309,15 +314,55 @@ static honch_status_t fake_queue_read_batch(
             *event_count = 0u;
             return HONCH_ERROR_OUT_OF_MEMORY;
         }
-        memcpy(copy, storage->last_queued_data, storage->last_queued_size);
+        memcpy(copy, source_data, source_size);
         events[i] = (honch_storage_event_t) {
             .sequence = storage->queued_sequences[i],
             .data = copy,
-            .length = storage->last_queued_size
+            .length = source_size
         };
         (*event_count)++;
     }
     return count == 0u ? HONCH_ERROR_NOT_INITIALIZED : HONCH_OK;
+}
+
+static void build_heavy_event(
+    const char *event_name,
+    size_t property_count,
+    size_t array_length,
+    size_t final_array_length,
+    uint8_t **out_data,
+    size_t *out_size)
+{
+    assert(out_data != NULL);
+    assert(out_size != NULL);
+
+    honch_wire_v2_property_t *properties = (honch_wire_v2_property_t *)calloc(property_count, sizeof(*properties));
+    assert(properties != NULL);
+    for (size_t i = 0u; i < property_count; i++) {
+        char key[8];
+        int key_length = snprintf(key, sizeof(key), "p%02zu", i);
+        assert(key_length > 0 && (size_t)key_length < sizeof(key));
+        char *stored_key = honch_strdup(key);
+        size_t item_count = i + 1u == property_count ? final_array_length : array_length;
+        honch_wire_v2_value_t *items = (honch_wire_v2_value_t *)calloc(item_count, sizeof(*items));
+        assert(stored_key != NULL);
+        assert(items != NULL);
+        for (size_t j = 0u; j < item_count; j++) {
+            items[j] = honch_u64((uint64_t)(i + j));
+        }
+        properties[i] = honch_prop(stored_key, honch_array(items, item_count));
+    }
+
+    honch_payload_t payload = {0};
+    assert(honch_event_record_build(event_name, "device-1", NULL, 1234u, properties, property_count, &payload) ==
+        HONCH_OK);
+    for (size_t i = 0u; i < property_count; i++) {
+        free((void *)properties[i].key);
+        free((void *)properties[i].value.array.items);
+    }
+    free(properties);
+    *out_data = payload.data;
+    *out_size = payload.length;
 }
 
 static honch_status_t fake_post_chunk(
@@ -343,9 +388,15 @@ static honch_status_t fake_post_chunk(
         storage->nested_flush_attempts++;
         storage->nested_flush_status = honch_core_flush(storage->nested_flush_client);
     }
-    *result = storage != NULL && storage->post_chunk_result != 0 ?
-        storage->post_chunk_result :
-        HONCH_TRANSPORT_ACCEPTED;
+    if (storage != NULL && storage->post_chunk_result_from_frame_flags) {
+        *result = body_size > 0u && (body[0] & 0x40u) != 0u ?
+            HONCH_TRANSPORT_CHUNK_STORED :
+            HONCH_TRANSPORT_ACCEPTED;
+    } else {
+        *result = storage != NULL && storage->post_chunk_result != 0 ?
+            storage->post_chunk_result :
+            HONCH_TRANSPORT_ACCEPTED;
+    }
     return storage != NULL && storage->post_chunk_status != 0 ?
         storage->post_chunk_status :
         HONCH_OK;
@@ -989,6 +1040,70 @@ static void test_tick_preserves_requested_flush_during_min_spacing(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
+static void test_tick_posts_at_most_one_chunk_per_call(void)
+{
+    uint8_t *event = NULL;
+    size_t event_size = 0u;
+    build_heavy_event("chunked_tick", 64u, 28u, 12u, &event, &event_size);
+
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .queue_depth = 1u,
+        .queued_sequences = {1u},
+        .queued_sequence_count = 1u,
+        .read_batch_data = event,
+        .read_batch_size = event_size,
+        .post_chunk_result_from_frame_flags = 1,
+        .now_ms = 1000u,
+        .force_now_ms = 1
+    };
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    (void)fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+
+    honch_client_t client = {0};
+    client.platform = &platform;
+    client.event_queue = &queue_ops;
+    client.transport = &transport;
+    client.api_key = "test-key";
+    client.endpoint_url = "http://collector.local";
+    client.device_id = "device-1";
+    client.device_model = "model-x";
+    client.firmware_version = "1.0.0";
+    client.environment = "test";
+    client.sdk_platform = "posix";
+    client.batch_size = 1u;
+    client.max_event_bytes = 65536u;
+    client.flush_event_threshold = 1u;
+    client.flush_min_interval_ms = 0u;
+    client.flush_retry_initial_ms = HONCH_DEFAULT_FLUSH_RETRY_INITIAL_MS;
+    client.flush_retry_max_ms = HONCH_DEFAULT_FLUSH_RETRY_MAX_MS;
+    client.current_retry_delay_ms = HONCH_DEFAULT_FLUSH_RETRY_INITIAL_MS;
+    client.scheduler_flush_requested = true;
+    client.wire_v2_message_id_seed = 0x100u;
+    snprintf(client.wire_v2_stream_id, sizeof(client.wire_v2_stream_id), "boot0001");
+
+    assert(honch_core_tick(&client) == HONCH_OK);
+    assert(storage.post_chunk_calls == 1);
+    assert(storage.queued_sequence_count == 1u);
+    assert(storage.queue_consume_calls == 0);
+
+    int ticks = 1;
+    while (storage.queued_sequence_count > 0u && ticks < 8) {
+        int calls_before = storage.post_chunk_calls;
+        storage.now_ms += 1u;
+        assert(honch_core_tick(&client) == HONCH_OK);
+        ticks++;
+        assert(storage.post_chunk_calls == calls_before + 1);
+    }
+
+    assert(storage.queued_sequence_count == 0u);
+    assert(storage.queue_consume_calls == 1);
+    free(event);
+}
+
 static void test_flush_returns_rate_limited_during_min_spacing(void)
 {
     fake_state_storage_t storage = {
@@ -1208,6 +1323,7 @@ int main(void)
     test_nested_flush_during_transport_returns_busy();
     test_retry_after_extends_scheduler_delay();
     test_tick_preserves_requested_flush_during_min_spacing();
+    test_tick_posts_at_most_one_chunk_per_call();
     test_flush_returns_rate_limited_during_min_spacing();
     test_empty_flush_is_not_rate_limited_during_min_spacing();
     test_tick_skips_transport_while_connectivity_unavailable();
