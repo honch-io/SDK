@@ -64,6 +64,20 @@ class EspIdfSingletonLifetimeTests(unittest.TestCase):
         self.assertIn("honch_client_leave(client)", compat)
         self.assertIn("honch_esp_client_detach", compat)
 
+    def test_esp_compat_does_not_keep_legacy_global_config_mirrors(self) -> None:
+        compat = read("ports/esp-idf/honch/src/esp_compat.c")
+
+        for name in (
+            "g_honch_api_key",
+            "g_honch_device_model",
+            "g_honch_firmware_version",
+            "g_honch_environment",
+            "g_honch_battery_callback",
+            "g_honch_battery_low_threshold",
+            "g_honch_connected",
+        ):
+            self.assertNotIn(name, compat)
+
     def test_public_wrappers_do_not_pass_global_singleton_directly_to_core(self) -> None:
         compat = read("ports/esp-idf/honch/src/esp_compat.c")
         unsafe_calls = [

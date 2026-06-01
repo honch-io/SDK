@@ -38,14 +38,6 @@ static char s_firmware_version[32];
 static char s_environment[32];
 static bool (*s_connectivity_callback)(void) = NULL;
 
-const char *g_honch_api_key = NULL;
-const char *g_honch_device_model = NULL;
-const char *g_honch_firmware_version = NULL;
-const char *g_honch_environment = "production";
-int (*g_honch_battery_callback)(void) = NULL;
-int g_honch_battery_low_threshold = 15;
-volatile bool g_honch_connected = false;
-
 static honch_err_t honch_esp_status_to_err(honch_status_t status);
 
 static int honch_esp_connectivity_callback(void *userdata)
@@ -238,15 +230,13 @@ static honch_err_t honch_esp_status_to_err(honch_status_t status)
     }
 }
 
-static void honch_esp_clear_legacy_globals(void)
+static void honch_esp_clear_config_state(void)
 {
-    g_honch_api_key = NULL;
-    g_honch_device_model = NULL;
-    g_honch_firmware_version = NULL;
-    g_honch_environment = "production";
-    g_honch_battery_callback = NULL;
-    g_honch_battery_low_threshold = 15;
-    g_honch_connected = false;
+    s_api_key[0] = '\0';
+    s_endpoint_url[0] = '\0';
+    s_device_model[0] = '\0';
+    s_firmware_version[0] = '\0';
+    s_environment[0] = '\0';
     s_connectivity_callback = NULL;
 }
 
@@ -288,13 +278,6 @@ static honch_err_t honch_esp_copy_config(const honch_config_t *config)
         return err;
     }
 
-    g_honch_api_key = s_api_key;
-    g_honch_device_model = s_device_model;
-    g_honch_firmware_version = s_firmware_version;
-    g_honch_environment = s_environment;
-    g_honch_battery_callback = config->battery_callback;
-    g_honch_battery_low_threshold =
-        config->battery_low_threshold > 0 ? config->battery_low_threshold : 15;
     s_connectivity_callback = config->connectivity_callback;
     return HONCH_OK;
 }
@@ -325,7 +308,7 @@ honch_err_t honch_init(const honch_config_t *config)
 
     honch_status_t status = honch_esp_platform_ops_init(&platform_ops, &s_platform_ctx);
     if (status != HONCH_STATUS_OK) {
-        honch_esp_clear_legacy_globals();
+        honch_esp_clear_config_state();
         honch_esp_init_finish(NULL);
         return honch_esp_status_to_err(status);
     }
@@ -339,7 +322,7 @@ honch_err_t honch_init(const honch_config_t *config)
             config->event_buffer_size);
         if (status != HONCH_STATUS_OK) {
             honch_esp_platform_ops_deinit(&s_platform_ctx);
-            honch_esp_clear_legacy_globals();
+            honch_esp_clear_config_state();
             honch_esp_init_finish(NULL);
             return honch_esp_status_to_err(status);
         }
@@ -348,7 +331,7 @@ honch_err_t honch_init(const honch_config_t *config)
     if (status != HONCH_STATUS_OK) {
         honch_esp_event_queue_ops_deinit(&s_storage_ctx);
         honch_esp_platform_ops_deinit(&s_platform_ctx);
-        honch_esp_clear_legacy_globals();
+        honch_esp_clear_config_state();
         honch_esp_init_finish(NULL);
         return honch_esp_status_to_err(status);
     }
@@ -373,7 +356,8 @@ honch_err_t honch_init(const honch_config_t *config)
     core_config.shutdown_flush_max_batches = config->shutdown_flush_max_batches;
     core_config.transport_timeout_ms = config->transport_timeout_ms;
     core_config.battery_callback = config->battery_callback;
-    core_config.battery_low_threshold = g_honch_battery_low_threshold;
+    core_config.battery_low_threshold =
+        config->battery_low_threshold > 0 ? config->battery_low_threshold : 15;
     core_config.connectivity_callback = honch_esp_connectivity_callback;
     core_config.connectivity_userdata = NULL;
     core_config.platform = &platform_ops;
@@ -387,7 +371,7 @@ honch_err_t honch_init(const honch_config_t *config)
         honch_esp_transport_ops_deinit(&s_transport_ctx);
         honch_esp_event_queue_ops_deinit(&s_storage_ctx);
         honch_esp_platform_ops_deinit(&s_platform_ctx);
-        honch_esp_clear_legacy_globals();
+        honch_esp_clear_config_state();
         honch_esp_init_finish(NULL);
         ESP_LOGE(TAG, "Core init failed: %s", honch_status_string(status));
         return honch_esp_status_to_err(status);
@@ -413,7 +397,7 @@ honch_err_t honch_shutdown(void)
     honch_esp_transport_ops_deinit(&s_transport_ctx);
     honch_esp_event_queue_ops_deinit(&s_storage_ctx);
     honch_esp_platform_ops_deinit(&s_platform_ctx);
-    honch_esp_clear_legacy_globals();
+    honch_esp_clear_config_state();
     honch_esp_shutdown_finish();
     return honch_esp_status_to_err(status);
 }
