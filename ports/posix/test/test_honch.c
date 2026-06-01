@@ -867,7 +867,8 @@ static honch_config_t test_config(const char *queue_dir)
         .batch_size = 2u,
         .max_queued_events = 10u,
         .max_event_bytes = 8192u,
-        .transport_timeout_ms = 1000u
+        .transport_timeout_ms = 1000u,
+        .flush_min_interval_ms = HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS
     };
     return config;
 }

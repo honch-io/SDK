@@ -6,23 +6,23 @@
 #include "honch/core/honch.h"
 
 struct HonchConfig {
-  const char *apiKey;
-  const char *host;
-  const char *rootCaPem;
-  const char *deviceId;
-  const char *deviceModel;
-  const char *firmwareVersion;
-  const char *environment;
-  uint8_t *eventBuffer;
-  size_t eventBufferSize;
-  uint32_t flushIntervalSeconds;
-  uint32_t flushMinIntervalMs;
-  uint32_t flushEventThreshold;
-  bool (*connectivityCallback)();
-  bool insecureSkipTlsVerify;
-  const honch_state_storage_ops_t *stateStorageOps;
-  const honch_event_queue_ops_t *eventQueueOps;
-  uint32_t transportTimeoutMs;
+  const char *apiKey = nullptr;
+  const char *host = nullptr;
+  const char *rootCaPem = nullptr;
+  const char *deviceId = nullptr;
+  const char *deviceModel = nullptr;
+  const char *firmwareVersion = nullptr;
+  const char *environment = nullptr;
+  uint8_t *eventBuffer = nullptr;
+  size_t eventBufferSize = 0;
+  uint32_t flushIntervalSeconds = 0;
+  uint32_t flushMinIntervalMs = 0;
+  uint32_t flushEventThreshold = 0;
+  bool (*connectivityCallback)() = nullptr;
+  bool insecureSkipTlsVerify = false;
+  const honch_state_storage_ops_t *stateStorageOps = nullptr;
+  const honch_event_queue_ops_t *eventQueueOps = nullptr;
+  uint32_t transportTimeoutMs = 0;
 };
 
 class HonchClass {
