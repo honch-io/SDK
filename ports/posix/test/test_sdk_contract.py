@@ -107,6 +107,17 @@ class PosixChunkWireTest(unittest.TestCase):
         self.assertIn("client->transport->post_chunk", queue_policy)
         self.assertNotIn("honch_core_post_batch", queue_policy)
 
+    def test_flush_and_packetizer_share_single_event_wire_encoder(self) -> None:
+        internal = read_sdk("core/src/honch_internal.h")
+        queue_policy = read_sdk("core/src/honch_queue_policy.c")
+        packetizer = read_sdk("core/src/honch_packetizer.c")
+
+        self.assertIn("honch_core_encode_single_wire_v2_event", internal)
+        self.assertIn("honch_core_encode_single_wire_v2_event", queue_policy)
+        self.assertIn("honch_core_encode_single_wire_v2_event", packetizer)
+        self.assertNotIn("honch_packetizer_normalize_timestamp", packetizer)
+        self.assertNotIn("honch_packetizer_device_time_source", packetizer)
+
     def test_queue_supports_configurable_durability_mode(self) -> None:
         public = read("include/honch/honch.h") + read_sdk("core/include/honch/core/config.h")
         queue = read_sdk("ports/posix/src/posix_storage.c")
