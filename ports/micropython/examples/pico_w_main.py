@@ -71,7 +71,7 @@ def main():
     client = Honch(
         api_key=API_KEY,
         endpoint_url=ENDPOINT_URL,
-        device_id=None,
+        device_id="pico-w-001",
         device_model=DEVICE_MODEL,
         firmware_version=FIRMWARE_VERSION,
         environment=ENVIRONMENT,

@@ -168,46 +168,6 @@ honch_status_t honch_random_hex(char out[33])
     return HONCH_STATUS_OK;
 }
 
-static honch_status_t honch_mp_default_device_id(char **out)
-{
-    if (out == NULL) {
-        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
-    }
-    *out = NULL;
-
-    nlr_buf_t nlr;
-    if (nlr_push(&nlr) != 0) {
-        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
-    }
-    mp_obj_t machine_module = mp_import_name(MP_QSTR_machine, mp_const_none, MP_OBJ_NEW_SMALL_INT(0));
-    mp_obj_t unique_id = mp_load_attr(machine_module, MP_QSTR_unique_id);
-    mp_obj_t value = mp_call_function_0(unique_id);
-    mp_buffer_info_t info;
-    mp_get_buffer_raise(value, &info, MP_BUFFER_READ);
-    if (info.buf == NULL || info.len == 0u) {
-        nlr_pop();
-        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
-    }
-
-    static const char hex[] = "0123456789abcdef";
-    size_t total = 4u + (info.len * 2u) + 1u;
-    char *device_id = (char *)malloc(total);
-    if (device_id == NULL) {
-        nlr_pop();
-        return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
-    }
-    memcpy(device_id, "mpy-", 4u);
-    const uint8_t *bytes = (const uint8_t *)info.buf;
-    for (size_t i = 0u; i < info.len; i++) {
-        device_id[4u + (i * 2u)] = hex[(bytes[i] >> 4u) & 0x0fu];
-        device_id[5u + (i * 2u)] = hex[bytes[i] & 0x0fu];
-    }
-    device_id[total - 1u] = '\0';
-    *out = device_id;
-    nlr_pop();
-    return HONCH_STATUS_OK;
-}
-
 honch_status_t honch_state_prepare(honch_client_t *client, const honch_core_config_t *config)
 {
     HONCH_MP_DEBUG_INIT("state_prepare_begin");
@@ -215,16 +175,13 @@ honch_status_t honch_state_prepare(honch_client_t *client, const honch_core_conf
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
 
-    honch_status_t status = HONCH_STATUS_OK;
-    if (config->device_id != NULL && !honch_is_blank(config->device_id)) {
-        client->configured_device_id = true;
-        client->device_id = honch_micropython_strdup(config->device_id);
-        status = client->device_id == NULL ? HONCH_STATUS_ERROR_OUT_OF_MEMORY : HONCH_STATUS_OK;
-    } else {
-        status = honch_mp_default_device_id(&client->device_id);
+    if (config->device_id == NULL || honch_is_blank(config->device_id)) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
-    if (status != HONCH_STATUS_OK) {
-        return status;
+    client->configured_device_id = true;
+    client->device_id = honch_micropython_strdup(config->device_id);
+    if (client->device_id == NULL) {
+        return HONCH_STATUS_ERROR_OUT_OF_MEMORY;
     }
 
     client->distinct_id = honch_micropython_strdup(client->device_id);

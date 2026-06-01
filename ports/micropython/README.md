@@ -38,6 +38,7 @@ import honch
 client = honch.Honch(
     api_key="project-key",
     endpoint_url="https://capture.honch.io",
+    device_id="device-serial-001",
     device_model="ActionCam X1",
     firmware_version="1.2.3",
     event_buffer=bytearray(8192),
@@ -57,13 +58,12 @@ Required:
 
 - `api_key`
 - `endpoint_url`
+- `device_id`
 - `device_model`
 - `firmware_version`
 - `event_buffer`
 
 Optional:
-
-- `device_id`
 - `environment`
 - `batch_size`
 - `max_queued_events`
@@ -122,8 +122,10 @@ supplied by users are rejected before compact wire-v2 packetization.
 
 The default user C module stores queued events in the caller-provided
 `event_buffer`. Events, `identify()` state, and firmware-version state are
-volatile by default and are lost across reset or power loss. Device id defaults
-to `machine.unique_id()` when `device_id` is not supplied.
+volatile by default and are lost across reset or power loss. `device_id` is required
+because this port does not persist SDK identity. Pass a caller-provided stable
+device_id from board provisioning, NVS, a filesystem file, or another
+product-owned durable source.
 
 Flush sends compact chunk frames to `POST <endpoint_url>/capture` with `Content-Type: application/vnd.honch.chunk`, `X-Honch-Project-Key`, and `X-Honch-Stream-Id`.
 

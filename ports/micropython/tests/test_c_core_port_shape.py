@@ -158,6 +158,7 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
 
         self.assertIn("typed event values", readme)
         self.assertIn("caller-provided", readme)
+        self.assertIn("`device_id` is required", readme)
         self.assertIn("volatile by default", readme)
         self.assertIn("compact wire-v2 packetization", readme)
         self.assertIn("`bytes`", readme)

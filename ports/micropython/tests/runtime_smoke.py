@@ -3,6 +3,7 @@ import honch
 client = honch.Honch(
     api_key="runtime-smoke-key",
     endpoint_url="http://127.0.0.1:9",
+    device_id="runtime-smoke-device",
     device_model="MicroPython Unix",
     firmware_version="runtime-smoke",
     environment="test",

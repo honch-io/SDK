@@ -24,9 +24,15 @@ class MicroPythonVolatileStorageTests(unittest.TestCase):
 
     def test_default_state_is_volatile(self) -> None:
         adapter = read("ports/micropython/usermod/honch/mphal_adapter.c")
+        config = read("ports/micropython/honch/config.py")
+        readme = read("ports/micropython/README.md")
+        compact_readme = " ".join(readme.split())
 
-        self.assertIn("honch_mp_default_device_id", adapter)
-        self.assertIn("MP_QSTR_unique_id", adapter)
+        self.assertNotIn("honch_mp_default_device_id", adapter)
+        self.assertNotIn("MP_QSTR_unique_id", adapter)
+        self.assertIn('"device_id"', config)
+        self.assertIn("`device_id` is required", readme)
+        self.assertIn("caller-provided stable device_id", compact_readme)
         self.assertIn("*changed = false;", adapter)
         self.assertNotIn("state_set", adapter)
         self.assertNotIn("state_get", adapter)

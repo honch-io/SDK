@@ -88,6 +88,7 @@ class ClientWrapperTests(unittest.TestCase):
         client = honch.Honch(
             api_key="key",
             endpoint_url="http://collector.local",
+            device_id="device-1",
             device_model="model",
             firmware_version="1.0",
             event_buffer=bytearray(8192),
@@ -97,6 +98,7 @@ class ClientWrapperTests(unittest.TestCase):
         self.assertEqual(client.get_device_id(), "device-from-core")
         self.assertEqual(client.queue_stats(), {"depth": 0})
         self.assertEqual(client._core.config["api_key"], "key")
+        self.assertEqual(client._core.config["device_id"], "device-1")
         self.assertEqual(client._core.config["batch_size"], 3)
         self.assertNotIn("enable_wire_v2", client._core.config)
 
@@ -133,6 +135,7 @@ class ClientWrapperTests(unittest.TestCase):
         client = honch.Honch(
             api_key="key",
             endpoint_url="http://collector.local",
+            device_id="device-1",
             device_model="model",
             firmware_version="1.0",
             event_buffer=bytearray(8192),
@@ -148,6 +151,7 @@ class ClientWrapperTests(unittest.TestCase):
         client = honch.Honch(
             api_key="key",
             endpoint_url="http://collector.local",
+            device_id="device-1",
             device_model="model",
             firmware_version="1.0",
             event_buffer=bytearray(8192),
@@ -163,6 +167,7 @@ class ClientWrapperTests(unittest.TestCase):
         client = honch.Honch(
             api_key="key",
             endpoint_url="http://collector.local",
+            device_id="device-1",
             device_model="model",
             firmware_version="1.0",
             event_buffer=bytearray(8192),
@@ -173,6 +178,32 @@ class ClientWrapperTests(unittest.TestCase):
         with self.assertRaises(honch.OfflineError):
             client.flush()
         self.assertEqual(client._core.calls, [])
+
+    def test_requires_caller_provided_device_id(self):
+        honch = importlib.import_module("honch")
+
+        with self.assertRaises(honch.InvalidArgumentError):
+            honch.Honch(
+                api_key="key",
+                endpoint_url="http://collector.local",
+                device_model="model",
+                firmware_version="1.0",
+                event_buffer=bytearray(8192),
+            )
+
+    def test_connectivity_callback_allows_tick_and_flush_when_online(self):
+        honch = importlib.import_module("honch")
+        state = {"connected": False}
+
+        client = honch.Honch(
+            api_key="key",
+            endpoint_url="http://collector.local",
+            device_id="device-1",
+            device_model="model",
+            firmware_version="1.0",
+            event_buffer=bytearray(8192),
+            connectivity_callback=lambda: state["connected"],
+        )
 
         state["connected"] = True
         client.tick()
