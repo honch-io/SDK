@@ -166,6 +166,24 @@ class PosixChunkWireTest(unittest.TestCase):
         self.assertIn("client->durability_mode", queue)
         self.assertIn("HONCH_DURABILITY_SYNC_ALWAYS ? HONCH_DURABILITY_SYNC_ALWAYS : HONCH_DURABILITY_OS_BUFFERED", core)
 
+    def test_file_queue_avoids_full_sorted_lists_for_unordered_operations(self) -> None:
+        queue = read_sdk("ports/posix/src/posix_storage.c")
+
+        reader_read = c_function_body(queue, "honch_posix_reader_read")
+        consume = c_function_body(queue, "honch_posix_queue_consume")
+        dead_letter = c_function_body(queue, "honch_posix_queue_dead_letter")
+        depth = c_function_body(queue, "honch_queue_count_pending")
+        clear_dir = c_function_body(queue, "honch_delete_queue_directory")
+
+        self.assertIn("honch_find_queue_entry_by_sequence_scan", queue)
+        self.assertIn("honch_count_queue_files_scan", queue)
+        self.assertIn("honch_delete_files_with_suffix_scan", queue)
+        self.assertNotIn("honch_list_queue_files", reader_read)
+        self.assertNotIn("honch_list_queue_files", consume)
+        self.assertNotIn("honch_list_queue_files", dead_letter)
+        self.assertNotIn("honch_list_queue_files", depth)
+        self.assertNotIn("honch_list_files_with_suffix", clear_dir)
+
     def test_posix_platform_enables_posix_declarations_before_headers(self) -> None:
         platform = read_sdk("ports/posix/src/posix_platform.c")
 

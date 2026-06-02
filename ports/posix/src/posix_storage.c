@@ -1,6 +1,7 @@
 #include "honch_internal.h"
 #include "honch/posix/honch.h"
 
+#include <dirent.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -98,7 +99,20 @@ static honch_status_t honch_queue_enqueue_with_sequence(
     size_t event_size,
     uint64_t sequence);
 static honch_status_t honch_list_queue_files(honch_client_t *client, honch_file_list_t *files);
+static honch_status_t honch_find_queue_entry_by_sequence_scan(
+    honch_client_t *client,
+    uint64_t sequence,
+    honch_file_entry_t *entry);
+static honch_status_t honch_count_queue_files_scan(const char *directory, size_t *count);
+static honch_status_t honch_delete_files_with_suffix_scan(const char *directory, const char *suffix);
 static honch_status_t honch_move_to_dead(honch_client_t *client, const honch_file_entry_t *entry);
+
+static bool honch_name_has_suffix(const char *name, const char *suffix)
+{
+    size_t name_length = strlen(name);
+    size_t suffix_length = strlen(suffix);
+    return name_length >= suffix_length && strcmp(name + name_length - suffix_length, suffix) == 0;
+}
 
 static bool honch_queue_sequence_from_name(const char *name, uint64_t *sequence)
 {
@@ -148,6 +162,17 @@ static honch_file_entry_t *honch_find_queue_entry_by_sequence(honch_file_list_t 
     return NULL;
 }
 
+static void honch_file_entry_free(honch_file_entry_t *entry)
+{
+    if (entry == NULL) {
+        return;
+    }
+    free(entry->name);
+    free(entry->path);
+    entry->name = NULL;
+    entry->path = NULL;
+}
+
 static honch_status_t honch_posix_reader_read(void *ctx, uint32_t offset, uint8_t *buffer, size_t buffer_size)
 {
     honch_client_t *client = (honch_client_t *)ctx;
@@ -155,17 +180,12 @@ static honch_status_t honch_posix_reader_read(void *ctx, uint32_t offset, uint8_
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    honch_file_list_t files = {0};
-    honch_status_t status = honch_list_queue_files(client, &files);
-    honch_file_entry_t *entry = status == HONCH_OK ?
-        honch_find_queue_entry_by_sequence(&files, client->active_storage_reader_sequence) :
-        NULL;
-    if (status == HONCH_OK && entry == NULL) {
-        status = HONCH_ERROR_NOT_INITIALIZED;
-    }
+    honch_file_entry_t entry = {0};
+    honch_status_t status =
+        honch_find_queue_entry_by_sequence_scan(client, client->active_storage_reader_sequence, &entry);
     if (status == HONCH_OK) {
         honch_payload_t payload = {0};
-        status = honch_read_file_limited_bytes(entry->path, client->max_event_bytes, &payload);
+        status = honch_read_file_limited_bytes(entry.path, client->max_event_bytes, &payload);
         if (status == HONCH_OK) {
             if (offset > payload.length || buffer_size > payload.length - offset) {
                 status = HONCH_ERROR_INVALID_ARGUMENT;
@@ -175,7 +195,7 @@ static honch_status_t honch_posix_reader_read(void *ctx, uint32_t offset, uint8_
         }
         free(payload.data);
     }
-    honch_file_list_free(&files);
+    honch_file_entry_free(&entry);
     return status;
 }
 
@@ -311,19 +331,15 @@ static honch_status_t honch_posix_queue_consume(void *ctx, uint64_t sequence)
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    honch_file_list_t files = {0};
-    honch_status_t status = honch_list_queue_files(client, &files);
-    honch_file_entry_t *entry = status == HONCH_OK ? honch_find_queue_entry_by_sequence(&files, sequence) : NULL;
-    if (status == HONCH_OK && entry == NULL) {
-        status = HONCH_ERROR_NOT_INITIALIZED;
-    }
+    honch_file_entry_t entry = {0};
+    honch_status_t status = honch_find_queue_entry_by_sequence_scan(client, sequence, &entry);
     if (status == HONCH_OK) {
-        status = honch_unlink_if_exists(entry->path);
+        status = honch_unlink_if_exists(entry.path);
     }
     if (status == HONCH_OK && client->queued_event_count > 0u) {
         client->queued_event_count--;
     }
-    honch_file_list_free(&files);
+    honch_file_entry_free(&entry);
     return status;
 }
 
@@ -364,19 +380,15 @@ static honch_status_t honch_posix_queue_dead_letter(void *ctx, uint64_t sequence
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    honch_file_list_t files = {0};
-    honch_status_t status = honch_list_queue_files(client, &files);
-    honch_file_entry_t *entry = status == HONCH_OK ? honch_find_queue_entry_by_sequence(&files, sequence) : NULL;
-    if (status == HONCH_OK && entry == NULL) {
-        status = HONCH_ERROR_NOT_INITIALIZED;
-    }
+    honch_file_entry_t entry = {0};
+    honch_status_t status = honch_find_queue_entry_by_sequence_scan(client, sequence, &entry);
     if (status == HONCH_OK) {
-        status = honch_move_to_dead(client, entry);
+        status = honch_move_to_dead(client, &entry);
     }
     if (status == HONCH_OK && client->queued_event_count > 0u) {
         client->queued_event_count--;
     }
-    honch_file_list_free(&files);
+    honch_file_entry_free(&entry);
     return status;
 }
 
@@ -496,6 +508,52 @@ static honch_status_t honch_list_queue_files(honch_client_t *client, honch_file_
     return HONCH_OK;
 }
 
+static honch_status_t honch_find_queue_entry_by_sequence_scan(
+    honch_client_t *client,
+    uint64_t sequence,
+    honch_file_entry_t *entry)
+{
+    if (client == NULL || entry == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    *entry = (honch_file_entry_t){0};
+    DIR *dir = opendir(client->pending_directory);
+    if (dir == NULL) {
+        return errno == ENOENT ? HONCH_ERROR_NOT_INITIALIZED : HONCH_ERROR_IO;
+    }
+
+    honch_status_t status = HONCH_ERROR_NOT_INITIALIZED;
+    struct dirent *dir_entry;
+    while ((dir_entry = readdir(dir)) != NULL) {
+        if (dir_entry->d_name[0] == '.' || !honch_name_has_suffix(dir_entry->d_name, ".hqe")) {
+            continue;
+        }
+
+        uint64_t entry_sequence = 0u;
+        if (!honch_queue_sequence_from_name(dir_entry->d_name, &entry_sequence) ||
+            entry_sequence != sequence) {
+            continue;
+        }
+
+        entry->name = honch_strdup(dir_entry->d_name);
+        if (entry->name == NULL) {
+            status = HONCH_ERROR_OUT_OF_MEMORY;
+            break;
+        }
+        status = honch_join_path(&entry->path, client->pending_directory, dir_entry->d_name);
+        if (status != HONCH_OK) {
+            honch_file_entry_free(entry);
+        }
+        break;
+    }
+
+    if (closedir(dir) != 0 && status == HONCH_ERROR_NOT_INITIALIZED) {
+        status = HONCH_ERROR_IO;
+    }
+    return status;
+}
+
 static honch_status_t honch_move_to_dead(honch_client_t *client, const honch_file_entry_t *entry)
 {
     char *dead_path = NULL;
@@ -581,36 +639,82 @@ honch_status_t honch_queue_enqueue(honch_client_t *client, const unsigned char *
 
 honch_status_t honch_queue_count_pending(honch_client_t *client, size_t *count)
 {
-    honch_file_list_t files = {0};
-    honch_status_t status = honch_list_queue_files(client, &files);
-    if (status == HONCH_OK) {
-        *count = files.count;
+    if (client == NULL || count == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
     }
-    honch_file_list_free(&files);
+    return honch_count_queue_files_scan(client->pending_directory, count);
+}
+
+static honch_status_t honch_count_queue_files_scan(const char *directory, size_t *count)
+{
+    if (directory == NULL || count == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    *count = 0u;
+    DIR *dir = opendir(directory);
+    if (dir == NULL) {
+        return errno == ENOENT ? HONCH_OK : HONCH_ERROR_IO;
+    }
+
+    honch_status_t status = HONCH_OK;
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] == '.' || !honch_name_has_suffix(entry->d_name, ".hqe")) {
+            continue;
+        }
+
+        uint64_t sequence = 0u;
+        if (honch_queue_sequence_from_name(entry->d_name, &sequence)) {
+            (*count)++;
+        }
+    }
+
+    if (closedir(dir) != 0) {
+        status = HONCH_ERROR_IO;
+    }
     return status;
 }
 
-static honch_status_t honch_delete_files(const honch_file_list_t *files, size_t count)
+static honch_status_t honch_delete_files_with_suffix_scan(const char *directory, const char *suffix)
 {
+    if (directory == NULL || suffix == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    DIR *dir = opendir(directory);
+    if (dir == NULL) {
+        return errno == ENOENT ? HONCH_OK : HONCH_ERROR_IO;
+    }
+
     honch_status_t status = HONCH_OK;
-    for (size_t i = 0u; i < count; i++) {
-        status = honch_unlink_if_exists(files->items[i].path);
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] == '.' || !honch_name_has_suffix(entry->d_name, suffix)) {
+            continue;
+        }
+
+        char *path = NULL;
+        status = honch_join_path(&path, directory, entry->d_name);
         if (status != HONCH_OK) {
             break;
         }
+        status = honch_unlink_if_exists(path);
+        free(path);
+        if (status != HONCH_OK) {
+            break;
+        }
+    }
+
+    if (closedir(dir) != 0 && status == HONCH_OK) {
+        status = HONCH_ERROR_IO;
     }
     return status;
 }
 
 static honch_status_t honch_delete_queue_directory(const char *directory)
 {
-    honch_file_list_t files = {0};
-    honch_status_t status = honch_list_files_with_suffix(directory, ".hqe", &files);
-    if (status == HONCH_OK) {
-        status = honch_delete_files(&files, files.count);
-    }
-    honch_file_list_free(&files);
-    return status;
+    return honch_delete_files_with_suffix_scan(directory, ".hqe");
 }
 
 honch_status_t honch_queue_clear(honch_client_t *client)
