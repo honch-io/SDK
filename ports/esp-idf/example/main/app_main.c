@@ -22,12 +22,18 @@ static const char *TAG = "honch_example";
 #define WIFI_FAIL_BIT      BIT1
 #define WIFI_MAX_RETRY     5
 #define HEARTBEAT_INTERVAL_SECONDS 5
-#define HONCH_TELEMETRY_TASK_STACK_WORDS 4096
+#define HONCH_TELEMETRY_TASK_STACK_BYTES 8192
 #define HONCH_TELEMETRY_TASK_PRIORITY 2
 #define HONCH_TICK_INTERVAL_MS 1000
 
 static EventGroupHandle_t s_wifi_event_group;
 static int s_retry_num = 0;
+
+static void init_network_stack(void)
+{
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+}
 
 static void init_wifi_nvs(void)
 {
@@ -68,8 +74,7 @@ static void wifi_init_sta(void)
 
     s_wifi_event_group = xEventGroupCreate();
 
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    init_network_stack();
     esp_netif_create_default_wifi_sta();
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -152,6 +157,7 @@ void app_main(void)
         wifi_init_sta();
         sync_time();
     } else {
+        init_network_stack();
         ESP_LOGW(TAG, "No Wi-Fi SSID configured; running offline tick smoke test");
     }
 
@@ -176,7 +182,7 @@ void app_main(void)
 
     BaseType_t task_created = xTaskCreate(honch_telemetry_task,
         "honch_telemetry",
-        HONCH_TELEMETRY_TASK_STACK_WORDS,
+        HONCH_TELEMETRY_TASK_STACK_BYTES,
         NULL,
         HONCH_TELEMETRY_TASK_PRIORITY,
         NULL);

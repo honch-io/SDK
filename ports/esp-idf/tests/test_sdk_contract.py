@@ -231,6 +231,9 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("core_config.flush_interval_seconds = config->flush_interval_seconds", compat)
         self.assertIn("core_config.flush_event_threshold = config->flush_event_threshold", compat)
         self.assertIn("xTaskCreate(honch_telemetry_task", example)
+        self.assertIn("#define HONCH_TELEMETRY_TASK_STACK_BYTES 8192", example)
+        self.assertIn("HONCH_TELEMETRY_TASK_STACK_BYTES", app_main)
+        self.assertNotIn("HONCH_TELEMETRY_TASK_STACK_WORDS", example)
         self.assertIn("honch_tick();", honch_task)
         self.assertNotIn("honch_tick();", app_main)
         self.assertIn("low-priority telemetry task", readme)
@@ -240,6 +243,18 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("transport_timeout_ms", readme)
         self.assertIn("3000", readme)
         self.assertNotIn("disable_background_flush", compat + public_header + readme)
+
+    def test_example_initializes_network_stack_for_offline_tick_smoke(self) -> None:
+        example = read("ports/esp-idf/example/main/app_main.c")
+        network_stack = c_function_body(example, "init_network_stack")
+        wifi_init = c_function_body(example, "wifi_init_sta")
+        app_main = c_function_body(example, "app_main")
+
+        self.assertIn("ESP_ERROR_CHECK(esp_netif_init());", network_stack)
+        self.assertIn("ESP_ERROR_CHECK(esp_event_loop_create_default());", network_stack)
+        self.assertIn("init_network_stack();", wifi_init)
+        self.assertIn("init_network_stack();", app_main)
+        self.assertLess(app_main.find("init_network_stack();"), app_main.find("honch_init(&config);"))
 
     def test_esp_idf_flush_spacing_is_configurable(self) -> None:
         compat = read("ports/esp-idf/honch/src/esp_compat.c")
