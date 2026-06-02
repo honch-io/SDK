@@ -54,6 +54,7 @@ class ArduinoCIWorkflowTests(unittest.TestCase):
         manifest = read("ports/arduino/library.json")
 
         self.assertIn('"name": "Honch"', manifest)
+        self.assertIn('"license": "Apache-2.0"', manifest)
         self.assertIn('"frameworks": "arduino"', manifest)
         self.assertIn('"platforms": "espressif32"', manifest)
         self.assertIn('"srcDir": "src"', manifest)
