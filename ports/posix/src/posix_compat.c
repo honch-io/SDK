@@ -1,5 +1,8 @@
 #include "honch/honch.h"
 #include "honch/posix/honch.h"
+#include "honch_internal.h"
+
+#include <stdlib.h>
 
 static void honch_posix_config_to_core(const honch_config_t *config, honch_core_config_t *core_config)
 {
@@ -49,16 +52,26 @@ honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
     honch_transport_ops_t transport_ops;
     honch_posix_platform_t platform_ctx;
     honch_posix_storage_t storage_ctx;
-    honch_posix_transport_t transport_ctx;
+    honch_posix_transport_t *transport_ctx = NULL;
 
     honch_status_t status = honch_posix_platform_ops_init(&platform_ops, &platform_ctx);
     if (status == HONCH_OK) {
         status = honch_posix_storage_ops_init(&state_ops, &queue_ops, &storage_ctx, config->queue_directory);
     }
     if (status == HONCH_OK) {
-        status = honch_posix_transport_ops_init(&transport_ops, &transport_ctx);
+        transport_ctx = (honch_posix_transport_t *)calloc(1u, sizeof(*transport_ctx));
+        if (transport_ctx == NULL) {
+            status = HONCH_ERROR_OUT_OF_MEMORY;
+        }
+    }
+    if (status == HONCH_OK) {
+        status = honch_posix_transport_ops_init(&transport_ops, transport_ctx);
     }
     if (status != HONCH_OK) {
+        if (transport_ctx != NULL) {
+            honch_posix_transport_ops_deinit(transport_ctx);
+            free(transport_ctx);
+        }
         return status;
     }
 
@@ -68,7 +81,14 @@ honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
     core_config.state_storage = &state_ops;
     core_config.event_queue = &queue_ops;
     core_config.transport = &transport_ops;
-    return honch_core_init(client, &core_config);
+    status = honch_core_init(client, &core_config);
+    if (status == HONCH_OK) {
+        transport_ctx->client = *client;
+    } else {
+        honch_posix_transport_ops_deinit(transport_ctx);
+        free(transport_ctx);
+    }
+    return status;
 }
 
 honch_status_t honch_track(
@@ -121,7 +141,17 @@ honch_status_t honch_reset(honch_client_t *client)
 
 honch_status_t honch_shutdown(honch_client_t *client)
 {
-    return honch_core_shutdown(client);
+    honch_posix_transport_t *transport_ctx = NULL;
+    if (client != NULL && client->transport != NULL) {
+        transport_ctx = (honch_posix_transport_t *)client->transport->ctx;
+    }
+
+    honch_status_t status = honch_core_shutdown(client);
+    if (status != HONCH_ERROR_BUSY && status != HONCH_ERROR_NOT_INITIALIZED && transport_ctx != NULL) {
+        honch_posix_transport_ops_deinit(transport_ctx);
+        free(transport_ctx);
+    }
+    return status;
 }
 
 const char *honch_get_device_id(honch_client_t *client)

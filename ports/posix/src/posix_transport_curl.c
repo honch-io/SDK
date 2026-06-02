@@ -72,8 +72,13 @@ static honch_status_t honch_posix_transport_post_chunk_ops(
 {
     (void)endpoint_url;
     (void)api_key;
-    honch_client_t *client = (honch_client_t *)ctx;
-    return honch_posix_transport_post_chunk(client, stream_id, body, body_size, result);
+    honch_posix_transport_t *transport = (honch_posix_transport_t *)ctx;
+    return honch_posix_transport_post_chunk(
+        transport == NULL ? NULL : transport->client,
+        stream_id,
+        body,
+        body_size,
+        result);
 }
 
 honch_status_t honch_posix_transport_ops_init(honch_transport_ops_t *ops, honch_posix_transport_t *ctx)
@@ -82,14 +87,30 @@ honch_status_t honch_posix_transport_ops_init(honch_transport_ops_t *ops, honch_
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    *ctx = (honch_posix_transport_t) {
-        .client = NULL
-    };
+    pthread_once(&honch_curl_once, honch_curl_global_init_once);
+
+    *ctx = (honch_posix_transport_t){0};
+    ctx->curl = curl_easy_init();
+    if (ctx->curl == NULL) {
+        return HONCH_ERROR_TRANSPORT;
+    }
     *ops = (honch_transport_ops_t) {
         .post_chunk = honch_posix_transport_post_chunk_ops,
-        .ctx = NULL
+        .ctx = ctx
     };
     return HONCH_OK;
+}
+
+void honch_posix_transport_ops_deinit(honch_posix_transport_t *ctx)
+{
+    if (ctx == NULL) {
+        return;
+    }
+    if (ctx->curl != NULL) {
+        curl_easy_cleanup(ctx->curl);
+        ctx->curl = NULL;
+    }
+    ctx->client = NULL;
 }
 
 static honch_status_t honch_transport_result_from_chunk_response(long response_code, honch_transport_result_t *result)
@@ -168,19 +189,19 @@ honch_status_t honch_posix_transport_post_chunk(
     }
 #endif
 
-    pthread_once(&honch_curl_once, honch_curl_global_init_once);
-
-    CURL *curl = curl_easy_init();
+    honch_posix_transport_t *transport =
+        client->transport == NULL ? NULL : (honch_posix_transport_t *)client->transport->ctx;
+    CURL *curl = transport == NULL ? NULL : (CURL *)transport->curl;
     if (curl == NULL) {
         free(url);
         return HONCH_ERROR_TRANSPORT;
     }
+    curl_easy_reset(curl);
 
     struct curl_slist *headers = NULL;
     struct curl_slist *next_header = curl_slist_append(headers, "Content-Type: application/vnd.honch.chunk");
     if (next_header == NULL) {
         free(url);
-        curl_easy_cleanup(curl);
         return HONCH_ERROR_OUT_OF_MEMORY;
     }
     headers = next_header;
@@ -190,14 +211,12 @@ honch_status_t honch_posix_transport_post_chunk(
     if (status != HONCH_OK) {
         curl_slist_free_all(headers);
         free(url);
-        curl_easy_cleanup(curl);
         return status;
     }
     char *key_header = (char *)malloc(key_header_size);
     if (key_header == NULL) {
         curl_slist_free_all(headers);
         free(url);
-        curl_easy_cleanup(curl);
         return HONCH_ERROR_OUT_OF_MEMORY;
     }
     snprintf(key_header, key_header_size, "X-Honch-Project-Key: %s", client->api_key);
@@ -206,7 +225,6 @@ honch_status_t honch_posix_transport_post_chunk(
     if (next_header == NULL) {
         curl_slist_free_all(headers);
         free(url);
-        curl_easy_cleanup(curl);
         return HONCH_ERROR_OUT_OF_MEMORY;
     }
     headers = next_header;
@@ -217,14 +235,12 @@ honch_status_t honch_posix_transport_post_chunk(
         if (status != HONCH_OK) {
             curl_slist_free_all(headers);
             free(url);
-            curl_easy_cleanup(curl);
             return status;
         }
         char *stream_header = (char *)malloc(stream_header_size);
         if (stream_header == NULL) {
             curl_slist_free_all(headers);
             free(url);
-            curl_easy_cleanup(curl);
             return HONCH_ERROR_OUT_OF_MEMORY;
         }
         snprintf(stream_header, stream_header_size, "X-Honch-Stream-Id: %s", stream_id);
@@ -233,7 +249,6 @@ honch_status_t honch_posix_transport_post_chunk(
         if (next_header == NULL) {
             curl_slist_free_all(headers);
             free(url);
-            curl_easy_cleanup(curl);
             return HONCH_ERROR_OUT_OF_MEMORY;
         }
         headers = next_header;
@@ -242,7 +257,6 @@ honch_status_t honch_posix_transport_post_chunk(
     if (payload_size > (size_t)LONG_MAX) {
         curl_slist_free_all(headers);
         free(url);
-        curl_easy_cleanup(curl);
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
@@ -263,7 +277,6 @@ honch_status_t honch_posix_transport_post_chunk(
 
     curl_slist_free_all(headers);
     free(url);
-    curl_easy_cleanup(curl);
 
     if (code != CURLE_OK) {
         *result = HONCH_TRANSPORT_RETRY;

@@ -39,6 +39,14 @@ def c_function_body(source: str, name: str) -> str:
     raise AssertionError(f"function {name} body is not closed")
 
 
+def c_global_function_body(source: str, return_type: str, name: str) -> str:
+    marker = f"\n{return_type} {name}("
+    start = source.find(marker)
+    if start < 0:
+        raise AssertionError(f"function {name} not found")
+    return c_function_body(source[start + 1:], name)
+
+
 class PosixChunkWireTest(unittest.TestCase):
     def test_core_status_header_exposes_guarded_short_aliases(self) -> None:
         status = read_sdk("core/include/honch/core/status.h")
@@ -83,6 +91,22 @@ class PosixChunkWireTest(unittest.TestCase):
         self.assertNotIn("Content-Type: application/cbor", transport)
         self.assertNotIn("Content-Encoding: gzip", transport)
         self.assertNotIn("find_package(ZLIB", cmake)
+
+    def test_transport_reuses_curl_easy_handle_across_chunks(self) -> None:
+        transport = read_sdk("ports/posix/src/posix_transport_curl.c")
+        header = read_sdk("ports/posix/include/honch/posix/honch.h")
+        init = c_function_body(transport, "honch_posix_transport_ops_init")
+        post = c_global_function_body(transport, "honch_status_t", "honch_posix_transport_post_chunk")
+        deinit = c_function_body(transport, "honch_posix_transport_ops_deinit")
+
+        self.assertIn("void *curl", header)
+        self.assertIn("pthread_once(&honch_curl_once, honch_curl_global_init_once);", init)
+        self.assertIn("ctx->curl = curl_easy_init();", init)
+        self.assertIn("CURL *curl = transport == NULL ? NULL : (CURL *)transport->curl;", post)
+        self.assertNotIn("curl_easy_init()", post)
+        self.assertNotIn("curl_easy_cleanup(curl)", post)
+        self.assertIn("curl_easy_reset(curl);", post)
+        self.assertIn("curl_easy_cleanup(ctx->curl);", deinit)
 
     def test_transport_guards_curl_post_field_size_cast(self) -> None:
         transport = read_sdk("ports/posix/src/posix_transport_curl.c")
