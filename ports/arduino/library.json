@@ -19,7 +19,7 @@
       "maintainer": true
     }
   ],
-  "license": "Proprietary",
+  "license": "Apache-2.0",
   "frameworks": "arduino",
   "platforms": "espressif32",
   "build": {
