@@ -95,8 +95,15 @@ def wait_for_clickhouse_event(clickhouse_url, database, project_id, event_name):
     raise AssertionError("E2E event did not appear in ClickHouse: %s" % event_name)
 
 
-@unittest.skipUnless(E2E_ENABLED and HAS_C_CORE, "set HONCH_E2E=1 and run with _honch_core to run real capture E2E tests")
+@unittest.skipUnless(E2E_ENABLED, "set HONCH_E2E=1 to run real capture E2E tests")
 class HonchCaptureE2ETests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if not HAS_C_CORE:
+            raise RuntimeError(
+                "_honch_core unavailable; run this E2E with a MicroPython runtime or firmware containing the Honch C module"
+            )
+
     def setUp(self):
         self.endpoint = env_or_default("HONCH_E2E_ENDPOINT", DEFAULT_CAPTURE_URL)
         self.token = env_or_default("HONCH_E2E_TOKEN", DEFAULT_TOKEN)
