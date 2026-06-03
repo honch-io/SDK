@@ -143,7 +143,7 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
                 .setServiceUuid(new ParcelUuid(RELAY_SERVICE_UUID))
                 .build();
             ScanSettings settings = new ScanSettings.Builder()
-                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER)
                 .build();
             scanner.startScan(Arrays.asList(filter), settings, scanCallback);
             Log.d(TAG, "BLE scan started");
@@ -172,20 +172,27 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
         try {
             if (scanner != null) {
                 scanner.stopScan(scanCallback);
+                scanner = null;
             }
             promise.resolve(null);
         } catch (SecurityException error) {
             promise.reject("missing_bluetooth_permission", error);
+        } catch (RuntimeException error) {
+            promise.reject("stop_scan_failed", error);
         }
     }
 
     @ReactMethod
     public void discoveredDevices(Promise promise) {
-        WritableArray devices = Arguments.createArray();
-        for (RelayDeviceInfo device : discoveredDevicesById.values()) {
-            devices.pushMap(device.toMap());
+        try {
+            WritableArray devices = Arguments.createArray();
+            for (RelayDeviceInfo device : discoveredDevicesById.values()) {
+                devices.pushMap(device.toMap());
+            }
+            promise.resolve(devices);
+        } catch (RuntimeException error) {
+            promise.reject("discovered_devices_failed", error);
         }
-        promise.resolve(devices);
     }
 
     @ReactMethod
@@ -210,6 +217,8 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
             promise.reject("invalid_device_id", error);
         } catch (SecurityException error) {
             promise.reject("missing_bluetooth_permission", error);
+        } catch (RuntimeException error) {
+            promise.reject("connect_failed", error);
         }
     }
 
@@ -225,6 +234,8 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
             promise.resolve(deviceId);
         } catch (SecurityException error) {
             promise.reject("missing_bluetooth_permission", error);
+        } catch (RuntimeException error) {
+            promise.reject("disconnect_failed", error);
         }
     }
 
@@ -241,6 +252,8 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
             promise.resolve(deviceId);
         } catch (SecurityException error) {
             promise.reject("missing_bluetooth_permission", error);
+        } catch (RuntimeException error) {
+            promise.reject("subscribe_frames_failed", error);
         }
     }
 
@@ -264,26 +277,42 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
             promise.reject("invalid_sequence", error);
         } catch (SecurityException error) {
             promise.reject("missing_bluetooth_permission", error);
+        } catch (RuntimeException error) {
+            promise.reject("acknowledge_failed", error);
         }
     }
 
     @ReactMethod
     public void scheduleUpload(double delayMs, Promise promise) {
-        OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(HonchRelayUploadWorker.class)
-            .setInitialDelay((long)delayMs, TimeUnit.MILLISECONDS)
-            .setInputData(new androidx.work.Data.Builder().putLong("delayMs", (long)delayMs).build())
-            .addTag(HonchRelayUploadWorker.WORK_TAG)
-            .build();
-        WorkManager
-            .getInstance(reactContext)
-            .enqueueUniqueWork(HonchRelayUploadWorker.WORK_TAG, ExistingWorkPolicy.REPLACE, request);
-        promise.resolve(null);
+        try {
+            OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(HonchRelayUploadWorker.class)
+                .setInitialDelay((long)delayMs, TimeUnit.MILLISECONDS)
+                .setInputData(new androidx.work.Data.Builder().putLong("delayMs", (long)delayMs).build())
+                .addTag(HonchRelayUploadWorker.WORK_TAG)
+                .build();
+            WorkManager
+                .getInstance(reactContext)
+                .enqueueUniqueWork(HonchRelayUploadWorker.WORK_TAG, ExistingWorkPolicy.REPLACE, request);
+            promise.resolve(null);
+        } catch (RuntimeException error) {
+            promise.reject("schedule_upload_failed", error);
+        }
     }
 
     @ReactMethod
     public void cancelUpload(Promise promise) {
-        WorkManager.getInstance(reactContext).cancelAllWorkByTag(HonchRelayUploadWorker.WORK_TAG);
-        promise.resolve(null);
+        try {
+            cancelScheduledUploads();
+            promise.resolve(null);
+        } catch (RuntimeException error) {
+            promise.reject("cancel_upload_failed", error);
+        }
+    }
+
+    @Override
+    public void invalidate() {
+        teardown();
+        super.invalidate();
     }
 
     private BluetoothAdapter bluetoothAdapter() {
@@ -291,6 +320,35 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
             Context.BLUETOOTH_SERVICE
         );
         return manager == null ? null : manager.getAdapter();
+    }
+
+    private void teardown() {
+        try {
+            if (scanner != null) {
+                scanner.stopScan(scanCallback);
+                scanner = null;
+            }
+        } catch (RuntimeException error) {
+            Log.w(TAG, "Failed to stop BLE scan during teardown", error);
+        }
+
+        for (BluetoothGatt gatt : gattsById.values()) {
+            try {
+                gatt.disconnect();
+                gatt.close();
+            } catch (RuntimeException error) {
+                Log.w(TAG, "Failed to close BLE GATT during teardown", error);
+            }
+        }
+        gattsById.clear();
+        ackCharacteristicsById.clear();
+        devicesById.clear();
+        discoveredDevicesById.clear();
+        cancelScheduledUploads();
+    }
+
+    private void cancelScheduledUploads() {
+        WorkManager.getInstance(reactContext).cancelAllWorkByTag(HonchRelayUploadWorker.WORK_TAG);
     }
 
     private static final class RelayDeviceInfo {

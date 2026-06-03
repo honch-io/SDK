@@ -77,7 +77,8 @@ iOS:
 Android:
 
 - Request `BLUETOOTH_SCAN` and `BLUETOOTH_CONNECT` at runtime on Android 12+.
-- Request `ACCESS_FINE_LOCATION` where required by BLE scan behavior.
+- The package marks `BLUETOOTH_SCAN` with `neverForLocation` and does not merge
+  `ACCESS_FINE_LOCATION` or notification permissions into the host manifest.
 - Keep `androidx.work:work-runtime` available for scheduled upload drains.
 - Register the package through the consuming React Native Android host.
 - Register a headless JS task named `HonchRelayUpload` that calls the same durable queue drain path used by foreground upload drains.

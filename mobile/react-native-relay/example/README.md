@@ -26,9 +26,8 @@ Required app configuration:
 - iOS `bluetooth-central` background mode for background receipt.
 - Android `BLUETOOTH_SCAN`.
 - Android `BLUETOOTH_CONNECT`.
-- Android `ACCESS_FINE_LOCATION` when required by target SDK/device behavior.
-- Android notification permission if upload status notifications are added by
-  the host app.
+- The relay package does not merge Android location or notification permissions;
+  add host-app permissions only for separate host features.
 
 The package directory is not a complete React Native host app. To run this
 example, copy the app into a generated React Native project or add platform
