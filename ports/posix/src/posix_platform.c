@@ -131,6 +131,7 @@ honch_status_t honch_posix_platform_ops_init(honch_platform_ops_t *ops, honch_po
         .mutex_destroy = honch_posix_mutex_destroy,
         .mutex_lock = honch_posix_mutex_lock,
         .mutex_unlock = honch_posix_mutex_unlock,
+        .requires_mutex = 1u,
         .ctx = NULL
     };
     return HONCH_OK;
