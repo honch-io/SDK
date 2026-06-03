@@ -191,6 +191,27 @@ class ClientWrapperTests(unittest.TestCase):
                 event_buffer=bytearray(8192),
             )
 
+    def test_rejects_explicit_zero_or_negative_transport_timeout(self):
+        honch = importlib.import_module("honch")
+
+        base_config = {
+            "api_key": "key",
+            "endpoint_url": "http://collector.local",
+            "device_id": "device-1",
+            "device_model": "model",
+            "firmware_version": "1.0",
+            "event_buffer": bytearray(8192),
+        }
+
+        client = honch.Honch(**base_config)
+        self.assertGreater(client.config.transport_timeout_ms, 0)
+
+        for timeout_ms in (0, -1):
+            config = dict(base_config)
+            config["transport_timeout_ms"] = timeout_ms
+            with self.assertRaises(honch.InvalidArgumentError):
+                honch.Honch(**config)
+
     def test_connectivity_callback_allows_tick_and_flush_when_online(self):
         honch = importlib.import_module("honch")
         state = {"connected": False}
@@ -220,6 +241,7 @@ class ClientWrapperTests(unittest.TestCase):
         self.assertIn("Do not call tick() or flush() from ISR-adjacent callbacks", normalized)
         self.assertIn("high-priority tasks", normalized)
         self.assertIn("maximum of 10000 ms", normalized)
+        self.assertIn("transport_timeout_ms` (finite positive milliseconds, clamped to 10000)", normalized)
 
 
 if __name__ == "__main__":
