@@ -19,7 +19,11 @@ bool honch_client_lock_ops_valid(const honch_platform_ops_t *platform)
         platform->mutex_destroy != NULL ||
         platform->mutex_lock != NULL ||
         platform->mutex_unlock != NULL;
-    return !any || honch_platform_has_lock_ops(platform);
+    bool all = honch_platform_has_lock_ops(platform);
+    if (platform->requires_mutex && !all) {
+        return false;
+    }
+    return !any || all;
 }
 
 honch_status_t honch_client_lock_create(honch_client_t *client, void **mutex)

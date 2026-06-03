@@ -180,6 +180,7 @@ honch_status_t honch_arduino_platform_ops_init(
       honch_arduino_mutex_destroy,
       honch_arduino_mutex_lock,
       honch_arduino_mutex_unlock,
+      1u,
       ctx,
   };
   return HONCH_OK;

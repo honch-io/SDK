@@ -538,6 +538,21 @@ static void test_core_state_lock_works_without_platform_lock_callbacks(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
+static void test_init_rejects_mutex_required_platform_without_lock_callbacks(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    platform.requires_mutex = true;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_ERROR_INVALID_ARGUMENT);
+    assert(client == NULL);
+}
+
 static void test_failed_firmware_update_queue_does_not_advance_persisted_version(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_ERROR_IO};
@@ -1302,6 +1317,7 @@ int main(void)
     test_queue_push_uses_honch_event_record_format();
     test_zero_platform_time_queues_parseable_event_record();
     test_core_state_lock_works_without_platform_lock_callbacks();
+    test_init_rejects_mutex_required_platform_without_lock_callbacks();
     test_failed_firmware_update_queue_does_not_advance_persisted_version();
     test_failed_init_rolls_back_queued_lifecycle_events();
     test_failed_reset_second_identity_write_preserves_persisted_identity();

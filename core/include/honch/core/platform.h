@@ -26,6 +26,7 @@ typedef struct honch_platform_ops {
     void (*mutex_destroy)(void *ctx, void *mutex);
     honch_status_t (*mutex_lock)(void *ctx, void *mutex);
     void (*mutex_unlock)(void *ctx, void *mutex);
+    uint8_t requires_mutex;
     void *ctx;
 } honch_platform_ops_t;
 
