@@ -26,4 +26,52 @@ describe("native frame events", () => {
 
     expect(received).toEqual([{ deviceId: "device-a", bytes: [9, 8, 7] }]);
   });
+
+  it("drops malformed native frame payloads without calling the frame handler", () => {
+    const received: string[] = [];
+    subscribeRelayNativeFrames(
+      {
+        addListener(_eventName, listener) {
+          listener({ deviceId: "device-a", frameBase64: "!!!!" });
+          return { remove() {} };
+        }
+      },
+      (deviceId) => {
+        received.push(deviceId);
+      }
+    );
+
+    expect(received).toEqual([]);
+  });
+
+  it("catches async frame handler rejections from native event dispatch", async () => {
+    const unhandled: unknown[] = [];
+    const previousUnhandled = process.listeners("unhandledRejection");
+    process.removeAllListeners("unhandledRejection");
+    process.on("unhandledRejection", (error) => {
+      unhandled.push(error);
+    });
+
+    try {
+      subscribeRelayNativeFrames(
+        {
+          addListener(_eventName, listener) {
+            listener({ deviceId: "device-a", frameBase64: "AQID" });
+            return { remove() {} };
+          }
+        },
+        async () => {
+          throw new Error("durable receipt failed");
+        }
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.removeAllListeners("unhandledRejection");
+      for (const listener of previousUnhandled) {
+        process.on("unhandledRejection", listener);
+      }
+    }
+  });
 });

@@ -21,7 +21,14 @@ export function subscribeRelayNativeFrames(
   onFrame: (deviceId: string, frameBytes: Uint8Array) => Promise<void> | void
 ): RelayNativeEventSubscription {
   return source.addListener(RELAY_FRAME_EVENT_NAME, (event) => {
-    void onFrame(event.deviceId, decodeRelayFrameEventPayload(event.frameBase64));
+    let frameBytes: Uint8Array;
+    try {
+      frameBytes = decodeRelayFrameEventPayload(event.frameBase64);
+    } catch {
+      return;
+    }
+
+    Promise.resolve(onFrame(event.deviceId, frameBytes)).catch(() => {});
   });
 }
 

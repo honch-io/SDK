@@ -13,12 +13,18 @@
     "verify:android:native": "scripts/verify-android-native.sh",
     "verify:ios:native": "scripts/verify-ios-syntax.sh"
   },
-  "dependencies": {
+  "peerDependencies": {
+    "react-native": ">=0.72",
     "react-native-mmkv": "^4.3.1",
     "react-native-nitro-modules": "^0.35.7"
   },
-  "peerDependencies": {
-    "react-native": ">=0.72"
+  "peerDependenciesMeta": {
+    "react-native-mmkv": {
+      "optional": true
+    },
+    "react-native-nitro-modules": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/node": "^25.9.1",

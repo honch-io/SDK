@@ -9,6 +9,7 @@ export type MmkvRelayStoreOptions = {
   maxChunks?: number;
   maxCompleteMessages?: number;
   ttlMs?: number;
+  keyPrefix?: string;
   now?: () => number;
 };
 
@@ -36,12 +37,15 @@ type SerializedRelayMessageIndexEntry = {
 };
 
 type SerializedRelayChunkRecord = {
-  frameBytes: number[];
-  payload: number[];
+  frameBase64?: string;
+  payloadBase64?: string;
+  frameBytes?: number[];
+  payload?: number[];
 };
 
 type SerializedRelayMessageRecord = {
-  body: number[];
+  bodyBase64?: string;
+  body?: number[];
 };
 
 type LegacySerializedRelayStoreState = {
@@ -67,7 +71,7 @@ type LegacySerializedRelayMessage = {
 };
 
 const LEGACY_RELAY_STORE_KEY = "honch.relay.queue.v1";
-const RELAY_INDEX_KEY = "honch.relay.index.v2";
+const DEFAULT_KEY_PREFIX = "honch.relay";
 const DEFAULT_MAX_CHUNKS = 4096;
 const DEFAULT_MAX_COMPLETE_MESSAGES = 1024;
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -80,6 +84,7 @@ export function createMmkvRelayStore(
     maxChunks: options.maxChunks ?? DEFAULT_MAX_CHUNKS,
     maxCompleteMessages: options.maxCompleteMessages ?? DEFAULT_MAX_COMPLETE_MESSAGES,
     ttlMs: options.ttlMs ?? DEFAULT_TTL_MS,
+    keyPrefix: normalizeKeyPrefix(options.keyPrefix),
     now: options.now ?? Date.now
   });
 }
@@ -92,7 +97,7 @@ class MmkvRelayStore implements RelayDurableStore {
 
   async putChunk(chunk: DurableRelayChunk): Promise<void> {
     const index = this.prunedIndex();
-    const key = chunkKey(chunk.deviceId, chunk.sequence, chunk.offset);
+    const key = this.chunkKey(chunk.deviceId, chunk.sequence, chunk.offset);
     const storedAtMs = this.options.now();
     const entry: SerializedRelayChunkIndexEntry = {
       key,
@@ -107,8 +112,8 @@ class MmkvRelayStore implements RelayDurableStore {
     this.storage.set(
       key,
       JSON.stringify({
-        frameBytes: Array.from(chunk.frameBytes),
-        payload: Array.from(chunk.payload)
+        frameBase64: bytesToBase64(chunk.frameBytes),
+        payloadBase64: bytesToBase64(chunk.payload)
       } satisfies SerializedRelayChunkRecord)
     );
 
@@ -139,7 +144,7 @@ class MmkvRelayStore implements RelayDurableStore {
 
   async putCompleteMessage(message: StoredRelayMessage): Promise<void> {
     const index = this.prunedIndex();
-    const key = messageKey(message.deviceId, message.sequence);
+    const key = this.messageKey(message.deviceId, message.sequence);
     const storedAtMs = this.options.now();
     const entry: SerializedRelayMessageIndexEntry = {
       key,
@@ -152,7 +157,7 @@ class MmkvRelayStore implements RelayDurableStore {
     this.storage.set(
       key,
       JSON.stringify({
-        body: Array.from(message.body)
+        bodyBase64: bytesToBase64(message.body)
       } satisfies SerializedRelayMessageRecord)
     );
 
@@ -240,7 +245,7 @@ class MmkvRelayStore implements RelayDurableStore {
   }
 
   private readIndex(): SerializedRelayStoreIndex {
-    const raw = this.storage.getString(RELAY_INDEX_KEY);
+    const raw = this.storage.getString(this.indexKey());
     if (raw === undefined) {
       return this.migrateLegacyIndex();
     }
@@ -253,10 +258,10 @@ class MmkvRelayStore implements RelayDurableStore {
 
   private writeIndex(index: SerializedRelayStoreIndex): void {
     if (index.chunks.length === 0 && index.messages.length === 0) {
-      this.storage.remove(RELAY_INDEX_KEY);
+      this.storage.remove(this.indexKey());
       return;
     }
-    this.storage.set(RELAY_INDEX_KEY, JSON.stringify(index));
+    this.storage.set(this.indexKey(), JSON.stringify(index));
   }
 
   private migrateLegacyIndex(): SerializedRelayStoreIndex {
@@ -273,12 +278,12 @@ class MmkvRelayStore implements RelayDurableStore {
     };
 
     for (const chunk of legacy.chunks ?? []) {
-      const key = chunkKey(chunk.deviceId, chunk.sequence, chunk.offset);
+      const key = this.chunkKey(chunk.deviceId, chunk.sequence, chunk.offset);
       this.storage.set(
         key,
         JSON.stringify({
-          frameBytes: chunk.frameBytes,
-          payload: chunk.payload
+          frameBase64: bytesToBase64(Uint8Array.from(chunk.frameBytes)),
+          payloadBase64: bytesToBase64(Uint8Array.from(chunk.payload))
         } satisfies SerializedRelayChunkRecord)
       );
       index.chunks.push({
@@ -293,11 +298,11 @@ class MmkvRelayStore implements RelayDurableStore {
     }
 
     for (const message of legacy.messages ?? []) {
-      const key = messageKey(message.deviceId, message.sequence);
+      const key = this.messageKey(message.deviceId, message.sequence);
       this.storage.set(
         key,
         JSON.stringify({
-          body: message.body
+          bodyBase64: bytesToBase64(Uint8Array.from(message.body))
         } satisfies SerializedRelayMessageRecord)
       );
       index.messages.push({
@@ -319,13 +324,17 @@ class MmkvRelayStore implements RelayDurableStore {
       return undefined;
     }
     const record = JSON.parse(raw) as SerializedRelayChunkRecord;
+    const frameBytes =
+      record.frameBase64 !== undefined ? base64ToBytes(record.frameBase64) : Uint8Array.from(record.frameBytes ?? []);
+    const payload =
+      record.payloadBase64 !== undefined ? base64ToBytes(record.payloadBase64) : Uint8Array.from(record.payload ?? []);
     return {
       deviceId: entry.deviceId,
       sourceType: entry.sourceType,
       sequence: entry.sequence,
       offset: entry.offset,
-      frameBytes: new Uint8Array(record.frameBytes),
-      payload: new Uint8Array(record.payload),
+      frameBytes,
+      payload,
       finalEnd: entry.finalEnd
     };
   }
@@ -336,19 +345,81 @@ class MmkvRelayStore implements RelayDurableStore {
       return undefined;
     }
     const record = JSON.parse(raw) as SerializedRelayMessageRecord;
+    const body = record.bodyBase64 !== undefined ? base64ToBytes(record.bodyBase64) : Uint8Array.from(record.body ?? []);
     return {
       deviceId: entry.deviceId,
       sourceType: entry.sourceType,
       sequence: entry.sequence,
-      body: new Uint8Array(record.body)
+      body
     };
+  }
+
+  private indexKey(): string {
+    return `${this.options.keyPrefix}.index.v2`;
+  }
+
+  private chunkKey(deviceId: string, sequence: string, offset: number): string {
+    return `${this.options.keyPrefix}.chunk.${deviceId}.${sequence}.${offset}`;
+  }
+
+  private messageKey(deviceId: string, sequence: string): string {
+    return `${this.options.keyPrefix}.message.${deviceId}.${sequence}`;
   }
 }
 
-function chunkKey(deviceId: string, sequence: string, offset: number): string {
-  return `honch.relay.chunk.${deviceId}.${sequence}.${offset}`;
+function normalizeKeyPrefix(keyPrefix: string | undefined): string {
+  const trimmed = keyPrefix?.trim().replace(/\.+$/g, "");
+  return trimmed === undefined || trimmed.length === 0 ? DEFAULT_KEY_PREFIX : trimmed;
 }
 
-function messageKey(deviceId: string, sequence: string): string {
-  return `honch.relay.message.${deviceId}.${sequence}`;
+const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let output = "";
+  for (let offset = 0; offset < bytes.length; offset += 3) {
+    const first = bytes[offset] ?? 0;
+    const second = bytes[offset + 1] ?? 0;
+    const third = bytes[offset + 2] ?? 0;
+    const packed = (first << 16) | (second << 8) | third;
+    output += BASE64_ALPHABET[(packed >>> 18) & 0x3f];
+    output += BASE64_ALPHABET[(packed >>> 12) & 0x3f];
+    output += offset + 1 < bytes.length ? BASE64_ALPHABET[(packed >>> 6) & 0x3f] : "=";
+    output += offset + 2 < bytes.length ? BASE64_ALPHABET[packed & 0x3f] : "=";
+  }
+  return output;
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  const sanitized = base64.replace(/\s/g, "");
+  const bytes: number[] = [];
+  for (let offset = 0; offset < sanitized.length; offset += 4) {
+    const chunk = sanitized.slice(offset, offset + 4);
+    const first = decodeBase64Character(chunk[0]);
+    const second = decodeBase64Character(chunk[1]);
+    const third = decodeBase64Character(chunk[2]);
+    const fourth = decodeBase64Character(chunk[3]);
+    if (first === undefined || second === undefined) {
+      break;
+    }
+
+    bytes.push((first << 2) | (second >> 4));
+    if (chunk[2] !== "=" && third !== undefined) {
+      bytes.push(((second & 0x0f) << 4) | (third >> 2));
+    }
+    if (chunk[3] !== "=" && third !== undefined && fourth !== undefined) {
+      bytes.push(((third & 0x03) << 6) | fourth);
+    }
+  }
+  return Uint8Array.from(bytes);
+}
+
+function decodeBase64Character(character: string | undefined): number | undefined {
+  if (character === undefined) {
+    return undefined;
+  }
+  if (character === "=") {
+    return 0;
+  }
+  const value = BASE64_ALPHABET.indexOf(character);
+  return value >= 0 ? value : undefined;
 }
