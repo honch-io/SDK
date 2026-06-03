@@ -73,6 +73,10 @@ from a latency-sensitive control loop, motor-control path, sensor sampling
 deadline, UI refresh path, or watchdog-sensitive section. The SDK does not start
 a hidden background task. Use `Honch.loop()` as an alias only when the sketch's
 `loop()` can tolerate upload latency.
+HTTPS uploads allocate the TLS client lazily on the heap, but the ESP32 Arduino
+HTTP/TLS stack still needs a pump task with enough stack for the handshake and
+POST path. Use at least an 8192 byte stack for a dedicated HTTPS pump task unless
+your firmware has measured a smaller board-specific limit.
 Each scheduled tick posts at most one wire chunk, so large queued uploads may
 need several pump iterations to finish.
 
@@ -90,7 +94,7 @@ static void honchPumpTask(void *parameter) {
 
 void setup() {
   // Configure Wi-Fi and call Honch.begin(config) first.
-  xTaskCreatePinnedToCore(honchPumpTask, "honch-pump", 4096, nullptr, 1, nullptr, 1);
+  xTaskCreatePinnedToCore(honchPumpTask, "honch-pump", 8192, nullptr, 1, nullptr, 1);
 }
 ```
 
