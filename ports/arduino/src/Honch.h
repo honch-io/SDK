@@ -28,6 +28,9 @@ struct HonchConfig {
 class HonchClass {
 public:
   HonchClass();
+  ~HonchClass();
+  HonchClass(const HonchClass &) = delete;
+  HonchClass &operator=(const HonchClass &) = delete;
   bool begin(const HonchConfig &config);
   bool track(const char *eventName, const honch_property_t *properties = nullptr, size_t propertyCount = 0);
   bool identify(const char *distinctId, const honch_property_t *traits = nullptr, size_t traitCount = 0);
@@ -43,11 +46,18 @@ public:
   bool queueStats(honch_queue_stats_t *stats);
   const char *lastError();
 
+#ifndef ARDUINO
+  bool hostLockForTest();
+  void hostUnlockForTest();
+#endif
+
 private:
-  bool setLastStatus(honch_status_t status);
-  bool recordQueuedStatus(honch_status_t status);
+  honch_status_t lockInstance();
+  void unlockInstance();
+  bool setLastStatusLocked(honch_status_t status);
 
   honch_client_t *_client;
+  void *_instanceMutex;
   honch_status_t _lastStatus;
 };
 

@@ -71,20 +71,55 @@ void honch_arduino_release_core_config(honch_core_config_t *) {}
 
 HonchClass::HonchClass()
     : _client(nullptr),
-      _lastStatus(HONCH_ERROR_NOT_INITIALIZED) {}
+      _instanceMutex(nullptr),
+      _lastStatus(HONCH_ERROR_NOT_INITIALIZED) {
+  honch_status_t status = honch_arduino_mutex_create(nullptr, &_instanceMutex);
+  if (status != HONCH_OK) {
+    _lastStatus = status;
+  }
+}
 
-bool HonchClass::setLastStatus(honch_status_t status) {
+HonchClass::~HonchClass() {
+  if (_instanceMutex != nullptr) {
+    honch_arduino_mutex_destroy(nullptr, _instanceMutex);
+    _instanceMutex = nullptr;
+  }
+}
+
+honch_status_t HonchClass::lockInstance() {
+  if (_instanceMutex == nullptr) {
+    honch_status_t status = honch_arduino_mutex_create(nullptr, &_instanceMutex);
+    if (status != HONCH_OK) {
+      _lastStatus = status;
+      return status;
+    }
+  }
+  honch_status_t status = honch_arduino_mutex_lock(nullptr, _instanceMutex);
+  if (status != HONCH_OK) {
+    _lastStatus = status;
+  }
+  return status;
+}
+
+void HonchClass::unlockInstance() {
+  honch_arduino_mutex_unlock(nullptr, _instanceMutex);
+}
+
+bool HonchClass::setLastStatusLocked(honch_status_t status) {
   _lastStatus = status;
   return status == HONCH_OK;
 }
 
-bool HonchClass::recordQueuedStatus(honch_status_t status) {
-  return setLastStatus(status);
-}
-
 bool HonchClass::begin(const HonchConfig &config) {
+  honch_status_t lockStatus = lockInstance();
+  if (lockStatus != HONCH_OK) {
+    return false;
+  }
+
   if (_client != nullptr) {
-    return setLastStatus(HONCH_ERROR_ALREADY_INITIALIZED);
+    bool ok = setLastStatusLocked(HONCH_ERROR_ALREADY_INITIALIZED);
+    unlockInstance();
+    return ok;
   }
 
   honch_core_config_t coreConfig = honch_arduino_make_core_config(config);
@@ -97,41 +132,87 @@ bool HonchClass::begin(const HonchConfig &config) {
     _client = nullptr;
     honch_arduino_storage_ops_deinit(&g_storage);
   }
-  return setLastStatus(status);
+  bool ok = setLastStatusLocked(status);
+  unlockInstance();
+  return ok;
 }
 
 bool HonchClass::track(const char *eventName, const honch_property_t *properties, size_t propertyCount) {
-  return recordQueuedStatus(honch_core_track(_client, eventName, properties, propertyCount));
+  honch_status_t lockStatus = lockInstance();
+  if (lockStatus != HONCH_OK) {
+    return false;
+  }
+  bool ok = setLastStatusLocked(honch_core_track(_client, eventName, properties, propertyCount));
+  unlockInstance();
+  return ok;
 }
 
 bool HonchClass::identify(const char *distinctId, const honch_property_t *traits, size_t traitCount) {
-  return recordQueuedStatus(honch_core_identify(_client, distinctId, traits, traitCount));
+  honch_status_t lockStatus = lockInstance();
+  if (lockStatus != HONCH_OK) {
+    return false;
+  }
+  bool ok = setLastStatusLocked(honch_core_identify(_client, distinctId, traits, traitCount));
+  unlockInstance();
+  return ok;
 }
 
 bool HonchClass::setProperty(const char *key, honch_value_t value) {
-  return recordQueuedStatus(honch_core_set_property(_client, key, value));
+  honch_status_t lockStatus = lockInstance();
+  if (lockStatus != HONCH_OK) {
+    return false;
+  }
+  bool ok = setLastStatusLocked(honch_core_set_property(_client, key, value));
+  unlockInstance();
+  return ok;
 }
 
 bool HonchClass::sessionStart(const char *sessionName) {
-  return recordQueuedStatus(honch_core_session_start(_client, sessionName));
+  honch_status_t lockStatus = lockInstance();
+  if (lockStatus != HONCH_OK) {
+    return false;
+  }
+  bool ok = setLastStatusLocked(honch_core_session_start(_client, sessionName));
+  unlockInstance();
+  return ok;
 }
 
 bool HonchClass::sessionEnd() {
-  return recordQueuedStatus(honch_core_session_end(_client));
+  honch_status_t lockStatus = lockInstance();
+  if (lockStatus != HONCH_OK) {
+    return false;
+  }
+  bool ok = setLastStatusLocked(honch_core_session_end(_client));
+  unlockInstance();
+  return ok;
 }
 
 bool HonchClass::flush() {
+  honch_status_t lockStatus = lockInstance();
+  if (lockStatus != HONCH_OK) {
+    return false;
+  }
   honch_status_t status = honch_core_flush(_client);
-  return setLastStatus(status);
+  bool ok = setLastStatusLocked(status);
+  unlockInstance();
+  return ok;
 }
 
 bool HonchClass::tick() {
+  honch_status_t lockStatus = lockInstance();
+  if (lockStatus != HONCH_OK) {
+    return false;
+  }
   if (_client == nullptr) {
-    return setLastStatus(HONCH_ERROR_NOT_INITIALIZED);
+    bool ok = setLastStatusLocked(HONCH_ERROR_NOT_INITIALIZED);
+    unlockInstance();
+    return ok;
   }
 
   honch_status_t status = honch_core_tick(_client);
-  return setLastStatus(status);
+  bool ok = setLastStatusLocked(status);
+  unlockInstance();
+  return ok;
 }
 
 bool HonchClass::loop() {
@@ -139,8 +220,14 @@ bool HonchClass::loop() {
 }
 
 bool HonchClass::shutdown() {
+  honch_status_t lockStatus = lockInstance();
+  if (lockStatus != HONCH_OK) {
+    return false;
+  }
   if (_client == nullptr) {
-    return setLastStatus(HONCH_ERROR_NOT_INITIALIZED);
+    bool ok = setLastStatusLocked(HONCH_ERROR_NOT_INITIALIZED);
+    unlockInstance();
+    return ok;
   }
 
   honch_client_t *client = _client;
@@ -149,22 +236,60 @@ bool HonchClass::shutdown() {
     _client = nullptr;
     honch_arduino_storage_ops_deinit(&g_storage);
   }
-  return setLastStatus(status);
+  bool ok = setLastStatusLocked(status);
+  unlockInstance();
+  return ok;
 }
 
 bool HonchClass::reset() {
-  return setLastStatus(honch_core_reset(_client));
+  honch_status_t lockStatus = lockInstance();
+  if (lockStatus != HONCH_OK) {
+    return false;
+  }
+  bool ok = setLastStatusLocked(honch_core_reset(_client));
+  unlockInstance();
+  return ok;
 }
 
 const char *HonchClass::deviceId() {
+  honch_status_t lockStatus = lockInstance();
+  if (lockStatus != HONCH_OK) {
+    return "";
+  }
   const char *id = honch_core_get_device_id(_client);
-  return id == nullptr ? "" : id;
+  const char *result = id == nullptr ? "" : id;
+  unlockInstance();
+  return result;
 }
 
 bool HonchClass::queueStats(honch_queue_stats_t *stats) {
-  return setLastStatus(honch_core_get_queue_stats(_client, stats));
+  honch_status_t lockStatus = lockInstance();
+  if (lockStatus != HONCH_OK) {
+    return false;
+  }
+  bool ok = setLastStatusLocked(honch_core_get_queue_stats(_client, stats));
+  unlockInstance();
+  return ok;
 }
 
 const char *HonchClass::lastError() {
-  return honch_status_string(_lastStatus);
+  honch_status_t status = _lastStatus;
+  honch_status_t lockStatus = lockInstance();
+  if (lockStatus == HONCH_OK) {
+    status = _lastStatus;
+    unlockInstance();
+  } else {
+    status = lockStatus;
+  }
+  return honch_status_string(status);
 }
+
+#ifndef ARDUINO
+bool HonchClass::hostLockForTest() {
+  return lockInstance() == HONCH_OK;
+}
+
+void HonchClass::hostUnlockForTest() {
+  unlockInstance();
+}
+#endif

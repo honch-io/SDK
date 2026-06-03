@@ -65,6 +65,15 @@ queues `$device_boot` before returning. It does not perform network I/O;
 delivery remains cooperative through `honch::defaultClient().tick()` or
 explicit flush calls.
 
+All `HonchClass` methods serialize access to the wrapper-owned client pointer.
+Concurrent calls from multiple FreeRTOS tasks are allowed, but only one wrapper
+call runs at a time. If another task is already inside the wrapper, the waiting
+call uses the SDK's bounded mutex wait and returns false with `lastError()` set
+to `busy` when it cannot acquire the lock. Keep using one low-priority pump task
+for `tick()` / `flush()` so application work is not blocked behind network I/O.
+Pointers returned by `deviceId()` are borrowed from the core client and remain
+valid only until the next successful `reset()` or `shutdown()`.
+
 `honch::defaultClient().tick()` performs scheduled flush work when the interval elapses or the
 event threshold is reached. Successful outbound uploads are spaced by
 `flushMinIntervalMs`; leave it at the 10000 ms default for consumer firmware, or
