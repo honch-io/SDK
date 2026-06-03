@@ -16,6 +16,7 @@ extern const mp_obj_type_t honch_micropython_client_type;
 #define HONCH_MP_MAX_TYPED_VALUES 64u
 #define HONCH_MP_MAX_TYPED_PAIRS 64u
 #define HONCH_MP_MAX_PROPERTIES 64u
+#define DEFAULT_TRANSPORT_TIMEOUT_MS 3000u
 
 typedef struct honch_mp_typed_pool {
     honch_value_t values[HONCH_MP_MAX_TYPED_VALUES];
@@ -280,7 +281,7 @@ static mp_obj_t honch_client_make_new(
         status = honch_micropython_transport_ops_init(
             &transport_ops,
             &self->transport_ctx,
-            honch_mp_map_get_uint(args[0], MP_QSTR_transport_timeout_ms, 0));
+            honch_mp_map_get_uint(args[0], MP_QSTR_transport_timeout_ms, DEFAULT_TRANSPORT_TIMEOUT_MS));
         HONCH_MP_DEBUG_INIT("transport_ops_done");
     }
     if (status != HONCH_STATUS_OK) {
@@ -300,7 +301,7 @@ static mp_obj_t honch_client_make_new(
         .batch_size = honch_mp_map_get_size(args[0], MP_QSTR_batch_size, 0),
         .max_queued_events = honch_mp_map_get_size(args[0], MP_QSTR_max_queued_events, 0),
         .max_event_bytes = honch_mp_map_get_size(args[0], MP_QSTR_max_event_bytes, 0),
-        .transport_timeout_ms = honch_mp_map_get_uint(args[0], MP_QSTR_transport_timeout_ms, 0),
+        .transport_timeout_ms = honch_mp_map_get_uint(args[0], MP_QSTR_transport_timeout_ms, DEFAULT_TRANSPORT_TIMEOUT_MS),
         .flush_interval_seconds = honch_mp_map_get_uint(args[0], MP_QSTR_flush_interval_seconds, 0),
         .flush_min_interval_ms = honch_mp_map_get_uint(args[0], MP_QSTR_flush_min_interval_ms, 0),
         .flush_event_threshold = honch_mp_map_get_size(args[0], MP_QSTR_flush_event_threshold, 0),

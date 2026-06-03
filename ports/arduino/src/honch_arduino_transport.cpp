@@ -16,6 +16,7 @@
 #endif
 
 #define HONCH_ARDUINO_DEFAULT_TRANSPORT_TIMEOUT_MS 3000u
+#define HONCH_ARDUINO_MAX_TRANSPORT_TIMEOUT_MS 30000u
 
 namespace {
 
@@ -165,6 +166,9 @@ honch_status_t honch_arduino_transport_ops_init(
   ctx->transportTimeoutMs = config.transportTimeoutMs == 0u ?
       HONCH_ARDUINO_DEFAULT_TRANSPORT_TIMEOUT_MS :
       config.transportTimeoutMs;
+  if (ctx->transportTimeoutMs > HONCH_ARDUINO_MAX_TRANSPORT_TIMEOUT_MS) {
+    ctx->transportTimeoutMs = HONCH_ARDUINO_MAX_TRANSPORT_TIMEOUT_MS;
+  }
   ctx->insecureSkipTlsVerify = config.insecureSkipTlsVerify;
   *ops = honch_transport_ops_t{
       arduino_post_chunk,

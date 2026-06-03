@@ -94,8 +94,10 @@ client.tick() and client.flush() may block for up to the configured transport
 timeout because urequests.post holds the MicroPython interpreter while the HTTP
 request is in progress. Do not call tick() from a latency-sensitive control
 loop, timing-critical sensor loop, UI refresh path, or watchdog-sensitive
-section. Schedule it from a low-priority part of the program where a stalled
-interpreter is acceptable for the configured timeout.
+section. Do not call tick() or flush() from ISR-adjacent callbacks or
+high-priority tasks. Schedule it from a low-priority part of the program where a
+stalled interpreter is acceptable for the configured timeout. Explicit timeout
+values above the hard maximum of 30000 ms are clamped.
 Each scheduled tick posts at most one wire chunk, so large queued uploads may
 need several pump iterations to finish.
 
