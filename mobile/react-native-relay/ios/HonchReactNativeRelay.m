@@ -4,14 +4,17 @@ static NSString * const HonchRelayServiceUUIDString = @"484f4e43-482d-5245-4c41-
 static NSString * const HonchRelayFrameCharacteristicUUIDString = @"484f4e43-482d-5245-4c41-592d4652414d";
 static NSString * const HonchRelayAckCharacteristicUUIDString = @"484f4e43-482d-5245-4c41-592d41434b31";
 static NSString * const HonchRelayFrameEventName = @"HonchRelayFrame";
+static void *HonchRelayBLEQueueKey = &HonchRelayBLEQueueKey;
 
 @interface HonchReactNativeRelay ()
 {
   CBCentralManager *_centralManager;
+  dispatch_queue_t _bleQueue;
   NSMutableDictionary<NSString *, CBPeripheral *> *_peripheralsById;
   NSMutableDictionary<NSString *, NSDictionary *> *_discoveredDevicesById;
   NSMutableDictionary<NSString *, CBCharacteristic *> *_ackCharacteristicsById;
   BOOL _hasListeners;
+  BOOL _didTeardown;
 }
 @end
 
@@ -22,6 +25,8 @@ RCT_EXPORT_MODULE()
 - (instancetype)init
 {
   if ((self = [super init])) {
+    _bleQueue = dispatch_queue_create("io.honch.relay.ble", DISPATCH_QUEUE_SERIAL);
+    dispatch_queue_set_specific(_bleQueue, HonchRelayBLEQueueKey, HonchRelayBLEQueueKey, NULL);
     _peripheralsById = [NSMutableDictionary new];
     _discoveredDevicesById = [NSMutableDictionary new];
     _ackCharacteristicsById = [NSMutableDictionary new];
@@ -32,6 +37,11 @@ RCT_EXPORT_MODULE()
 + (BOOL)requiresMainQueueSetup
 {
   return NO;
+}
+
+- (dispatch_queue_t)methodQueue
+{
+  return _bleQueue;
 }
 
 - (NSArray<NSString *> *)supportedEvents
@@ -127,7 +137,11 @@ RCT_EXPORT_METHOD(acknowledgeMessage:(NSString *)deviceId sequence:(NSString *)s
 
 RCT_EXPORT_METHOD(scheduleUpload:(double)delayMs resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 {
-  resolve(nil);
+  reject(
+    @"ios_background_upload_unsupported",
+    @"iOS relay upload scheduling is foreground-only; call drainUploads from the host app foreground lifecycle.",
+    nil
+  );
 }
 
 RCT_EXPORT_METHOD(cancelUpload:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
@@ -135,11 +149,60 @@ RCT_EXPORT_METHOD(cancelUpload:(RCTPromiseResolveBlock)resolve rejecter:(RCTProm
   resolve(nil);
 }
 
+- (void)invalidate
+{
+  [self teardown];
+  [super invalidate];
+}
+
+- (void)dealloc
+{
+  [self teardown];
+}
+
 - (void)ensureCentralManager
 {
   if (_centralManager == nil) {
-    _centralManager = [[CBCentralManager alloc] initWithDelegate:self queue:nil];
+    _centralManager = [[CBCentralManager alloc] initWithDelegate:self queue:_bleQueue];
   }
+}
+
+- (void)performOnBLEQueueSync:(dispatch_block_t)block
+{
+  if (dispatch_get_specific(HonchRelayBLEQueueKey) == HonchRelayBLEQueueKey) {
+    block();
+    return;
+  }
+  dispatch_sync(_bleQueue, block);
+}
+
+- (void)teardown
+{
+  [self performOnBLEQueueSync:^{
+    if (self->_didTeardown) {
+      return;
+    }
+    self->_didTeardown = YES;
+    self->_hasListeners = NO;
+
+    if (self->_centralManager != nil) {
+      [self->_centralManager stopScan];
+      for (CBPeripheral *peripheral in self->_peripheralsById.allValues) {
+        peripheral.delegate = nil;
+        [self->_centralManager cancelPeripheralConnection:peripheral];
+      }
+      self->_centralManager.delegate = nil;
+      self->_centralManager = nil;
+    } else {
+      for (CBPeripheral *peripheral in self->_peripheralsById.allValues) {
+        peripheral.delegate = nil;
+      }
+    }
+
+    [self->_peripheralsById removeAllObjects];
+    [self->_discoveredDevicesById removeAllObjects];
+    [self->_ackCharacteristicsById removeAllObjects];
+  }];
 }
 
 - (NSData *)ackPayloadForSequence:(NSString *)sequence

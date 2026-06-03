@@ -73,6 +73,9 @@ iOS:
 - Add `NSBluetoothAlwaysUsageDescription`.
 - Enable `bluetooth-central` background mode if relay receipt should continue while backgrounded.
 - Install through the consuming React Native iOS host `Podfile`.
+- iOS upload scheduling is foreground-only. Call `drainUploads()` from the host
+  app foreground lifecycle; `startUploadScheduler()` is only backed by native
+  scheduled work on Android.
 
 Android:
 
