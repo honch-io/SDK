@@ -155,7 +155,8 @@ class PosixChunkWireTest(unittest.TestCase):
 
     def test_queue_supports_configurable_durability_mode(self) -> None:
         public = read("include/honch/honch.h") + read_sdk("core/include/honch/core/config.h")
-        queue = read_sdk("ports/posix/src/posix_storage.c")
+        storage = read_sdk("ports/posix/src/posix_storage.c")
+        state = read_sdk("ports/posix/src/posix_state.c")
         core = read_sdk("core/src/honch_core.c")
 
         self.assertIn("honch_durability_mode_t", public)
@@ -163,7 +164,10 @@ class PosixChunkWireTest(unittest.TestCase):
         self.assertIn("HONCH_DURABILITY_OS_BUFFERED = 0", public)
         self.assertIn("HONCH_DURABILITY_SYNC_ALWAYS = 1", public)
         self.assertIn("HONCH_DURABILITY_DEFAULT = HONCH_DURABILITY_OS_BUFFERED", public)
-        self.assertIn("client->durability_mode", queue)
+        self.assertIn("client->durability_mode", storage)
+        self.assertIn("client->durability_mode", state)
+        self.assertNotIn("honch_write_file_atomic_bytes(client->state_directory", storage)
+        self.assertNotIn("honch_write_file_atomic(client->state_directory", state)
         self.assertIn("HONCH_DURABILITY_SYNC_ALWAYS ? HONCH_DURABILITY_SYNC_ALWAYS : HONCH_DURABILITY_OS_BUFFERED", core)
 
     def test_file_queue_avoids_full_sorted_lists_for_unordered_operations(self) -> None:

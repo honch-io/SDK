@@ -101,7 +101,12 @@ static honch_status_t honch_write_state_file(honch_client_t *client, const char 
             strlen(content));
     }
 
-    return honch_write_file_atomic(client->state_directory, name, content);
+    return honch_write_file_atomic_bytes_with_durability(
+        client->state_directory,
+        name,
+        (const unsigned char *)content,
+        strlen(content),
+        client->durability_mode);
 }
 
 static honch_status_t honch_copy_or_null(char **out, const char *value)
