@@ -119,9 +119,12 @@ describe("React Native relay package shape", () => {
       "utf8"
     );
 
-    for (const permission of ["BLUETOOTH_SCAN", "BLUETOOTH_CONNECT", "ACCESS_FINE_LOCATION"]) {
+    for (const permission of ["BLUETOOTH_SCAN", "BLUETOOTH_CONNECT"]) {
       expect(androidManifest).toContain(permission);
     }
+    expect(androidManifest).toContain('android:usesPermissionFlags="neverForLocation"');
+    expect(androidManifest).not.toContain("ACCESS_FINE_LOCATION");
+    expect(androidManifest).not.toContain("POST_NOTIFICATIONS");
 
     for (const expected of [
       "BluetoothManager",
@@ -140,6 +143,57 @@ describe("React Native relay package shape", () => {
       "putLong"
     ]) {
       expect(androidModule).toContain(expected);
+    }
+    expect(androidModule).toContain("ScanSettings.SCAN_MODE_LOW_POWER");
+    expect(androidModule).not.toContain("ScanSettings.SCAN_MODE_LOW_LATENCY");
+  });
+
+  it("tears down Android scans, GATT connections, and scheduled upload work", () => {
+    const androidModule = readFileSync(
+      new URL(
+        "android/src/main/java/io/honch/reactnativerelay/HonchReactNativeRelayModule.java",
+        packageRoot
+      ),
+      "utf8"
+    );
+
+    expect(androidModule).toContain("public void invalidate()");
+    expect(androidModule).toContain("private void teardown()");
+    expect(androidModule).toContain("scanner.stopScan(scanCallback)");
+    expect(androidModule).toContain("gatt.disconnect()");
+    expect(androidModule).toContain("gatt.close()");
+    expect(androidModule).toContain("gattsById.clear()");
+    expect(androidModule).toContain("ackCharacteristicsById.clear()");
+    expect(androidModule).toContain("cancelAllWorkByTag(HonchRelayUploadWorker.WORK_TAG)");
+  });
+
+  it("keeps Android ReactMethod native exceptions contained in promise rejections", () => {
+    const androidModule = readFileSync(
+      new URL(
+        "android/src/main/java/io/honch/reactnativerelay/HonchReactNativeRelayModule.java",
+        packageRoot
+      ),
+      "utf8"
+    );
+
+    for (const method of [
+      "stopScan",
+      "discoveredDevices",
+      "connect",
+      "disconnect",
+      "subscribeFrames",
+      "acknowledgeMessage",
+      "scheduleUpload",
+      "cancelUpload"
+    ]) {
+      const methodIndex = androidModule.indexOf(`public void ${method}`);
+      const nextMethodIndex = androidModule.indexOf("@ReactMethod", methodIndex + 1);
+      const methodBody = androidModule.slice(
+        methodIndex,
+        nextMethodIndex === -1 ? androidModule.length : nextMethodIndex
+      );
+      expect(methodBody, `${method} should catch RuntimeException`).toContain("catch (RuntimeException error)");
+      expect(methodBody, `${method} should reject promise on native errors`).toContain("promise.reject(");
     }
   });
 
