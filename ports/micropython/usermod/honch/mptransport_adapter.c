@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define HONCH_MP_MAX_TRANSPORT_TIMEOUT_MS 30000u
+
 static honch_status_t honch_mp_endpoint_url(const char *endpoint_url, const char *suffix, char **out)
 {
     if (endpoint_url == NULL || suffix == NULL || out == NULL) {
@@ -138,6 +140,12 @@ honch_status_t honch_micropython_transport_ops_init(
 {
     if (ops == NULL || ctx == NULL) {
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    if (timeout_ms == 0u) {
+        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    if (timeout_ms > HONCH_MP_MAX_TRANSPORT_TIMEOUT_MS) {
+        timeout_ms = HONCH_MP_MAX_TRANSPORT_TIMEOUT_MS;
     }
     *ctx = (honch_micropython_transport_t) {
         .requests_module = mp_const_none,

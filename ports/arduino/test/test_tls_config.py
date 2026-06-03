@@ -68,16 +68,20 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         self.assertIn("coreConfig.transport_timeout_ms = config.transportTimeoutMs;", adapter)
         self.assertIn("uint32_t transportTimeoutMs;", transport_header)
         self.assertIn("HONCH_ARDUINO_DEFAULT_TRANSPORT_TIMEOUT_MS 3000u", transport)
+        self.assertIn("HONCH_ARDUINO_MAX_TRANSPORT_TIMEOUT_MS 30000u", transport)
         self.assertIn(
             "ctx->transportTimeoutMs = config.transportTimeoutMs == 0u ?",
             transport,
         )
+        self.assertIn("if (ctx->transportTimeoutMs > HONCH_ARDUINO_MAX_TRANSPORT_TIMEOUT_MS)", transport)
+        self.assertIn("ctx->transportTimeoutMs = HONCH_ARDUINO_MAX_TRANSPORT_TIMEOUT_MS;", transport)
         self.assertIn("http.setTimeout(transport->transportTimeoutMs);", transport)
         self.assertLess(
             transport.index("http.setTimeout(transport->transportTimeoutMs);"),
             transport.index("int code = http.POST("),
         )
         self.assertIn("transportTimeoutMs", readme)
+        self.assertIn("maximum of 30000 ms", readme)
 
     def test_public_config_exposes_connectivity_gate(self) -> None:
         header = read("ports/arduino/src/Honch.h")
@@ -111,6 +115,8 @@ class ArduinoTLSConfigTests(unittest.TestCase):
 
         self.assertIn("`honch::defaultClient().tick()` may block for up to the configured transport timeout", normalized_readme)
         self.assertIn("Do not call `honch::defaultClient().tick()` from a latency-sensitive control loop", normalized_readme)
+        self.assertIn("Do not call `honch::defaultClient().tick()` or `honch::defaultClient().flush()` from an ISR", normalized_readme)
+        self.assertIn("high-priority task", normalized_readme)
         self.assertIn("xTaskCreatePinnedToCore", readme)
         self.assertRegex(task_example, r"xTaskCreatePinnedToCore\(\s*honchPumpTask")
         self.assertIn("honch::defaultClient().tick();", task_example)

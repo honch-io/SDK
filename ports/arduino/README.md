@@ -81,14 +81,16 @@ set it to `HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS` for benchmark or explicit
 high-throughput modes.
 `transportTimeoutMs` bounds each synchronous HTTP POST; leave it at the 3000 ms
 default unless the capture endpoint and network need a different per-request
-timeout.
+timeout. Values above the hard maximum of 30000 ms are clamped.
 
 `honch::defaultClient().tick()` may block for up to the configured transport timeout because the
-HTTP POST is synchronous and runs on the caller's task. Do not call `honch::defaultClient().tick()`
-from a latency-sensitive control loop, motor-control path, sensor sampling
-deadline, UI refresh path, or watchdog-sensitive section. The SDK does not start
-a hidden background task. Use `honch::defaultClient().loop()` as an alias only when the sketch's
-`loop()` can tolerate upload latency.
+HTTP POST is synchronous and runs on the caller's task. Do not call
+`honch::defaultClient().tick()` from a latency-sensitive control loop. Do not
+call `honch::defaultClient().tick()` or `honch::defaultClient().flush()` from an
+ISR, high-priority task, motor-control path, sensor sampling deadline, UI
+refresh path, or watchdog-sensitive section. The SDK does not start a hidden
+background task. Use `honch::defaultClient().loop()` as an alias only when the
+sketch's `loop()` can tolerate upload latency.
 HTTPS uploads allocate the TLS client lazily on the heap, but the ESP32 Arduino
 HTTP/TLS stack still needs a pump task with enough stack for the handshake and
 POST path. Use at least an 8192 byte stack for a dedicated HTTPS pump task unless

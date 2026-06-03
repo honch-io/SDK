@@ -146,7 +146,7 @@ It does not perform network I/O; delivery remains cooperative through
 | `flush_event_threshold`  | No       | 30             | Flush when this many events are queued     |
 | `flush_max_batches`      | No       | 1              | Max batches sent by one `honch_flush()`    |
 | `shutdown_flush_max_batches` | No   | 1              | Max batches sent during `honch_shutdown()` |
-| `transport_timeout_ms`   | No       | 3000           | Per HTTP request timeout                   |
+| `transport_timeout_ms`   | No       | 3000           | Per HTTP request timeout, max 30000 ms     |
 | `battery_callback`       | No       | NULL           | Function returning 0-100 or -1             |
 | `battery_low_threshold`  | No       | 15             | Battery level that triggers `$battery_low` |
 | `connectivity_callback`  | No       | NULL           | Return false while offline or radio is off |
@@ -157,9 +157,11 @@ Call `honch_tick()` periodically from a low-priority telemetry task. The SDK
 flushes after `flush_interval_seconds` or when the queue reaches
 `flush_event_threshold`, and the flush path can perform blocking network I/O.
 Do not call `honch_tick()` or `honch_flush()` from an ISR, control loop, UI
-loop, or other customer-critical path. Keep `honch_track()` on product paths and
-run delivery from a background task that your firmware can afford to block for
-up to `transport_timeout_ms`.
+loop, high-priority task, ISR-adjacent callback, watchdog-sensitive section, or
+other customer-critical path. Keep `honch_track()` on product paths and run
+delivery from a background task that your firmware can afford to block for up to
+`transport_timeout_ms`; configured values above the hard maximum of 30000 ms are
+clamped.
 
 Do not call `honch_tick()` while connectivity is unavailable or the radio is
 intentionally off. If that is hard to guarantee, provide

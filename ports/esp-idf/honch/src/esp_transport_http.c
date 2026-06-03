@@ -19,6 +19,8 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 
+#define HONCH_ESP_MAX_TRANSPORT_TIMEOUT_MS 30000u
+
 static const char *TAG = "honch";
 
 static int honch_esp_month_index(const char *month)
@@ -452,6 +454,9 @@ honch_status_t honch_esp_transport_ops_init(
     unsigned int effective_timeout_ms = transport_timeout_ms == 0u ?
         HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS :
         transport_timeout_ms;
+    if (effective_timeout_ms > HONCH_ESP_MAX_TRANSPORT_TIMEOUT_MS) {
+        effective_timeout_ms = HONCH_ESP_MAX_TRANSPORT_TIMEOUT_MS;
+    }
     ctx->configured_timeout_ms = effective_timeout_ms > (unsigned int)INT_MAX ?
         INT_MAX :
         (int)effective_timeout_ms;
