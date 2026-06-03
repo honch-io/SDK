@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define HONCH_MP_MAX_TRANSPORT_TIMEOUT_MS 30000u
+#define HONCH_MP_MAX_TRANSPORT_TIMEOUT_MS 10000u
 
 static honch_status_t honch_mp_endpoint_url(const char *endpoint_url, const char *suffix, char **out)
 {

@@ -242,14 +242,14 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("application-owned FreeRTOS task", readme)
         self.assertIn("transport_timeout_ms", readme)
         self.assertIn("3000", readme)
-        self.assertIn("maximum of 30000 ms", readme)
+        self.assertIn("maximum of 10000 ms", readme)
         self.assertNotIn("disable_background_flush", compat + public_header + readme)
 
     def test_esp_transport_timeout_is_hard_capped(self) -> None:
         transport = read("ports/esp-idf/honch/src/esp_transport_http.c")
         ops_init = c_function_body(transport, "honch_esp_transport_ops_init")
 
-        self.assertIn("#define HONCH_ESP_MAX_TRANSPORT_TIMEOUT_MS 30000u", transport)
+        self.assertIn("#define HONCH_ESP_MAX_TRANSPORT_TIMEOUT_MS 10000u", transport)
         self.assertIn("if (effective_timeout_ms > HONCH_ESP_MAX_TRANSPORT_TIMEOUT_MS)", ops_init)
         self.assertIn("effective_timeout_ms = HONCH_ESP_MAX_TRANSPORT_TIMEOUT_MS;", ops_init)
         self.assertIn(".timeout_ms = timeout_ms", transport)

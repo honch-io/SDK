@@ -19,7 +19,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 
-#define HONCH_ESP_MAX_TRANSPORT_TIMEOUT_MS 30000u
+#define HONCH_ESP_MAX_TRANSPORT_TIMEOUT_MS 10000u
 
 static const char *TAG = "honch";
 
