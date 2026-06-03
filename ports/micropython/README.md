@@ -84,6 +84,12 @@ Optional:
 
 Python `platform=`, `transport=`, `battery_callback=`, and `auto_properties_callback=` hooks are not supported by the C-core-derived port. Board behavior belongs in the user module adapters.
 
+client init does synchronous work on the caller's thread. It validates config,
+initializes the C core against the caller-provided event buffer, derives initial
+state from the supplied device/config values, and queues `$device_boot` before
+returning. It does not perform network I/O; delivery remains cooperative through
+`tick()` or explicit `flush()` calls.
+
 client.tick() and client.flush() may block for up to the configured transport
 timeout because urequests.post holds the MicroPython interpreter while the HTTP
 request is in progress. Do not call tick() from a latency-sensitive control
@@ -131,6 +137,11 @@ volatile by default and are lost across reset or power loss. `device_id` is requ
 because this port does not persist SDK identity. Pass a caller-provided stable
 device_id from board provisioning, NVS, a filesystem file, or another
 product-owned durable source.
+
+That RAM queue is bounded and compact. Consuming a non-tail event uses an O(n)
+memmove per consumed event to keep the caller-provided buffer contiguous; this
+is acceptable at default sizes, but larger buffers and queue limits should be
+measured on the target board.
 
 Flush sends compact chunk frames to `POST <endpoint_url>/capture` with `Content-Type: application/vnd.honch.chunk`, `X-Honch-Project-Key`, and `X-Honch-Stream-Id`.
 
