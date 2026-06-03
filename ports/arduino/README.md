@@ -45,20 +45,20 @@ void setup() {
     .insecureSkipTlsVerify = false,
   };
 
-  if (Honch.begin(config)) {
+  if (honch::defaultClient().begin(config)) {
     const honch_property_t properties[] = {
       honch_prop("source", honch_str("setup")),
     };
-    Honch.track("app_started", properties, 1);
+    honch::defaultClient().track("app_started", properties, 1);
   }
 }
 
 void loop() {
-  Honch.tick();
+  honch::defaultClient().tick();
 }
 ```
 
-`Honch.tick()` performs scheduled flush work when the interval elapses or the
+`honch::defaultClient().tick()` performs scheduled flush work when the interval elapses or the
 event threshold is reached. Successful outbound uploads are spaced by
 `flushMinIntervalMs`; leave it at the 10000 ms default for consumer firmware, or
 set it to `HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS` for benchmark or explicit
@@ -67,11 +67,11 @@ high-throughput modes.
 default unless the capture endpoint and network need a different per-request
 timeout.
 
-Honch.tick() may block for up to the configured transport timeout because the
-HTTP POST is synchronous and runs on the caller's task. Do not call Honch.tick()
+`honch::defaultClient().tick()` may block for up to the configured transport timeout because the
+HTTP POST is synchronous and runs on the caller's task. Do not call `honch::defaultClient().tick()`
 from a latency-sensitive control loop, motor-control path, sensor sampling
 deadline, UI refresh path, or watchdog-sensitive section. The SDK does not start
-a hidden background task. Use `Honch.loop()` as an alias only when the sketch's
+a hidden background task. Use `honch::defaultClient().loop()` as an alias only when the sketch's
 `loop()` can tolerate upload latency.
 HTTPS uploads allocate the TLS client lazily on the heap, but the ESP32 Arduino
 HTTP/TLS stack still needs a pump task with enough stack for the handshake and
@@ -87,21 +87,21 @@ low-priority FreeRTOS task:
 static void honchPumpTask(void *parameter) {
   (void)parameter;
   for (;;) {
-    Honch.tick();
+    honch::defaultClient().tick();
     vTaskDelay(pdMS_TO_TICKS(250));
   }
 }
 
 void setup() {
-  // Configure Wi-Fi and call Honch.begin(config) first.
+  // Configure Wi-Fi and call honch::defaultClient().begin(config) first.
   xTaskCreatePinnedToCore(honchPumpTask, "honch-pump", 8192, nullptr, 1, nullptr, 1);
 }
 ```
 
-Do not call `Honch.tick()` while Wi-Fi is unavailable or the radio is
+Do not call `honch::defaultClient().tick()` while Wi-Fi is unavailable or the radio is
 intentionally off. If the sketch cannot guarantee that, set
 `connectivityCallback`; when it returns false, ticks keep uploads pending and
-`Honch.flush()` returns false with `lastError()` set to `offline` without
+`honch::defaultClient().flush()` returns false with `lastError()` set to `offline` without
 network I/O.
 
 The default queue uses only the caller-provided RAM buffer. Events and

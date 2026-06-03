@@ -2,10 +2,9 @@
 
 #include "honch_arduino_adapter.h"
 
-HonchClass Honch;
-
 namespace {
 
+HonchClass g_defaultClient;
 honch_arduino_platform_t g_platform;
 honch_arduino_storage_t g_storage;
 honch_arduino_transport_t g_transport;
@@ -20,6 +19,14 @@ int honch_arduino_connectivity_callback(void *) {
 }
 
 } // namespace
+
+namespace honch {
+
+HonchClass &defaultClient() {
+  return g_defaultClient;
+}
+
+} // namespace honch
 
 honch_core_config_t honch_arduino_make_core_config(const HonchConfig &config) {
   honch_core_config_t coreConfig = {};

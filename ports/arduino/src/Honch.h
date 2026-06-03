@@ -51,4 +51,8 @@ private:
   honch_status_t _lastStatus;
 };
 
-extern HonchClass Honch;
+namespace honch {
+
+HonchClass &defaultClient();
+
+} // namespace honch

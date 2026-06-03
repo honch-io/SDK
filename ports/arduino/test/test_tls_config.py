@@ -90,17 +90,30 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         self.assertIn("connectivityCallback", readme)
         self.assertIn("offline", readme)
 
+    def test_default_client_is_namespaced_not_unprefixed_global(self) -> None:
+        header = read("ports/arduino/src/Honch.h")
+        adapter = read("ports/arduino/src/Honch.cpp")
+        readme = read("ports/arduino/README.md")
+
+        self.assertNotIn("extern HonchClass Honch;", header)
+        self.assertNotIn("HonchClass Honch;", adapter)
+        self.assertIn("namespace honch", header)
+        self.assertIn("HonchClass &defaultClient();", header)
+        self.assertIn("HonchClass g_defaultClient;", adapter)
+        self.assertIn("HonchClass &defaultClient()", adapter)
+        self.assertIn("honch::defaultClient()", readme)
+
     def test_tick_contract_warns_about_blocking_and_shows_dedicated_task(self) -> None:
         readme = read("ports/arduino/README.md")
         task_example = read("ports/arduino/examples/HonchDedicatedTask/HonchDedicatedTask.ino")
         normalized_readme = " ".join(readme.split())
         normalized_example = " ".join(task_example.split())
 
-        self.assertIn("Honch.tick() may block for up to the configured transport timeout", normalized_readme)
-        self.assertIn("Do not call Honch.tick() from a latency-sensitive control loop", normalized_readme)
+        self.assertIn("`honch::defaultClient().tick()` may block for up to the configured transport timeout", normalized_readme)
+        self.assertIn("Do not call `honch::defaultClient().tick()` from a latency-sensitive control loop", normalized_readme)
         self.assertIn("xTaskCreatePinnedToCore", readme)
         self.assertRegex(task_example, r"xTaskCreatePinnedToCore\(\s*honchPumpTask")
-        self.assertIn("Honch.tick();", task_example)
+        self.assertIn("honch::defaultClient().tick();", task_example)
         self.assertIn("vTaskDelay(pdMS_TO_TICKS(250));", task_example)
 
     def test_transport_initializer_matches_core_ops_shape(self) -> None:

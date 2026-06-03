@@ -33,10 +33,10 @@ void setup() {
   config.flushEventThreshold = 30;
   config.insecureSkipTlsVerify = false;
 
-  Honch.begin(config);
-  Honch.track("boot");
+  honch::defaultClient().begin(config);
+  honch::defaultClient().track("boot");
 }
 
 void loop() {
-  Honch.tick();
+  honch::defaultClient().tick();
 }
