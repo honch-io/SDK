@@ -332,6 +332,7 @@ int main(void)
         .max_queued_events = 100u,
         .max_event_bytes = 8192u,
         .transport_timeout_ms = 15000u,
+        .flush_min_interval_ms = HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS,
         .battery_callback = e2e_battery_callback,
         .battery_low_threshold = 20,
         .auto_properties_callback = e2e_auto_properties
