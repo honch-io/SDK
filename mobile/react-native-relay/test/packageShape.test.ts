@@ -109,6 +109,40 @@ describe("React Native relay package shape", () => {
     }
   });
 
+  it("documents iOS upload scheduling as foreground-only instead of linking dead background tasks", () => {
+    const podspec = readFileSync(new URL("ios/HonchReactNativeRelay.podspec", packageRoot), "utf8");
+    const iosModule = readFileSync(new URL("ios/HonchReactNativeRelay.m", packageRoot), "utf8");
+    const readme = readFileSync(new URL("README.md", packageRoot), "utf8");
+
+    expect(podspec).not.toContain("BackgroundTasks");
+    expect(iosModule).toContain("reject(");
+    expect(iosModule).toContain('"ios_background_upload_unsupported"');
+    expect(readme).toContain("iOS upload scheduling is foreground-only");
+  });
+
+  it("keeps iOS BLE callbacks and frame encoding off the main queue", () => {
+    const iosModule = readFileSync(new URL("ios/HonchReactNativeRelay.m", packageRoot), "utf8");
+
+    expect(iosModule).toContain('dispatch_queue_create("io.honch.relay.ble", DISPATCH_QUEUE_SERIAL)');
+    expect(iosModule).toContain("- (dispatch_queue_t)methodQueue");
+    expect(iosModule).toContain("initWithDelegate:self queue:_bleQueue");
+    expect(iosModule).not.toContain("initWithDelegate:self queue:nil");
+  });
+
+  it("tears down iOS scans, peripherals, listeners, and native state", () => {
+    const iosModule = readFileSync(new URL("ios/HonchReactNativeRelay.m", packageRoot), "utf8");
+
+    expect(iosModule).toContain("- (void)invalidate");
+    expect(iosModule).toContain("- (void)dealloc");
+    expect(iosModule).toContain("- (void)teardown");
+    expect(iosModule).toContain("[_centralManager stopScan]");
+    expect(iosModule).toContain("cancelPeripheralConnection:peripheral");
+    expect(iosModule).toContain("peripheral.delegate = nil");
+    expect(iosModule).toContain("[self->_peripheralsById removeAllObjects]");
+    expect(iosModule).toContain("[self->_ackCharacteristicsById removeAllObjects]");
+    expect(iosModule).toContain("_hasListeners = NO");
+  });
+
   it("implements the Android BLE relay receiver contract", () => {
     const androidManifest = readFileSync(new URL("android/src/main/AndroidManifest.xml", packageRoot), "utf8");
     const androidModule = readFileSync(
