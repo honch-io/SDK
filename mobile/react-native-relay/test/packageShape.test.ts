@@ -11,13 +11,18 @@ describe("React Native relay package shape", () => {
       "react-native"?: string;
       dependencies?: Record<string, string>;
       peerDependencies?: Record<string, string>;
+      peerDependenciesMeta?: Record<string, { optional?: boolean }>;
     };
 
     expect(packageJson.main).toBe("src/index.ts");
     expect(packageJson["react-native"]).toBe("src/index.ts");
     expect(packageJson.peerDependencies?.["react-native"]).toBe(">=0.72");
-    expect(packageJson.dependencies?.["react-native-mmkv"]).toBeDefined();
-    expect(packageJson.dependencies?.["react-native-nitro-modules"]).toBeDefined();
+    expect(packageJson.dependencies?.["react-native-mmkv"]).toBeUndefined();
+    expect(packageJson.dependencies?.["react-native-nitro-modules"]).toBeUndefined();
+    expect(packageJson.peerDependencies?.["react-native-mmkv"]).toBe("^4.3.1");
+    expect(packageJson.peerDependencies?.["react-native-nitro-modules"]).toBe("^0.35.7");
+    expect(packageJson.peerDependenciesMeta?.["react-native-mmkv"]?.optional).toBe(true);
+    expect(packageJson.peerDependenciesMeta?.["react-native-nitro-modules"]?.optional).toBe(true);
   });
 
   it("routes native verification through package-owned scripts", () => {

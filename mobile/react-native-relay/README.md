@@ -29,14 +29,19 @@ Firmware relay chunks carry compact message bytes. The mobile relay validates an
 Install this package and a production durable store into a React Native host app:
 
 ```bash
-bun add @honch/react-native-relay react-native-mmkv
+bun add @honch/react-native-relay
 ```
 
 The consuming app must register native modules and run its normal iOS/Android dependency installation flow.
 
 ## Durable Storage
 
-Production mobile apps should use MMKV:
+Production mobile apps should use MMKV. It is an optional peer dependency, so
+install it only when using `createMmkvRelayStore`:
+
+```bash
+bun add react-native-mmkv react-native-nitro-modules
+```
 
 ```ts
 import { createMMKV } from "react-native-mmkv";
@@ -45,15 +50,19 @@ import { createMmkvRelayStore } from "@honch/react-native-relay";
 const relayStore = createMmkvRelayStore(createMMKV({ id: "honch-relay" }));
 ```
 
-MMKV relay storage uses per-chunk and per-message records with a small index, so receipt no longer rewrites the full queue blob for every chunk. By default it retains up to 4,096 chunks and 1,024 completed messages for seven days, then drops the oldest or expired entries to bound offline growth. Override these limits when the host app has a smaller storage budget:
+MMKV relay storage uses per-chunk and per-message records with a small index, so receipt does not rewrite a full queue blob for every chunk. Binary frame, payload, and message bodies are stored as base64 strings instead of JSON number arrays. By default it retains up to 4,096 chunks and 1,024 completed messages for seven days, then drops the oldest or expired entries to bound offline growth. Override these limits when the host app has a smaller storage budget:
 
 ```ts
 const relayStore = createMmkvRelayStore(createMMKV({ id: "honch-relay" }), {
+  keyPrefix: "com.example.honch.relay",
   maxChunks: 1024,
   maxCompleteMessages: 256,
   ttlMs: 3 * 24 * 60 * 60 * 1000
 });
 ```
+
+Use `keyPrefix` when sharing an MMKV instance with host app data. The default
+prefix is `honch.relay`.
 
 Completed messages and incomplete assemblies remain pending across app restarts until Capture accepts or permanently rejects them, unless they age out or the configured queue bounds require dropping oldest state.
 

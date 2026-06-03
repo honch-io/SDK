@@ -153,6 +153,56 @@ describe("MMKV relay durable store retention", () => {
     expect(mmkv.setKeys).not.toContain("honch.relay.queue.v1");
   });
 
+  it("stores binary MMKV records as base64 strings instead of JSON number arrays", async () => {
+    const mmkv = fakeMmkv();
+    const store = createMmkvRelayStore(mmkv, { now: () => 1000 });
+
+    await store.putChunk({
+      deviceId: "device-a",
+      sourceType: 1,
+      sequence: "1",
+      offset: 0,
+      frameBytes: new Uint8Array([1, 2, 3, 4]),
+      payload: new Uint8Array([2, 3, 4])
+    });
+    await store.putCompleteMessage({
+      deviceId: "device-a",
+      sourceType: 1,
+      sequence: "1",
+      body: new Uint8Array([5, 6, 7])
+    });
+
+    const chunkRecord = mmkv.values.get("honch.relay.chunk.device-a.1.0") ?? "";
+    const messageRecord = mmkv.values.get("honch.relay.message.device-a.1") ?? "";
+    expect(chunkRecord).toContain('"frameBase64":"AQIDBA=="');
+    expect(chunkRecord).toContain('"payloadBase64":"AgME"');
+    expect(messageRecord).toContain('"bodyBase64":"BQYH"');
+    expect(chunkRecord).not.toContain("[1,2,3,4]");
+    expect(messageRecord).not.toContain("[5,6,7]");
+    expect(Array.from((await store.chunks("device-a", "1"))[0]?.frameBytes ?? [])).toEqual([1, 2, 3, 4]);
+    expect(Array.from((await store.completeMessages())[0]?.body ?? [])).toEqual([5, 6, 7]);
+  });
+
+  it("keeps relay keys under a caller-selected namespace for host-supplied MMKV stores", async () => {
+    const mmkv = fakeMmkv();
+    const store = createMmkvRelayStore(mmkv, {
+      keyPrefix: "host.app.honch",
+      now: () => 1000
+    });
+
+    await store.putCompleteMessage({
+      deviceId: "device-a",
+      sourceType: 1,
+      sequence: "1",
+      body: new Uint8Array([1])
+    });
+
+    expect(mmkv.setKeys).toContain("host.app.honch.index.v2");
+    expect(mmkv.setKeys).toContain("host.app.honch.message.device-a.1");
+    expect(mmkv.setKeys).not.toContain("honch.relay.index.v2");
+    expect(mmkv.setKeys).not.toContain("honch.relay.message.device-a.1");
+  });
+
   it("migrates the legacy MMKV queue blob without dropping pending uploads", async () => {
     const mmkv = fakeMmkv();
     mmkv.set(
