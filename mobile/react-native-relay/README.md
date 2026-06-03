@@ -126,6 +126,7 @@ const subscription = relay.subscribeNativeFrames();
 
 Retryable upload failures keep messages pending and schedule the next native upload attempt with relay backoff.
 If Capture returns `Retry-After` on a retryable response, that delay takes precedence over the local exponential backoff.
+Upload retry timing stays in the JavaScript relay drain path. Android WorkManager only retries failures to launch the headless task, and the headless task timeout is capped at 10 seconds to bound wake-lock hold time.
 
 Android scheduled drains start the `HonchRelayUpload` headless JS task from WorkManager. Register the task in the host app entrypoint and call the app-owned relay singleton:
 

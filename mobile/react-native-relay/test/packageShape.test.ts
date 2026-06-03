@@ -264,4 +264,29 @@ describe("React Native relay package shape", () => {
       )
     ).toContain("enqueueUniqueWork");
   });
+
+  it("keeps Android upload retry timing in JS and bounds the headless wake lock", () => {
+    const worker = readFileSync(
+      new URL(
+        "android/src/main/java/io/honch/reactnativerelay/HonchRelayUploadWorker.java",
+        packageRoot
+      ),
+      "utf8"
+    );
+    const service = readFileSync(
+      new URL(
+        "android/src/main/java/io/honch/reactnativerelay/HonchRelayUploadTaskService.java",
+        packageRoot
+      ),
+      "utf8"
+    );
+    const readme = readFileSync(new URL("README.md", packageRoot), "utf8");
+
+    expect(worker).toContain("return Result.success()");
+    expect(worker).toContain("return Result.retry()");
+    expect(worker).not.toContain("uploadRelayMessage");
+    expect(worker).not.toContain("drainUploads");
+    expect(service).toContain("private static final long TASK_TIMEOUT_MS = 10000L");
+    expect(readme).toContain("Upload retry timing stays in the JavaScript relay drain path");
+  });
 });

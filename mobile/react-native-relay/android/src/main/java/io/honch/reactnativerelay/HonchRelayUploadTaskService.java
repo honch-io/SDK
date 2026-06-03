@@ -13,7 +13,7 @@ import com.facebook.react.jstasks.HeadlessJsTaskConfig;
 public class HonchRelayUploadTaskService extends HeadlessJsTaskService {
     public static final String TASK_NAME = "HonchRelayUpload";
     public static final String EXTRA_DELAY_MS = "delayMs";
-    private static final long TASK_TIMEOUT_MS = 30000L;
+    private static final long TASK_TIMEOUT_MS = 10000L;
 
     public static void acquireWakeLock(Context context) {
         HeadlessJsTaskService.acquireWakeLockNow(context);
