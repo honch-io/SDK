@@ -332,8 +332,9 @@ static honch_status_t honch_core_read_queue_batch(
 
     for (size_t i = 0u; i < *event_count; i++) {
         if (storage_events[i].data == NULL || storage_events[i].length > client->max_event_bytes) {
+            honch_core_free_flush_events(client, i);
             honch_core_free_storage_events(storage_events, *event_count);
-            *event_count = i;
+            *event_count = 0u;
             return HONCH_ERROR_INVALID_ARGUMENT;
         }
         events[i] = (honch_payload_t) {

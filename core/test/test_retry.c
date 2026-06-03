@@ -153,6 +153,44 @@ static honch_status_t fake_queue_read_batch_overreports(
     return HONCH_OK;
 }
 
+static honch_status_t fake_queue_read_batch_valid_then_invalid(
+    void *ctx,
+    honch_storage_event_t *events,
+    size_t max_events,
+    size_t max_event_bytes,
+    size_t *event_count)
+{
+    fake_storage_t *storage = (fake_storage_t *)ctx;
+    storage->read_batch_calls++;
+    assert(max_events >= 2u);
+    assert(storage->event_count >= 1u);
+    assert(storage->events[0].size <= max_event_bytes);
+
+    uint8_t *copy = (uint8_t *)malloc(storage->events[0].size);
+    assert(copy != NULL);
+    memcpy(copy, storage->events[0].data, storage->events[0].size);
+    events[0] = (honch_storage_event_t) {
+        .data = copy,
+        .length = storage->events[0].size,
+        .sequence = storage->events[0].sequence
+    };
+    events[1] = (honch_storage_event_t) {
+        .data = NULL,
+        .length = 1u,
+        .sequence = storage->events[0].sequence + 1u
+    };
+    *event_count = 2u;
+    return HONCH_OK;
+}
+
+static honch_status_t fake_queue_peek_empty(void *ctx, honch_storage_reader_t *reader)
+{
+    fake_storage_t *storage = (fake_storage_t *)ctx;
+    (void)reader;
+    storage->peek_calls++;
+    return HONCH_ERROR_NOT_INITIALIZED;
+}
+
 static honch_status_t fake_queue_consume(void *ctx, uint64_t sequence)
 {
     fake_event_t *event = find_event((fake_storage_t *)ctx, sequence);
@@ -1169,6 +1207,32 @@ static void test_flush_rejects_overreported_storage_batch_count(void)
     assert(!storage.events[1].consumed);
 }
 
+static void test_invalid_storage_batch_frees_transferred_events_before_reader_fallback(void)
+{
+    fake_storage_t storage;
+    setup_storage(&storage);
+    fake_transport_t transport = {
+        .result = HONCH_TRANSPORT_ACCEPTED,
+        .status = HONCH_OK
+    };
+    honch_event_queue_ops_t storage_ops = {0};
+    honch_transport_ops_t transport_ops = {0};
+    honch_client_t client = fake_client(&storage, &storage_ops, &transport, &transport_ops);
+    storage_ops.queue_read_batch = fake_queue_read_batch_valid_then_invalid;
+    storage_ops.queue_peek = fake_queue_peek_empty;
+
+    bool progressed = true;
+    assert(honch_queue_flush_one_locked(&client, &progressed) == HONCH_OK);
+    assert(!progressed);
+    assert(storage.read_batch_calls == 1u);
+    assert(storage.peek_calls == 1u);
+    assert(transport.chunk_calls == 0u);
+    assert(client.flush_events[0].data == NULL);
+    assert(!client.flush_event_borrowed[0]);
+    assert(!storage.events[0].consumed);
+    assert(!storage.events[1].consumed);
+}
+
 static void test_v2_flush_splits_batches_by_distinct_id(void)
 {
     fake_storage_t storage;
@@ -1323,6 +1387,7 @@ int main(void)
     test_flush_uses_storage_batch_read_when_available();
     test_limited_flush_stops_after_one_batch();
     test_flush_rejects_overreported_storage_batch_count();
+    test_invalid_storage_batch_frees_transferred_events_before_reader_fallback();
     test_v2_flush_splits_batches_by_distinct_id();
     test_v2_flush_dead_letters_semantically_invalid_event();
     test_401_dead_letters_events();

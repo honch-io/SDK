@@ -3,6 +3,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <atomic>
+
 #include "honch/core/honch.h"
 
 struct HonchConfig {
@@ -58,7 +60,7 @@ private:
 
   honch_client_t *_client;
   void *_instanceMutex;
-  honch_status_t _lastStatus;
+  std::atomic<honch_status_t> _lastStatus;
 };
 
 namespace honch {
