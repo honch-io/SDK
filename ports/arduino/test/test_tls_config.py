@@ -14,17 +14,29 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         header = read("ports/arduino/src/Honch.h")
         adapter = read("ports/arduino/src/honch_arduino_adapter.h")
 
-        self.assertIn("const char *rootCaPem;", header)
+        self.assertIn("const char *rootCaPem = nullptr;", header)
         self.assertIn("const char *rootCaPem;", adapter)
 
     def test_secure_transport_uses_root_ca_before_insecure_fallback(self) -> None:
         transport = read("ports/arduino/src/honch_arduino_transport.cpp")
 
-        self.assertIn("secureClient.setCACert(transport->rootCaPem);", transport)
+        self.assertIn("secureClient->setCACert(transport->rootCaPem);", transport)
         self.assertLess(
-            transport.index("secureClient.setCACert(transport->rootCaPem);"),
-            transport.index("secureClient.setInsecure();"),
+            transport.index("secureClient->setCACert(transport->rootCaPem);"),
+            transport.index("secureClient->setInsecure();"),
         )
+
+    def test_secure_transport_does_not_put_tls_client_on_caller_stack(self) -> None:
+        transport = read("ports/arduino/src/honch_arduino_transport.cpp")
+        readme = read("ports/arduino/README.md")
+        task_example = read("ports/arduino/examples/HonchDedicatedTask/HonchDedicatedTask.ino")
+
+        self.assertNotIn("WiFiClientSecure secureClient;", transport)
+        self.assertIn("new (std::nothrow) WiFiClientSecure()", transport)
+        self.assertIn("delete secureClient;", transport)
+        self.assertIn("HTTPS uploads allocate the TLS client lazily on the heap", readme)
+        self.assertIn("8192", readme)
+        self.assertIn("8192", task_example)
 
     def test_examples_configure_tls_root_ca_not_insecure_skip(self) -> None:
         basic = read("ports/arduino/examples/HonchBasic/HonchBasic.ino")
@@ -40,7 +52,7 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         adapter = read("ports/arduino/src/Honch.cpp")
         readme = read("ports/arduino/README.md")
 
-        self.assertIn("uint32_t flushMinIntervalMs;", header)
+        self.assertIn("uint32_t flushMinIntervalMs = 0;", header)
         self.assertIn("coreConfig.flush_min_interval_ms = config.flushMinIntervalMs;", adapter)
         self.assertIn("flushMinIntervalMs", readme)
         self.assertIn("HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS", readme)
@@ -52,7 +64,7 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         transport = read("ports/arduino/src/honch_arduino_transport.cpp")
         readme = read("ports/arduino/README.md")
 
-        self.assertIn("uint32_t transportTimeoutMs;", header)
+        self.assertIn("uint32_t transportTimeoutMs = 0;", header)
         self.assertIn("coreConfig.transport_timeout_ms = config.transportTimeoutMs;", adapter)
         self.assertIn("uint32_t transportTimeoutMs;", transport_header)
         self.assertIn("HONCH_ARDUINO_DEFAULT_TRANSPORT_TIMEOUT_MS 3000u", transport)
@@ -72,7 +84,7 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         adapter = read("ports/arduino/src/Honch.cpp")
         readme = read("ports/arduino/README.md")
 
-        self.assertIn("bool (*connectivityCallback)();", header)
+        self.assertIn("bool (*connectivityCallback)() = nullptr;", header)
         self.assertIn("honch_arduino_connectivity_callback", adapter)
         self.assertIn("coreConfig.connectivity_callback = honch_arduino_connectivity_callback;", adapter)
         self.assertIn("connectivityCallback", readme)

@@ -10,6 +10,7 @@
 
 #ifdef ARDUINO
 #include <HTTPClient.h>
+#include <new>
 #include <WiFiClient.h>
 #include <WiFiClientSecure.h>
 #endif
@@ -100,15 +101,21 @@ honch_status_t arduino_post_chunk(
   std::string url = capture_url(endpointUrl);
   HTTPClient http;
   WiFiClient plainClient;
-  WiFiClientSecure secureClient;
+  WiFiClientSecure *secureClient = nullptr;
   bool https = url.rfind("https://", 0) == 0;
   if (https) {
-    if (transport != nullptr && transport->rootCaPem != nullptr && transport->rootCaPem[0] != '\0') {
-      secureClient.setCACert(transport->rootCaPem);
-    } else if (transport != nullptr && transport->insecureSkipTlsVerify) {
-      secureClient.setInsecure();
+    secureClient = new (std::nothrow) WiFiClientSecure();
+    if (secureClient == nullptr) {
+      *result = HONCH_TRANSPORT_RETRY;
+      return HONCH_ERROR_OUT_OF_MEMORY;
     }
-    if (!http.begin(secureClient, url.c_str())) {
+    if (transport != nullptr && transport->rootCaPem != nullptr && transport->rootCaPem[0] != '\0') {
+      secureClient->setCACert(transport->rootCaPem);
+    } else if (transport != nullptr && transport->insecureSkipTlsVerify) {
+      secureClient->setInsecure();
+    }
+    if (!http.begin(*secureClient, url.c_str())) {
+      delete secureClient;
       *result = HONCH_TRANSPORT_RETRY;
       return HONCH_ERROR_TRANSPORT;
     }
@@ -128,6 +135,7 @@ honch_status_t arduino_post_chunk(
 
   int code = http.POST(const_cast<uint8_t *>(body), bodySize);
   http.end();
+  delete secureClient;
   return classify_http_status(code, result);
 #else
   g_hostTransport.calls++;

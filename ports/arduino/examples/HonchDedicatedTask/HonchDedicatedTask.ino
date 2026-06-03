@@ -53,7 +53,7 @@ void setup() {
   xTaskCreatePinnedToCore(
       honchPumpTask,
       "honch-pump",
-      4096,
+      8192,
       nullptr,
       1,
       nullptr,
