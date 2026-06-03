@@ -153,6 +153,23 @@ class PosixChunkWireTest(unittest.TestCase):
         self.assertIn("honch_wire_v2_measure_event_batch_provider", wire)
         self.assertIn("honch_flush_wire_event_provider", queue_policy)
 
+    def test_flush_avoids_steady_state_snapshot_heap_churn(self) -> None:
+        internal = read_sdk("core/src/honch_internal.h")
+        queue_policy = read_sdk("core/src/honch_queue_policy.c")
+        ram_queue = read_sdk("core/src/honch_ram_queue.c")
+
+        snapshot = c_function_body(queue_policy, "honch_flush_context_snapshot")
+        ram_batch = c_function_body(ram_queue, "honch_ram_queue_read_batch")
+        flush_one = c_function_body(queue_policy, "honch_queue_flush_one_with_chunk_limit_locked")
+
+        self.assertIn("flush_event_borrowed[HONCH_FLUSH_SCRATCH_MAX_EVENTS]", internal)
+        self.assertNotIn("honch_strdup", snapshot)
+        self.assertNotIn("malloc(entry->length)", ram_batch)
+        self.assertIn("HONCH_STORAGE_EVENT_BORROWED", ram_batch)
+        self.assertLess(
+            flush_one.find("honch_core_build_wire_v2_message"),
+            flush_one.find("honch_client_state_unlock(client);"))
+
     def test_queue_supports_configurable_durability_mode(self) -> None:
         public = read("include/honch/honch.h") + read_sdk("core/include/honch/core/config.h")
         storage = read_sdk("ports/posix/src/posix_storage.c")

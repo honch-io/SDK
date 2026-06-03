@@ -144,6 +144,11 @@ void honch_free_client_fields(honch_client_t *client)
     free(client->state_directory);
     free(client->distinct_id);
     free(client->session_id);
+    for (size_t i = 0u; i < HONCH_FLUSH_SCRATCH_MAX_EVENTS; i++) {
+        if (!client->flush_event_borrowed[i]) {
+            free(client->flush_events[i].data);
+        }
+    }
 }
 
 bool honch_property_key_is_reserved(const char *key)

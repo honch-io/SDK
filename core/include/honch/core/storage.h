@@ -21,7 +21,11 @@ typedef struct honch_storage_event {
     uint8_t *data;
     size_t length;
     uint64_t sequence;
+    uint8_t flags;
 } honch_storage_event_t;
+
+/* data points into queue-owned storage and must not be freed by the core. */
+#define HONCH_STORAGE_EVENT_BORROWED 0x01u
 
 typedef struct honch_queue_stats {
     size_t queued_events;

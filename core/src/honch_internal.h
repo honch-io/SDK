@@ -154,6 +154,7 @@ struct honch_client {
     honch_wire_v2_property_t auto_property_buffers[HONCH_AUTO_PROPERTY_BUFFER_COUNT][HONCH_MAX_EVENT_PROPERTIES];
     honch_atomic_bool_t auto_property_buffer_in_use[HONCH_AUTO_PROPERTY_BUFFER_COUNT];
     honch_payload_t flush_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
+    bool flush_event_borrowed[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
     uint64_t flush_sequences[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
     honch_storage_event_t flush_storage_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
     honch_event_record_t flush_parsed_record;
