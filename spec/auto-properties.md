@@ -4,6 +4,10 @@ Every event emitted by a Honch SDK must carry this context. The SDK encoder
 sets it automatically. User-supplied properties using SDK-owned keys are
 rejected instead of overwritten.
 
+Honch SDKs are not silent on the wire. These context fields and lifecycle rules
+mean auto-emitted events create analytics traffic and queue pressure even before
+the host application records its own product events.
+
 ## Required (always present)
 
 | Property | Type | Description |

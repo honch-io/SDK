@@ -58,6 +58,13 @@ void loop() {
 }
 ```
 
+`honch::defaultClient().begin()` init does synchronous work on the caller's
+task. It validates config, initializes the C core against the caller-provided
+event buffer, derives initial state from the supplied device/config values, and
+queues `$device_boot` before returning. It does not perform network I/O;
+delivery remains cooperative through `honch::defaultClient().tick()` or
+explicit flush calls.
+
 `honch::defaultClient().tick()` performs scheduled flush work when the interval elapses or the
 event threshold is reached. Successful outbound uploads are spaced by
 `flushMinIntervalMs`; leave it at the 10000 ms default for consumer firmware, or
@@ -107,6 +114,10 @@ network I/O.
 The default queue uses only the caller-provided RAM buffer. Events and
 `identify()` state are lost across reset or power loss unless you provide
 `eventQueueOps` and/or `stateStorageOps` backed by durable storage.
+That RAM queue is bounded and compact: consuming a non-tail event uses an O(n)
+memmove per consumed event to keep the caller-provided buffer contiguous. This
+is acceptable at default sizes, but larger buffers and queue limits should be
+measured on the target board.
 
 ## Security
 

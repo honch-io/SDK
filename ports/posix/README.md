@@ -204,6 +204,12 @@ The returned pointer is owned by the SDK and remains valid until `honch_reset`
 or `honch_shutdown`. Use `honch_copy_device_id` when another thread may reset or
 shut down the client while the ID is being read.
 
+honch init does synchronous work on the caller's thread. It validates config,
+creates and reconciles queue directories, loads or persists identity and
+firmware-version state, and queues `$device_boot` before returning. It does not
+perform network I/O; delivery remains cooperative through `honch_tick()` or
+explicit flush calls.
+
 `honch_shutdown` returns `HONCH_ERROR_NOT_INITIALIZED` when called without a
 client, matching the ESP-IDF SDK's shutdown-before-init behavior. For a valid
 client, it queues `$device_shutdown`, attempts a synchronous shutdown flush,
@@ -397,6 +403,12 @@ Queue behavior:
 Sharing the same `queue_directory` across concurrent clients can delay flush
 visibility and may temporarily exceed `max_queued_events`, because each client
 maintains an in-memory queue count cache between disk reconciliations.
+
+The default portable RAM queue used by embedded ports is bounded and compact:
+consuming a non-tail event uses an O(n) memmove per consumed event to keep the
+caller-provided buffer contiguous. The POSIX port uses file-backed storage by
+default, but custom RAM-backed queues should keep that consume cost in mind when
+raising queue limits.
 
 ## Test Coverage
 

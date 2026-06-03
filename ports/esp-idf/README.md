@@ -124,6 +124,12 @@ idf.py flash monitor
 - `$battery_low` — when battery drops below threshold (default 15%), emitted once until recovery
 - `$session_start` / `$session_end` — when you call the session API
 
+honch init does synchronous work on the caller's task. It validates config,
+reads ESP reset/MAC identity data, may call host-supplied state storage for
+identity and firmware-version state, and queues `$device_boot` before returning.
+It does not perform network I/O; delivery remains cooperative through
+`honch_tick()` or explicit flush calls.
+
 ## Configuration options
 
 | Field                    | Required | Default        | Description                                |
@@ -230,6 +236,11 @@ volatile unless you provide custom storage. Use `event_queue_ops` for a durable
 event queue and `state_storage_ops` for durable identity/version state. Those
 hooks can be backed by NVS, a filesystem, external flash, FRAM, or a product
 specific queue.
+
+The default RAM queue is bounded and compact. Consuming a non-tail event uses an
+O(n) memmove per consumed event to keep the caller-provided buffer contiguous;
+this is acceptable at the default sizes, but larger custom queue limits should
+be measured on the target board.
 
 ## Troubleshooting
 

@@ -254,6 +254,25 @@ class PosixChunkWireTest(unittest.TestCase):
         self.assertIn("honch_tick(client);", readme)
         self.assertIn("usleep(250000);", readme)
 
+    def test_non_mobile_docs_cover_behavioral_costs(self) -> None:
+        root_readme = read_sdk("README.md")
+        auto_properties = read_sdk("spec/auto-properties.md")
+        posix_readme = read("README.md")
+        esp_readme = read_sdk("ports/esp-idf/README.md")
+        micropython_readme = read_sdk("ports/micropython/README.md")
+        arduino_readme = read_sdk("ports/arduino/README.md")
+
+        canonical_docs = "\n".join([root_readme, auto_properties])
+        self.assertIn("not silent on the wire", canonical_docs)
+        self.assertIn("auto-emitted events create analytics traffic and queue pressure", canonical_docs)
+        self.assertIn("honch_init does synchronous work on the caller's thread", root_readme)
+        self.assertIn("O(n) memmove per consumed event", root_readme)
+
+        for readme in (posix_readme, esp_readme, micropython_readme, arduino_readme):
+            normalized = " ".join(readme.split())
+            self.assertIn("init does synchronous work", normalized)
+            self.assertIn("queues `$device_boot` before returning", normalized)
+
     def test_generated_ids_fail_closed_when_secure_randomness_is_unavailable(self) -> None:
         platform = read_sdk("ports/posix/src/posix_platform.c")
         random_hex = c_function_body(platform, "honch_random_hex")

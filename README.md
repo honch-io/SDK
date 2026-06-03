@@ -21,6 +21,26 @@ Stable SDKs are supported integration paths for product work. Preview SDKs are u
 
 Relay packages are not application analytics SDKs. They forward device-originated Honch payloads through companion apps, so production rollout should include host-app and target-device validation.
 
+## Runtime Behavior Contract
+
+Honch is not silent on the wire. The SDK stamps required context and can
+auto-emit `$device_boot`, `$device_shutdown`, `$firmware_update`,
+`$battery_low`, `$session_start`, and `$session_end`; those auto-emitted events
+create analytics traffic and queue pressure even when the host only calls
+`init`, session, battery, or shutdown APIs.
+
+honch_init does synchronous work on the caller's thread. Depending on the
+port and configured storage hooks, init may validate config, read or derive a
+device ID, read or write state such as firmware version, create or reconcile
+queue storage, and queues `$device_boot` before returning. It does not perform
+network I/O; uploads remain cooperative through `honch_tick()` or explicit
+flush calls.
+
+The default RAM queue is bounded and drop-oldest. Consuming a non-tail event
+uses an O(n) memmove per consumed event to compact the caller-provided buffer;
+that is acceptable at the default queue sizes, but products with larger custom
+queues should measure consume cost on their target hardware.
+
 ## Repository Layout
 
 - [`core/`](core/) — canonical portable SDK behavior: typed event properties, HQR1 queue records, compact encoding, identity, lifecycle events, queue policy, retry classification, and packetization.
