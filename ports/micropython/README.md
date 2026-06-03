@@ -73,7 +73,7 @@ Optional:
 - `batch_size`
 - `max_queued_events`
 - `max_event_bytes`
-- `transport_timeout_ms`
+- `transport_timeout_ms` (finite positive milliseconds, clamped to 10000)
 - `flush_interval_seconds`
 - `flush_min_interval_ms` (default `10000`; use `0xFFFFFFFF` to disable for benchmarks)
 - `flush_event_threshold`

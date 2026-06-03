@@ -45,7 +45,10 @@ class HonchConfig:
 
         self.max_queued_events = int(kwargs.get("max_queued_events") or DEFAULT_MAX_QUEUED_EVENTS)
         self.max_event_bytes = int(kwargs.get("max_event_bytes") or DEFAULT_MAX_EVENT_BYTES)
-        self.transport_timeout_ms = int(kwargs.get("transport_timeout_ms") or DEFAULT_TRANSPORT_TIMEOUT_MS)
+        timeout = kwargs.get("transport_timeout_ms")
+        self.transport_timeout_ms = DEFAULT_TRANSPORT_TIMEOUT_MS if timeout is None else int(timeout)
+        if self.transport_timeout_ms <= 0:
+            raise InvalidArgumentError("transport_timeout_ms must be positive")
         if self.transport_timeout_ms > MAX_TRANSPORT_TIMEOUT_MS:
             self.transport_timeout_ms = MAX_TRANSPORT_TIMEOUT_MS
         self.flush_interval_seconds = int(kwargs.get("flush_interval_seconds") or DEFAULT_FLUSH_INTERVAL_SECONDS)
