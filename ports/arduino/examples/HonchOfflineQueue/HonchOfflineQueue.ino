@@ -28,17 +28,17 @@ void setup() {
   config.flushEventThreshold = 30;
   config.insecureSkipTlsVerify = false;
 
-  Honch.begin(config);
-  Honch.track("staged_before_wifi");
+  honch::defaultClient().begin(config);
+  honch::defaultClient().track("staged_before_wifi");
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED) {
     delay(250);
   }
 
-  Honch.flush();
+  honch::defaultClient().flush();
 }
 
 void loop() {
-  Honch.tick();
+  honch::defaultClient().tick();
 }

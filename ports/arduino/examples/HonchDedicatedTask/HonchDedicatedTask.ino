@@ -19,7 +19,7 @@ static bool honchConnected() {
 static void honchPumpTask(void *parameter) {
   (void)parameter;
   for (;;) {
-    Honch.tick();
+    honch::defaultClient().tick();
     vTaskDelay(pdMS_TO_TICKS(250));
   }
 }
@@ -47,8 +47,8 @@ void setup() {
   config.connectivityCallback = honchConnected;
   config.insecureSkipTlsVerify = false;
 
-  Honch.begin(config);
-  Honch.track("boot");
+  honch::defaultClient().begin(config);
+  honch::defaultClient().track("boot");
 
   xTaskCreatePinnedToCore(
       honchPumpTask,

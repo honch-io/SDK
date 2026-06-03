@@ -13,6 +13,7 @@ static void assert_http_status(int code, honch_status_t status, honch_transport_
 }
 
 int main() {
+  HonchClass &client = honch::defaultClient();
   static uint8_t buffer[8192];
   HonchConfig config = {
     .apiKey = "test-key",
@@ -28,38 +29,38 @@ int main() {
     .insecureSkipTlsVerify = true,
   };
 
-  assert(!Honch.tick());
-  assert(strcmp(Honch.lastError(), "not initialized") == 0);
+  assert(!client.tick());
+  assert(strcmp(client.lastError(), "not initialized") == 0);
 
-  assert(Honch.begin(config));
+  assert(client.begin(config));
   const honch_property_t buttonProps[] = {
       honch_prop("count", honch_i64(1))
   };
   const honch_property_t traits[] = {
       honch_prop("role", honch_str("tester"))
   };
-  assert(Honch.track("button_pressed", buttonProps, 1u));
-  assert(Honch.identify("user-1", traits, 1u));
-  assert(Honch.setProperty("mode", honch_str("host")));
-  assert(Honch.sessionStart("demo"));
-  assert(Honch.sessionEnd());
-  if (!Honch.flush()) {
-    fprintf(stderr, "flush failed: %s\n", Honch.lastError());
+  assert(client.track("button_pressed", buttonProps, 1u));
+  assert(client.identify("user-1", traits, 1u));
+  assert(client.setProperty("mode", honch_str("host")));
+  assert(client.sessionStart("demo"));
+  assert(client.sessionEnd());
+  if (!client.flush()) {
+    fprintf(stderr, "flush failed: %s\n", client.lastError());
     abort();
   }
-  assert(strlen(Honch.deviceId()) > 0);
-  assert(strcmp(Honch.lastError(), "ok") == 0);
-  assert(Honch.shutdown());
+  assert(strlen(client.deviceId()) > 0);
+  assert(strcmp(client.lastError(), "ok") == 0);
+  assert(client.shutdown());
 
   honch_arduino_host_transport_reset();
   honch_arduino_host_transport_set_result(HONCH_ERROR_TRANSPORT, HONCH_TRANSPORT_RETRY);
-  assert(Honch.begin(config));
-  assert(Honch.track("queued"));
-  assert(!Honch.shutdown());
+  assert(client.begin(config));
+  assert(client.track("queued"));
+  assert(!client.shutdown());
 
   honch_arduino_host_transport_set_result(HONCH_OK, HONCH_TRANSPORT_ACCEPTED);
-  assert(Honch.begin(config));
-  assert(Honch.flush());
+  assert(client.begin(config));
+  assert(client.flush());
   assert(honch_arduino_host_transport_call_count() > 0);
   assert(strcmp(honch_arduino_host_transport_last_url(), "http://127.0.0.1:8001/capture") == 0);
   assert(strcmp(honch_arduino_host_transport_last_content_type(), "application/vnd.honch.chunk") == 0);
@@ -67,7 +68,7 @@ int main() {
   assert(strlen(honch_arduino_host_transport_last_stream_id()) > 0);
   assert(honch_arduino_host_transport_last_body_size() > 0);
   assert(honch_arduino_host_transport_last_body() != NULL);
-  assert(Honch.shutdown());
+  assert(client.shutdown());
 
   assert_http_status(202, HONCH_OK, HONCH_TRANSPORT_CHUNK_STORED);
   assert_http_status(204, HONCH_OK, HONCH_TRANSPORT_ACCEPTED);
@@ -86,41 +87,41 @@ int main() {
   scheduledConfig.flushEventThreshold = 3;
   honch_arduino_host_transport_reset();
   honch_arduino_host_set_millis(1000);
-  assert(Honch.begin(scheduledConfig));
-  assert(Honch.track("scheduled_one"));
-  assert(Honch.tick());
+  assert(client.begin(scheduledConfig));
+  assert(client.track("scheduled_one"));
+  assert(client.tick());
   assert(honch_arduino_host_transport_call_count() == 0);
-  assert(Honch.track("scheduled_two"));
-  assert(Honch.tick());
+  assert(client.track("scheduled_two"));
+  assert(client.tick());
   assert(honch_arduino_host_transport_call_count() > 0);
-  assert(Honch.shutdown());
+  assert(client.shutdown());
 
   honch_arduino_host_transport_reset();
   honch_arduino_host_set_millis(5000);
-  assert(Honch.begin(scheduledConfig));
-  assert(Honch.track("interval_one"));
+  assert(client.begin(scheduledConfig));
+  assert(client.track("interval_one"));
   honch_arduino_host_advance_millis(1000);
-  assert(Honch.loop());
+  assert(client.loop());
   assert(honch_arduino_host_transport_call_count() == 0);
   honch_arduino_host_advance_millis(1000);
-  assert(Honch.loop());
+  assert(client.loop());
   assert(honch_arduino_host_transport_call_count() > 0);
-  assert(Honch.shutdown());
+  assert(client.shutdown());
 
   HonchConfig defaultScheduledConfig = config;
   defaultScheduledConfig.flushIntervalSeconds = 0;
   defaultScheduledConfig.flushEventThreshold = 0;
   honch_arduino_host_transport_reset();
   honch_arduino_host_set_millis(10000);
-  assert(Honch.begin(defaultScheduledConfig));
-  assert(Honch.track("default_interval"));
+  assert(client.begin(defaultScheduledConfig));
+  assert(client.track("default_interval"));
   honch_arduino_host_advance_millis(59000);
-  assert(Honch.tick());
+  assert(client.tick());
   assert(honch_arduino_host_transport_call_count() == 0);
   honch_arduino_host_advance_millis(1000);
-  assert(Honch.tick());
+  assert(client.tick());
   assert(honch_arduino_host_transport_call_count() > 0);
-  assert(Honch.shutdown());
+  assert(client.shutdown());
 
   honch_platform_ops_t platformOps;
   honch_arduino_platform_t platformCtx;
