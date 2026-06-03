@@ -219,7 +219,7 @@ class ClientWrapperTests(unittest.TestCase):
         self.assertIn("Do not call tick() from a latency-sensitive control loop", normalized)
         self.assertIn("Do not call tick() or flush() from ISR-adjacent callbacks", normalized)
         self.assertIn("high-priority tasks", normalized)
-        self.assertIn("maximum of 30000 ms", normalized)
+        self.assertIn("maximum of 10000 ms", normalized)
 
 
 if __name__ == "__main__":

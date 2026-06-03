@@ -81,7 +81,7 @@ set it to `HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS` for benchmark or explicit
 high-throughput modes.
 `transportTimeoutMs` bounds each synchronous HTTP POST; leave it at the 3000 ms
 default unless the capture endpoint and network need a different per-request
-timeout. Values above the hard maximum of 30000 ms are clamped.
+timeout. Values above the hard maximum of 10000 ms are clamped.
 
 `honch::defaultClient().tick()` may block for up to the configured transport timeout because the
 HTTP POST is synchronous and runs on the caller's task. Do not call

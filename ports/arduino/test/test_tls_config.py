@@ -68,7 +68,7 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         self.assertIn("coreConfig.transport_timeout_ms = config.transportTimeoutMs;", adapter)
         self.assertIn("uint32_t transportTimeoutMs;", transport_header)
         self.assertIn("HONCH_ARDUINO_DEFAULT_TRANSPORT_TIMEOUT_MS 3000u", transport)
-        self.assertIn("HONCH_ARDUINO_MAX_TRANSPORT_TIMEOUT_MS 30000u", transport)
+        self.assertIn("HONCH_ARDUINO_MAX_TRANSPORT_TIMEOUT_MS 10000u", transport)
         self.assertIn(
             "ctx->transportTimeoutMs = config.transportTimeoutMs == 0u ?",
             transport,
@@ -81,7 +81,7 @@ class ArduinoTLSConfigTests(unittest.TestCase):
             transport.index("int code = http.POST("),
         )
         self.assertIn("transportTimeoutMs", readme)
-        self.assertIn("maximum of 30000 ms", readme)
+        self.assertIn("maximum of 10000 ms", readme)
 
     def test_public_config_exposes_connectivity_gate(self) -> None:
         header = read("ports/arduino/src/Honch.h")
