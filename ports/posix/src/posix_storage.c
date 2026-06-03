@@ -74,7 +74,12 @@ static honch_status_t honch_posix_state_set(void *ctx, const char *key, const ui
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    return honch_write_file_atomic_bytes(client->state_directory, key, data, data_size);
+    return honch_write_file_atomic_bytes_with_durability(
+        client->state_directory,
+        key,
+        data,
+        data_size,
+        client->durability_mode);
 }
 
 static honch_status_t honch_posix_state_delete(void *ctx, const char *key)

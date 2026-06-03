@@ -386,10 +386,11 @@ Queue behavior:
 - a queue directory is intended to be owned by one active SDK client/process at a time
 - events are written atomically through temp-file rename
 - `HONCH_DURABILITY_OS_BUFFERED` keeps atomic rename behavior but skips
-  per-event fsyncs by default; this lowers enqueue latency and flash wear, but
-  queued events may be lost after OS crash or power loss before storage is flushed
-- `HONCH_DURABILITY_SYNC_ALWAYS` fsyncs each queued event file and the queue
-  directory before returning from `honch_track`
+  per-write fsyncs by default; this lowers enqueue/state-update latency and
+  flash wear, but queued events and state changes may be lost after OS crash or
+  power loss before storage is flushed
+- `HONCH_DURABILITY_SYNC_ALWAYS` fsyncs each queued event or state file and its
+  directory before returning from the write operation
 - events are stored as `.hqe` files
 - startup removes temporary write files
 - queue length is bounded by `max_queued_events`
