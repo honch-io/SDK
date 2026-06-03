@@ -226,23 +226,19 @@ class PosixChunkWireTest(unittest.TestCase):
 
     def test_docs_reference_chunk_wire_contract(self) -> None:
         readme = read("README.md")
+        esp_idf_readme = read_sdk("ports/esp-idf/README.md")
         spec = (SDK_ROOT / "spec/wire-format-v2.md").read_text()
         root_readme = read_sdk("README.md")
-        production_e2e = read_sdk("docs/production-e2e.md")
-        release_runner = read_sdk("tools/release_e2e.py")
 
         self.assertIn("/capture", readme)
         self.assertIn("application/vnd.honch.chunk", readme)
         self.assertIn("POST /capture", spec)
+        self.assertIn("application/vnd.honch.chunk", esp_idf_readme)
         self.assertNotIn("application/cbor", readme)
         self.assertNotIn("POST /batch", readme)
         self.assertIn("HQR1 queue records", root_readme)
-        self.assertIn("ports/posix/test/test_sdk_contract.py", production_e2e)
-        self.assertIn("ports/esp-idf/tests/test_sdk_contract.py", production_e2e)
-        self.assertIn("ports/posix/test/test_sdk_contract.py", release_runner)
-        self.assertIn("ports/esp-idf/tests/test_sdk_contract.py", release_runner)
-        self.assertNotIn("test_cbor_migration.py", production_e2e)
-        self.assertNotIn("test_cbor_migration.py", release_runner)
+        self.assertIn("spec/conformance/", root_readme)
+        self.assertNotIn("test_cbor_migration.py", root_readme)
 
     def test_docs_warn_tick_may_block_and_show_dedicated_pump_thread(self) -> None:
         readme = read("README.md")

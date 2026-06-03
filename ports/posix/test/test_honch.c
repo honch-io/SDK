@@ -2184,8 +2184,8 @@ static void test_flush_dead_letters_invalid_persisted_queue_files(void)
     char oversized_path[240];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
     snprintf(dead_dir, sizeof(dead_dir), "%s/dead", queue_dir);
-    snprintf(malformed_path, sizeof(malformed_path), "%s/00000000000000000000-000000-malformed.hqe", pending_dir);
-    snprintf(oversized_path, sizeof(oversized_path), "%s/00000000000000000001-000001-oversized.hqe", pending_dir);
+    snprintf(malformed_path, sizeof(malformed_path), "%s/00000000000000090000-090000-malformed.hqe", pending_dir);
+    snprintf(oversized_path, sizeof(oversized_path), "%s/00000000000000090001-090001-oversized.hqe", pending_dir);
 
     EXPECT_TRUE(write_text_file(malformed_path, "{\"event\":") != 0);
 
@@ -2259,7 +2259,7 @@ static void test_flush_dead_letters_semantically_invalid_queue_record(void)
     char invalid_path[240];
     snprintf(pending_dir, sizeof(pending_dir), "%s/pending", queue_dir);
     snprintf(dead_dir, sizeof(dead_dir), "%s/dead", queue_dir);
-    snprintf(invalid_path, sizeof(invalid_path), "%s/00000000000000000000-000000-invalid.hqe", pending_dir);
+    snprintf(invalid_path, sizeof(invalid_path), "%s/00000000000000090002-090002-invalid.hqe", pending_dir);
 
     const unsigned char valid_but_not_event[] = {0xf6};
     EXPECT_TRUE(write_bytes_file(invalid_path, valid_but_not_event, sizeof(valid_but_not_event)) != 0);
