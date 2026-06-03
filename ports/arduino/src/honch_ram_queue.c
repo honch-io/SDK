@@ -150,15 +150,11 @@ static honch_status_t honch_ram_queue_read_batch(
         if (entry->length > max_event_bytes) {
             return HONCH_ERROR_QUEUE_FULL;
         }
-        uint8_t *copy = (uint8_t *)malloc(entry->length);
-        if (copy == NULL) {
-            return HONCH_ERROR_OUT_OF_MEMORY;
-        }
-        memcpy(copy, queue->buffer + entry->offset, entry->length);
         events[*event_count] = (honch_storage_event_t) {
-            .data = copy,
+            .data = queue->buffer + entry->offset,
             .length = entry->length,
-            .sequence = entry->sequence
+            .sequence = entry->sequence,
+            .flags = HONCH_STORAGE_EVENT_BORROWED
         };
         bytes += entry->length;
         (*event_count)++;
