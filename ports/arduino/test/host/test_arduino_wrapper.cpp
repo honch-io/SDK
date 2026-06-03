@@ -50,6 +50,12 @@ int main() {
   }
   assert(strlen(client.deviceId()) > 0);
   assert(strcmp(client.lastError(), "ok") == 0);
+
+  assert(client.hostLockForTest());
+  assert(!client.track("locked_wrapper_probe"));
+  client.hostUnlockForTest();
+  assert(strcmp(client.lastError(), "busy") == 0);
+
   assert(client.shutdown());
 
   honch_arduino_host_transport_reset();

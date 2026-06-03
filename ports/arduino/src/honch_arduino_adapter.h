@@ -34,6 +34,10 @@ uint64_t honch_arduino_epoch_millis(void *ctx);
 honch_status_t honch_arduino_random_bytes(void *ctx, uint8_t *buffer, size_t bufferSize);
 honch_status_t honch_arduino_device_id(void *ctx, char *buffer, size_t bufferSize);
 void honch_arduino_log(void *ctx, honch_log_level_t level, const char *message);
+honch_status_t honch_arduino_mutex_create(void *ctx, void **mutex);
+void honch_arduino_mutex_destroy(void *ctx, void *mutex);
+honch_status_t honch_arduino_mutex_lock(void *ctx, void *mutex);
+void honch_arduino_mutex_unlock(void *ctx, void *mutex);
 
 honch_status_t honch_arduino_platform_ops_init(
     honch_platform_ops_t *ops,
