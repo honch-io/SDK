@@ -90,13 +90,13 @@ honch_status_t HonchClass::lockInstance() {
   if (_instanceMutex == nullptr) {
     honch_status_t status = honch_arduino_mutex_create(nullptr, &_instanceMutex);
     if (status != HONCH_OK) {
-      _lastStatus = status;
+      _lastStatus.store(status);
       return status;
     }
   }
   honch_status_t status = honch_arduino_mutex_lock(nullptr, _instanceMutex);
   if (status != HONCH_OK) {
-    _lastStatus = status;
+    _lastStatus.store(status);
   }
   return status;
 }
@@ -106,7 +106,7 @@ void HonchClass::unlockInstance() {
 }
 
 bool HonchClass::setLastStatusLocked(honch_status_t status) {
-  _lastStatus = status;
+  _lastStatus.store(status);
   return status == HONCH_OK;
 }
 
@@ -273,10 +273,10 @@ bool HonchClass::queueStats(honch_queue_stats_t *stats) {
 }
 
 const char *HonchClass::lastError() {
-  honch_status_t status = _lastStatus;
+  honch_status_t status = _lastStatus.load();
   honch_status_t lockStatus = lockInstance();
   if (lockStatus == HONCH_OK) {
-    status = _lastStatus;
+    status = _lastStatus.load();
     unlockInstance();
   } else {
     status = lockStatus;
