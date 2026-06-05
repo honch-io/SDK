@@ -16,7 +16,7 @@ The example app should prove:
 - Manual and scheduled upload draining.
 - iOS foreground upload draining from the host app lifecycle.
 - Android headless `HonchRelayUpload` task registration for scheduled drains.
-- Capture to ClickHouse verification using a unique event name.
+- Capture ingestion verification using a unique event name.
 
 Required app configuration:
 

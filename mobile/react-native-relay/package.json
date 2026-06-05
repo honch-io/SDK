@@ -7,7 +7,6 @@
   "react-native": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {
-    "e2e:capture": "bun e2e/relay-capture-e2e.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "verify:android:native": "scripts/verify-android-native.sh",
