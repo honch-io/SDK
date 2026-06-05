@@ -459,7 +459,7 @@ static void run_offline_queue_proof(void)
 
     ESP_LOGI(TAG,
              "BENCH_OFFLINE_PROOF_DONE proof_id=%" PRIu32
-             " queued_estimate=%" PRIu32 " clickhouse_event=bench_offline_queue_proof",
+             " queued_estimate=%" PRIu32 " capture_event=bench_offline_queue_proof",
              proof_id,
              s_queued_estimate);
 }
@@ -498,7 +498,7 @@ static void bench_task(void *arg)
 
     if (CONFIG_BENCH_OFFLINE_QUEUE_PROOF) {
         run_offline_queue_proof();
-        ESP_LOGI(TAG, "Offline queue proof complete. Verify bench_offline_queue_proof rows in ClickHouse.");
+        ESP_LOGI(TAG, "Offline queue proof complete. Verify bench_offline_queue_proof rows in your Capture backend.");
         while (1) {
             vTaskDelay(pdMS_TO_TICKS(60000));
         }

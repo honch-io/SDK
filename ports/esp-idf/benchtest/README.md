@@ -58,7 +58,7 @@ Expected flow:
 4. Restore capture.
 5. Wait for `BENCH_OFFLINE_RECOVERY_FLUSH queued_estimate=0`.
 6. Verify `bench_offline_queue_proof` rows for the logged `proof_id` in
-   ClickHouse.
+   your Capture backend.
 
 Proof-specific monitor markers:
 
