@@ -86,34 +86,6 @@ find_package(honch_posix REQUIRED)
 target_link_libraries(app PRIVATE honch::honch_posix)
 ```
 
-## E2E Capture Test
-
-The real ingest E2E test is opt-in because it sends events to the configured
-service. It includes local-stack defaults for the Honch development E2E stack,
-and every value can be overridden with environment variables.
-
-```sh
-cmake -S . -B build-e2e -DHONCH_BUILD_TESTS=ON -DHONCH_BUILD_E2E=ON
-cmake --build build-e2e
-ctest --test-dir build-e2e --output-on-failure -R honch_posix_e2e
-```
-
-Default local E2E settings:
-
-- `HONCH_E2E_ENDPOINT`: `http://127.0.0.1:8001`
-- `HONCH_E2E_CAPTURE_HEALTH_URL`: `http://127.0.0.1:8001/health`
-- `HONCH_E2E_WORKER_HEALTH_URL`: `http://127.0.0.1:8080/`
-- `HONCH_E2E_TOKEN`: `honch_e2e_test_key`
-- `HONCH_E2E_PROJECT_ID`: `00000000-0000-0000-0000-000000000002`
-- `HONCH_E2E_CLICKHOUSE_URL`: `http://127.0.0.1:8123`
-- `HONCH_E2E_CLICKHOUSE_DATABASE`: `platform`
-
-The test verifies capture health, worker health, ClickHouse reachability, SDK
-validation failures, batching, lifecycle events, identify, user properties,
-reserved-property protection, auto properties, battery-low telemetry, sessions,
-device ID persistence across restart, reset identity rotation, and ingested
-ClickHouse rows.
-
 ## Examples
 
 Run the minimal example:
