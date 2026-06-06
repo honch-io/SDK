@@ -677,9 +677,9 @@ static void test_init_sets_next_sequence_after_existing_storage_events(void)
 {
     fake_state_storage_t storage = {
         .queue_push_status = HONCH_OK,
-        .queue_depth = 2u,
-        .queued_sequences = {2u, 5u},
-        .queued_sequence_count = 2u
+        .queue_depth = 3u,
+        .queued_sequences = {2u, 9u, 4u},
+        .queued_sequence_count = 3u
     };
     honch_platform_ops_t platform;
     honch_state_storage_ops_t state_ops;
@@ -689,12 +689,12 @@ static void test_init_sets_next_sequence_after_existing_storage_events(void)
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
-    assert(storage.queue_peek_calls == 2);
-    assert(storage.queued_sequence_count == 3u);
-    assert(storage.queued_sequences[2] == 6u);
-    assert(honch_core_track(client, "after_existing_storage", NULL, 0u) == HONCH_OK);
+    assert(storage.queue_peek_calls == 3);
     assert(storage.queued_sequence_count == 4u);
-    assert(storage.queued_sequences[3] == 7u);
+    assert(storage.queued_sequences[3] == 10u);
+    assert(honch_core_track(client, "after_existing_storage", NULL, 0u) == HONCH_OK);
+    assert(storage.queued_sequence_count == 5u);
+    assert(storage.queued_sequences[4] == 11u);
 
     storage.queue_depth = 0u;
     storage.queued_sequence_count = 0u;

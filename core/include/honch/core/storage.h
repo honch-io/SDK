@@ -48,6 +48,12 @@ typedef struct honch_state_storage_ops {
 
 typedef struct honch_event_queue_ops {
     honch_status_t (*queue_push)(void *ctx, const uint8_t *event, size_t event_size, uint64_t sequence);
+    /*
+     * queue_peek is an advancing pending-event iterator used during startup sequence recovery
+     * and reader-based flush fallback. Repeated calls must expose pending events in
+     * stable order and must return
+     * HONCH_ERROR_NOT_INITIALIZED when iteration is exhausted.
+     */
     honch_status_t (*queue_peek)(void *ctx, honch_storage_reader_t *reader);
     honch_status_t (*queue_read_batch)(
         void *ctx,
