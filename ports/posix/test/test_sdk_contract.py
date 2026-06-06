@@ -85,6 +85,13 @@ class PosixChunkWireTest(unittest.TestCase):
         self.assertIn("HONCH_ERROR_NOT_INITIALIZED when iteration is exhausted", storage_header)
         self.assertIn("used during startup sequence recovery", storage_header)
 
+    def test_wire_v2_zigzag_avoids_signed_negative_shift(self) -> None:
+        wire = read_sdk("core/src/honch_wire_v2.c")
+        body = c_global_function_body(wire, "uint64_t", "honch_wire_v2_zigzag_i64")
+
+        self.assertIn("value < 0", body)
+        self.assertNotIn("value >>", body)
+
     def test_transport_posts_chunk_wire_to_capture_endpoint(self) -> None:
         transport = read_sdk("ports/posix/src/posix_transport_curl.c")
         cmake = read("CMakeLists.txt") + read_sdk("ports/posix/CMakeLists.txt")
