@@ -557,7 +557,10 @@ The spec requires binary fixtures before implementation is considered complete:
 - one duplicate continuation accepted by the reassembler;
 - one CRC failure rejected before decode;
 - one semantic failure for duplicate reserved property keys;
-- one maximum-SDK-limit message.
+- one maximum-SDK-limit message;
+- one scalar value-types fixture covering bytes, float32, and float64;
+- one metadata-context fixture covering `device_time_source`, `capabilities`,
+  and extension context.
 
 Each fixture must include:
 

@@ -99,23 +99,35 @@ class ConformanceFixtureTests(unittest.TestCase):
             [("track", fixture["expect"]["event"], op["properties"])],
         )
 
-    def test_input_style_event_fixtures_delegate_track_calls_to_core(self):
-        for path in (
-            "spec/conformance/events/boot_event.json",
-            "spec/conformance/events/custom_event_with_session.json",
-        ):
-            fixture = load_fixture(path)
-            with self.subTest(path=path):
-                client = self._client_from_fixture_config(fixture["input"]["config"])
-                if "session_id" in fixture["input"]:
-                    client.session_start(None)
-                client.track(fixture["input"]["event"], fixture["input"]["properties"])
+    def test_boot_event_fixture_delegates_track_call_to_core(self):
+        fixture = load_fixture("spec/conformance/events/boot_event.json")
+        client = self._client_from_fixture_config(fixture["input"]["config"])
+        client.track(fixture["input"]["event"], fixture["input"]["properties"])
 
-                self.assertEqual(client._core.config["device_model"], fixture["input"]["config"]["device_model"])
-                self.assertEqual(
-                    client._core.calls[-1],
-                    ("track", fixture["expected"]["event"], fixture["input"]["properties"]),
-                )
+        self.assertEqual(client._core.config["device_model"], fixture["input"]["config"]["device_model"])
+        self.assertEqual(
+            client._core.calls[-1],
+            ("track", fixture["expected"]["event"], fixture["input"]["properties"]),
+        )
+
+    def test_custom_session_event_fixture_delegates_session_and_track_to_core(self):
+        fixture = load_fixture("spec/conformance/events/custom_event_with_session.json")
+        client = self._client_from_fixture_config(fixture["config"])
+
+        for op in fixture["operations"]:
+            if op["op"] == "session_start":
+                client.session_start(op["session_name"])
+            elif op["op"] == "track":
+                client.track(op["event"], op["properties"])
+
+        self.assertEqual(client._core.config["device_model"], fixture["config"]["device_model"])
+        self.assertEqual(
+            client._core.calls,
+            [
+                ("session_start", None),
+                ("track", fixture["expected"]["event"], fixture["operations"][1]["properties"]),
+            ],
+        )
 
     def test_auto_stamp_conflict_fixture_expects_rejection(self):
         fixture = load_fixture("spec/conformance/events/auto_stamp_wins_conflict.json")

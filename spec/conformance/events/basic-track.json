@@ -12,8 +12,7 @@
       "op": "track",
       "event": "button_pressed",
       "properties": {
-        "pin": 0,
-        "$device_id": "spoofed"
+        "pin": 0
       }
     }
   ],
@@ -26,9 +25,6 @@
       "$device_model": "FixtureBoard",
       "$firmware_version": "1.2.3",
       "$environment": "test"
-    },
-    "properties_absent": [
-      "spoofed"
-    ]
+    }
   }
 }
