@@ -107,6 +107,19 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         self.assertIn("HonchClass &defaultClient()", adapter)
         self.assertIn("honch::defaultClient()", readme)
 
+    def test_readme_explains_wrapper_and_core_runtime_versions(self) -> None:
+        readme = read("ports/arduino/README.md")
+        library = read("ports/arduino/library.properties")
+        internal = read("ports/arduino/src/honch_internal.h")
+        normalized = " ".join(readme.split())
+
+        self.assertIn("version=0.1.0", library)
+        self.assertIn('#define HONCH_SDK_VERSION "0.2.0"', internal)
+        self.assertIn("Arduino wrapper/package version", normalized)
+        self.assertIn("0.1.0", normalized)
+        self.assertIn("shared C core runtime version", normalized)
+        self.assertIn("0.2.0", normalized)
+
     def test_tick_contract_warns_about_blocking_and_shows_dedicated_task(self) -> None:
         readme = read("ports/arduino/README.md")
         task_example = read("ports/arduino/examples/HonchDedicatedTask/HonchDedicatedTask.ino")
