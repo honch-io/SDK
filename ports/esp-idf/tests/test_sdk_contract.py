@@ -254,6 +254,21 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("effective_timeout_ms = HONCH_ESP_MAX_TRANSPORT_TIMEOUT_MS;", ops_init)
         self.assertIn(".timeout_ms = timeout_ms", transport)
 
+    def test_esp_static_config_string_limits_are_public_constants(self) -> None:
+        compat = read("ports/esp-idf/honch/src/esp_compat.c")
+        public_header = read("ports/esp-idf/honch/include/honch.h")
+
+        self.assertIn("#define HONCH_ESP_API_KEY_MAX_LENGTH 127u", public_header)
+        self.assertIn("#define HONCH_ESP_ENDPOINT_URL_MAX_LENGTH 279u", public_header)
+        self.assertIn("#define HONCH_ESP_DEVICE_MODEL_MAX_LENGTH 63u", public_header)
+        self.assertIn("#define HONCH_ESP_FIRMWARE_VERSION_MAX_LENGTH 31u", public_header)
+        self.assertIn("#define HONCH_ESP_ENVIRONMENT_MAX_LENGTH 31u", public_header)
+        self.assertIn("s_api_key[HONCH_ESP_API_KEY_MAX_LENGTH + 1u]", compat)
+        self.assertIn("s_endpoint_url[HONCH_ESP_ENDPOINT_URL_MAX_LENGTH + 1u]", compat)
+        self.assertIn("s_device_model[HONCH_ESP_DEVICE_MODEL_MAX_LENGTH + 1u]", compat)
+        self.assertIn("s_firmware_version[HONCH_ESP_FIRMWARE_VERSION_MAX_LENGTH + 1u]", compat)
+        self.assertIn("s_environment[HONCH_ESP_ENVIRONMENT_MAX_LENGTH + 1u]", compat)
+
     def test_example_initializes_network_stack_for_offline_tick_smoke(self) -> None:
         example = read("ports/esp-idf/example/main/app_main.c")
         network_stack = c_function_body(example, "init_network_stack")
