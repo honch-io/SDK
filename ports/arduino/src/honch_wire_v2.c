@@ -33,7 +33,7 @@
 uint64_t honch_wire_v2_zigzag_i64(int64_t value)
 {
     uint64_t bits = (uint64_t)value;
-    return (bits << 1u) ^ (uint64_t)(value >> 63);
+    return (bits << 1u) ^ (value < 0 ? UINT64_MAX : 0u);
 }
 
 int64_t honch_wire_v2_unzigzag_i64(uint64_t value)
