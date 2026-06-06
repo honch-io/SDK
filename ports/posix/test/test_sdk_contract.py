@@ -123,6 +123,15 @@ class PosixChunkWireTest(unittest.TestCase):
         self.assertIn("curl_easy_reset(curl);", post)
         self.assertIn("curl_easy_cleanup(ctx->curl);", deinit)
 
+    def test_docs_cover_process_wide_libcurl_initialization(self) -> None:
+        readme = read("README.md")
+        normalized = " ".join(readme.split())
+
+        self.assertIn("curl_global_init(CURL_GLOBAL_DEFAULT)", normalized)
+        self.assertIn("pthread_once", normalized)
+        self.assertIn("process-wide libcurl initialization", normalized)
+        self.assertIn("does not call curl_global_cleanup", normalized)
+
     def test_transport_guards_curl_post_field_size_cast(self) -> None:
         transport = read_sdk("ports/posix/src/posix_transport_curl.c")
 

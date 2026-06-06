@@ -281,6 +281,12 @@ key is sent as `X-Honch-Project-Key`; a boot-scoped stream ID is sent as
 Use HTTPS in production. Local HTTP should only be used for intentional local
 Capture testing.
 
+The POSIX transport performs process-wide libcurl initialization by calling
+`curl_global_init(CURL_GLOBAL_DEFAULT)` once through `pthread_once`. The SDK
+cleans up each client-owned easy handle but does not call curl_global_cleanup;
+hosts that manage libcurl directly should account for that process-wide libcurl
+lifecycle.
+
 GPIO tracking is intentionally kept out of the reusable C core. Use a platform
 adapter, like `example/posix_gpio`, to debounce platform-specific GPIO edge
 signals and translate accepted edges into normal `honch_track` calls with at
