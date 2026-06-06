@@ -2,6 +2,7 @@
 
 #include <assert.h>
 #include <stdbool.h>
+#include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -43,6 +44,20 @@ static void test_crc16_ccitt_false_matches_check_value(void)
     static const uint8_t input[] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
 
     assert(honch_wire_v2_crc16(input, sizeof(input)) == 0x29b1u);
+}
+
+static void test_zigzag_i64_matches_wire_edge_cases(void)
+{
+    assert(honch_wire_v2_zigzag_i64(0) == 0u);
+    assert(honch_wire_v2_zigzag_i64(-1) == 1u);
+    assert(honch_wire_v2_zigzag_i64(1) == 2u);
+    assert(honch_wire_v2_zigzag_i64(INT64_MIN) == UINT64_MAX);
+    assert(honch_wire_v2_zigzag_i64(INT64_MAX) == UINT64_MAX - 1u);
+
+    const int64_t values[] = {0, -1, 1, INT64_MIN, INT64_MAX};
+    for (size_t i = 0u; i < sizeof(values) / sizeof(values[0]); i++) {
+        assert(honch_wire_v2_unzigzag_i64(honch_wire_v2_zigzag_i64(values[i])) == values[i]);
+    }
 }
 
 static void test_single_final_frame_uses_v2_header_varint_id_and_message_crc(void)
@@ -1310,6 +1325,7 @@ static void test_event_batch_encoder_rejects_compact_messages_over_sdk_limit(voi
 int main(void)
 {
     test_crc16_ccitt_false_matches_check_value();
+    test_zigzag_i64_matches_wire_edge_cases();
     test_single_final_frame_uses_v2_header_varint_id_and_message_crc();
     test_init_frame_includes_total_length_and_no_crc_when_more_frames_follow();
     test_final_continuation_uses_offset_and_crc_over_complete_message();
