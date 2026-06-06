@@ -383,6 +383,11 @@ Sharing the same `queue_directory` across concurrent clients can delay flush
 visibility and may temporarily exceed `max_queued_events`, because each client
 maintains an in-memory queue count cache between disk reconciliations.
 
+The POSIX file-backed queue scans and sorts queue files for ordered read/peek
+paths. It is intended for bounded embedded-style queues, not very large offline
+backlogs. Keep `max_queued_events` conservative for the target filesystem, or
+provide a custom queue when large offline backlogs are expected.
+
 The default portable RAM queue used by embedded ports is bounded and compact:
 consuming a non-tail event uses an O(n) memmove per consumed event to keep the
 caller-provided buffer contiguous. The POSIX port uses file-backed storage by

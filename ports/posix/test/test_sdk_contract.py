@@ -229,6 +229,15 @@ class PosixChunkWireTest(unittest.TestCase):
         self.assertNotIn("honch_list_queue_files", depth)
         self.assertNotIn("honch_list_files_with_suffix", clear_dir)
 
+    def test_docs_cover_posix_file_queue_scaling_characteristics(self) -> None:
+        readme = read("README.md")
+        normalized = " ".join(readme.split())
+
+        self.assertIn("file-backed queue scans and sorts", normalized)
+        self.assertIn("bounded embedded-style queues", normalized)
+        self.assertIn("large offline backlogs", normalized)
+        self.assertIn("custom queue", normalized)
+
     def test_posix_platform_enables_posix_declarations_before_headers(self) -> None:
         platform = read_sdk("ports/posix/src/posix_platform.c")
 
