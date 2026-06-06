@@ -43,8 +43,16 @@ class HonchConfig:
         if self.batch_size <= 0:
             self.batch_size = DEFAULT_BATCH_SIZE
 
-        self.max_queued_events = int(kwargs.get("max_queued_events") or DEFAULT_MAX_QUEUED_EVENTS)
-        self.max_event_bytes = int(kwargs.get("max_event_bytes") or DEFAULT_MAX_EVENT_BYTES)
+        max_queued_events = kwargs.get("max_queued_events")
+        self.max_queued_events = DEFAULT_MAX_QUEUED_EVENTS if max_queued_events is None else int(max_queued_events)
+        if self.max_queued_events <= 0:
+            raise InvalidArgumentError("max_queued_events must be positive")
+
+        max_event_bytes = kwargs.get("max_event_bytes")
+        self.max_event_bytes = DEFAULT_MAX_EVENT_BYTES if max_event_bytes is None else int(max_event_bytes)
+        if self.max_event_bytes <= 0:
+            raise InvalidArgumentError("max_event_bytes must be positive")
+
         timeout = kwargs.get("transport_timeout_ms")
         self.transport_timeout_ms = DEFAULT_TRANSPORT_TIMEOUT_MS if timeout is None else int(timeout)
         if self.transport_timeout_ms <= 0:
