@@ -77,6 +77,14 @@ class PosixChunkWireTest(unittest.TestCase):
         self.assertNotIn("CLOCK_REALTIME", portable_core)
         self.assertNotIn("pthread_create", portable_core)
 
+    def test_storage_queue_peek_documents_advancing_iteration_contract(self) -> None:
+        storage_header = read_sdk("core/include/honch/core/storage.h")
+
+        self.assertIn("queue_peek is an advancing pending-event iterator", storage_header)
+        self.assertIn("stable order", storage_header)
+        self.assertIn("HONCH_ERROR_NOT_INITIALIZED when iteration is exhausted", storage_header)
+        self.assertIn("used during startup sequence recovery", storage_header)
+
     def test_transport_posts_chunk_wire_to_capture_endpoint(self) -> None:
         transport = read_sdk("ports/posix/src/posix_transport_curl.c")
         cmake = read("CMakeLists.txt") + read_sdk("ports/posix/CMakeLists.txt")
