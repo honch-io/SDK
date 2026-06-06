@@ -31,11 +31,11 @@ static honch_esp_platform_t s_platform_ctx;
 static honch_esp_storage_t s_storage_ctx;
 static honch_esp_transport_t s_transport_ctx;
 
-static char s_api_key[128];
-static char s_endpoint_url[280];
-static char s_device_model[64];
-static char s_firmware_version[32];
-static char s_environment[32];
+static char s_api_key[HONCH_ESP_API_KEY_MAX_LENGTH + 1u];
+static char s_endpoint_url[HONCH_ESP_ENDPOINT_URL_MAX_LENGTH + 1u];
+static char s_device_model[HONCH_ESP_DEVICE_MODEL_MAX_LENGTH + 1u];
+static char s_firmware_version[HONCH_ESP_FIRMWARE_VERSION_MAX_LENGTH + 1u];
+static char s_environment[HONCH_ESP_ENVIRONMENT_MAX_LENGTH + 1u];
 static bool (*s_connectivity_callback)(void) = NULL;
 
 static honch_err_t honch_esp_status_to_err(honch_status_t status);

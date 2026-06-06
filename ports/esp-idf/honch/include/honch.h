@@ -41,6 +41,12 @@ typedef enum {
 #define HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS 0xffffffffu
 #endif
 
+#define HONCH_ESP_API_KEY_MAX_LENGTH 127u
+#define HONCH_ESP_ENDPOINT_URL_MAX_LENGTH 279u
+#define HONCH_ESP_DEVICE_MODEL_MAX_LENGTH 63u
+#define HONCH_ESP_FIRMWARE_VERSION_MAX_LENGTH 31u
+#define HONCH_ESP_ENVIRONMENT_MAX_LENGTH 31u
+
 typedef struct {
     const char *api_key;                 // required
     const char *host;                    // required, e.g. "https://capture.honch.io"
