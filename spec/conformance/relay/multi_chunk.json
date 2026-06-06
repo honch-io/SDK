@@ -1,5 +1,7 @@
 {
-  "description": "two relay chunks carrying one CBOR message",
+  "status": "legacy",
+  "wire_format": "legacy-relay-cbor",
+  "description": "Legacy relay chunks carrying one CBOR message; not part of active wire-v2 conformance",
   "device_id": "device-a",
   "source_type": 1,
   "sequence": "8",

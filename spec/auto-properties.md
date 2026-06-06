@@ -1,8 +1,9 @@
 # Auto-Stamped Properties
 
-Every event emitted by a Honch SDK must carry this context. The SDK encoder
-sets it automatically. User-supplied properties using SDK-owned keys are
-rejected instead of overwritten.
+Every event expanded by Capture carries this context. SDKs provide required
+context through wire-v2 batch context and dynamic per-event properties.
+User-supplied properties using SDK-owned keys are rejected instead of
+overwritten.
 
 Honch SDKs are not silent on the wire. These context fields and lifecycle rules
 mean auto-emitted events create analytics traffic and queue pressure even before
@@ -25,15 +26,20 @@ the host application records its own product events.
 |----------|------|-----------|
 | `$session_id` | string | Only when a session is active |
 | `$battery_level` | int (0-100) | Only when `battery_callback` is configured and returns >= 0 |
-| `$wifi_rssi` | int (dBm) | Only when Wi-Fi is connected (embedded SDKs only) |
+| `$wifi_rssi` | int (dBm) | Only when a port auto-properties callback supplies it; the portable core does not auto-detect Wi-Fi |
+
+Ports may supply additional non-reserved auto properties through
+`auto_properties_callback`; reserved SDK-owned keys are ignored except
+`$wifi_rssi`.
 
 ## Server-Side Promotion
 
 Capture promotes these fields to top-level columns: `$device_id`,
 `$device_model`, `$firmware_version`, `$session_id`, `$sdk_platform`,
-`$environment`. Promoted context properties are encoded once in wire-v2 message
-context and removed from the event properties before wire encoding. Port
-authors should not also write promoted context fields into event properties.
+`$environment`, `$sdk_version`. Promoted context properties are encoded once in
+wire-v2 message context and removed from the event properties before wire
+encoding. Port authors should not also write promoted context fields into event
+properties.
 
 ## Lifecycle Events
 

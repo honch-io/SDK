@@ -1,6 +1,9 @@
 {
   "name": "persisted identity reboot",
-  "description": "A previously identified distinct_id persists across reboot and applies to events tracked before the next identify call",
+  "description": "When a port has persistent state storage, a previously identified distinct_id persists across reboot and applies to events tracked before the next identify call",
+  "applies_when": {
+    "state_storage": "persistent"
+  },
   "config": {
     "api_key": "test-key",
     "device_id": "dev_fixture",
