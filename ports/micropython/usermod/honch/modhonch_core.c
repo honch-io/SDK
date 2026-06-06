@@ -206,7 +206,11 @@ static size_t honch_mp_map_get_size(mp_obj_t dict_obj, qstr key, size_t fallback
     if (elem == NULL || elem->value == mp_const_none) {
         return fallback;
     }
-    return (size_t)mp_obj_get_int(elem->value);
+    mp_int_t value = mp_obj_get_int(elem->value);
+    if (value <= 0) {
+        mp_raise_ValueError(MP_ERROR_TEXT("size config values must be positive"));
+    }
+    return (size_t)value;
 }
 
 static unsigned int honch_mp_map_get_uint(mp_obj_t dict_obj, qstr key, unsigned int fallback)

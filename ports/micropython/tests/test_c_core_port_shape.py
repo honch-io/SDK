@@ -52,6 +52,14 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertIn("mp_map_slot_is_filled(map, i)", module)
         self.assertNotIn("i < map->used; i++) {\n        mp_map_elem_t *elem = &map->table[i];", module)
 
+    def test_c_binding_rejects_negative_size_values(self):
+        module = self.read("ports/micropython/usermod/honch/modhonch_core.c")
+
+        self.assertIn("mp_int_t value = mp_obj_get_int(elem->value);", module)
+        self.assertIn("if (value <= 0) {", module)
+        self.assertIn("mp_raise_ValueError(MP_ERROR_TEXT(\"size config values must be positive\"));", module)
+        self.assertNotIn("return (size_t)mp_obj_get_int(elem->value);", module)
+
     def test_micropython_adapters_implement_core_ops(self):
         adapters = "\n".join(
             [

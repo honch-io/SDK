@@ -212,6 +212,26 @@ class ClientWrapperTests(unittest.TestCase):
             with self.assertRaises(honch.InvalidArgumentError):
                 honch.Honch(**config)
 
+    def test_rejects_zero_or_negative_size_limits(self):
+        honch = importlib.import_module("honch")
+
+        base_config = {
+            "api_key": "key",
+            "endpoint_url": "http://collector.local",
+            "device_id": "device-1",
+            "device_model": "model",
+            "firmware_version": "1.0",
+            "event_buffer": bytearray(8192),
+        }
+
+        for key in ("max_queued_events", "max_event_bytes"):
+            for value in (0, -1):
+                config = dict(base_config)
+                config[key] = value
+                with self.subTest(key=key, value=value):
+                    with self.assertRaises(honch.InvalidArgumentError):
+                        honch.Honch(**config)
+
     def test_connectivity_callback_allows_tick_and_flush_when_online(self):
         honch = importlib.import_module("honch")
         state = {"connected": False}
