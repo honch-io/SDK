@@ -108,6 +108,7 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertIn("mp_call_function_n_kw(post, 1, 3, args)", transport)
         self.assertIn("transport->timeout_ms", transport)
         self.assertIn("honch_mp_map_get_uint(args[0], MP_QSTR_transport_timeout_ms, DEFAULT_TRANSPORT_TIMEOUT_MS)", module)
+        self.assertIn("DEFAULT_TRANSPORT_TIMEOUT_MS = 3000", config)
         self.assertIn("MAX_TRANSPORT_TIMEOUT_MS = 10000", config)
 
     def test_micropython_exposes_flush_spacing_config(self):
