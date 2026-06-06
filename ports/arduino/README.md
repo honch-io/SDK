@@ -6,6 +6,11 @@ Preview Arduino ESP32 wrapper around the canonical Honch C core.
 
 Preview `0.1.0`. Use for evaluation or controlled pilots until your product has passed hardware, TLS, offline queue, flush, retry, and power-cycle validation on the target ESP32 board.
 
+`0.1.0` is the Arduino wrapper/package version published in
+`library.properties`. Events still report the shared C core runtime version
+`0.2.0` in `$sdk_version`, matching the canonical wire/runtime contract used by
+the other C-derived SDKs.
+
 ## Support
 
 - Board family: ESP32 Arduino.
