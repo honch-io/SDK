@@ -50,6 +50,10 @@ import { createMmkvRelayStore } from "@honch/react-native-relay";
 const relayStore = createMmkvRelayStore(createMMKV({ id: "honch-relay" }));
 ```
 
+The relay store only requires an MMKV-compatible object with `getString`,
+`set`, and `remove`, so host apps on `react-native-mmkv` v2, v3, or v4 can use
+their existing MMKV installation.
+
 MMKV relay storage uses per-chunk and per-message records with a small index, so receipt does not rewrite a full queue blob for every chunk. Binary frame, payload, and message bodies are stored as base64 strings instead of JSON number arrays. By default it retains up to 4,096 chunks and 1,024 completed messages for seven days, then drops the oldest or expired entries to bound offline growth. Override these limits when the host app has a smaller storage budget:
 
 ```ts
