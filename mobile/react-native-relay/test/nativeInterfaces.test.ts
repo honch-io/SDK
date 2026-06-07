@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createBleRelayReceiver } from "../src/ble";
-import type { RelayBleNative } from "../src/ble";
+import { buildRelayAck, createRelayFrameReceiver } from "../src/relayFrameReceiver";
 import { createRelayUploadScheduler } from "../src/scheduler";
 import { createInMemoryRelayQueue } from "../src/relayQueue";
 
@@ -42,79 +41,70 @@ function frame(options: {
   return bytes;
 }
 
-function fakeNative(acknowledgements: string[]): RelayBleNative {
-  return {
-    async startScan() {},
-    async stopScan() {},
-    async discoveredDevices() {
-      return [];
-    },
-    async connect() {},
-    async disconnect() {},
-    async subscribeFrames() {},
-    async acknowledgeMessage(deviceId, sequence) {
-      acknowledgements.push(`${deviceId}:${sequence}`);
-    }
-  };
-}
-
 describe("native relay interfaces", () => {
-  it("stores received BLE frames and ACKs completed messages", async () => {
+  it("builds relay ACK bytes for host-owned BLE writes", () => {
+    expect(Array.from(buildRelayAck("1"))).toEqual([1, 0, 0, 0, 0, 0, 0, 0, 1]);
+  });
+
+  it("stores received host BLE frames and returns ACK bytes for completed messages", async () => {
     const queue = createInMemoryRelayQueue();
-    const acknowledgements: string[] = [];
-    const receiver = createBleRelayReceiver({
-      queue,
-      native: fakeNative(acknowledgements)
-    });
+    const receiver = createRelayFrameReceiver({ queue });
 
     const result = await receiver.receiveFrame("device-a", frame({ first: true, final: true, payload: [9] }));
 
     expect(result.complete).toBe(true);
     expect(Array.from(result.message?.body ?? [])).toEqual([9]);
-    expect(acknowledgements).toEqual(["device-a:1"]);
-  });
-
-  it("subscribes frame notifications through the native BLE bridge", async () => {
-    const subscriptions: string[] = [];
-    const receiver = createBleRelayReceiver({
-      queue: createInMemoryRelayQueue(),
-      native: {
-        ...fakeNative([]),
-        async subscribeFrames(deviceId) {
-          subscriptions.push(deviceId);
-        }
-      }
-    });
-
-    await receiver.subscribeFrames("device-a");
-
-    expect(subscriptions).toEqual(["device-a"]);
+    expect(Array.from(result.ackBytes ?? [])).toEqual([1, 0, 0, 0, 0, 0, 0, 0, 1]);
   });
 
   it("does not ACK malformed frames", async () => {
+    const receiver = createRelayFrameReceiver({ queue: createInMemoryRelayQueue() });
     const acknowledgements: string[] = [];
-    const receiver = createBleRelayReceiver({
-      queue: createInMemoryRelayQueue(),
-      native: fakeNative(acknowledgements)
-    });
 
-    await expect(receiver.receiveFrame("device-a", new Uint8Array([1, 2, 3]))).rejects.toThrow();
+    await expect(
+      receiver.receiveFrame("device-a", new Uint8Array([1, 2, 3]), {
+        acknowledge: ({ deviceId }) => {
+          acknowledgements.push(deviceId);
+        }
+      })
+    ).rejects.toThrow();
 
     expect(acknowledgements).toEqual([]);
   });
 
   it("ACKs only after a multi-chunk message is durably complete", async () => {
-    const acknowledgements: string[] = [];
-    const receiver = createBleRelayReceiver({
-      queue: createInMemoryRelayQueue(),
-      native: fakeNative(acknowledgements)
-    });
+    const acknowledgements: number[][] = [];
+    const receiver = createRelayFrameReceiver({ queue: createInMemoryRelayQueue() });
 
-    await receiver.receiveFrame("device-a", frame({ first: true, payload: [1, 2] }));
+    await receiver.receiveFrame("device-a", frame({ first: true, payload: [1, 2] }), {
+      acknowledge: ({ ackBytes }) => {
+        acknowledgements.push(Array.from(ackBytes));
+      }
+    });
     expect(acknowledgements).toEqual([]);
 
-    await receiver.receiveFrame("device-a", frame({ final: true, offset: 2, payload: [3] }));
-    expect(acknowledgements).toEqual(["device-a:1"]);
+    await receiver.receiveFrame("device-a", frame({ final: true, offset: 2, payload: [3] }), {
+      acknowledge: ({ ackBytes }) => {
+        acknowledgements.push(Array.from(ackBytes));
+      }
+    });
+    expect(acknowledgements).toEqual([[1, 0, 0, 0, 0, 0, 0, 0, 1]]);
+  });
+
+  it("re-ACKs duplicate completed frames so host retries can settle", async () => {
+    const acknowledgements: string[] = [];
+    const receiver = createRelayFrameReceiver({ queue: createInMemoryRelayQueue() });
+    const completedFrame = frame({ first: true, final: true, payload: [9] });
+
+    for (let index = 0; index < 2; index += 1) {
+      await receiver.receiveFrame("device-a", completedFrame, {
+        acknowledge: ({ deviceId, sequence }) => {
+          acknowledgements.push(`${deviceId}:${sequence}`);
+        }
+      });
+    }
+
+    expect(acknowledgements).toEqual(["device-a:1", "device-a:1"]);
   });
 
   it("delegates upload scheduling to the native scheduler", async () => {

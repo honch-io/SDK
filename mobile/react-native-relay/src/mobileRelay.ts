@@ -1,63 +1,29 @@
-import { createBleRelayReceiver } from "./ble";
 import { drainRelayQueue } from "./drain";
-import { subscribeRelayNativeFrames, type RelayNativeFrameEventSource } from "./nativeFrameEvents";
+import { createRelayFrameReceiver, type RelayReceiveFrameOptions } from "./relayFrameReceiver";
 import { createDurableRelayQueue, type StoredRelayMessage } from "./relayQueue";
 import { createRelayUploadScheduler } from "./scheduler";
 import { uploadRelayMessageOutcome, type RelayUploaderConfig } from "./uploader";
-import type { RelayBleNative, RelayScanOptions } from "./ble";
 import type { RelayDurableStore } from "./durableStore";
 import type { RelayUploadSchedulerNative } from "./scheduler";
 
 export type MobileRelayOptions = {
   durableStore: RelayDurableStore;
   uploaderConfig: RelayUploaderConfig;
-  bleNative: RelayBleNative;
-  schedulerNative: RelayUploadSchedulerNative;
-  frameEvents?: RelayNativeFrameEventSource;
+  schedulerNative?: RelayUploadSchedulerNative;
   random?: () => number;
 };
 
 export function createMobileRelay(options: MobileRelayOptions) {
   const queue = createDurableRelayQueue(options.durableStore);
-  const receiver = createBleRelayReceiver({ queue, native: options.bleNative });
-  const scheduler = createRelayUploadScheduler({ native: options.schedulerNative });
+  const receiver = createRelayFrameReceiver({ queue });
+  const scheduler =
+    options.schedulerNative === undefined
+      ? undefined
+      : createRelayUploadScheduler({ native: options.schedulerNative });
 
   return {
-    startScan(scanOptions?: RelayScanOptions) {
-      return receiver.startScan(scanOptions);
-    },
-
-    stopScan() {
-      return receiver.stopScan();
-    },
-
-    discoveredDevices() {
-      return receiver.discoveredDevices();
-    },
-
-    connect(deviceId: string) {
-      return receiver.connect(deviceId);
-    },
-
-    disconnect(deviceId: string) {
-      return receiver.disconnect(deviceId);
-    },
-
-    subscribeFrames(deviceId: string) {
-      return receiver.subscribeFrames(deviceId);
-    },
-
-    receiveFrame(deviceId: string, frameBytes: Uint8Array) {
-      return receiver.receiveFrame(deviceId, frameBytes);
-    },
-
-    subscribeNativeFrames() {
-      if (options.frameEvents === undefined) {
-        throw new Error("native frame event source is not configured");
-      }
-      return subscribeRelayNativeFrames(options.frameEvents, async (deviceId, frameBytes) => {
-        await receiver.receiveFrame(deviceId, frameBytes);
-      });
+    receiveFrame(deviceId: string, frameBytes: Uint8Array, receiveOptions?: RelayReceiveFrameOptions) {
+      return receiver.receiveFrame(deviceId, frameBytes, receiveOptions);
     },
 
     pending(): Promise<StoredRelayMessage[]> {
@@ -65,12 +31,19 @@ export function createMobileRelay(options: MobileRelayOptions) {
     },
 
     async startUploadScheduler(): Promise<void> {
+      if (scheduler === undefined) {
+        await this.drainUploads();
+        return;
+      }
       await scheduler.schedule(0);
       await this.drainUploads();
     },
 
-    stopUploadScheduler(): Promise<void> {
-      return scheduler.cancel();
+    async stopUploadScheduler(): Promise<void> {
+      if (scheduler === undefined) {
+        return;
+      }
+      await scheduler.cancel();
     },
 
     drainUploads(): Promise<void> {
@@ -86,7 +59,7 @@ export function createMobileRelay(options: MobileRelayOptions) {
           .map((message) => message.nextAttemptAtMs)
           .filter((value): value is number => value !== undefined);
         if (dueTimes.length > 0) {
-          await scheduler.schedule(Math.max(0, Math.min(...dueTimes) - drainStartedAtMs));
+          await scheduler?.schedule(Math.max(0, Math.min(...dueTimes) - drainStartedAtMs));
         }
       });
     }

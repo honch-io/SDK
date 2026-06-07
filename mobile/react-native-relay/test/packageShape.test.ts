@@ -37,11 +37,10 @@ describe("React Native relay package shape", () => {
     expect(existsSync(new URL("scripts/verify-android-native.sh", packageRoot))).toBe(true);
   });
 
-  it("includes native package metadata for Android and iOS", () => {
+  it("includes Android upload scheduler metadata without iOS BLE autolinking", () => {
     const reactNativeConfig = readFileSync(new URL("react-native.config.js", packageRoot), "utf8");
     const expectedFiles = [
       "react-native.config.js",
-      "HonchReactNativeRelay.podspec",
       "android/build.gradle",
       "android/settings.gradle",
       "android/src/main/AndroidManifest.xml",
@@ -49,9 +48,6 @@ describe("React Native relay package shape", () => {
       "android/src/main/java/io/honch/reactnativerelay/HonchReactNativeRelayPackage.java",
       "android/src/main/java/io/honch/reactnativerelay/HonchRelayUploadWorker.java",
       "android/src/main/java/io/honch/reactnativerelay/HonchRelayUploadTaskService.java",
-      "ios/HonchReactNativeRelay.podspec",
-      "ios/HonchReactNativeRelay.h",
-      "ios/HonchReactNativeRelay.m",
       "example/README.md",
       "example/package.json",
       "example/App.tsx",
@@ -63,12 +59,14 @@ describe("React Native relay package shape", () => {
       expect(existsSync(new URL(file, packageRoot)), `${file} should exist`).toBe(true);
     }
 
-    expect(reactNativeConfig).toContain("ios");
-    expect(reactNativeConfig).toContain("podspecPath");
-    expect(reactNativeConfig).toContain("./ios/HonchReactNativeRelay.podspec");
+    expect(reactNativeConfig).not.toContain("ios");
+    expect(reactNativeConfig).not.toContain("podspecPath");
+    expect(existsSync(new URL("HonchReactNativeRelay.podspec", packageRoot))).toBe(false);
+    expect(existsSync(new URL("ios/HonchReactNativeRelay.podspec", packageRoot))).toBe(false);
+    expect(existsSync(new URL("ios/HonchReactNativeRelay.m", packageRoot))).toBe(false);
   });
 
-  it("exposes the native module methods used by the TypeScript bridge", () => {
+  it("exposes only native upload scheduler methods used by the TypeScript bridge", () => {
     const androidModule = readFileSync(
       new URL(
         "android/src/main/java/io/honch/reactnativerelay/HonchReactNativeRelayModule.java",
@@ -76,7 +74,10 @@ describe("React Native relay package shape", () => {
       ),
       "utf8"
     ) as string;
-    const iosModule = readFileSync(new URL("ios/HonchReactNativeRelay.m", packageRoot), "utf8") as string;
+
+    for (const method of ["scheduleUpload", "cancelUpload"]) {
+      expect(androidModule).toContain(method);
+    }
 
     for (const method of [
       "startScan",
@@ -85,78 +86,19 @@ describe("React Native relay package shape", () => {
       "connect",
       "disconnect",
       "subscribeFrames",
-      "acknowledgeMessage",
-      "scheduleUpload",
-      "cancelUpload"
+      "acknowledgeMessage"
     ]) {
-      expect(androidModule).toContain(method);
-      expect(iosModule).toContain(method);
+      expect(androidModule).not.toContain(method);
     }
   });
 
-  it("implements the iOS CoreBluetooth relay receiver contract", () => {
-    const iosHeader = readFileSync(new URL("ios/HonchReactNativeRelay.h", packageRoot), "utf8");
-    const iosModule = readFileSync(new URL("ios/HonchReactNativeRelay.m", packageRoot), "utf8");
-
-    expect(iosHeader).toContain("<CoreBluetooth/CoreBluetooth.h>");
-    expect(iosHeader).toContain("RCTEventEmitter");
-    expect(iosHeader).toContain("CBCentralManagerDelegate");
-    expect(iosHeader).toContain("CBPeripheralDelegate");
-
-    for (const expected of [
-      "484f4e43-482d-5245-4c41-592d53445631",
-      "484f4e43-482d-5245-4c41-592d4652414d",
-      "484f4e43-482d-5245-4c41-592d41434b31",
-      "HonchRelayFrame",
-      "scanForPeripheralsWithServices",
-      "connectPeripheral",
-      "setNotifyValue:YES",
-      "writeValue:ackData",
-      "CBCharacteristicWriteWithResponse"
-    ]) {
-      expect(iosModule).toContain(expected);
-    }
-  });
-
-  it("documents iOS upload scheduling as foreground-only instead of linking dead background tasks", () => {
-    const podspec = readFileSync(new URL("ios/HonchReactNativeRelay.podspec", packageRoot), "utf8");
-    const rootPodspec = readFileSync(new URL("HonchReactNativeRelay.podspec", packageRoot), "utf8");
-    const iosModule = readFileSync(new URL("ios/HonchReactNativeRelay.m", packageRoot), "utf8");
+  it("documents iOS upload scheduling as foreground-only without linking a native module", () => {
     const readme = readFileSync(new URL("README.md", packageRoot), "utf8");
 
-    expect(podspec).not.toContain("BackgroundTasks");
-    expect(podspec).toContain('s.dependency "React-Core"');
-    expect(rootPodspec).not.toContain("BackgroundTasks");
-    expect(rootPodspec).toContain('s.dependency "React-Core"');
-    expect(iosModule).toContain("reject(");
-    expect(iosModule).toContain('"ios_background_upload_unsupported"');
     expect(readme).toContain("iOS upload scheduling is foreground-only");
   });
 
-  it("keeps iOS BLE callbacks and frame encoding off the main queue", () => {
-    const iosModule = readFileSync(new URL("ios/HonchReactNativeRelay.m", packageRoot), "utf8");
-
-    expect(iosModule).toContain('dispatch_queue_create("io.honch.relay.ble", DISPATCH_QUEUE_SERIAL)');
-    expect(iosModule).toContain("- (dispatch_queue_t)methodQueue");
-    expect(iosModule).toContain("initWithDelegate:self queue:_bleQueue");
-    expect(iosModule).not.toContain("initWithDelegate:self queue:nil");
-  });
-
-  it("tears down iOS scans, peripherals, listeners, and native state", () => {
-    const iosModule = readFileSync(new URL("ios/HonchReactNativeRelay.m", packageRoot), "utf8");
-
-    expect(iosModule).toContain("- (void)invalidate");
-    expect(iosModule).toContain("- (void)dealloc");
-    expect(iosModule).toContain("- (void)teardown");
-    expect(iosModule).toContain("[_centralManager stopScan]");
-    expect(iosModule).toContain("cancelPeripheralConnection:peripheral");
-    expect(iosModule).toContain("peripheral.delegate = nil");
-    expect(iosModule).toContain("[self->_peripheralsById removeAllObjects]");
-    expect(iosModule).toContain("[self->_ackCharacteristicsById removeAllObjects]");
-    expect(iosModule).toContain("_hasListeners = NO");
-  });
-
-  it("implements the Android BLE relay receiver contract", () => {
+  it("does not merge BLE permissions or receiver code into Android host apps", () => {
     const androidManifest = readFileSync(new URL("android/src/main/AndroidManifest.xml", packageRoot), "utf8");
     const androidModule = readFileSync(
       new URL(
@@ -166,10 +108,9 @@ describe("React Native relay package shape", () => {
       "utf8"
     );
 
-    for (const permission of ["BLUETOOTH_SCAN", "BLUETOOTH_CONNECT"]) {
-      expect(androidManifest).toContain(permission);
-    }
-    expect(androidManifest).toContain('android:usesPermissionFlags="neverForLocation"');
+    expect(androidManifest).not.toContain("BLUETOOTH_SCAN");
+    expect(androidManifest).not.toContain("BLUETOOTH_CONNECT");
+    expect(androidManifest).not.toContain('android:usesPermissionFlags="neverForLocation"');
     expect(androidManifest).not.toContain("ACCESS_FINE_LOCATION");
     expect(androidManifest).not.toContain("POST_NOTIFICATIONS");
 
@@ -186,16 +127,14 @@ describe("React Native relay package shape", () => {
       "484f4e43-482d-5245-4c41-592d41434b31",
       "setCharacteristicNotification",
       "writeCharacteristic",
-      "ByteBuffer.allocate(9)",
-      "putLong"
+      "ByteBuffer.allocate(9)"
     ]) {
-      expect(androidModule).toContain(expected);
+      expect(androidModule).not.toContain(expected);
     }
-    expect(androidModule).toContain("ScanSettings.SCAN_MODE_LOW_POWER");
     expect(androidModule).not.toContain("ScanSettings.SCAN_MODE_LOW_LATENCY");
   });
 
-  it("tears down Android scans, GATT connections, and scheduled upload work", () => {
+  it("tears down only Android scheduled upload work", () => {
     const androidModule = readFileSync(
       new URL(
         "android/src/main/java/io/honch/reactnativerelay/HonchReactNativeRelayModule.java",
@@ -205,12 +144,6 @@ describe("React Native relay package shape", () => {
     );
 
     expect(androidModule).toContain("public void invalidate()");
-    expect(androidModule).toContain("private void teardown()");
-    expect(androidModule).toContain("scanner.stopScan(scanCallback)");
-    expect(androidModule).toContain("gatt.disconnect()");
-    expect(androidModule).toContain("gatt.close()");
-    expect(androidModule).toContain("gattsById.clear()");
-    expect(androidModule).toContain("ackCharacteristicsById.clear()");
     expect(androidModule).toContain("cancelAllWorkByTag(HonchRelayUploadWorker.WORK_TAG)");
   });
 
@@ -223,16 +156,7 @@ describe("React Native relay package shape", () => {
       "utf8"
     );
 
-    for (const method of [
-      "stopScan",
-      "discoveredDevices",
-      "connect",
-      "disconnect",
-      "subscribeFrames",
-      "acknowledgeMessage",
-      "scheduleUpload",
-      "cancelUpload"
-    ]) {
+    for (const method of ["scheduleUpload", "cancelUpload"]) {
       const methodIndex = androidModule.indexOf(`public void ${method}`);
       const nextMethodIndex = androidModule.indexOf("@ReactMethod", methodIndex + 1);
       const methodBody = androidModule.slice(
@@ -305,44 +229,12 @@ describe("React Native relay package shape", () => {
     expect(readme).toContain("Upload retry timing and attempt state stay in the JavaScript relay drain path");
   });
 
-  it("auto-stops native BLE scans after an idle timeout", () => {
-    const androidModule = readFileSync(
-      new URL(
-        "android/src/main/java/io/honch/reactnativerelay/HonchReactNativeRelayModule.java",
-        packageRoot
-      ),
-      "utf8"
-    );
-    const iosModule = readFileSync(new URL("ios/HonchReactNativeRelay.m", packageRoot), "utf8");
-
-    expect(androidModule).toContain("DEFAULT_SCAN_TIMEOUT_MS");
-    expect(androidModule).toContain("scheduleScanTimeout");
-    expect(iosModule).toContain("HonchRelayDefaultScanTimeoutSeconds");
-    expect(iosModule).toContain("scheduleScanTimeout");
-  });
-
-  it("makes Android scan start idempotent while a scan is already active", () => {
-    const androidModule = readFileSync(
-      new URL(
-        "android/src/main/java/io/honch/reactnativerelay/HonchReactNativeRelayModule.java",
-        packageRoot
-      ),
-      "utf8"
-    );
-
-    expect(androidModule).toContain("private boolean isScanning = false");
-    expect(androidModule).toContain("if (isScanning) {");
-    expect(androidModule).toContain("BLE scan already active; refreshed idle timeout");
-    expect(androidModule).toContain("isScanning = true");
-    expect(androidModule).toContain("isScanning = false");
-  });
-
   it("keeps the example relay singleton reusable by foreground UI and headless tasks", () => {
     const relayModule = readFileSync(new URL("example/relay.ts", packageRoot), "utf8");
     const exampleIndex = readFileSync(new URL("example/index.ts", packageRoot), "utf8");
 
     expect(relayModule).toContain("export const relay");
-    expect(relayModule).toContain("export const frameEvents");
+    expect(relayModule).not.toContain("export const frameEvents");
     expect(exampleIndex).toContain('AppRegistry.registerHeadlessTask("HonchRelayUpload"');
     expect(exampleIndex).toContain("relay.drainUploads()");
   });

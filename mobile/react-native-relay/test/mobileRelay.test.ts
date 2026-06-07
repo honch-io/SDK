@@ -49,25 +49,12 @@ describe("createMobileRelay", () => {
   });
 
   it("ACKs durable BLE receipt and keeps retryable uploads pending", async () => {
-    const acknowledgements: string[] = [];
+    const acknowledgements: number[][] = [];
     const scheduled: number[] = [];
     const relay = createMobileRelay({
       durableStore: createMemoryDurableStore(),
       uploaderConfig,
       random: () => 0.5,
-      bleNative: {
-        async startScan() {},
-        async stopScan() {},
-        async discoveredDevices() {
-          return [];
-        },
-        async connect() {},
-        async disconnect() {},
-        async subscribeFrames() {},
-        async acknowledgeMessage(deviceId, sequence) {
-          acknowledgements.push(`${deviceId}:${sequence}`);
-        }
-      },
       schedulerNative: {
         async scheduleUpload(delayMs) {
           scheduled.push(delayMs);
@@ -76,12 +63,16 @@ describe("createMobileRelay", () => {
       }
     });
 
-    await relay.receiveFrame("device-a", frame([1, 2, 3]));
+    await relay.receiveFrame("device-a", frame([1, 2, 3]), {
+      acknowledge: ({ ackBytes }) => {
+        acknowledgements.push(Array.from(ackBytes));
+      }
+    });
     vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 503 })));
 
     await relay.drainUploads();
 
-    expect(acknowledgements).toEqual(["device-a:1"]);
+    expect(acknowledgements).toEqual([[1, 0, 0, 0, 0, 0, 0, 0, 1]]);
     expect(scheduled).toEqual([1000]);
     expect((await relay.pending()).map((message) => message.sequence)).toEqual(["1"]);
   });
@@ -90,17 +81,6 @@ describe("createMobileRelay", () => {
     const relay = createMobileRelay({
       durableStore: createMemoryDurableStore(),
       uploaderConfig,
-      bleNative: {
-        async startScan() {},
-        async stopScan() {},
-        async discoveredDevices() {
-          return [];
-        },
-        async connect() {},
-        async disconnect() {},
-        async subscribeFrames() {},
-        async acknowledgeMessage() {}
-      },
       schedulerNative: {
         async scheduleUpload() {},
         async cancelUpload() {}
@@ -119,17 +99,6 @@ describe("createMobileRelay", () => {
     const relay = createMobileRelay({
       durableStore: createMemoryDurableStore(),
       uploaderConfig,
-      bleNative: {
-        async startScan() {},
-        async stopScan() {},
-        async discoveredDevices() {
-          return [];
-        },
-        async connect() {},
-        async disconnect() {},
-        async subscribeFrames() {},
-        async acknowledgeMessage() {}
-      },
       schedulerNative: {
         async scheduleUpload(delayMs) {
           scheduled.push(delayMs);
@@ -151,17 +120,6 @@ describe("createMobileRelay", () => {
     const relay = createMobileRelay({
       durableStore: createMemoryDurableStore(),
       uploaderConfig,
-      bleNative: {
-        async startScan() {},
-        async stopScan() {},
-        async discoveredDevices() {
-          return [];
-        },
-        async connect() {},
-        async disconnect() {},
-        async subscribeFrames() {},
-        async acknowledgeMessage() {}
-      },
       schedulerNative: {
         async scheduleUpload(delayMs) {
           calls.push(`schedule:${delayMs}`);
@@ -177,69 +135,48 @@ describe("createMobileRelay", () => {
     expect(calls).toEqual(["cancel"]);
   });
 
-  it("exposes discovered BLE relay devices", async () => {
+  it("drains in foreground when no native upload scheduler is configured", async () => {
     const relay = createMobileRelay({
       durableStore: createMemoryDurableStore(),
-      uploaderConfig,
-      bleNative: {
-        async startScan() {},
-        async stopScan() {},
-        async discoveredDevices() {
-          return [{ id: "device-a", name: "Relay A", rssi: -64 }];
-        },
-        async connect() {},
-        async disconnect() {},
-        async subscribeFrames() {},
-        async acknowledgeMessage() {}
-      },
-      schedulerNative: {
-        async scheduleUpload() {},
-        async cancelUpload() {}
-      }
+      uploaderConfig
     });
+    await relay.receiveFrame("device-a", frame([6]));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 202 })));
 
-    await expect(relay.discoveredDevices()).resolves.toEqual([
-      { id: "device-a", name: "Relay A", rssi: -64 }
-    ]);
+    await relay.startUploadScheduler();
+
+    expect(await relay.pending()).toEqual([]);
   });
 
-  it("subscribes native frame events into durable BLE receipt", async () => {
+  it("receives host-owned frame events into durable receipt", async () => {
     const listeners = new Map<string, (event: { deviceId: string; frameBase64: string }) => void>();
     const acknowledgements: string[] = [];
     const relay = createMobileRelay({
       durableStore: createMemoryDurableStore(),
       uploaderConfig,
-      frameEvents: {
-        addListener(eventName, listener) {
-          listeners.set(eventName, listener);
-          return {
-            remove() {
-              listeners.delete(eventName);
-            }
-          };
-        }
-      },
-      bleNative: {
-        async startScan() {},
-        async stopScan() {},
-        async discoveredDevices() {
-          return [];
-        },
-        async connect() {},
-        async disconnect() {},
-        async subscribeFrames() {},
-        async acknowledgeMessage(deviceId, sequence) {
-          acknowledgements.push(`${deviceId}:${sequence}`);
-        }
-      },
       schedulerNative: {
         async scheduleUpload() {},
         async cancelUpload() {}
       }
     });
 
-    const subscription = relay.subscribeNativeFrames();
-    listeners.get("HonchRelayFrame")?.({
+    const subscription = {
+      remove() {
+        listeners.delete("host-frame");
+      }
+    };
+    listeners.set("host-frame", (event) => {
+      void relay.receiveFrame(
+        event.deviceId,
+        Uint8Array.from(Buffer.from(event.frameBase64, "base64")),
+        {
+          acknowledge: ({ deviceId, sequence }) => {
+            acknowledgements.push(`${deviceId}:${sequence}`);
+          }
+        }
+      );
+    });
+    listeners.get("host-frame")?.({
       deviceId: "device-a",
       frameBase64: base64(frame([6, 7]))
     });
@@ -250,6 +187,6 @@ describe("createMobileRelay", () => {
     expect((await relay.pending()).map((message) => Array.from(message.body))).toEqual([[6, 7]]);
 
     subscription.remove();
-    expect(listeners.has("HonchRelayFrame")).toBe(false);
+    expect(listeners.has("host-frame")).toBe(false);
   });
 });
