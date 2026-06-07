@@ -15,12 +15,25 @@ export type MmkvRelayStoreOptions = {
 };
 
 type SerializedRelayStoreIndex = {
-  chunks: SerializedRelayChunkIndexEntry[];
+  chunks?: SerializedRelayChunkIndexEntry[];
   messages: SerializedRelayMessageIndexEntry[];
 };
 
 type SerializedRelaySequenceChunkIndex = {
   chunks: SerializedRelayChunkIndexEntry[];
+};
+
+type SerializedRelayChunkOrderState = {
+  nextOrdinal: number;
+  oldestOrdinal: number;
+  count: number;
+};
+
+type SerializedRelayChunkOrderEntry = {
+  key: string;
+  deviceId: string;
+  sequence: string;
+  offset: number;
 };
 
 type SerializedRelayChunkIndexEntry = {
@@ -103,7 +116,7 @@ class MmkvRelayStore implements RelayDurableStore {
   ) {}
 
   async putChunk(chunk: DurableRelayChunk): Promise<void> {
-    const index = this.prunedIndex();
+    const sequenceIndex = this.prunedSequenceChunkIndex(chunk.deviceId, chunk.sequence);
     const key = this.chunkKey(chunk.deviceId, chunk.sequence, chunk.offset);
     const storedAtMs = this.options.now();
     const entry: SerializedRelayChunkIndexEntry = {
@@ -124,27 +137,25 @@ class MmkvRelayStore implements RelayDurableStore {
       } satisfies SerializedRelayChunkRecord)
     );
 
-    const existing = index.chunks.findIndex(
+    const existing = sequenceIndex.chunks.findIndex(
       (candidate) =>
         candidate.deviceId === chunk.deviceId &&
         candidate.sequence === chunk.sequence &&
         candidate.offset === chunk.offset
     );
     if (existing >= 0) {
-      index.chunks[existing] = entry;
+      sequenceIndex.chunks[existing] = entry;
     } else {
-      index.chunks.push(entry);
+      sequenceIndex.chunks.push(entry);
+      this.appendChunkOrderEntry(entry);
     }
 
-    this.enforceLimits(index);
-    this.writeSequenceChunkIndex(chunk.deviceId, chunk.sequence, index);
-    this.writeIndex(index);
+    this.writeSequenceChunkIndex(chunk.deviceId, chunk.sequence, sequenceIndex.chunks);
+    this.enforceChunkLimit();
   }
 
   async chunks(deviceId: string, sequence: string): Promise<DurableRelayChunk[]> {
-    const index = this.prunedIndex();
-    this.writeIndex(index);
-    const sequenceIndex = this.readSequenceChunkIndex(deviceId, sequence, index);
+    const sequenceIndex = this.prunedSequenceChunkIndex(deviceId, sequence);
     return sequenceIndex.chunks
       .map((entry) => this.readChunk(entry))
       .filter((chunk): chunk is DurableRelayChunk => chunk !== undefined);
@@ -211,13 +222,9 @@ class MmkvRelayStore implements RelayDurableStore {
       this.storage.remove(message.key);
       return false;
     });
-    index.chunks = index.chunks.filter((chunk) => {
-      if (chunk.deviceId !== deviceId || chunk.sequence !== sequence) {
-        return true;
-      }
+    for (const chunk of this.readSequenceChunkIndex(deviceId, sequence).chunks) {
       this.storage.remove(chunk.key);
-      return false;
-    });
+    }
     this.storage.remove(this.sequenceChunkIndexKey(deviceId, sequence));
     this.writeIndex(index);
   }
@@ -226,14 +233,6 @@ class MmkvRelayStore implements RelayDurableStore {
     const index = this.readIndex();
     const expiresBeforeMs = this.options.now() - this.options.ttlMs;
 
-    index.chunks = index.chunks.filter((chunk) => {
-      if (chunk.storedAtMs >= expiresBeforeMs) {
-        return true;
-      }
-      this.storage.remove(chunk.key);
-      this.storage.remove(this.sequenceChunkIndexKey(chunk.deviceId, chunk.sequence));
-      return false;
-    });
     index.messages = index.messages.filter((message) => {
       if (message.storedAtMs >= expiresBeforeMs) {
         return true;
@@ -246,24 +245,14 @@ class MmkvRelayStore implements RelayDurableStore {
   }
 
   private enforceLimits(index: SerializedRelayStoreIndex): void {
-    index.chunks.sort((left, right) => left.storedAtMs - right.storedAtMs);
-    while (index.chunks.length > this.options.maxChunks) {
-      const [removed] = index.chunks.splice(0, 1);
-      this.storage.remove(removed.key);
-      this.writeSequenceChunkIndex(removed.deviceId, removed.sequence, index);
-    }
-
     index.messages.sort((left, right) => left.storedAtMs - right.storedAtMs);
     while (index.messages.length > this.options.maxCompleteMessages) {
       const [removed] = index.messages.splice(0, 1);
       this.storage.remove(removed.key);
-      index.chunks = index.chunks.filter((chunk) => {
-        if (chunk.deviceId !== removed.deviceId || chunk.sequence !== removed.sequence) {
-          return true;
-        }
+      const sequenceIndex = this.readSequenceChunkIndex(removed.deviceId, removed.sequence);
+      for (const chunk of sequenceIndex.chunks) {
         this.storage.remove(chunk.key);
-        return false;
-      });
+      }
       this.storage.remove(this.sequenceChunkIndexKey(removed.deviceId, removed.sequence));
     }
   }
@@ -281,7 +270,7 @@ class MmkvRelayStore implements RelayDurableStore {
   }
 
   private writeIndex(index: SerializedRelayStoreIndex): void {
-    if (index.chunks.length === 0 && index.messages.length === 0) {
+    if ((index.chunks?.length ?? 0) === 0 && index.messages.length === 0) {
       this.storage.remove(this.indexKey());
       return;
     }
@@ -290,8 +279,7 @@ class MmkvRelayStore implements RelayDurableStore {
 
   private readSequenceChunkIndex(
     deviceId: string,
-    sequence: string,
-    globalIndex: SerializedRelayStoreIndex
+    sequence: string
   ): SerializedRelaySequenceChunkIndex {
     const raw = this.storage.getString(this.sequenceChunkIndexKey(deviceId, sequence));
     if (raw !== undefined) {
@@ -299,29 +287,137 @@ class MmkvRelayStore implements RelayDurableStore {
       return { chunks: parsed.chunks ?? [] };
     }
 
-    const sequenceIndex = {
-      chunks: globalIndex.chunks.filter(
-        (chunk) => chunk.deviceId === deviceId && chunk.sequence === sequence
-      )
-    };
-    this.writeSequenceChunkIndex(deviceId, sequence, globalIndex);
-    return sequenceIndex;
+    return this.readLegacySequenceChunkIndex(deviceId, sequence);
+  }
+
+  private prunedSequenceChunkIndex(deviceId: string, sequence: string): SerializedRelaySequenceChunkIndex {
+    const sequenceIndex = this.readSequenceChunkIndex(deviceId, sequence);
+    const expiresBeforeMs = this.options.now() - this.options.ttlMs;
+    const chunks = sequenceIndex.chunks.filter((chunk) => {
+      if (chunk.storedAtMs >= expiresBeforeMs) {
+        return true;
+      }
+      this.storage.remove(chunk.key);
+      return false;
+    });
+    this.writeSequenceChunkIndex(deviceId, sequence, chunks);
+    return { chunks };
   }
 
   private writeSequenceChunkIndex(
     deviceId: string,
     sequence: string,
-    globalIndex: SerializedRelayStoreIndex
+    chunks: SerializedRelayChunkIndexEntry[]
   ): void {
-    const chunks = globalIndex.chunks.filter(
-      (chunk) => chunk.deviceId === deviceId && chunk.sequence === sequence
-    );
     const key = this.sequenceChunkIndexKey(deviceId, sequence);
     if (chunks.length === 0) {
       this.storage.remove(key);
       return;
     }
     this.storage.set(key, JSON.stringify({ chunks } satisfies SerializedRelaySequenceChunkIndex));
+  }
+
+  private appendChunkOrderEntry(entry: SerializedRelayChunkIndexEntry): void {
+    const state = this.readChunkOrderState();
+    const ordinal = state.nextOrdinal;
+    this.storage.set(
+      this.chunkOrderEntryKey(ordinal),
+      JSON.stringify({
+        key: entry.key,
+        deviceId: entry.deviceId,
+        sequence: entry.sequence,
+        offset: entry.offset
+      } satisfies SerializedRelayChunkOrderEntry)
+    );
+    this.writeChunkOrderState({
+      nextOrdinal: ordinal + 1,
+      oldestOrdinal: state.count === 0 ? ordinal : state.oldestOrdinal,
+      count: state.count + 1
+    });
+  }
+
+  private enforceChunkLimit(): void {
+    let state = this.readChunkOrderState();
+    while (state.count > this.options.maxChunks) {
+      const orderKey = this.chunkOrderEntryKey(state.oldestOrdinal);
+      const raw = this.storage.getString(orderKey);
+      this.storage.remove(orderKey);
+      if (raw !== undefined) {
+        const entry = JSON.parse(raw) as SerializedRelayChunkOrderEntry;
+        this.storage.remove(entry.key);
+        const sequenceIndex = this.readSequenceChunkIndex(entry.deviceId, entry.sequence);
+        this.writeSequenceChunkIndex(
+          entry.deviceId,
+          entry.sequence,
+          sequenceIndex.chunks.filter((chunk) => chunk.offset !== entry.offset)
+        );
+      }
+      state = {
+        nextOrdinal: state.nextOrdinal,
+        oldestOrdinal: state.oldestOrdinal + 1,
+        count: state.count - 1
+      };
+    }
+    this.writeChunkOrderState(state);
+  }
+
+  private readChunkOrderState(): SerializedRelayChunkOrderState {
+    const raw = this.storage.getString(this.chunkOrderStateKey());
+    if (raw === undefined) {
+      return { nextOrdinal: 1, oldestOrdinal: 1, count: 0 };
+    }
+    const parsed = JSON.parse(raw) as Partial<SerializedRelayChunkOrderState>;
+    return {
+      nextOrdinal: parsed.nextOrdinal ?? 1,
+      oldestOrdinal: parsed.oldestOrdinal ?? 1,
+      count: parsed.count ?? 0
+    };
+  }
+
+  private writeChunkOrderState(state: SerializedRelayChunkOrderState): void {
+    if (state.count <= 0) {
+      this.storage.remove(this.chunkOrderStateKey());
+      return;
+    }
+    this.storage.set(this.chunkOrderStateKey(), JSON.stringify(state));
+  }
+
+  private readLegacySequenceChunkIndex(
+    deviceId: string,
+    sequence: string
+  ): SerializedRelaySequenceChunkIndex {
+    const raw = this.storage.getString(LEGACY_RELAY_STORE_KEY);
+    if (raw === undefined) {
+      return { chunks: [] };
+    }
+
+    const legacy = JSON.parse(raw) as LegacySerializedRelayStoreState;
+    const storedAtMs = this.options.now();
+    const chunks: SerializedRelayChunkIndexEntry[] = [];
+    for (const chunk of legacy.chunks ?? []) {
+      if (chunk.deviceId !== deviceId || chunk.sequence !== sequence) {
+        continue;
+      }
+      const key = this.chunkKey(chunk.deviceId, chunk.sequence, chunk.offset);
+      this.storage.set(
+        key,
+        JSON.stringify({
+          frameBase64: bytesToBase64(Uint8Array.from(chunk.frameBytes)),
+          payloadBase64: bytesToBase64(Uint8Array.from(chunk.payload))
+        } satisfies SerializedRelayChunkRecord)
+      );
+      chunks.push({
+        key,
+        deviceId: chunk.deviceId,
+        sourceType: chunk.sourceType,
+        sequence: chunk.sequence,
+        offset: chunk.offset,
+        storedAtMs,
+        finalEnd: chunk.finalEnd
+      });
+    }
+    this.writeSequenceChunkIndex(deviceId, sequence, chunks);
+    return { chunks };
   }
 
   private migrateLegacyIndex(): SerializedRelayStoreIndex {
@@ -333,7 +429,6 @@ class MmkvRelayStore implements RelayDurableStore {
     const legacy = JSON.parse(raw) as LegacySerializedRelayStoreState;
     const storedAtMs = this.options.now();
     const index: SerializedRelayStoreIndex = {
-      chunks: [],
       messages: []
     };
 
@@ -346,7 +441,7 @@ class MmkvRelayStore implements RelayDurableStore {
           payloadBase64: bytesToBase64(Uint8Array.from(chunk.payload))
         } satisfies SerializedRelayChunkRecord)
       );
-      index.chunks.push({
+      const entry = {
         key,
         deviceId: chunk.deviceId,
         sourceType: chunk.sourceType,
@@ -354,7 +449,10 @@ class MmkvRelayStore implements RelayDurableStore {
         offset: chunk.offset,
         storedAtMs,
         finalEnd: chunk.finalEnd
-      });
+      };
+      const sequenceIndex = this.readSequenceChunkIndex(chunk.deviceId, chunk.sequence);
+      this.writeSequenceChunkIndex(chunk.deviceId, chunk.sequence, [...sequenceIndex.chunks, entry]);
+      this.appendChunkOrderEntry(entry);
     }
 
     for (const message of legacy.messages ?? []) {
@@ -418,6 +516,14 @@ class MmkvRelayStore implements RelayDurableStore {
 
   private indexKey(): string {
     return `${this.options.keyPrefix}.index.v2`;
+  }
+
+  private chunkOrderStateKey(): string {
+    return `${this.options.keyPrefix}.chunkOrder.state.v1`;
+  }
+
+  private chunkOrderEntryKey(ordinal: number): string {
+    return `${this.options.keyPrefix}.chunkOrder.${ordinal}`;
   }
 
   private chunkKey(deviceId: string, sequence: string, offset: number): string {

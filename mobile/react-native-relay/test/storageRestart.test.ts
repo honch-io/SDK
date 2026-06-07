@@ -140,6 +140,8 @@ describe("MMKV relay durable store retention", () => {
       frameBytes: new Uint8Array([1, 2]),
       payload: new Uint8Array([2])
     });
+    expect(mmkv.setKeys).not.toContain("honch.relay.index.v2");
+
     await store.putCompleteMessage({
       deviceId: "device-a",
       sourceType: 1,
@@ -148,10 +150,43 @@ describe("MMKV relay durable store retention", () => {
     });
 
     expect(mmkv.setKeys).toContain("honch.relay.index.v2");
+    expect(mmkv.setKeys).toContain("honch.relay.chunkOrder.state.v1");
+    expect(mmkv.setKeys).toContain("honch.relay.chunkOrder.1");
     expect(mmkv.setKeys).toContain("honch.relay.chunks.device-a.1.index.v1");
     expect(mmkv.setKeys).toContain("honch.relay.chunk.device-a.1.0");
     expect(mmkv.setKeys).toContain("honch.relay.message.device-a.1");
     expect(mmkv.setKeys).not.toContain("honch.relay.queue.v1");
+  });
+
+  it("does not read or rewrite the global MMKV message index while storing BLE chunks", async () => {
+    const mmkv = fakeMmkv();
+    const store = createMmkvRelayStore(mmkv, { now: () => 1000 });
+
+    mmkv.values.set(
+      "honch.relay.index.v2",
+      JSON.stringify({
+        messages: Array.from({ length: 100 }, (_, index) => ({
+          key: `honch.relay.message.device-old.${index}`,
+          deviceId: "device-old",
+          sourceType: 1,
+          sequence: String(index),
+          storedAtMs: 999
+        }))
+      })
+    );
+
+    await store.putChunk({
+      deviceId: "device-a",
+      sourceType: 1,
+      sequence: "1",
+      offset: 0,
+      frameBytes: new Uint8Array([1, 2]),
+      payload: new Uint8Array([2])
+    });
+
+    expect(mmkv.setKeys).not.toContain("honch.relay.index.v2");
+    expect(mmkv.values.get("honch.relay.index.v2")).toContain("device-old");
+    expect(mmkv.setKeys).toContain("honch.relay.chunks.device-a.1.index.v1");
   });
 
   it("stores binary MMKV records as base64 strings instead of JSON number arrays", async () => {
