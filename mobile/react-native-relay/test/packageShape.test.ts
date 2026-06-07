@@ -290,7 +290,7 @@ describe("React Native relay package shape", () => {
     expect(worker).not.toContain("acquireWakeLock");
     expect(worker).not.toContain("uploadRelayMessage");
     expect(worker).not.toContain("drainUploads");
-    expect(service).toContain("HeadlessJsTaskService.acquireWakeLockNow(context)");
+    expect(service).not.toContain("HeadlessJsTaskService.acquireWakeLockNow(context)");
     expect(service).toContain("private static final long TASK_TIMEOUT_MS = 10000L");
     expect(readme).toContain("Upload retry timing and attempt state stay in the JavaScript relay drain path");
   });
