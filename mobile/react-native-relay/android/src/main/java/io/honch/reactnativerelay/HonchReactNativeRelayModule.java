@@ -62,6 +62,7 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
     private final Map<String, BluetoothGatt> gattsById = new HashMap<>();
     private final Map<String, BluetoothGattCharacteristic> ackCharacteristicsById = new HashMap<>();
     private BluetoothLeScanner scanner;
+    private boolean isScanning = false;
     private final Runnable scanTimeoutRunnable = new Runnable() {
         @Override
         public void run() {
@@ -153,6 +154,12 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
                 promise.reject("scanner_unavailable", "BLE scanner is not available");
                 return;
             }
+            if (isScanning) {
+                scheduleScanTimeout(DEFAULT_SCAN_TIMEOUT_MS);
+                Log.d(TAG, "BLE scan already active; refreshed idle timeout");
+                promise.resolve(null);
+                return;
+            }
 
             ScanFilter filter = new ScanFilter.Builder()
                 .setServiceUuid(new ParcelUuid(RELAY_SERVICE_UUID))
@@ -161,6 +168,7 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER)
                 .build();
             scanner.startScan(Arrays.asList(filter), settings, scanCallback);
+            isScanning = true;
             scheduleScanTimeout(DEFAULT_SCAN_TIMEOUT_MS);
             Log.d(TAG, "BLE scan started");
             promise.resolve(null);
@@ -190,6 +198,7 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
                 scanner.stopScan(scanCallback);
                 scanner = null;
             }
+            isScanning = false;
             cancelScanTimeout();
             promise.resolve(null);
         } catch (SecurityException error) {
@@ -346,6 +355,7 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
                 scanner.stopScan(scanCallback);
                 scanner = null;
             }
+            isScanning = false;
         } catch (RuntimeException error) {
             Log.w(TAG, "Failed to stop BLE scan during teardown", error);
         }
@@ -383,6 +393,7 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
             if (scanner != null) {
                 scanner.stopScan(scanCallback);
                 scanner = null;
+                isScanning = false;
                 Log.d(TAG, "BLE scan stopped after idle timeout");
             }
         } catch (SecurityException error) {
