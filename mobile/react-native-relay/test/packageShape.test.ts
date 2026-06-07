@@ -38,8 +38,10 @@ describe("React Native relay package shape", () => {
   });
 
   it("includes native package metadata for Android and iOS", () => {
+    const reactNativeConfig = readFileSync(new URL("react-native.config.js", packageRoot), "utf8");
     const expectedFiles = [
       "react-native.config.js",
+      "HonchReactNativeRelay.podspec",
       "android/build.gradle",
       "android/settings.gradle",
       "android/src/main/AndroidManifest.xml",
@@ -60,6 +62,10 @@ describe("React Native relay package shape", () => {
     for (const file of expectedFiles) {
       expect(existsSync(new URL(file, packageRoot)), `${file} should exist`).toBe(true);
     }
+
+    expect(reactNativeConfig).toContain("ios");
+    expect(reactNativeConfig).toContain("podspecPath");
+    expect(reactNativeConfig).toContain("./ios/HonchReactNativeRelay.podspec");
   });
 
   it("exposes the native module methods used by the TypeScript bridge", () => {
@@ -114,10 +120,14 @@ describe("React Native relay package shape", () => {
 
   it("documents iOS upload scheduling as foreground-only instead of linking dead background tasks", () => {
     const podspec = readFileSync(new URL("ios/HonchReactNativeRelay.podspec", packageRoot), "utf8");
+    const rootPodspec = readFileSync(new URL("HonchReactNativeRelay.podspec", packageRoot), "utf8");
     const iosModule = readFileSync(new URL("ios/HonchReactNativeRelay.m", packageRoot), "utf8");
     const readme = readFileSync(new URL("README.md", packageRoot), "utf8");
 
     expect(podspec).not.toContain("BackgroundTasks");
+    expect(podspec).toContain('s.dependency "React-Core"');
+    expect(rootPodspec).not.toContain("BackgroundTasks");
+    expect(rootPodspec).toContain('s.dependency "React-Core"');
     expect(iosModule).toContain("reject(");
     expect(iosModule).toContain('"ios_background_upload_unsupported"');
     expect(readme).toContain("iOS upload scheduling is foreground-only");
