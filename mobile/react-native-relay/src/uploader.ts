@@ -67,7 +67,7 @@ export async function uploadRelayMessageOutcome(
     return { action: "retry", error };
   }
 
-  if (response.ok) {
+  if (response.status === 204) {
     return { action: "consume", status: response.status };
   }
   if (response.status === 400 || response.status === 401 || response.status === 404) {

@@ -393,7 +393,7 @@ class MmkvRelayStore implements RelayDurableStore {
 
     const legacy = JSON.parse(raw) as LegacySerializedRelayStoreState;
     const storedAtMs = this.options.now();
-    const chunks: SerializedRelayChunkIndexEntry[] = [];
+    const chunksByOffset = new Map<number, SerializedRelayChunkIndexEntry>();
     for (const chunk of legacy.chunks ?? []) {
       if (chunk.deviceId !== deviceId || chunk.sequence !== sequence) {
         continue;
@@ -406,7 +406,7 @@ class MmkvRelayStore implements RelayDurableStore {
           payloadBase64: bytesToBase64(Uint8Array.from(chunk.payload))
         } satisfies SerializedRelayChunkRecord)
       );
-      chunks.push({
+      chunksByOffset.set(chunk.offset, {
         key,
         deviceId: chunk.deviceId,
         sourceType: chunk.sourceType,
@@ -416,6 +416,7 @@ class MmkvRelayStore implements RelayDurableStore {
         finalEnd: chunk.finalEnd
       });
     }
+    const chunks = [...chunksByOffset.values()].sort((left, right) => left.offset - right.offset);
     this.writeSequenceChunkIndex(deviceId, sequence, chunks);
     return { chunks };
   }
@@ -431,6 +432,7 @@ class MmkvRelayStore implements RelayDurableStore {
     const index: SerializedRelayStoreIndex = {
       messages: []
     };
+    const chunkIndexesBySequence = new Map<string, SerializedRelayChunkIndexEntry[]>();
 
     for (const chunk of legacy.chunks ?? []) {
       const key = this.chunkKey(chunk.deviceId, chunk.sequence, chunk.offset);
@@ -441,7 +443,7 @@ class MmkvRelayStore implements RelayDurableStore {
           payloadBase64: bytesToBase64(Uint8Array.from(chunk.payload))
         } satisfies SerializedRelayChunkRecord)
       );
-      const entry = {
+      const entry: SerializedRelayChunkIndexEntry = {
         key,
         deviceId: chunk.deviceId,
         sourceType: chunk.sourceType,
@@ -450,9 +452,27 @@ class MmkvRelayStore implements RelayDurableStore {
         storedAtMs,
         finalEnd: chunk.finalEnd
       };
-      const sequenceIndex = this.readSequenceChunkIndex(chunk.deviceId, chunk.sequence);
-      this.writeSequenceChunkIndex(chunk.deviceId, chunk.sequence, [...sequenceIndex.chunks, entry]);
-      this.appendChunkOrderEntry(entry);
+      const sequenceKey = `${chunk.deviceId}\0${chunk.sequence}`;
+      const sequenceIndex = chunkIndexesBySequence.get(sequenceKey) ?? [];
+      const existing = sequenceIndex.findIndex((candidate) => candidate.offset === entry.offset);
+      if (existing >= 0) {
+        sequenceIndex[existing] = entry;
+      } else {
+        sequenceIndex.push(entry);
+        this.appendChunkOrderEntry(entry);
+      }
+      chunkIndexesBySequence.set(sequenceKey, sequenceIndex);
+    }
+
+    for (const chunks of chunkIndexesBySequence.values()) {
+      const [firstChunk] = chunks;
+      if (firstChunk !== undefined) {
+        this.writeSequenceChunkIndex(
+          firstChunk.deviceId,
+          firstChunk.sequence,
+          chunks.sort((left, right) => left.offset - right.offset)
+        );
+      }
     }
 
     for (const message of legacy.messages ?? []) {

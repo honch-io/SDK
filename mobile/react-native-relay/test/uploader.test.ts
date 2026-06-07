@@ -66,7 +66,7 @@ describe("uploadRelayMessage", () => {
   });
 
   it("uploads relay messages to the capture endpoint with relay headers", async () => {
-    const fetchMock = vi.fn(async () => new Response(null, { status: 202 }));
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
 
     await uploadRelayMessage(config, message);
@@ -86,7 +86,7 @@ describe("uploadRelayMessage", () => {
   });
 
   it("does not use the legacy batch CBOR upload contract", async () => {
-    const fetchMock = vi.fn(async () => new Response(null, { status: 202 }));
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
 
     await uploadRelayMessage(config, message);
@@ -108,8 +108,8 @@ describe("uploadRelayMessage", () => {
 
   it("classifies upload statuses using the canonical relay queue policy", async () => {
     const cases = [
-      { status: 200, action: "consume" },
-      { status: 202, action: "consume" },
+      { status: 202, action: "retry" },
+      { status: 204, action: "consume" },
       { status: 400, action: "drop" },
       { status: 401, action: "drop" },
       { status: 404, action: "drop" },

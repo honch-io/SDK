@@ -29,6 +29,9 @@ export function decodeRelayFrame(bytes: Uint8Array): RelayFrame {
   if (bytes[3] !== 0) {
     throw new Error("relay frame reserved byte must be zero");
   }
+  if ((bytes[2] & ~0x03) !== 0) {
+    throw new Error("relay frame unknown flag bits");
+  }
 
   const payloadLength = (bytes[16] << 8) | bytes[17];
   if (bytes.length !== RELAY_FRAME_HEADER_SIZE + payloadLength) {

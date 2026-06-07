@@ -15,6 +15,7 @@ function crc16(bytes: Uint8Array): number {
 
 function frame(options: {
   sourceType?: number;
+  flags?: number;
   first?: boolean;
   final?: boolean;
   sequence?: bigint;
@@ -25,7 +26,7 @@ function frame(options: {
   const bytes = new Uint8Array(20 + payload.length);
   bytes[0] = 1;
   bytes[1] = options.sourceType ?? 1;
-  bytes[2] = (options.first ? 1 : 0) | (options.final ? 2 : 0);
+  bytes[2] = options.flags ?? ((options.first ? 1 : 0) | (options.final ? 2 : 0));
   let sequence = options.sequence ?? 1n;
   for (let i = 11; i >= 4; i -= 1) {
     bytes[i] = Number(sequence & 0xffn);
@@ -75,6 +76,12 @@ describe("decodeRelayFrame", () => {
     const bytes = frame({ sourceType: 2, first: true, final: true });
 
     expect(() => decodeRelayFrame(bytes)).toThrow("unsupported relay frame source type");
+  });
+
+  it("rejects unknown flag bits", () => {
+    const bytes = frame({ flags: 0x04, payload: [1] });
+
+    expect(() => decodeRelayFrame(bytes)).toThrow("relay frame unknown flag bits");
   });
 
   it("decodes large offsets as unsigned uint32 values", () => {
