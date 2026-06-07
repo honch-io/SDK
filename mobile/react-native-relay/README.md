@@ -70,62 +70,49 @@ prefix is `honch.relay`.
 
 Completed messages and incomplete assemblies remain pending across app restarts until Capture accepts or permanently rejects them, unless they age out or the configured queue bounds require dropping oldest state. Retry attempts and next-attempt timestamps are stored with completed messages, so app restarts do not reset relay backoff or hammer Capture while a message is still inside its retry delay.
 
+## Host-Owned Bluetooth
+
+The relay package does not scan, connect, subscribe, request BLE permissions, or write BLE characteristics for the host app. Production apps should keep their existing Bluetooth stack and pass relay frames into the SDK:
+
+```ts
+import { createMobileRelay } from "@honch/react-native-relay";
+
+const relay = createMobileRelay({
+  durableStore,
+  uploaderConfig,
+  schedulerNative
+});
+
+hostBle.onRelayFrame(async ({ deviceId, frameBytes }) => {
+  await relay.receiveFrame(deviceId, frameBytes, {
+    acknowledge: async ({ ackBytes }) => {
+      await hostBle.writeRelayAck(deviceId, ackBytes);
+    }
+  });
+});
+```
+
+ACK bytes are emitted only after the received relay message has been durably assembled and stored. Malformed frames reject and do not produce ACK bytes. Duplicate completed frames can be ACKed again so firmware retries can settle.
+
+The Honch relay BLE UUIDs and frame format remain defined by `spec/relay-chunks.md`; the host app owns how those characteristics are discovered and wired into its device UX.
+
 ## Native Host Requirements
 
 iOS:
 
-- Add `NSBluetoothAlwaysUsageDescription`.
-- Enable `bluetooth-central` background mode if relay receipt should continue while backgrounded.
-- Install through the consuming React Native iOS host `Podfile`.
+- Add the Bluetooth usage strings/background modes required by the host app's own BLE implementation.
 - iOS upload scheduling is foreground-only. Call `drainUploads()` from the host
-  app foreground lifecycle; `startUploadScheduler()` is only backed by native
-  scheduled work on Android.
+  app foreground lifecycle; `startUploadScheduler()` drains immediately without
+  native background scheduling when no scheduler binding is configured.
 
 Android:
 
-- Request `BLUETOOTH_SCAN` and `BLUETOOTH_CONNECT` at runtime on Android 12+.
-- The package marks `BLUETOOTH_SCAN` with `neverForLocation` and does not merge
-  `ACCESS_FINE_LOCATION` or notification permissions into the host manifest.
-- `requestRelayAndroidPermissions()` requests only Android 12+ BLE permissions
-  by default. For a pre-Android-12 host that intentionally needs legacy
-  location-backed scans, call it with `requestLegacyLocation: true` and the
-  host app's API-level context.
+- Request the Bluetooth permissions required by the host app's own BLE implementation.
+- This package does not merge BLE, location, or notification permissions into
+  the host manifest.
 - Keep `androidx.work:work-runtime` available for scheduled upload drains.
 - Register the package through the consuming React Native Android host.
 - Register a headless JS task named `HonchRelayUpload` that calls the same durable queue drain path used by foreground upload drains.
-
-Native scans auto-stop after an idle timeout to avoid continuous BLE scan drain.
-Call `startScan()` again when the host app is ready to discover relay devices.
-
-## Native Frame Events
-
-Native iOS and Android bridges emit:
-
-```text
-HonchRelayFrame
-{
-  deviceId: "<native peripheral id>",
-  frameBase64: "<relay frame bytes>"
-}
-```
-
-Wire this event source into `createMobileRelay` so native notifications enter the same durable validation, assembly, ACK, and upload path as manual `receiveFrame` calls.
-
-```ts
-import { NativeEventEmitter, NativeModules } from "react-native";
-import { createMobileRelay } from "@honch/react-native-relay";
-
-const nativeModule = NativeModules.HonchReactNativeRelay;
-const relay = createMobileRelay({
-  durableStore,
-  uploaderConfig,
-  bleNative,
-  schedulerNative,
-  frameEvents: new NativeEventEmitter(nativeModule),
-});
-
-const subscription = relay.subscribeNativeFrames();
-```
 
 ## Upload Draining
 

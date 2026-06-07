@@ -2,27 +2,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SDK_PATH="$(xcrun --sdk iphoneos --show-sdk-path)"
-HEADER_ROOT="${TMPDIR:-/tmp}/honch-rn-relay-headers"
 
-rm -rf "${HEADER_ROOT}"
-mkdir -p "${HEADER_ROOT}/React" "${HEADER_ROOT}/RCTDeprecation"
+if [[ -f "${ROOT_DIR}/HonchReactNativeRelay.podspec" ]] || find "${ROOT_DIR}/ios" -type f 2>/dev/null | grep -q .; then
+  echo "iOS native verification failed: react-native-relay should not autolink SDK-owned BLE code." >&2
+  exit 1
+fi
 
-find "${ROOT_DIR}/node_modules/react-native/React" -name '*.h' -exec ln -sf {} "${HEADER_ROOT}/React/" \;
-ln -sf \
-  "${ROOT_DIR}/node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation/Exported/RCTDeprecation.h" \
-  "${HEADER_ROOT}/RCTDeprecation/RCTDeprecation.h"
-
-xcrun --sdk iphoneos clang \
-  -fsyntax-only \
-  -ObjC \
-  -fobjc-arc \
-  -isysroot "${SDK_PATH}" \
-  -miphoneos-version-min=13.0 \
-  -I "${HEADER_ROOT}" \
-  -I "${ROOT_DIR}/node_modules/react-native/React" \
-  -I "${ROOT_DIR}/node_modules/react-native/React/Base" \
-  -I "${ROOT_DIR}/node_modules/react-native/React/Modules" \
-  -I "${ROOT_DIR}/node_modules/react-native/ReactCommon" \
-  -I "${ROOT_DIR}/node_modules/react-native/ReactCommon/react/nativemodule/core" \
-  "${ROOT_DIR}/ios/HonchReactNativeRelay.m"
+echo "react-native-relay has no iOS native module; host apps own Bluetooth integration."

@@ -1,21 +1,12 @@
-import type { RelayBleNative } from "./ble";
 import type { RelayUploadSchedulerNative } from "./scheduler";
 
-export type RelayNativeModule = RelayBleNative & RelayUploadSchedulerNative;
+export type RelayNativeModule = RelayUploadSchedulerNative;
 
 export type RelayNativeBindings = {
-  bleNative: RelayBleNative;
   schedulerNative: RelayUploadSchedulerNative;
 };
 
 const requiredMethods = [
-  "startScan",
-  "stopScan",
-  "discoveredDevices",
-  "connect",
-  "disconnect",
-  "subscribeFrames",
-  "acknowledgeMessage",
   "scheduleUpload",
   "cancelUpload"
 ] as const;
@@ -30,16 +21,6 @@ export function createRelayNativeBindings(nativeModule: unknown): RelayNativeBin
 
   const typedModule = nativeModule as RelayNativeModule;
   return {
-    bleNative: {
-      startScan: () => typedModule.startScan(),
-      stopScan: () => typedModule.stopScan(),
-      discoveredDevices: () => typedModule.discoveredDevices(),
-      connect: (deviceId) => typedModule.connect(deviceId),
-      disconnect: (deviceId) => typedModule.disconnect(deviceId),
-      subscribeFrames: (deviceId) => typedModule.subscribeFrames(deviceId),
-      acknowledgeMessage: (deviceId, sequence) =>
-        typedModule.acknowledgeMessage(deviceId, sequence)
-    },
     schedulerNative: {
       scheduleUpload: (delayMs) => typedModule.scheduleUpload(delayMs),
       cancelUpload: () => typedModule.cancelUpload()

@@ -1,4 +1,4 @@
-import { NativeEventEmitter, NativeModules } from "react-native";
+import { NativeModules } from "react-native";
 import { createMMKV } from "react-native-mmkv";
 import {
   createMmkvRelayStore,
@@ -20,12 +20,8 @@ const captureConfig = {
 const nativeModule = NativeModules.HonchReactNativeRelay;
 const bindings = createRelayNativeBindings(nativeModule);
 
-export const frameEvents = new NativeEventEmitter(nativeModule);
-
 export const relay = createMobileRelay({
   durableStore: createMmkvRelayStore(createMMKV({ id: "honch-relay-example" })),
   uploaderConfig: captureConfig,
-  bleNative: bindings.bleNative,
-  schedulerNative: bindings.schedulerNative,
-  frameEvents
+  schedulerNative: bindings.schedulerNative
 });
