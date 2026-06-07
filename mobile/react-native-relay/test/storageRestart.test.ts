@@ -263,6 +263,75 @@ describe("MMKV relay durable store retention", () => {
     expect(mmkv.setKeys).toContain("honch.relay.message.device-a.7");
   });
 
+  it("migrates legacy MMKV chunks once when complete messages are read before chunks", async () => {
+    const mmkv = fakeMmkv();
+    mmkv.set(
+      "honch.relay.queue.v1",
+      JSON.stringify({
+        chunks: [
+          {
+            deviceId: "device-a",
+            sourceType: 1,
+            sequence: "1",
+            offset: 0,
+            frameBytes: Array.from(frame({ first: true, sequence: 1n, payload: [1, 2] })),
+            payload: [1, 2]
+          },
+          {
+            deviceId: "device-a",
+            sourceType: 1,
+            sequence: "1",
+            offset: 2,
+            frameBytes: Array.from(frame({ final: true, sequence: 1n, offset: 2, payload: [3, 4] })),
+            payload: [3, 4],
+            finalEnd: 4
+          }
+        ],
+        messages: []
+      })
+    );
+
+    const store = createMmkvRelayStore(mmkv, { now: () => 1000 });
+
+    expect(await store.completeMessages()).toEqual([]);
+    expect((await store.chunks("device-a", "1")).map((chunk) => chunk.offset)).toEqual([0, 2]);
+  });
+
+  it("migrates legacy MMKV chunks once when chunks are read before complete messages", async () => {
+    const mmkv = fakeMmkv();
+    mmkv.set(
+      "honch.relay.queue.v1",
+      JSON.stringify({
+        chunks: [
+          {
+            deviceId: "device-a",
+            sourceType: 1,
+            sequence: "1",
+            offset: 0,
+            frameBytes: Array.from(frame({ first: true, sequence: 1n, payload: [1, 2] })),
+            payload: [1, 2]
+          },
+          {
+            deviceId: "device-a",
+            sourceType: 1,
+            sequence: "1",
+            offset: 2,
+            frameBytes: Array.from(frame({ final: true, sequence: 1n, offset: 2, payload: [3, 4] })),
+            payload: [3, 4],
+            finalEnd: 4
+          }
+        ],
+        messages: []
+      })
+    );
+
+    const store = createMmkvRelayStore(mmkv, { now: () => 1000 });
+
+    expect((await store.chunks("device-a", "1")).map((chunk) => chunk.offset)).toEqual([0, 2]);
+    expect(await store.completeMessages()).toEqual([]);
+    expect((await store.chunks("device-a", "1")).map((chunk) => chunk.offset)).toEqual([0, 2]);
+  });
+
   it("expires stale MMKV relay entries by TTL", async () => {
     let now = 1000;
     const mmkv = fakeMmkv();

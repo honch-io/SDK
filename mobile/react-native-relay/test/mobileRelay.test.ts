@@ -87,11 +87,33 @@ describe("createMobileRelay", () => {
       }
     });
     await relay.receiveFrame("device-a", frame([4]));
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 202 })));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
 
     await relay.drainUploads();
 
     expect(await relay.pending()).toEqual([]);
+  });
+
+  it("keeps uploaded payloads pending when capture only stores a chunk", async () => {
+    const scheduled: number[] = [];
+    const relay = createMobileRelay({
+      durableStore: createMemoryDurableStore(),
+      uploaderConfig,
+      random: () => 0.5,
+      schedulerNative: {
+        async scheduleUpload(delayMs) {
+          scheduled.push(delayMs);
+        },
+        async cancelUpload() {}
+      }
+    });
+    await relay.receiveFrame("device-a", frame([4]));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 202 })));
+
+    await relay.drainUploads();
+
+    expect((await relay.pending()).map((message) => message.sequence)).toEqual(["1"]);
+    expect(scheduled).toEqual([1000]);
   });
 
   it("drains pending uploads when the upload scheduler starts", async () => {
@@ -107,7 +129,7 @@ describe("createMobileRelay", () => {
       }
     });
     await relay.receiveFrame("device-a", frame([5]));
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 202 })));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
 
     await relay.startUploadScheduler();
 
@@ -141,7 +163,7 @@ describe("createMobileRelay", () => {
       uploaderConfig
     });
     await relay.receiveFrame("device-a", frame([6]));
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 202 })));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
 
     await relay.startUploadScheduler();
 
