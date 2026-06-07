@@ -311,6 +311,22 @@ describe("React Native relay package shape", () => {
     expect(iosModule).toContain("scheduleScanTimeout");
   });
 
+  it("makes Android scan start idempotent while a scan is already active", () => {
+    const androidModule = readFileSync(
+      new URL(
+        "android/src/main/java/io/honch/reactnativerelay/HonchReactNativeRelayModule.java",
+        packageRoot
+      ),
+      "utf8"
+    );
+
+    expect(androidModule).toContain("private boolean isScanning = false");
+    expect(androidModule).toContain("if (isScanning) {");
+    expect(androidModule).toContain("BLE scan already active; refreshed idle timeout");
+    expect(androidModule).toContain("isScanning = true");
+    expect(androidModule).toContain("isScanning = false");
+  });
+
   it("keeps the example relay singleton reusable by foreground UI and headless tasks", () => {
     const relayModule = readFileSync(new URL("example/relay.ts", packageRoot), "utf8");
     const exampleIndex = readFileSync(new URL("example/index.ts", packageRoot), "utf8");
