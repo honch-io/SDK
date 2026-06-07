@@ -8,6 +8,7 @@ include(GNUInstallDirs)
 option(HONCH_BUILD_TESTS "Build Honch POSIX SDK tests" ON)
 option(HONCH_BUILD_EXAMPLES "Build Honch POSIX SDK examples" ON)
 option(HONCH_BUILD_BENCHMARKS "Build Honch POSIX SDK benchmarks" OFF)
+option(HONCH_BUILD_E2E "Build Honch POSIX SDK end-to-end tests" OFF)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -142,6 +143,28 @@ if(HONCH_BUILD_TESTS)
         NAME honch_posix_sdk_contract_tests
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_sdk_contract.py
     )
+
+    if(HONCH_BUILD_E2E)
+        add_executable(honch_posix_e2e
+            test/test_e2e_capture.c
+        )
+
+        target_link_libraries(honch_posix_e2e PRIVATE honch_posix_test)
+        if(UNIX AND NOT APPLE)
+            target_link_libraries(honch_posix_e2e PRIVATE m)
+        endif()
+        target_compile_definitions(honch_posix_e2e PRIVATE
+            HONCH_TESTING
+            _POSIX_C_SOURCE=200809L
+            _DEFAULT_SOURCE
+            _DARWIN_C_SOURCE
+        )
+        target_compile_options(honch_posix_e2e PRIVATE
+            $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
+        )
+
+        add_test(NAME honch_posix_e2e COMMAND honch_posix_e2e)
+    endif()
 endif()
 
 if(HONCH_BUILD_EXAMPLES)
