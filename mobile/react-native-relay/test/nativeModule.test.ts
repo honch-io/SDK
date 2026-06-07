@@ -5,8 +5,10 @@ import { createRelayNativeBindings } from "../src/nativeModule";
 describe("createRelayNativeBindings", () => {
   it("maps a React Native native module object to BLE and scheduler bindings", async () => {
     const calls: string[] = [];
+    const startScanArgs: unknown[][] = [];
     const bindings = createRelayNativeBindings({
-      async startScan() {
+      async startScan(...args: unknown[]) {
+        startScanArgs.push(args);
         calls.push("startScan");
       },
       async stopScan() {
@@ -36,7 +38,7 @@ describe("createRelayNativeBindings", () => {
       }
     });
 
-    await bindings.bleNative.startScan();
+    await bindings.bleNative.startScan({ timeoutMs: 1000 });
     await expect(bindings.bleNative.discoveredDevices()).resolves.toEqual([
       { id: "device-a", name: "Relay A", rssi: -42 }
     ]);
@@ -59,6 +61,7 @@ describe("createRelayNativeBindings", () => {
       "schedule:5000",
       "cancel"
     ]);
+    expect(startScanArgs).toEqual([[]]);
   });
 
   it("rejects missing native module methods early", () => {
