@@ -16,7 +16,7 @@ describe("requestRelayAndroidPermissions", () => {
     ).resolves.toEqual({ granted: true, requested: [], denied: [] });
   });
 
-  it("requests the BLE relay permission set on Android", async () => {
+  it("requests only the Android 12+ BLE relay permission set by default", async () => {
     const requestedByNative: string[][] = [];
 
     const result = await requestRelayAndroidPermissions({
@@ -40,8 +40,7 @@ describe("requestRelayAndroidPermissions", () => {
     expect(requestedByNative).toEqual([
       [
         "android.permission.BLUETOOTH_SCAN",
-        "android.permission.BLUETOOTH_CONNECT",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.BLUETOOTH_CONNECT"
       ]
     ]);
     expect(result).toEqual({
@@ -49,6 +48,31 @@ describe("requestRelayAndroidPermissions", () => {
       requested: requestedByNative[0],
       denied: []
     });
+  });
+
+  it("requests legacy fine location only when explicitly enabled for pre-Android 12 scans", async () => {
+    const requestedByNative: string[][] = [];
+
+    const result = await requestRelayAndroidPermissions({
+      platformOS: "android",
+      androidApiLevel: 30,
+      requestLegacyLocation: true,
+      permissions: {
+        PERMISSIONS: {
+          ACCESS_FINE_LOCATION: "android.permission.ACCESS_FINE_LOCATION"
+        },
+        RESULTS: {
+          GRANTED: "granted"
+        },
+        async requestMultiple(permissions) {
+          requestedByNative.push(permissions);
+          return Object.fromEntries(permissions.map((permission) => [permission, "granted"]));
+        }
+      }
+    });
+
+    expect(requestedByNative).toEqual([["android.permission.ACCESS_FINE_LOCATION"]]);
+    expect(result.granted).toBe(true);
   });
 
   it("reports denied permissions", async () => {
@@ -73,8 +97,7 @@ describe("requestRelayAndroidPermissions", () => {
       granted: false,
       requested: [
         "android.permission.BLUETOOTH_SCAN",
-        "android.permission.BLUETOOTH_CONNECT",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.BLUETOOTH_CONNECT"
       ],
       denied: ["android.permission.BLUETOOTH_CONNECT"]
     });

@@ -4,6 +4,7 @@ static NSString * const HonchRelayServiceUUIDString = @"484f4e43-482d-5245-4c41-
 static NSString * const HonchRelayFrameCharacteristicUUIDString = @"484f4e43-482d-5245-4c41-592d4652414d";
 static NSString * const HonchRelayAckCharacteristicUUIDString = @"484f4e43-482d-5245-4c41-592d41434b31";
 static NSString * const HonchRelayFrameEventName = @"HonchRelayFrame";
+static NSTimeInterval const HonchRelayDefaultScanTimeoutSeconds = 30.0;
 static void *HonchRelayBLEQueueKey = &HonchRelayBLEQueueKey;
 
 @interface HonchReactNativeRelay ()
@@ -13,6 +14,9 @@ static void *HonchRelayBLEQueueKey = &HonchRelayBLEQueueKey;
   NSMutableDictionary<NSString *, CBPeripheral *> *_peripheralsById;
   NSMutableDictionary<NSString *, NSDictionary *> *_discoveredDevicesById;
   NSMutableDictionary<NSString *, CBCharacteristic *> *_ackCharacteristicsById;
+  RCTPromiseResolveBlock _pendingScanResolve;
+  RCTPromiseRejectBlock _pendingScanReject;
+  NSUInteger _scanGeneration;
   BOOL _hasListeners;
   BOOL _didTeardown;
 }
@@ -62,20 +66,32 @@ RCT_EXPORT_MODULE()
 RCT_EXPORT_METHOD(startScan:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 {
   [self ensureCentralManager];
+  if (_centralManager.state == CBManagerStateUnknown || _centralManager.state == CBManagerStateResetting) {
+    _pendingScanResolve = resolve;
+    _pendingScanReject = reject;
+    return;
+  }
   if (_centralManager.state != CBManagerStatePoweredOn) {
     reject(@"bluetooth_unavailable", @"Bluetooth is not powered on", nil);
     return;
   }
 
+  [self beginScan];
+  resolve(nil);
+}
+
+- (void)beginScan
+{
   CBUUID *serviceUUID = [CBUUID UUIDWithString:HonchRelayServiceUUIDString];
   [_centralManager scanForPeripheralsWithServices:@[serviceUUID] options:nil];
-  resolve(nil);
+  [self scheduleScanTimeout];
 }
 
 RCT_EXPORT_METHOD(stopScan:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 {
   [self ensureCentralManager];
   [_centralManager stopScan];
+  _scanGeneration += 1;
   resolve(nil);
 }
 
@@ -184,6 +200,9 @@ RCT_EXPORT_METHOD(cancelUpload:(RCTPromiseResolveBlock)resolve rejecter:(RCTProm
     }
     self->_didTeardown = YES;
     self->_hasListeners = NO;
+    self->_scanGeneration += 1;
+    self->_pendingScanResolve = nil;
+    self->_pendingScanReject = nil;
 
     if (self->_centralManager != nil) {
       [self->_centralManager stopScan];
@@ -219,6 +238,35 @@ RCT_EXPORT_METHOD(cancelUpload:(RCTPromiseResolveBlock)resolve rejecter:(RCTProm
 
 - (void)centralManagerDidUpdateState:(CBCentralManager *)central
 {
+  if (_pendingScanResolve == nil) {
+    return;
+  }
+  RCTPromiseResolveBlock resolve = _pendingScanResolve;
+  RCTPromiseRejectBlock reject = _pendingScanReject;
+  _pendingScanResolve = nil;
+  _pendingScanReject = nil;
+
+  if (central.state == CBManagerStatePoweredOn) {
+    [self beginScan];
+    resolve(nil);
+  } else if (central.state != CBManagerStateUnknown && central.state != CBManagerStateResetting) {
+    reject(@"bluetooth_unavailable", @"Bluetooth is not powered on", nil);
+  }
+}
+
+- (void)scheduleScanTimeout
+{
+  _scanGeneration += 1;
+  NSUInteger generation = _scanGeneration;
+  dispatch_after(
+    dispatch_time(DISPATCH_TIME_NOW, (int64_t)(HonchRelayDefaultScanTimeoutSeconds * NSEC_PER_SEC)),
+    _bleQueue,
+    ^{
+      if (self->_scanGeneration == generation && self->_centralManager != nil) {
+        [self->_centralManager stopScan];
+      }
+    }
+  );
 }
 
 - (void)centralManager:(CBCentralManager *)central

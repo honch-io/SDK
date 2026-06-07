@@ -1,12 +1,12 @@
 # Honch React Native Relay
 
-Preview React Native relay package for companion apps that receive Honch relay frames from offline devices, durably assemble completed device messages, ACK durable receipt, and upload to Honch Capture.
+Release-candidate React Native relay package for companion apps that receive Honch relay frames from offline devices, durably assemble completed device messages, ACK durable receipt, and upload to Honch Capture.
 
 React Native Relay is not a device analytics SDK. Use it only when firmware cannot upload directly.
 
 ## Status
 
-Preview `0.1.0`. Production use requires validation inside the consuming iOS and Android host apps. See [`PRODUCTION_READINESS.md`](PRODUCTION_READINESS.md).
+Release-candidate `0.1.0`. Production use still requires validation inside the consuming iOS and Android host apps. See [`PRODUCTION_READINESS.md`](PRODUCTION_READINESS.md).
 
 ## Capture Contract
 
@@ -64,7 +64,7 @@ const relayStore = createMmkvRelayStore(createMMKV({ id: "honch-relay" }), {
 Use `keyPrefix` when sharing an MMKV instance with host app data. The default
 prefix is `honch.relay`.
 
-Completed messages and incomplete assemblies remain pending across app restarts until Capture accepts or permanently rejects them, unless they age out or the configured queue bounds require dropping oldest state.
+Completed messages and incomplete assemblies remain pending across app restarts until Capture accepts or permanently rejects them, unless they age out or the configured queue bounds require dropping oldest state. Retry attempts and next-attempt timestamps are stored with completed messages, so app restarts do not reset relay backoff or hammer Capture while a message is still inside its retry delay.
 
 ## Native Host Requirements
 
@@ -82,9 +82,16 @@ Android:
 - Request `BLUETOOTH_SCAN` and `BLUETOOTH_CONNECT` at runtime on Android 12+.
 - The package marks `BLUETOOTH_SCAN` with `neverForLocation` and does not merge
   `ACCESS_FINE_LOCATION` or notification permissions into the host manifest.
+- `requestRelayAndroidPermissions()` requests only Android 12+ BLE permissions
+  by default. For a pre-Android-12 host that intentionally needs legacy
+  location-backed scans, call it with `requestLegacyLocation: true` and the
+  host app's API-level context.
 - Keep `androidx.work:work-runtime` available for scheduled upload drains.
 - Register the package through the consuming React Native Android host.
 - Register a headless JS task named `HonchRelayUpload` that calls the same durable queue drain path used by foreground upload drains.
+
+Native scans auto-stop after an idle timeout to avoid continuous BLE scan drain.
+Call `startScan()` again when the host app is ready to discover relay devices.
 
 ## Native Frame Events
 
@@ -126,7 +133,7 @@ const subscription = relay.subscribeNativeFrames();
 
 Retryable upload failures keep messages pending and schedule the next native upload attempt with relay backoff.
 If Capture returns `Retry-After` on a retryable response, that delay takes precedence over the local exponential backoff.
-Upload retry timing stays in the JavaScript relay drain path. Android WorkManager only retries failures to launch the headless task, and the headless task timeout is capped at 10 seconds to bound wake-lock hold time.
+Upload retry timing and attempt state stay in the JavaScript relay drain path and durable store. Android WorkManager only retries failures to launch the headless task, and the headless task timeout is capped at 10 seconds to bound wake-lock hold time.
 
 Android scheduled drains start the `HonchRelayUpload` headless JS task from WorkManager. Register the task in the host app entrypoint and call the app-owned relay singleton:
 
@@ -143,6 +150,7 @@ AppRegistry.registerHeadlessTask("HonchRelayUpload", () => async () => {
 ```bash
 bun run test
 bun run typecheck
+bun run e2e:capture
 bun run verify:ios:native
 bun run verify:android:native
 ```

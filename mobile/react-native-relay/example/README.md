@@ -3,10 +3,12 @@
 This directory contains a host-app example shape for validating the preview
 React Native Relay package inside a consuming mobile app.
 
-`App.tsx` wires the package to `NativeModules.HonchReactNativeRelay`, subscribes
-to native `HonchRelayFrame` events, stores relay queue state in MMKV, displays
-discovered relay devices and pending mobile relay messages, and exposes manual
-scan/connect/drain controls.
+`relay.ts` wires the package to `NativeModules.HonchReactNativeRelay`, stores
+relay queue state in MMKV, and exports the app-owned relay singleton used by
+both the foreground UI and Android headless upload task. `App.tsx` subscribes
+to native `HonchRelayFrame` events, displays discovered relay devices and
+pending mobile relay messages, and exposes manual scan/connect/drain controls.
+`index.ts` registers the `HonchRelayUpload` headless task.
 
 The example app should prove:
 

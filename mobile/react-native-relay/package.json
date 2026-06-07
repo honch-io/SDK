@@ -9,6 +9,7 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "e2e:capture": "bun e2e/relay-capture-e2e.ts",
     "verify:android:native": "scripts/verify-android-native.sh",
     "verify:ios:native": "scripts/verify-ios-syntax.sh"
   },

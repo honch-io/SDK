@@ -31,7 +31,7 @@ export function createRelayNativeBindings(nativeModule: unknown): RelayNativeBin
   const typedModule = nativeModule as RelayNativeModule;
   return {
     bleNative: {
-      startScan: () => typedModule.startScan(),
+      startScan: (options) => typedModule.startScan(options),
       stopScan: () => typedModule.stopScan(),
       discoveredDevices: () => typedModule.discoveredDevices(),
       connect: (deviceId) => typedModule.connect(deviceId),

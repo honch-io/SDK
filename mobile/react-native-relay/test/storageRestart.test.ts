@@ -148,6 +148,7 @@ describe("MMKV relay durable store retention", () => {
     });
 
     expect(mmkv.setKeys).toContain("honch.relay.index.v2");
+    expect(mmkv.setKeys).toContain("honch.relay.chunks.device-a.1.index.v1");
     expect(mmkv.setKeys).toContain("honch.relay.chunk.device-a.1.0");
     expect(mmkv.setKeys).toContain("honch.relay.message.device-a.1");
     expect(mmkv.setKeys).not.toContain("honch.relay.queue.v1");
@@ -264,5 +265,29 @@ describe("MMKV relay durable store retention", () => {
 
     expect((await store.completeMessages()).map((message) => message.sequence)).toEqual(["2"]);
     expect(mmkv.removedKeys).toContain("honch.relay.message.device-a.1");
+  });
+
+  it("persists MMKV retry metadata across store re-instantiation", async () => {
+    const mmkv = fakeMmkv();
+    const firstStore = createMmkvRelayStore(mmkv, { now: () => 1000 });
+
+    await firstStore.putCompleteMessage({
+      deviceId: "device-a",
+      sourceType: 1,
+      sequence: "1",
+      body: new Uint8Array([1])
+    });
+    await firstStore.markRetry("device-a", "1", { attempt: 3, nextAttemptAtMs: 9000 });
+
+    const restartedStore = createMmkvRelayStore(mmkv, { now: () => 2000 });
+
+    expect(await restartedStore.completeMessages()).toMatchObject([
+      {
+        deviceId: "device-a",
+        sequence: "1",
+        retryAttempt: 3,
+        nextAttemptAtMs: 9000
+      }
+    ]);
   });
 });

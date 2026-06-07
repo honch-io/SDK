@@ -6,6 +6,13 @@ export type StoredRelayMessage = {
   sourceType: number;
   sequence: string;
   body: Uint8Array;
+  retryAttempt?: number;
+  nextAttemptAtMs?: number;
+};
+
+export type RelayRetryState = {
+  attempt: number;
+  nextAttemptAtMs: number;
 };
 
 export interface RelayQueue {
@@ -15,6 +22,7 @@ export interface RelayQueue {
   ): Promise<{ complete: boolean; message?: StoredRelayMessage }>;
   markUploaded(deviceId: string, sequence: string): Promise<void>;
   markDropped(deviceId: string, sequence: string): Promise<void>;
+  markRetry(deviceId: string, sequence: string, retry: RelayRetryState): Promise<void>;
   pending(): Promise<StoredRelayMessage[]>;
 }
 
@@ -100,14 +108,18 @@ export function createInMemoryRelayQueue(): RelayQueue {
         return { complete: assembly.message !== undefined, message: assembly.message };
       }
 
+      if (frame.final) {
+        const finalEnd = frame.offset + frame.payload.length;
+        if (assembly.finalEnd !== undefined && assembly.finalEnd !== finalEnd) {
+          throw new Error("relay final chunk length mismatch");
+        }
+        assembly.finalEnd = finalEnd;
+      }
       assembly.chunks.push({
         offset: frame.offset,
         bytes: new Uint8Array(frameBytes),
         payload: new Uint8Array(frame.payload)
       });
-      if (frame.final) {
-        assembly.finalEnd = frame.offset + frame.payload.length;
-      }
 
       const message = completeMessage(assembly);
       if (message === undefined) {
@@ -134,6 +146,16 @@ export function createInMemoryRelayQueue(): RelayQueue {
 
     async markDropped(deviceId, sequence) {
       await this.markUploaded(deviceId, sequence);
+    },
+
+    async markRetry(deviceId, sequence, retry) {
+      const message = completeMessages.find(
+        (entry) => entry.deviceId === deviceId && entry.sequence === sequence
+      );
+      if (message !== undefined) {
+        message.retryAttempt = retry.attempt;
+        message.nextAttemptAtMs = retry.nextAttemptAtMs;
+      }
     },
 
     async pending() {
@@ -178,7 +200,12 @@ export function createDurableRelayQueue(store: RelayDurableStore): RelayQueue {
         payload: new Uint8Array(frame.payload)
       };
       if (frame.final) {
-        chunk.finalEnd = frame.offset + frame.payload.length;
+        const finalEnd = frame.offset + frame.payload.length;
+        const existingFinalEnd = existingChunks.find((entry) => entry.finalEnd !== undefined)?.finalEnd;
+        if (existingFinalEnd !== undefined && existingFinalEnd !== finalEnd) {
+          throw new Error("relay final chunk length mismatch");
+        }
+        chunk.finalEnd = finalEnd;
       }
       await store.putChunk(chunk);
 
@@ -200,6 +227,10 @@ export function createDurableRelayQueue(store: RelayDurableStore): RelayQueue {
 
     async markDropped(deviceId, sequence) {
       await store.deleteMessage(deviceId, sequence);
+    },
+
+    async markRetry(deviceId, sequence, retry) {
+      await store.markRetry(deviceId, sequence, retry);
     },
 
     async pending() {

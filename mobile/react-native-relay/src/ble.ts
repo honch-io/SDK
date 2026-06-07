@@ -7,7 +7,7 @@ export type RelayDiscoveredDevice = {
 };
 
 export interface RelayBleNative {
-  startScan(): Promise<void>;
+  startScan(options?: RelayScanOptions): Promise<void>;
   stopScan(): Promise<void>;
   discoveredDevices(): Promise<RelayDiscoveredDevice[]>;
   connect(deviceId: string): Promise<void>;
@@ -15,6 +15,10 @@ export interface RelayBleNative {
   subscribeFrames(deviceId: string): Promise<void>;
   acknowledgeMessage(deviceId: string, sequence: string): Promise<void>;
 }
+
+export type RelayScanOptions = {
+  timeoutMs?: number;
+};
 
 export type RelayBleReceiverOptions = {
   queue: RelayQueue;
@@ -28,8 +32,8 @@ export type RelayFrameReceipt = {
 
 export function createBleRelayReceiver(options: RelayBleReceiverOptions) {
   return {
-    startScan() {
-      return options.native.startScan();
+    startScan(scanOptions?: RelayScanOptions) {
+      return options.native.startScan(scanOptions);
     },
 
     stopScan() {

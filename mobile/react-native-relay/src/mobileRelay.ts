@@ -4,7 +4,7 @@ import { subscribeRelayNativeFrames, type RelayNativeFrameEventSource } from "./
 import { createDurableRelayQueue, type StoredRelayMessage } from "./relayQueue";
 import { createRelayUploadScheduler } from "./scheduler";
 import { uploadRelayMessageOutcome, type RelayUploaderConfig } from "./uploader";
-import type { RelayBleNative } from "./ble";
+import type { RelayBleNative, RelayScanOptions } from "./ble";
 import type { RelayDurableStore } from "./durableStore";
 import type { RelayUploadSchedulerNative } from "./scheduler";
 
@@ -23,8 +23,8 @@ export function createMobileRelay(options: MobileRelayOptions) {
   const scheduler = createRelayUploadScheduler({ native: options.schedulerNative });
 
   return {
-    startScan() {
-      return receiver.startScan();
+    startScan(scanOptions?: RelayScanOptions) {
+      return receiver.startScan(scanOptions);
     },
 
     stopScan() {
@@ -74,11 +74,20 @@ export function createMobileRelay(options: MobileRelayOptions) {
     },
 
     drainUploads(): Promise<void> {
+      const drainStartedAtMs = Date.now();
       return drainRelayQueue({
         queue,
         upload: (message) => uploadRelayMessageOutcome(options.uploaderConfig, message),
-        recordRetry: async (_message, delayMs) => scheduler.schedule(delayMs),
+        now: () => drainStartedAtMs,
         random: options.random
+      }).then(async () => {
+        const pending = await queue.pending();
+        const dueTimes = pending
+          .map((message) => message.nextAttemptAtMs)
+          .filter((value): value is number => value !== undefined);
+        if (dueTimes.length > 0) {
+          await scheduler.schedule(Math.max(0, Math.min(...dueTimes) - drainStartedAtMs));
+        }
       });
     }
   };
