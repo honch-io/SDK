@@ -1,6 +1,5 @@
 package io.honch.reactnativerelay;
 
-import android.content.Context;
 import android.content.Intent;
 
 import androidx.annotation.Nullable;
@@ -15,15 +14,9 @@ public class HonchRelayUploadTaskService extends HeadlessJsTaskService {
     public static final String EXTRA_DELAY_MS = "delayMs";
     private static final long TASK_TIMEOUT_MS = 10000L;
 
-    public static void acquireWakeLock(Context context) {
-        HeadlessJsTaskService.acquireWakeLockNow(context);
-    }
-
     @Nullable
     @Override
     protected HeadlessJsTaskConfig getTaskConfig(Intent intent) {
-        Context context = getApplicationContext();
-        HeadlessJsTaskService.acquireWakeLockNow(context);
         WritableMap data = Arguments.createMap();
         data.putDouble(EXTRA_DELAY_MS, intent.getLongExtra(EXTRA_DELAY_MS, 0L));
         return new HeadlessJsTaskConfig(TASK_NAME, data, TASK_TIMEOUT_MS, true);
