@@ -1,6 +1,7 @@
 import type { MMKV } from "react-native-mmkv";
 
 import type { DurableRelayChunk, RelayDurableStore } from "../durableStore";
+import type { RelayRetryState } from "../relayQueue";
 import type { StoredRelayMessage } from "../relayQueue";
 
 type RelayMmkvStorage = Pick<MMKV, "getString" | "set" | "remove">;
@@ -16,6 +17,10 @@ export type MmkvRelayStoreOptions = {
 type SerializedRelayStoreIndex = {
   chunks: SerializedRelayChunkIndexEntry[];
   messages: SerializedRelayMessageIndexEntry[];
+};
+
+type SerializedRelaySequenceChunkIndex = {
+  chunks: SerializedRelayChunkIndexEntry[];
 };
 
 type SerializedRelayChunkIndexEntry = {
@@ -34,6 +39,8 @@ type SerializedRelayMessageIndexEntry = {
   sourceType: number;
   sequence: string;
   storedAtMs: number;
+  retryAttempt?: number;
+  nextAttemptAtMs?: number;
 };
 
 type SerializedRelayChunkRecord = {
@@ -130,14 +137,15 @@ class MmkvRelayStore implements RelayDurableStore {
     }
 
     this.enforceLimits(index);
+    this.writeSequenceChunkIndex(chunk.deviceId, chunk.sequence, index);
     this.writeIndex(index);
   }
 
   async chunks(deviceId: string, sequence: string): Promise<DurableRelayChunk[]> {
     const index = this.prunedIndex();
     this.writeIndex(index);
-    return index.chunks
-      .filter((chunk) => chunk.deviceId === deviceId && chunk.sequence === sequence)
+    const sequenceIndex = this.readSequenceChunkIndex(deviceId, sequence, index);
+    return sequenceIndex.chunks
       .map((entry) => this.readChunk(entry))
       .filter((chunk): chunk is DurableRelayChunk => chunk !== undefined);
   }
@@ -182,6 +190,18 @@ class MmkvRelayStore implements RelayDurableStore {
       .filter((message): message is StoredRelayMessage => message !== undefined);
   }
 
+  async markRetry(deviceId: string, sequence: string, retry: RelayRetryState): Promise<void> {
+    const index = this.prunedIndex();
+    const entry = index.messages.find(
+      (message) => message.deviceId === deviceId && message.sequence === sequence
+    );
+    if (entry !== undefined) {
+      entry.retryAttempt = retry.attempt;
+      entry.nextAttemptAtMs = retry.nextAttemptAtMs;
+      this.writeIndex(index);
+    }
+  }
+
   async deleteMessage(deviceId: string, sequence: string): Promise<void> {
     const index = this.prunedIndex();
     index.messages = index.messages.filter((message) => {
@@ -198,6 +218,7 @@ class MmkvRelayStore implements RelayDurableStore {
       this.storage.remove(chunk.key);
       return false;
     });
+    this.storage.remove(this.sequenceChunkIndexKey(deviceId, sequence));
     this.writeIndex(index);
   }
 
@@ -210,6 +231,7 @@ class MmkvRelayStore implements RelayDurableStore {
         return true;
       }
       this.storage.remove(chunk.key);
+      this.storage.remove(this.sequenceChunkIndexKey(chunk.deviceId, chunk.sequence));
       return false;
     });
     index.messages = index.messages.filter((message) => {
@@ -228,6 +250,7 @@ class MmkvRelayStore implements RelayDurableStore {
     while (index.chunks.length > this.options.maxChunks) {
       const [removed] = index.chunks.splice(0, 1);
       this.storage.remove(removed.key);
+      this.writeSequenceChunkIndex(removed.deviceId, removed.sequence, index);
     }
 
     index.messages.sort((left, right) => left.storedAtMs - right.storedAtMs);
@@ -241,6 +264,7 @@ class MmkvRelayStore implements RelayDurableStore {
         this.storage.remove(chunk.key);
         return false;
       });
+      this.storage.remove(this.sequenceChunkIndexKey(removed.deviceId, removed.sequence));
     }
   }
 
@@ -262,6 +286,42 @@ class MmkvRelayStore implements RelayDurableStore {
       return;
     }
     this.storage.set(this.indexKey(), JSON.stringify(index));
+  }
+
+  private readSequenceChunkIndex(
+    deviceId: string,
+    sequence: string,
+    globalIndex: SerializedRelayStoreIndex
+  ): SerializedRelaySequenceChunkIndex {
+    const raw = this.storage.getString(this.sequenceChunkIndexKey(deviceId, sequence));
+    if (raw !== undefined) {
+      const parsed = JSON.parse(raw) as SerializedRelaySequenceChunkIndex;
+      return { chunks: parsed.chunks ?? [] };
+    }
+
+    const sequenceIndex = {
+      chunks: globalIndex.chunks.filter(
+        (chunk) => chunk.deviceId === deviceId && chunk.sequence === sequence
+      )
+    };
+    this.writeSequenceChunkIndex(deviceId, sequence, globalIndex);
+    return sequenceIndex;
+  }
+
+  private writeSequenceChunkIndex(
+    deviceId: string,
+    sequence: string,
+    globalIndex: SerializedRelayStoreIndex
+  ): void {
+    const chunks = globalIndex.chunks.filter(
+      (chunk) => chunk.deviceId === deviceId && chunk.sequence === sequence
+    );
+    const key = this.sequenceChunkIndexKey(deviceId, sequence);
+    if (chunks.length === 0) {
+      this.storage.remove(key);
+      return;
+    }
+    this.storage.set(key, JSON.stringify({ chunks } satisfies SerializedRelaySequenceChunkIndex));
   }
 
   private migrateLegacyIndex(): SerializedRelayStoreIndex {
@@ -350,7 +410,9 @@ class MmkvRelayStore implements RelayDurableStore {
       deviceId: entry.deviceId,
       sourceType: entry.sourceType,
       sequence: entry.sequence,
-      body
+      body,
+      retryAttempt: entry.retryAttempt,
+      nextAttemptAtMs: entry.nextAttemptAtMs
     };
   }
 
@@ -360,6 +422,10 @@ class MmkvRelayStore implements RelayDurableStore {
 
   private chunkKey(deviceId: string, sequence: string, offset: number): string {
     return `${this.options.keyPrefix}.chunk.${deviceId}.${sequence}.${offset}`;
+  }
+
+  private sequenceChunkIndexKey(deviceId: string, sequence: string): string {
+    return `${this.options.keyPrefix}.chunks.${deviceId}.${sequence}.index.v1`;
   }
 
   private messageKey(deviceId: string, sequence: string): string {

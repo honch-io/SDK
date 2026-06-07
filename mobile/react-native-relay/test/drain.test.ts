@@ -16,10 +16,12 @@ function message(sequence: string): StoredRelayMessage {
 function queue(messages: StoredRelayMessage[]): RelayQueue & {
   uploaded: string[];
   dropped: string[];
+  retries: Array<{ sequence: string; attempt: number; nextAttemptAtMs: number }>;
 } {
   return {
     uploaded: [],
     dropped: [],
+    retries: [],
     async putChunk() {
       return { complete: false };
     },
@@ -31,6 +33,9 @@ function queue(messages: StoredRelayMessage[]): RelayQueue & {
     },
     async markDropped(_deviceId, sequence) {
       this.dropped.push(sequence);
+    },
+    async markRetry(_deviceId, sequence, retry) {
+      this.retries.push({ sequence, ...retry });
     }
   };
 }
@@ -44,10 +49,7 @@ describe("drainRelayQueue", () => {
       upload: async (relayMessage): Promise<RelayUploadOutcome> =>
         relayMessage.sequence === "1"
           ? { action: "consume", status: 202 }
-          : { action: "drop", status: 401 },
-      recordRetry: async () => {
-        throw new Error("retry should not be recorded");
-      }
+          : { action: "drop", status: 401 }
     });
 
     expect(relayQueue.uploaded).toEqual(["1"]);
@@ -56,25 +58,21 @@ describe("drainRelayQueue", () => {
 
   it("records retry state without removing retryable messages", async () => {
     const relayQueue = queue([message("3")]);
-    const retries: Array<{ sequence: string; delayMs: number }> = [];
 
     await drainRelayQueue({
       queue: relayQueue,
       upload: async (): Promise<RelayUploadOutcome> => ({ action: "retry", status: 503 }),
-      recordRetry: async (relayMessage, delayMs) => {
-        retries.push({ sequence: relayMessage.sequence, delayMs });
-      },
+      now: () => 10000,
       random: () => 0.5
     });
 
     expect(relayQueue.uploaded).toEqual([]);
     expect(relayQueue.dropped).toEqual([]);
-    expect(retries).toEqual([{ sequence: "3", delayMs: 1000 }]);
+    expect(relayQueue.retries).toEqual([{ sequence: "3", attempt: 1, nextAttemptAtMs: 11000 }]);
   });
 
   it("uses Retry-After delay before local exponential backoff", async () => {
     const relayQueue = queue([message("4")]);
-    const retries: Array<{ sequence: string; delayMs: number }> = [];
 
     await drainRelayQueue({
       queue: relayQueue,
@@ -83,12 +81,52 @@ describe("drainRelayQueue", () => {
         status: 429,
         retryAfterMs: 12000
       }),
-      recordRetry: async (relayMessage, delayMs) => {
-        retries.push({ sequence: relayMessage.sequence, delayMs });
-      },
+      now: () => 20000,
       random: () => 0.5
     });
 
-    expect(retries).toEqual([{ sequence: "4", delayMs: 12000 }]);
+    expect(relayQueue.retries).toEqual([{ sequence: "4", attempt: 1, nextAttemptAtMs: 32000 }]);
+  });
+
+  it("skips messages whose retry delay is not due yet", async () => {
+    const relayQueue = queue([
+      {
+        ...message("5"),
+        retryAttempt: 1,
+        nextAttemptAtMs: 50000
+      }
+    ]);
+    let uploads = 0;
+
+    await drainRelayQueue({
+      queue: relayQueue,
+      upload: async (): Promise<RelayUploadOutcome> => {
+        uploads += 1;
+        return { action: "consume", status: 202 };
+      },
+      now: () => 49000
+    });
+
+    expect(uploads).toBe(0);
+    expect(relayQueue.uploaded).toEqual([]);
+  });
+
+  it("uses persisted retry attempts for exponential backoff", async () => {
+    const relayQueue = queue([
+      {
+        ...message("6"),
+        retryAttempt: 2,
+        nextAttemptAtMs: 10000
+      }
+    ]);
+
+    await drainRelayQueue({
+      queue: relayQueue,
+      upload: async (): Promise<RelayUploadOutcome> => ({ action: "retry", status: 503 }),
+      now: () => 10000,
+      random: () => 0.5
+    });
+
+    expect(relayQueue.retries).toEqual([{ sequence: "6", attempt: 3, nextAttemptAtMs: 14000 }]);
   });
 });

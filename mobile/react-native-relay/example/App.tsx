@@ -1,7 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  NativeEventEmitter,
-  NativeModules,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -9,26 +7,13 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
-import { createMMKV } from "react-native-mmkv";
 import {
   RELAY_FRAME_EVENT_NAME,
-  createMobileRelay,
-  createMmkvRelayStore,
-  createRelayNativeBindings,
   requestRelayAndroidPermissions,
   type RelayDiscoveredDevice,
   type StoredRelayMessage
 } from "@honch/react-native-relay";
-
-const captureConfig = {
-  endpointUrl: "http://127.0.0.1:8001",
-  projectKey: "test_key_123",
-  relayId: "mobile-relay-example",
-  relaySdkPlatform: "react-native",
-  relaySdkVersion: "0.1.0",
-  streamId: (message: StoredRelayMessage) => `relay-${message.deviceId}`,
-  messageId: (message: StoredRelayMessage) => Number(message.sequence)
-};
+import { frameEvents, relay } from "./relay";
 
 export default function App() {
   const [status, setStatus] = useState("idle");
@@ -37,21 +22,6 @@ export default function App() {
   const [pending, setPending] = useState<StoredRelayMessage[]>([]);
   const [lastError, setLastError] = useState<string>("none");
   const [lastReceivedDeviceId, setLastReceivedDeviceId] = useState<string>("none");
-  const { relay, frameEvents } = useMemo(() => {
-    const nativeModule = NativeModules.HonchReactNativeRelay;
-    const bindings = createRelayNativeBindings(nativeModule);
-    const events = new NativeEventEmitter(nativeModule);
-    return {
-      frameEvents: events,
-      relay: createMobileRelay({
-        durableStore: createMmkvRelayStore(createMMKV({ id: "honch-relay-example" })),
-        uploaderConfig: captureConfig,
-        bleNative: bindings.bleNative,
-        schedulerNative: bindings.schedulerNative,
-        frameEvents: events
-      })
-    };
-  }, []);
 
   useEffect(() => {
     const relaySubscription = relay.subscribeNativeFrames();

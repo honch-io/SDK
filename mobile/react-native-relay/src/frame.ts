@@ -10,6 +10,7 @@ export type RelayFrame = {
 
 const RELAY_FRAME_HEADER_SIZE = 20;
 const RELAY_FRAME_CRC_OFFSET = 18;
+const RELAY_FRAME_SOURCE_TYPE_EVENTS = 1;
 const RELAY_FRAME_CRC_INITIAL = 0xffff;
 const RELAY_FRAME_CRC_POLYNOMIAL = 0x1021;
 
@@ -21,6 +22,9 @@ export function decodeRelayFrame(bytes: Uint8Array): RelayFrame {
   const version = bytes[0];
   if (version !== 1) {
     throw new Error("unsupported relay frame version");
+  }
+  if (bytes[1] !== RELAY_FRAME_SOURCE_TYPE_EVENTS) {
+    throw new Error("unsupported relay frame source type");
   }
   if (bytes[3] !== 0) {
     throw new Error("relay frame reserved byte must be zero");
@@ -42,7 +46,7 @@ export function decodeRelayFrame(bytes: Uint8Array): RelayFrame {
     sequence = (sequence << 8n) | BigInt(bytes[i]);
   }
 
-  const offset = (bytes[12] << 24) | (bytes[13] << 16) | (bytes[14] << 8) | bytes[15];
+  const offset = ((bytes[12] << 24) | (bytes[13] << 16) | (bytes[14] << 8) | bytes[15]) >>> 0;
   return {
     version,
     sourceType: bytes[1],

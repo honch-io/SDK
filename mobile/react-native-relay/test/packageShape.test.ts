@@ -32,6 +32,7 @@ describe("React Native relay package shape", () => {
 
     expect(packageJson.scripts?.["verify:ios:native"]).toBe("scripts/verify-ios-syntax.sh");
     expect(packageJson.scripts?.["verify:android:native"]).toBe("scripts/verify-android-native.sh");
+    expect(packageJson.scripts?.["e2e:capture"]).toBe("bun e2e/relay-capture-e2e.ts");
     expect(existsSync(new URL("scripts/verify-ios-syntax.sh", packageRoot))).toBe(true);
     expect(existsSync(new URL("scripts/verify-android-native.sh", packageRoot))).toBe(true);
   });
@@ -51,7 +52,9 @@ describe("React Native relay package shape", () => {
       "ios/HonchReactNativeRelay.m",
       "example/README.md",
       "example/package.json",
-      "example/App.tsx"
+      "example/App.tsx",
+      "example/relay.ts",
+      "example/index.ts"
     ];
 
     for (const file of expectedFiles) {
@@ -284,9 +287,37 @@ describe("React Native relay package shape", () => {
 
     expect(worker).toContain("return Result.success()");
     expect(worker).toContain("return Result.retry()");
+    expect(worker).not.toContain("acquireWakeLock");
     expect(worker).not.toContain("uploadRelayMessage");
     expect(worker).not.toContain("drainUploads");
+    expect(service).toContain("HeadlessJsTaskService.acquireWakeLockNow(context)");
     expect(service).toContain("private static final long TASK_TIMEOUT_MS = 10000L");
-    expect(readme).toContain("Upload retry timing stays in the JavaScript relay drain path");
+    expect(readme).toContain("Upload retry timing and attempt state stay in the JavaScript relay drain path");
+  });
+
+  it("auto-stops native BLE scans after an idle timeout", () => {
+    const androidModule = readFileSync(
+      new URL(
+        "android/src/main/java/io/honch/reactnativerelay/HonchReactNativeRelayModule.java",
+        packageRoot
+      ),
+      "utf8"
+    );
+    const iosModule = readFileSync(new URL("ios/HonchReactNativeRelay.m", packageRoot), "utf8");
+
+    expect(androidModule).toContain("DEFAULT_SCAN_TIMEOUT_MS");
+    expect(androidModule).toContain("scheduleScanTimeout");
+    expect(iosModule).toContain("HonchRelayDefaultScanTimeoutSeconds");
+    expect(iosModule).toContain("scheduleScanTimeout");
+  });
+
+  it("keeps the example relay singleton reusable by foreground UI and headless tasks", () => {
+    const relayModule = readFileSync(new URL("example/relay.ts", packageRoot), "utf8");
+    const exampleIndex = readFileSync(new URL("example/index.ts", packageRoot), "utf8");
+
+    expect(relayModule).toContain("export const relay");
+    expect(relayModule).toContain("export const frameEvents");
+    expect(exampleIndex).toContain('AppRegistry.registerHeadlessTask("HonchRelayUpload"');
+    expect(exampleIndex).toContain("relay.drainUploads()");
   });
 });

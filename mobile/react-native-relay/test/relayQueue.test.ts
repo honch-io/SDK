@@ -91,6 +91,16 @@ describe("createInMemoryRelayQueue", () => {
     ).rejects.toThrow("relay duplicate chunk mismatch");
   });
 
+  it("rejects a second final chunk that changes the completed message length", async () => {
+    const queue = createInMemoryRelayQueue();
+
+    await queue.putChunk("device-a", frame({ first: true, final: true, payload: [1, 2] }));
+
+    await expect(
+      queue.putChunk("device-a", frame({ final: true, offset: 2, payload: [3] }))
+    ).rejects.toThrow("relay final chunk length mismatch");
+  });
+
   it("returns complete unuploaded messages and removes uploaded messages", async () => {
     const queue = createInMemoryRelayQueue();
 
@@ -142,5 +152,24 @@ describe("createDurableRelayQueue", () => {
 
     const uploadedQueue = createDurableRelayQueue(store);
     expect(await uploadedQueue.pending()).toEqual([]);
+  });
+
+  it("persists retry metadata across queue re-instantiation", async () => {
+    const store = createMemoryDurableStore();
+    const firstQueue = createDurableRelayQueue(store);
+
+    await firstQueue.putChunk("device-a", frame({ first: true, final: true, payload: [9] }));
+    await firstQueue.markRetry("device-a", "1", { attempt: 2, nextAttemptAtMs: 12345 });
+
+    const restartedQueue = createDurableRelayQueue(store);
+
+    expect(await restartedQueue.pending()).toMatchObject([
+      {
+        deviceId: "device-a",
+        sequence: "1",
+        retryAttempt: 2,
+        nextAttemptAtMs: 12345
+      }
+    ]);
   });
 });

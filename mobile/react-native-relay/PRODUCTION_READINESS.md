@@ -1,28 +1,45 @@
 # React Native Relay Production Readiness
 
-Status: preview. Do not treat the package as production-ready for a customer app until the consuming iOS and Android host apps pass native build, BLE, durable-storage, background scheduling, and live Capture validation.
+Status: release candidate. Do not treat the package as production-ready for a customer app until the consuming iOS and Android host apps pass native build, BLE, durable-storage, background scheduling, and live Capture validation.
 
 ## Current Evidence
 
 - TypeScript package tests and type checks are expected release gates.
 - Native bridge syntax/library checks are useful preflights, but they do not replace host-app archive/build and device validation.
 - Offline relay harness coverage proves relay assembly and retry behavior at package level.
-- MMKV package tests cover per-record storage, legacy queue migration, TTL expiry, completed-message caps, and retry scheduling with `Retry-After`.
+- MMKV package tests cover per-record storage, per-sequence chunk indexes, legacy queue migration, TTL expiry, completed-message caps, persisted retry metadata, and retry scheduling with `Retry-After`.
+
+Latest local package evidence from June 7, 2026:
+
+- `bun run test`: 14 files, 86 tests passed.
+- `bun run typecheck`: passed.
+- `DEVELOPER_DIR="/Volumes/X9 Pro/Applications/Xcode.app/Contents/Developer" bun run verify:ios:native`: passed Objective-C syntax preflight against Xcode 26.5 / iPhoneOS 26.5 SDK.
+- `bun run verify:android:native`: passed Android library `assembleDebug` when Gradle was allowed to use its normal user cache.
+- `bun run e2e:capture`: blocked at preflight because `http://127.0.0.1:8001/health` was not reachable in this environment.
 
 ## Required Host-App Validation
 
 - Build and archive the consuming iOS host app.
 - Build the consuming Android host app.
+- Build both platforms in a temporary React Native validation host if no customer host app is available.
 - Pair with a firmware relay peripheral advertising the relay service.
 - Verify iOS and Android scan, connect, frame notification, and ACK writes.
 - Verify malformed frames are rejected without ACK.
 - Verify complete messages are ACKed only after durable mobile storage.
 - Verify retryable Capture failures preserve MMKV queue state across app restart.
+- Verify retry attempt metadata and next-attempt timestamps survive app restart and do not reset backoff.
 - Verify `Retry-After` schedules the next drain at the server-requested delay.
 - Verify MMKV retention bounds and TTL match the host app's offline budget.
 - Verify Android `HonchRelayUpload` headless JS task runs from WorkManager in foreground, background, and cold-start conditions.
 - Verify accepted Capture responses remove queue state exactly once.
 - Run live Capture validation and confirm relay metadata reaches ingest.
+
+## Remaining Signoff Inputs
+
+- A live `HONCH_CAPTURE_URL`, `HONCH_PROJECT_KEY`, and optional `CLICKHOUSE_URL`
+  for `bun run e2e:capture`.
+- A real iOS and Android host app or temporary React Native validation host.
+- A firmware relay peripheral using the UUIDs from `../../spec/relay-chunks.md`.
 
 ## Supported Storage
 

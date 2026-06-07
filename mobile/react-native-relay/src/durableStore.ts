@@ -1,4 +1,5 @@
 import type { StoredRelayMessage } from "./relayQueue";
+import type { RelayRetryState } from "./relayQueue";
 
 export type DurableRelayChunk = {
   deviceId: string;
@@ -15,6 +16,7 @@ export interface RelayDurableStore {
   chunks(deviceId: string, sequence: string): Promise<DurableRelayChunk[]>;
   putCompleteMessage(message: StoredRelayMessage): Promise<void>;
   completeMessages(): Promise<StoredRelayMessage[]>;
+  markRetry(deviceId: string, sequence: string, retry: RelayRetryState): Promise<void>;
   deleteMessage(deviceId: string, sequence: string): Promise<void>;
 }
 
@@ -57,6 +59,16 @@ export function createMemoryDurableStore(): RelayDurableStore {
 
     async completeMessages() {
       return messages.map(cloneMessage);
+    },
+
+    async markRetry(deviceId, sequence, retry) {
+      const message = messages.find(
+        (entry) => entry.deviceId === deviceId && entry.sequence === sequence
+      );
+      if (message !== undefined) {
+        message.retryAttempt = retry.attempt;
+        message.nextAttemptAtMs = retry.nextAttemptAtMs;
+      }
     },
 
     async deleteMessage(deviceId, sequence) {

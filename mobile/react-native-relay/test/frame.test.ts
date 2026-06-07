@@ -71,6 +71,18 @@ describe("decodeRelayFrame", () => {
     expect(() => decodeRelayFrame(bytes)).toThrow("unsupported relay frame version");
   });
 
+  it("rejects unsupported source types", () => {
+    const bytes = frame({ sourceType: 2, first: true, final: true });
+
+    expect(() => decodeRelayFrame(bytes)).toThrow("unsupported relay frame source type");
+  });
+
+  it("decodes large offsets as unsigned uint32 values", () => {
+    const bytes = frame({ first: true, final: true, offset: 0x80000000, payload: [1] });
+
+    expect(decodeRelayFrame(bytes).offset).toBe(0x80000000);
+  });
+
   it("rejects frames with a mismatched crc", () => {
     const bytes = frame({ first: true, final: true, payload: [1, 2, 3] });
     bytes[22] ^= 0xff;

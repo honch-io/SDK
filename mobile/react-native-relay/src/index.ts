@@ -17,7 +17,8 @@ export type {
   RelayBleNative,
   RelayBleReceiverOptions,
   RelayDiscoveredDevice,
-  RelayFrameReceipt
+  RelayFrameReceipt,
+  RelayScanOptions
 } from "./ble";
 export { createRelayUploadScheduler } from "./scheduler";
 export type { RelayUploadSchedulerNative, RelayUploadSchedulerOptions } from "./scheduler";

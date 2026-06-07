@@ -14,6 +14,8 @@ import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.ParcelUuid;
 import android.util.Base64;
 import android.util.Log;
@@ -51,13 +53,21 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
     private static final UUID ACK_CHARACTERISTIC_UUID = UUID.fromString("484f4e43-482d-5245-4c41-592d41434b31");
     private static final UUID CLIENT_CHARACTERISTIC_CONFIG_UUID =
         UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
+    private static final long DEFAULT_SCAN_TIMEOUT_MS = 30000L;
 
     private final ReactApplicationContext reactContext;
+    private final Handler scanTimeoutHandler = new Handler(Looper.getMainLooper());
     private final Map<String, BluetoothDevice> devicesById = new HashMap<>();
     private final Map<String, RelayDeviceInfo> discoveredDevicesById = new HashMap<>();
     private final Map<String, BluetoothGatt> gattsById = new HashMap<>();
     private final Map<String, BluetoothGattCharacteristic> ackCharacteristicsById = new HashMap<>();
     private BluetoothLeScanner scanner;
+    private final Runnable scanTimeoutRunnable = new Runnable() {
+        @Override
+        public void run() {
+            stopScanAfterTimeout();
+        }
+    };
 
     private final ScanCallback scanCallback = new ScanCallback() {
         @Override
@@ -87,6 +97,11 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
         public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
             if (newState == android.bluetooth.BluetoothProfile.STATE_CONNECTED) {
                 gatt.discoverServices();
+            } else if (newState == android.bluetooth.BluetoothProfile.STATE_DISCONNECTED) {
+                String deviceId = gatt.getDevice().getAddress();
+                gattsById.remove(deviceId);
+                ackCharacteristicsById.remove(deviceId);
+                gatt.close();
             }
         }
 
@@ -146,6 +161,7 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER)
                 .build();
             scanner.startScan(Arrays.asList(filter), settings, scanCallback);
+            scheduleScanTimeout(DEFAULT_SCAN_TIMEOUT_MS);
             Log.d(TAG, "BLE scan started");
             promise.resolve(null);
         } catch (SecurityException error) {
@@ -174,6 +190,7 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
                 scanner.stopScan(scanCallback);
                 scanner = null;
             }
+            cancelScanTimeout();
             promise.resolve(null);
         } catch (SecurityException error) {
             promise.reject("missing_bluetooth_permission", error);
@@ -323,6 +340,7 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
     }
 
     private void teardown() {
+        cancelScanTimeout();
         try {
             if (scanner != null) {
                 scanner.stopScan(scanCallback);
@@ -349,6 +367,29 @@ public class HonchReactNativeRelayModule extends ReactContextBaseJavaModule {
 
     private void cancelScheduledUploads() {
         WorkManager.getInstance(reactContext).cancelAllWorkByTag(HonchRelayUploadWorker.WORK_TAG);
+    }
+
+    private void scheduleScanTimeout(long timeoutMs) {
+        cancelScanTimeout();
+        scanTimeoutHandler.postDelayed(scanTimeoutRunnable, timeoutMs);
+    }
+
+    private void cancelScanTimeout() {
+        scanTimeoutHandler.removeCallbacks(scanTimeoutRunnable);
+    }
+
+    private void stopScanAfterTimeout() {
+        try {
+            if (scanner != null) {
+                scanner.stopScan(scanCallback);
+                scanner = null;
+                Log.d(TAG, "BLE scan stopped after idle timeout");
+            }
+        } catch (SecurityException error) {
+            Log.w(TAG, "Missing bluetooth permission while stopping timed-out scan", error);
+        } catch (RuntimeException error) {
+            Log.w(TAG, "Failed to stop timed-out BLE scan", error);
+        }
     }
 
     private static final class RelayDeviceInfo {

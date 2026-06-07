@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 import type { DurableRelayChunk, RelayDurableStore } from "../durableStore";
+import type { RelayRetryState } from "../relayQueue";
 import type { StoredRelayMessage } from "../relayQueue";
 
 type JsonRelayStoreState = {
@@ -24,6 +25,8 @@ type JsonRelayMessage = {
   sourceType: number;
   sequence: string;
   body: number[];
+  retryAttempt?: number;
+  nextAttemptAtMs?: number;
 };
 
 const EMPTY_STATE: JsonRelayStoreState = {
@@ -79,6 +82,18 @@ class JsonFileRelayStore implements RelayDurableStore {
   async completeMessages(): Promise<StoredRelayMessage[]> {
     const state = await this.readState();
     return state.messages.map(deserializeMessage);
+  }
+
+  async markRetry(deviceId: string, sequence: string, retry: RelayRetryState): Promise<void> {
+    const state = await this.readState();
+    const message = state.messages.find(
+      (entry) => entry.deviceId === deviceId && entry.sequence === sequence
+    );
+    if (message !== undefined) {
+      message.retryAttempt = retry.attempt;
+      message.nextAttemptAtMs = retry.nextAttemptAtMs;
+      await this.writeState(state);
+    }
   }
 
   async deleteMessage(deviceId: string, sequence: string): Promise<void> {
@@ -145,7 +160,9 @@ function serializeMessage(message: StoredRelayMessage): JsonRelayMessage {
     deviceId: message.deviceId,
     sourceType: message.sourceType,
     sequence: message.sequence,
-    body: Array.from(message.body)
+    body: Array.from(message.body),
+    retryAttempt: message.retryAttempt,
+    nextAttemptAtMs: message.nextAttemptAtMs
   };
 }
 
@@ -154,6 +171,8 @@ function deserializeMessage(message: JsonRelayMessage): StoredRelayMessage {
     deviceId: message.deviceId,
     sourceType: message.sourceType,
     sequence: message.sequence,
-    body: new Uint8Array(message.body)
+    body: new Uint8Array(message.body),
+    retryAttempt: message.retryAttempt,
+    nextAttemptAtMs: message.nextAttemptAtMs
   };
 }

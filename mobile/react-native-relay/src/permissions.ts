@@ -6,6 +6,8 @@ export type RelayPermissionRequestResult = {
 
 type RelayPermissionDeps = {
   platformOS?: string;
+  androidApiLevel?: number;
+  requestLegacyLocation?: boolean;
   permissions?: {
     PERMISSIONS?: Record<string, string | undefined>;
     RESULTS?: Record<string, string | undefined>;
@@ -13,11 +15,7 @@ type RelayPermissionDeps = {
   };
 };
 
-const ANDROID_BLE_PERMISSION_NAMES = [
-  "BLUETOOTH_SCAN",
-  "BLUETOOTH_CONNECT",
-  "ACCESS_FINE_LOCATION"
-] as const;
+const ANDROID_12_BLE_PERMISSION_NAMES = ["BLUETOOTH_SCAN", "BLUETOOTH_CONNECT"] as const;
 
 export async function requestRelayAndroidPermissions(
   deps: RelayPermissionDeps = {}
@@ -27,9 +25,16 @@ export async function requestRelayAndroidPermissions(
     return { granted: true, requested: [], denied: [] };
   }
 
-  const requested = ANDROID_BLE_PERMISSION_NAMES.map(
+  const permissionNames =
+    (resolved.androidApiLevel ?? 31) < 31
+      ? (resolved.requestLegacyLocation ? ["ACCESS_FINE_LOCATION"] : [] as string[])
+      : [...ANDROID_12_BLE_PERMISSION_NAMES];
+  const requested = permissionNames.map(
     (name) => resolved.permissions.PERMISSIONS?.[name] ?? `android.permission.${name}`
   );
+  if (requested.length === 0) {
+    return { granted: true, requested: [], denied: [] };
+  }
   const grantedValue = resolved.permissions.RESULTS?.GRANTED ?? "granted";
   const results = await resolved.permissions.requestMultiple(requested);
   const denied = requested.filter((permission) => results[permission] !== grantedValue);
@@ -45,6 +50,8 @@ async function resolvePermissionDeps(deps: RelayPermissionDeps) {
   if (deps.platformOS !== undefined && deps.permissions !== undefined) {
     return {
       platformOS: deps.platformOS,
+      androidApiLevel: deps.androidApiLevel,
+      requestLegacyLocation: deps.requestLegacyLocation ?? false,
       permissions: deps.permissions
     };
   }
@@ -59,6 +66,8 @@ async function resolvePermissionDeps(deps: RelayPermissionDeps) {
 
   return {
     platformOS: deps.platformOS ?? reactNative.Platform.OS,
+    androidApiLevel: deps.androidApiLevel,
+    requestLegacyLocation: deps.requestLegacyLocation ?? false,
     permissions: deps.permissions ?? reactNative.PermissionsAndroid
   };
 }

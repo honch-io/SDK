@@ -25,7 +25,6 @@ public class HonchRelayUploadWorker extends Worker {
 
         try {
             context.startService(intent);
-            HonchRelayUploadTaskService.acquireWakeLock(context);
             return Result.success();
         } catch (RuntimeException error) {
             Log.e(TAG, "Failed to start relay upload task", error);

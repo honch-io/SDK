@@ -22,6 +22,8 @@ public class HonchRelayUploadTaskService extends HeadlessJsTaskService {
     @Nullable
     @Override
     protected HeadlessJsTaskConfig getTaskConfig(Intent intent) {
+        Context context = getApplicationContext();
+        HeadlessJsTaskService.acquireWakeLockNow(context);
         WritableMap data = Arguments.createMap();
         data.putDouble(EXTRA_DELAY_MS, intent.getLongExtra(EXTRA_DELAY_MS, 0L));
         return new HeadlessJsTaskConfig(TASK_NAME, data, TASK_TIMEOUT_MS, true);
