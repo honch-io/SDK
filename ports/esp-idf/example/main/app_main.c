@@ -15,6 +15,7 @@
 #include "nvs_flash.h"
 #include "esp_sntp.h"
 #include "honch.h"
+#include "water_filter.h"
 
 static const char *TAG = "honch_example";
 
@@ -180,6 +181,8 @@ void app_main(void)
 
     ESP_LOGI(TAG, "Honch initialized, device_id: %s", honch_get_device_id());
 
+    water_filter_run_demo();
+
     BaseType_t task_created = xTaskCreate(honch_telemetry_task,
         "honch_telemetry",
         HONCH_TELEMETRY_TASK_STACK_BYTES,
@@ -190,26 +193,9 @@ void app_main(void)
         ESP_LOGE(TAG, "Failed to start Honch telemetry task");
     }
 
-    // Start a demo session
-    honch_session_start("demo");
-
-    // Track a custom event
-    const honch_property_t app_started[] = {
-        honch_prop("foo", honch_str("bar"))
-    };
-    honch_track("app_started", app_started, 1u);
-
-    // End the session
-    honch_session_end();
-
     // Idle loop
     while (1) {
-        const honch_property_t heartbeat[] = {
-            honch_prop("source", honch_str("esp-idf-example"))
-        };
-        err = honch_track("heartbeat", heartbeat, 1u);
-        ESP_LOGI(TAG, "honch_track heartbeat: %d", err);
-        ESP_LOGI(TAG, "Free heap: %u bytes", (unsigned)esp_get_free_heap_size());
+        water_filter_emit_health_report();
         vTaskDelay(pdMS_TO_TICKS(HEARTBEAT_INTERVAL_SECONDS * 1000));
     }
 }

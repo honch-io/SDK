@@ -1,5 +1,7 @@
 idf_component_register(
-    SRCS "app_main.c"
+    SRCS
+        "app_main.c"
+        "water_filter.c"
     INCLUDE_DIRS "."
     REQUIRES
         SDK
