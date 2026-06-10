@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <time.h>
+#include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -24,6 +25,7 @@ static const char *TAG = "honch_example";
 #define WIFI_MAX_RETRY     5
 #define HEARTBEAT_INTERVAL_SECONDS 5
 #define HONCH_TELEMETRY_TASK_STACK_BYTES 8192
+#define HONCH_IDENTIFY_PILOT_TASK_STACK_BYTES 16384
 #define HONCH_TELEMETRY_TASK_PRIORITY 2
 #define HONCH_TICK_INTERVAL_MS 1000
 
@@ -139,6 +141,66 @@ static void sync_time(void)
 
 static uint8_t s_event_buffer[16384];
 
+static int run_identify_pilot(void)
+{
+    uint32_t run_nonce = esp_random();
+    char run_id[32];
+    char user_id[64];
+    char pre_event[64];
+    char post_event[64];
+
+    snprintf(run_id, sizeof(run_id), "%08" PRIx32, run_nonce);
+    snprintf(user_id, sizeof(user_id), "esp32-identify-user-%s", run_id);
+    snprintf(pre_event, sizeof(pre_event), "esp32_identify_pre_%s", run_id);
+    snprintf(post_event, sizeof(post_event), "esp32_identify_post_%s", run_id);
+
+    const char *device_id = honch_get_device_id();
+    ESP_LOGI(TAG, "IDENTIFY_PILOT run_id=%s device_id=%s user_id=%s", run_id, device_id, user_id);
+
+    const honch_property_t pre_properties[] = {
+        honch_prop("run_id", honch_str(run_id)),
+        honch_prop("phase", honch_str("pre_identify")),
+    };
+    honch_err_t pre_status = honch_track(pre_event, pre_properties, 2u);
+    ESP_LOGI(TAG, "IDENTIFY_PILOT pre_event=%s status=%d", pre_event, pre_status);
+    if (pre_status != HONCH_OK) {
+        return 1;
+    }
+
+    const honch_property_t traits[] = {
+        honch_prop("run_id", honch_str(run_id)),
+        honch_prop("pilot", honch_str("esp32-identify")),
+    };
+    honch_err_t identify_status = honch_identify(user_id, traits, 2u);
+    ESP_LOGI(TAG, "IDENTIFY_PILOT identify_user_id=%s status=%d", user_id, identify_status);
+    if (identify_status != HONCH_OK) {
+        return 1;
+    }
+
+    const honch_property_t post_properties[] = {
+        honch_prop("run_id", honch_str(run_id)),
+        honch_prop("phase", honch_str("post_identify")),
+    };
+    honch_err_t post_status = honch_track(post_event, post_properties, 2u);
+    ESP_LOGI(TAG, "IDENTIFY_PILOT post_event=%s status=%d", post_event, post_status);
+    if (post_status != HONCH_OK) {
+        return 1;
+    }
+
+    honch_err_t flush_status = honch_flush();
+    ESP_LOGI(TAG, "IDENTIFY_PILOT flush status=%d", flush_status);
+    ESP_LOGI(TAG, "IDENTIFY_PILOT complete run_id=%s ok=%s", run_id, flush_status == HONCH_OK ? "true" : "false");
+    return flush_status == HONCH_OK ? 0 : 1;
+}
+
+static void honch_identify_pilot_task(void *arg)
+{
+    (void)arg;
+    int pilot_status = run_identify_pilot();
+    ESP_LOGI(TAG, "IDENTIFY_PILOT finished status=%d", pilot_status);
+    vTaskDelete(NULL);
+}
+
 static void honch_telemetry_task(void *arg)
 {
     (void)arg;
@@ -171,6 +233,10 @@ void app_main(void)
         .event_buffer = s_event_buffer,
         .event_buffer_size = sizeof(s_event_buffer),
         .flush_event_threshold = 1,
+#ifdef CONFIG_HONCH_IDENTIFY_PILOT
+        .flush_max_batches = 8,
+        .shutdown_flush_max_batches = 8,
+#endif
     };
 
     honch_err_t err = honch_init(&config);
@@ -180,6 +246,23 @@ void app_main(void)
     }
 
     ESP_LOGI(TAG, "Honch initialized, device_id: %s", honch_get_device_id());
+
+#ifdef CONFIG_HONCH_IDENTIFY_PILOT
+    if (CONFIG_HONCH_IDENTIFY_PILOT) {
+        BaseType_t pilot_task_created = xTaskCreate(honch_identify_pilot_task,
+            "honch_identify_pilot",
+            HONCH_IDENTIFY_PILOT_TASK_STACK_BYTES,
+            NULL,
+            HONCH_TELEMETRY_TASK_PRIORITY,
+            NULL);
+        if (pilot_task_created != pdPASS) {
+            ESP_LOGE(TAG, "Failed to start Honch identify pilot task");
+        }
+        while (1) {
+            vTaskDelay(pdMS_TO_TICKS(HEARTBEAT_INTERVAL_SECONDS * 1000));
+        }
+    }
+#endif
 
     water_filter_run_demo();
 

@@ -24,4 +24,11 @@ menu "Honch Example Configuration"
         help
             Password for the Wi-Fi network.
 
+    config HONCH_IDENTIFY_PILOT
+        bool "Run one-shot identify pilot validation"
+        default n
+        help
+            Sends a pre-identify event, identify call, post-identify event, and
+            flush with serial markers for real ESP32 hardware validation.
+
 endmenu
