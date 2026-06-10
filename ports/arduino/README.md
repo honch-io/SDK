@@ -130,6 +130,11 @@ network I/O.
 The default queue uses only the caller-provided RAM buffer. Events and
 `identify()` state are lost across reset or power loss unless you provide
 `eventQueueOps` and/or `stateStorageOps` backed by durable storage.
+
+After `identify()`, future events use the new distinct ID. The `$identify`
+event also includes the previous identity as `$anon_distinct_id`, usually the
+device ID, so earlier anonymous events can merge into the identified person.
+
 That RAM queue is bounded and compact: consuming a non-tail event uses an O(n)
 memmove per consumed event to keep the caller-provided buffer contiguous. This
 is acceptable at default sizes, but larger buffers and queue limits should be

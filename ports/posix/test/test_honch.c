@@ -1995,7 +1995,7 @@ static void test_battery_low_uses_same_sample_for_event_properties(void)
     honch_test_set_transport(NULL, NULL);
 }
 
-static void test_identify_payload_and_persistence(void)
+static void test_identify_payload_includes_previous_distinct_id_for_merge(void)
 {
     char queue_dir[128];
     char distinct_file[180];
@@ -2020,11 +2020,62 @@ static void test_identify_payload_and_persistence(void)
     EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$identify\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"distinct_id\":\"user-1\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"plan\":\"beta\"");
-    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"$anon_distinct_id\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$anon_distinct_id\":\"device-1\"");
     EXPECT_STR_NOT_CONTAINS(transport.last_payload, "\"$set\"");
 
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
+}
+
+static void test_identify_rejects_user_supplied_anon_distinct_id(void)
+{
+    char queue_dir[128];
+    char distinct_file[180];
+    char distinct_id[80];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    snprintf(distinct_file, sizeof(distinct_file), "%s/state/distinct_id", queue_dir);
+    honch_config_t config = test_config(queue_dir);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_TRUE(read_text_file(distinct_file, distinct_id, sizeof(distinct_id)) != 0);
+    EXPECT_TRUE(strcmp(distinct_id, "device-1") == 0);
+
+    const honch_property_t traits[] = {
+        honch_prop("$anon_distinct_id", honch_str("spoofed-device"))
+    };
+    EXPECT_EQ_INT(honch_identify(client, "user-1", traits, 1u), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_TRUE(read_text_file(distinct_file, distinct_id, sizeof(distinct_id)) != 0);
+    EXPECT_TRUE(strcmp(distinct_id, "device-1") == 0);
+
+    honch_shutdown(client);
+}
+
+static void test_identify_reserves_one_property_slot_for_previous_distinct_id(void)
+{
+    char queue_dir[128];
+    char distinct_file[180];
+    char distinct_id[80];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    snprintf(distinct_file, sizeof(distinct_file), "%s/state/distinct_id", queue_dir);
+    honch_config_t config = test_config(queue_dir);
+
+    honch_property_t traits[64];
+    char keys[64][8];
+    for (int i = 0; i < 64; i++) {
+        int written = snprintf(keys[i], sizeof(keys[i]), "k%d", i);
+        EXPECT_TRUE(written > 0 && (size_t)written < sizeof(keys[i]));
+        traits[i] = honch_prop(keys[i], honch_i64(i));
+    }
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_identify(client, "user-full", traits, 64u), HONCH_ERROR_INVALID_ARGUMENT);
+    EXPECT_TRUE(read_text_file(distinct_file, distinct_id, sizeof(distinct_id)) != 0);
+    EXPECT_TRUE(strcmp(distinct_id, "device-1") == 0);
+    EXPECT_EQ_INT(honch_identify(client, "user-ok", traits, 63u), HONCH_OK);
+
+    honch_shutdown(client);
 }
 
 static void test_identify_does_not_queue_event_when_persistence_fails(void)
@@ -3004,7 +3055,9 @@ int main(void)
     test_firmware_update_emitted_when_version_changes();
     test_battery_callback_stamps_level_and_emits_low_event();
     test_battery_low_uses_same_sample_for_event_properties();
-    test_identify_payload_and_persistence();
+    test_identify_payload_includes_previous_distinct_id_for_merge();
+    test_identify_rejects_user_supplied_anon_distinct_id();
+    test_identify_reserves_one_property_slot_for_previous_distinct_id();
     test_identify_does_not_queue_event_when_persistence_fails();
     test_queue_limit_drops_oldest();
     test_flush_retry_keeps_events();
