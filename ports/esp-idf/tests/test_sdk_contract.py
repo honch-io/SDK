@@ -74,6 +74,25 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn('CONFIG_HONCH_API_KEY="honch_e2e_test_key"', template)
         self.assertIn('CONFIG_HONCH_HOST="http://192.168.1.122:8001"', template)
 
+    def test_esp_idf_example_has_identify_pilot_sequence(self) -> None:
+        example = read("ports/esp-idf/example/main/app_main.c")
+        sequence = c_function_body(example, "run_identify_pilot")
+
+        self.assertIn("esp32_identify_pre_", sequence)
+        self.assertIn("esp32-identify-user-", sequence)
+        self.assertIn("honch_identify(user_id", sequence)
+        self.assertIn("esp32_identify_post_", sequence)
+        self.assertIn("honch_flush()", sequence)
+        self.assertIn("IDENTIFY_PILOT run_id=%s device_id=%s user_id=%s", sequence)
+        self.assertIn("HONCH_IDENTIFY_PILOT_TASK_STACK_BYTES", example)
+        self.assertIn('"honch_identify_pilot"', example)
+        self.assertIn("xTaskCreate(honch_identify_pilot_task", example)
+        self.assertIn(".flush_max_batches = 8", example)
+        self.assertIn(".shutdown_flush_max_batches = 8", example)
+        self.assertLess(sequence.find("honch_err_t pre_status = honch_track"), sequence.find("honch_identify(user_id"))
+        self.assertLess(sequence.find("honch_identify(user_id"), sequence.find("honch_err_t post_status = honch_track"))
+        self.assertLess(sequence.find("honch_err_t post_status = honch_track"), sequence.find("honch_flush()"))
+
     def test_esp_transport_ops_post_chunk_wire_to_capture_endpoint(self) -> None:
         transport = read("ports/esp-idf/honch/src/esp_transport_http.c")
         adapter = read("ports/esp-idf/honch/src/esp_core_adapter.h")
