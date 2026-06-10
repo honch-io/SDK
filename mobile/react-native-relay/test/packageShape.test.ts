@@ -9,6 +9,7 @@ describe("React Native relay package shape", () => {
     const packageJson = JSON.parse(readFileSync(new URL("package.json", packageRoot), "utf8")) as {
       main?: string;
       "react-native"?: string;
+      private?: boolean;
       dependencies?: Record<string, string>;
       peerDependencies?: Record<string, string>;
       peerDependenciesMeta?: Record<string, { optional?: boolean }>;
@@ -16,6 +17,7 @@ describe("React Native relay package shape", () => {
 
     expect(packageJson.main).toBe("src/index.ts");
     expect(packageJson["react-native"]).toBe("src/index.ts");
+    expect(packageJson.private).not.toBe(true);
     expect(packageJson.peerDependencies?.["react-native"]).toBe(">=0.72");
     expect(packageJson.dependencies?.["react-native-mmkv"]).toBeUndefined();
     expect(packageJson.dependencies?.["react-native-nitro-modules"]).toBeUndefined();
