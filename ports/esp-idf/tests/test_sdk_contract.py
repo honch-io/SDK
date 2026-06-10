@@ -41,6 +41,7 @@ class EspIdfChunkWireTest(unittest.TestCase):
         component_cmake = read("ports/esp-idf/honch/CMakeLists.txt")
         example_cmake = read("ports/esp-idf/example/CMakeLists.txt")
         bench_cmake = read("ports/esp-idf/benchtest/CMakeLists.txt")
+        rate_sweep_cmake = read("ports/esp-idf/rate_sweep_bench/CMakeLists.txt")
         footprint_cmake = read("ports/esp-idf/footprint/CMakeLists.txt")
 
         self.assertIn("if(ESP_PLATFORM)", root_cmake)
@@ -51,7 +52,27 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("HONCH_FLUSH_TIMING", component_cmake)
         self.assertIn('set(EXTRA_COMPONENT_DIRS "../../..")', example_cmake)
         self.assertIn('set(EXTRA_COMPONENT_DIRS "../honch")', bench_cmake)
+        self.assertIn('set(EXTRA_COMPONENT_DIRS "../honch")', rate_sweep_cmake)
         self.assertIn('set(EXTRA_COMPONENT_DIRS "../honch")', footprint_cmake)
+
+    def test_esp_idf_examples_include_optional_local_defaults(self) -> None:
+        for path in [
+            "ports/esp-idf/example/CMakeLists.txt",
+            "ports/esp-idf/example_gpio/CMakeLists.txt",
+            "ports/esp-idf/benchtest/CMakeLists.txt",
+            "ports/esp-idf/rate_sweep_bench/CMakeLists.txt",
+        ]:
+            cmake = read(path)
+            self.assertIn("SDKCONFIG_DEFAULTS", cmake, path)
+            self.assertIn("local/sdkconfig.defaults", cmake, path)
+
+    def test_esp_idf_local_defaults_template_is_safe_to_commit(self) -> None:
+        template = read("ports/esp-idf/local/sdkconfig.defaults.example")
+
+        self.assertIn('CONFIG_WIFI_SSID="your-ssid"', template)
+        self.assertIn('CONFIG_WIFI_PASSWORD="your-password"', template)
+        self.assertIn('CONFIG_HONCH_API_KEY="honch_e2e_test_key"', template)
+        self.assertIn('CONFIG_HONCH_HOST="http://192.168.1.122:8001"', template)
 
     def test_esp_transport_ops_post_chunk_wire_to_capture_endpoint(self) -> None:
         transport = read("ports/esp-idf/honch/src/esp_transport_http.c")

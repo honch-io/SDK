@@ -10,6 +10,10 @@ markers.
 
 ```bash
 cd SDK/ports/esp-idf/benchtest
+mkdir -p ../local
+cp ../local/sdkconfig.defaults.example ../local/sdkconfig.defaults
+$EDITOR ../local/sdkconfig.defaults
+
 idf.py menuconfig
 ```
 
@@ -23,7 +27,7 @@ Set:
 For the local sandbox on the same LAN, use a host like:
 
 ```text
-http://192.168.1.95:8001
+http://192.168.1.122:8001
 ```
 
 ## Run

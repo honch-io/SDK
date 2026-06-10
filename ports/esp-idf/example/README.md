@@ -8,6 +8,10 @@ dispense sessions, and sends periodic device health reports.
 
 1. Configure via menuconfig:
    ```bash
+   mkdir -p ../local
+   cp ../local/sdkconfig.defaults.example ../local/sdkconfig.defaults
+   $EDITOR ../local/sdkconfig.defaults
+
    idf.py menuconfig
    ```
    Set these under "Honch Example Configuration":

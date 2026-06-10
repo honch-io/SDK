@@ -94,6 +94,10 @@ void app_main(void)
 
 ```bash
 cd ports/esp-idf/example
+mkdir -p ../local
+cp ../local/sdkconfig.defaults.example ../local/sdkconfig.defaults
+$EDITOR ../local/sdkconfig.defaults
+
 idf.py menuconfig
 # Navigate to "Honch Example Configuration" and set:
 #   - Wi-Fi SSID
@@ -104,6 +108,11 @@ idf.py menuconfig
 idf.py set-target esp32s3   # or esp32, esp32c3, etc.
 idf.py flash monitor
 ```
+
+`ports/esp-idf/local/sdkconfig.defaults` is ignored by Git and can hold the
+Wi-Fi, API key, and host values reused by the ESP-IDF examples and local
+sandbox hardware runs. `menuconfig` remains available when you want to override
+values for one app build.
 
 ## What gets sent automatically
 
