@@ -248,6 +248,10 @@ event queue and `state_storage_ops` for durable identity/version state. Those
 hooks can be backed by NVS, a filesystem, external flash, FRAM, or a product
 specific queue.
 
+After `identify()`, future events use the new distinct ID. The `$identify`
+event also includes the previous identity as `$anon_distinct_id`, usually the
+device ID, so earlier anonymous events can merge into the identified person.
+
 The default RAM queue is bounded and compact. Consuming a non-tail event uses an
 O(n) memmove per consumed event to keep the caller-provided buffer contiguous;
 this is acceptable at the default sizes, but larger custom queue limits should

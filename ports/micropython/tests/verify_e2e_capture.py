@@ -97,6 +97,8 @@ def main():
     assert row["distinct_id"] == user_id, row
     assert '"plan":"beta"' in row["properties"], row
     assert '"cohort":"local"' in row["properties"], row
+    assert '"$anon_distinct_id":"' in row["properties"], row
+    assert first_device_id in row["properties"], row
 
     row = wait_for_event(clickhouse_url, database, project_id, "$set_property", user_id)
     assert row["distinct_id"] == user_id, row

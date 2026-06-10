@@ -421,6 +421,8 @@ int main(void)
         EXPECT_TRUE(strcmp(row.distinct_id, user_id) == 0);
         EXPECT_STR_CONTAINS(row.properties, "\"plan\":\"beta\"");
         EXPECT_STR_CONTAINS(row.properties, "\"cohort\":\"local\"");
+        EXPECT_STR_CONTAINS(row.properties, "\"$anon_distinct_id\":\"");
+        EXPECT_STR_CONTAINS(row.properties, first_device_id);
     }
 
     if (verify_event(clickhouse_url, database, project_id, "$set_property", &row)) {
