@@ -124,6 +124,10 @@ client.get_device_id()
 client.queue_stats()
 ```
 
+After `identify()`, future events use the new distinct ID. The `$identify`
+event also includes the previous identity as `$anon_distinct_id`, usually the
+device ID, so earlier anonymous events can merge into the identified person.
+
 Call `client.tick()` periodically from the device main loop for scheduled flush work. Use `client.flush()` when you want an immediate drain attempt.
 
 Properties support typed event values, including strings, integers, floats,

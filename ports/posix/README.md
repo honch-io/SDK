@@ -345,6 +345,10 @@ int main(void)
 }
 ```
 
+After `honch_identify`, future events use the new distinct ID. The `$identify`
+event also includes the previous identity as `$anon_distinct_id`, usually the
+device ID, so earlier anonymous events can merge into the identified person.
+
 ## Local Storage
 
 The SDK stores state and queued events under `queue_directory`.

@@ -212,6 +212,8 @@ static honch_status_t honch_build_property_pairs(
     size_t *out_property_count,
     const honch_wire_v2_property_t *user_properties,
     size_t user_property_count,
+    const honch_wire_v2_property_t *trusted_properties,
+    size_t trusted_property_count,
     int battery_level,
     const honch_auto_properties_snapshot_t *auto_properties)
 {
@@ -224,6 +226,14 @@ static honch_status_t honch_build_property_pairs(
             user_properties[i].key,
             user_properties[i].value,
             false);
+    }
+    for (size_t i = 0u; status == HONCH_OK && i < trusted_property_count; i++) {
+        status = honch_append_typed_property(
+            out_properties,
+            out_property_count,
+            trusted_properties[i].key,
+            trusted_properties[i].value,
+            true);
     }
     if (status == HONCH_OK) {
         status = honch_append_auto_properties(out_properties, out_property_count, auto_properties);
@@ -293,6 +303,8 @@ static honch_status_t honch_build_event(
     const char *event_name,
     const honch_wire_v2_property_t *user_properties,
     size_t user_property_count,
+    const honch_wire_v2_property_t *trusted_properties,
+    size_t trusted_property_count,
     int battery_level,
     const honch_auto_properties_snapshot_t *auto_properties,
     honch_payload_t *out)
@@ -306,6 +318,8 @@ static honch_status_t honch_build_event(
         &property_count,
         user_properties,
         user_property_count,
+        trusted_properties,
+        trusted_property_count,
         battery_level,
         auto_properties);
     if (status == HONCH_OK) {
@@ -608,6 +622,8 @@ static honch_status_t honch_track_locked_internal(
     const char *event_name,
     const honch_wire_v2_property_t *properties,
     size_t property_count,
+    const honch_wire_v2_property_t *trusted_properties,
+    size_t trusted_property_count,
     int battery_level,
     bool check_battery_low,
     const honch_auto_properties_snapshot_t *auto_properties,
@@ -641,6 +657,8 @@ static honch_status_t honch_emit_battery_low_locked(
             honch_prop("level", honch_i64(battery_level))
         },
         1u,
+        NULL,
+        0u,
         battery_level,
         false,
         auto_properties,
@@ -652,6 +670,8 @@ static honch_status_t honch_track_locked_internal(
     const char *event_name,
     const honch_wire_v2_property_t *properties,
     size_t property_count,
+    const honch_wire_v2_property_t *trusted_properties,
+    size_t trusted_property_count,
     int battery_level,
     bool check_battery_low,
     const honch_auto_properties_snapshot_t *auto_properties,
@@ -663,6 +683,8 @@ static honch_status_t honch_track_locked_internal(
         event_name,
         properties,
         property_count,
+        trusted_properties,
+        trusted_property_count,
         battery_level,
         auto_properties,
         &event);
@@ -957,6 +979,8 @@ static honch_status_t honch_emit_firmware_update_locked(
             "$firmware_update",
             properties,
             sizeof(properties) / sizeof(properties[0]),
+            NULL,
+            0u,
             event_context.battery_level,
             true,
             &event_context.auto_properties,
@@ -1117,6 +1141,8 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
                 "$device_boot",
                 boot_properties,
                 sizeof(boot_properties) / sizeof(boot_properties[0]),
+                NULL,
+                0u,
                 event_context.battery_level,
                 true,
                 &event_context.auto_properties,
@@ -1190,6 +1216,8 @@ honch_status_t honch_core_track(
         event_name,
         properties,
         property_count,
+        NULL,
+        0u,
         event_context.battery_level,
         true,
         &event_context.auto_properties,
@@ -1213,7 +1241,7 @@ honch_status_t honch_core_identify(
 
     if (honch_validate_distinct_id(distinct_id) != HONCH_OK ||
         (trait_count > 0u && traits == NULL) ||
-        trait_count > HONCH_MAX_EVENT_PROPERTIES) {
+        trait_count >= HONCH_MAX_EVENT_PROPERTIES) {
         honch_client_leave(client);
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
@@ -1257,11 +1285,16 @@ honch_status_t honch_core_identify(
     client->distinct_id = next_distinct_id;
     next_distinct_id = NULL;
 
+    const honch_wire_v2_property_t identify_properties[] = {
+        honch_prop("$anon_distinct_id", honch_str(previous_distinct_id))
+    };
     status = honch_track_locked_internal(
         client,
         "$identify",
         traits,
         trait_count,
+        identify_properties,
+        sizeof(identify_properties) / sizeof(identify_properties[0]),
         event_context.battery_level,
         false,
         &event_context.auto_properties,
@@ -1310,6 +1343,8 @@ honch_status_t honch_core_set_property(honch_client_t *client, const char *key, 
                 "$set_property",
                 properties,
                 1u,
+                NULL,
+                0u,
                 event_context.battery_level,
                 true,
                 &event_context.auto_properties,
@@ -1371,6 +1406,8 @@ honch_status_t honch_core_session_start(honch_client_t *client, const char *sess
             "$session_end",
             NULL,
             0u,
+            NULL,
+            0u,
             end_event_context.battery_level,
             true,
             &end_event_context.auto_properties,
@@ -1397,6 +1434,8 @@ honch_status_t honch_core_session_start(honch_client_t *client, const char *sess
             "$session_start",
             start_properties,
             start_property_count,
+            NULL,
+            0u,
             start_event_context.battery_level,
             true,
             &start_event_context.auto_properties,
@@ -1452,6 +1491,8 @@ honch_status_t honch_core_session_end(honch_client_t *client)
         status = honch_track_locked_internal(
             client,
             "$session_end",
+            NULL,
+            0u,
             NULL,
             0u,
             event_context.battery_level,
@@ -1637,6 +1678,8 @@ honch_status_t honch_core_shutdown(honch_client_t *client)
     status = honch_track_locked_internal(
         client,
         "$device_shutdown",
+        NULL,
+        0u,
         NULL,
         0u,
         event_context.battery_level,

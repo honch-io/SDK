@@ -154,6 +154,7 @@ void honch_free_client_fields(honch_client_t *client)
 bool honch_property_key_is_reserved(const char *key)
 {
     static const char *reserved[] = {
+        "$anon_distinct_id",
         "$battery_level",
         "distinct_id",
         "$device_id",
