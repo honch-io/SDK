@@ -171,6 +171,7 @@ if(HONCH_BUILD_EXAMPLES)
     add_subdirectory(example/posix_device)
     add_subdirectory(example/connected_camera)
     add_subdirectory(example/posix_gpio)
+    add_subdirectory(example/identify_merge)
 endif()
 
 if(HONCH_BUILD_BENCHMARKS)
