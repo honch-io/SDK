@@ -49,7 +49,7 @@ typedef enum {
 
 typedef struct {
     const char *api_key;                 // required
-    const char *host;                    // required, e.g. "https://capture.honch.io"
+    const char *host;                    // required, e.g. "https://i.honch.io"
     const char *device_model;            // required
     const char *firmware_version;        // required
     const char *environment;             // optional, defaults to "production"

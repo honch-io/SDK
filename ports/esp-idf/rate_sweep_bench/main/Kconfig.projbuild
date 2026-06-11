@@ -8,7 +8,7 @@ menu "Honch Rate Sweep Benchmark Configuration"
 
     config HONCH_HOST
         string "Honch Host"
-        default "https://capture.honch.io"
+        default "https://i.honch.io"
         help
             The Honch capture endpoint URL.
 

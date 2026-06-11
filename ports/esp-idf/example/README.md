@@ -18,7 +18,7 @@ dispense sessions, and sends periodic device health reports.
    - **Wi-Fi SSID** — your network name
    - **Wi-Fi Password** — your network password
    - **Honch API Key** — from your Honch project settings
-   - **Honch Host** — defaults to `https://capture.honch.io`
+   - **Honch Host** — defaults to `https://i.honch.io`
 
 2. Build and flash:
    ```bash
