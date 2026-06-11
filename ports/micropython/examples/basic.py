@@ -3,7 +3,7 @@ import honch
 
 client = honch.Honch(
     api_key="your-api-key",
-    endpoint_url="https://capture.honch.io",
+    endpoint_url="https://i.honch.io",
     device_id="dev-board-001",
     device_model="dev-board",
     firmware_version="1.0.0",

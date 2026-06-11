@@ -62,7 +62,7 @@ void app_main(void)
 
     honch_config_t config = {
         .api_key = "your-api-key",
-        .host = "https://capture.honch.io",
+        .host = "https://i.honch.io",
         .device_model = "my-device",
         .firmware_version = "1.0.0",
         .event_buffer = event_buffer,
@@ -103,7 +103,7 @@ idf.py menuconfig
 #   - Wi-Fi SSID
 #   - Wi-Fi Password
 #   - Honch API Key
-#   - Honch Host (default: https://capture.honch.io)
+#   - Honch Host (default: https://i.honch.io)
 
 idf.py set-target esp32s3   # or esp32, esp32c3, etc.
 idf.py flash monitor
