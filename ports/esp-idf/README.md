@@ -47,6 +47,8 @@ repository as `components/honch`.
 
 static uint8_t event_buffer[8192];
 
+#define HONCH_TELEMETRY_TASK_STACK_BYTES 8192
+
 static void honch_telemetry_task(void *arg)
 {
     (void)arg;
@@ -71,7 +73,12 @@ void app_main(void)
 
     honch_init(&config);
 
-    xTaskCreate(honch_telemetry_task, "honch_telemetry", 4096, NULL, 2, NULL);
+    xTaskCreate(honch_telemetry_task,
+        "honch_telemetry",
+        HONCH_TELEMETRY_TASK_STACK_BYTES,
+        NULL,
+        2,
+        NULL);
 
     // Track custom events
     honch_property_t button_props[] = {
@@ -203,6 +210,11 @@ application-owned FreeRTOS task so task priority, stack size, CPU affinity,
 watchdog policy, and shutdown ordering stay under firmware control. A future
 SDK-owned worker task should be opt-in only, after flush and shutdown drain
 budgets are explicit.
+
+ESP-IDF `xTaskCreate()` stack sizes are in bytes, not FreeRTOS stack words.
+Because `honch_tick()` performs HTTPS uploads on the caller's task, the TLS
+handshake and POST path need at least 8192 bytes for the Honch telemetry task
+unless your firmware has measured a smaller board-specific limit.
 
 ## GPIO tracking
 

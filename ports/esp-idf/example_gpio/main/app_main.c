@@ -28,8 +28,8 @@ static const char *TAG = "honch_gpio_example";
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
 #define WIFI_MAX_RETRY 5
-#define HONCH_TELEMETRY_TASK_STACK_WORDS 4096
-#define APP_GPIO_TASK_STACK_WORDS 4096
+#define HONCH_TELEMETRY_TASK_STACK_BYTES 8192
+#define APP_GPIO_TASK_STACK_BYTES 4096
 #define HONCH_TASK_PRIORITY 2
 #define HONCH_TICK_INTERVAL_MS 1000
 #define GPIO_DEBOUNCE_MS 50
@@ -236,7 +236,7 @@ static esp_err_t init_button_gpio(void)
     BaseType_t task_created = xTaskCreate(
         gpio_tracking_task,
         "app_gpio",
-        APP_GPIO_TASK_STACK_WORDS,
+        APP_GPIO_TASK_STACK_BYTES,
         NULL,
         HONCH_TASK_PRIORITY,
         NULL);
@@ -275,7 +275,7 @@ void app_main(void)
     BaseType_t task_created = xTaskCreate(
         honch_telemetry_task,
         "honch_telemetry",
-        HONCH_TELEMETRY_TASK_STACK_WORDS,
+        HONCH_TELEMETRY_TASK_STACK_BYTES,
         NULL,
         HONCH_TASK_PRIORITY,
         NULL);
