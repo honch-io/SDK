@@ -42,7 +42,7 @@ import honch
 
 client = honch.Honch(
     api_key="project-key",
-    endpoint_url="https://capture.honch.io",
+    endpoint_url="https://i.honch.io",
     device_id="device-serial-001",
     device_model="ActionCam X1",
     firmware_version="1.2.3",

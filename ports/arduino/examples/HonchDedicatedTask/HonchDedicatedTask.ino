@@ -34,7 +34,7 @@ void setup() {
 
   HonchConfig config = {};
   config.apiKey = HONCH_PROJECT_KEY;
-  config.host = "https://capture.honch.io";
+  config.host = "https://i.honch.io";
   config.rootCaPem = HONCH_ROOT_CA_PEM;
   config.deviceModel = "esp32-devkit";
   config.firmwareVersion = "1.0.0";
