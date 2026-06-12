@@ -35,7 +35,7 @@
   - Move `enable_error_tracking` and `enable_crash_symbolication` to the end of `honch_config_t`.
   - Add a contract test that pins field order or old positional initializer compatibility.
 
-- [ ] 7. Decouple `$device_boot.reset_reason` from error tracking strip flag.
+- [x] 7. Decouple `$device_boot.reset_reason` from error tracking strip flag.
   - File: `core/src/honch_core.c` and vendored Arduino copy.
   - Keep `$error` emission behind `HONCH_ENABLE_ERROR_TRACKING`, but keep bounded boot reset reason handling available when error tracking is compiled out.
   - OFF builds should still emit supplied boot reset reasons.

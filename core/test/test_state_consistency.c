@@ -71,7 +71,6 @@ static honch_status_t fake_random_bytes(void *ctx, uint8_t *buffer, size_t buffe
     return HONCH_OK;
 }
 
-#if HONCH_ENABLE_ERROR_TRACKING
 static const honch_wire_v2_property_t *find_record_property(
     const honch_event_record_t *record,
     const char *key)
@@ -83,9 +82,7 @@ static const honch_wire_v2_property_t *find_record_property(
     }
     return NULL;
 }
-#endif
 
-#if HONCH_ENABLE_ERROR_TRACKING
 static void assert_record_string_property(
     const honch_event_record_t *record,
     const char *key,
@@ -97,7 +94,6 @@ static void assert_record_string_property(
     assert(property->value.string_value != NULL);
     assert(strcmp(property->value.string_value, expected) == 0);
 }
-#endif
 
 static char *fake_state_value(fake_state_storage_t *storage, const char *key)
 {
@@ -261,7 +257,6 @@ static void test_zero_platform_time_queues_parseable_event_record(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
-#if HONCH_ENABLE_ERROR_TRACKING
 static void test_normal_reset_does_not_queue_error_event(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
@@ -319,6 +314,7 @@ static void test_abnormal_reset_does_not_queue_error_event_when_disabled(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
+#if HONCH_ENABLE_ERROR_TRACKING
 static void test_abnormal_reset_queues_error_event_when_enabled(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
@@ -1535,9 +1531,9 @@ int main(void)
 {
     test_queue_push_uses_honch_event_record_format();
     test_zero_platform_time_queues_parseable_event_record();
-#if HONCH_ENABLE_ERROR_TRACKING
     test_normal_reset_does_not_queue_error_event();
     test_abnormal_reset_does_not_queue_error_event_when_disabled();
+#if HONCH_ENABLE_ERROR_TRACKING
     test_abnormal_reset_queues_error_event_when_enabled();
     test_oversized_fault_event_is_skipped_without_failing_init();
     test_overlong_fault_fields_are_omitted_without_large_allocation();

@@ -999,6 +999,55 @@ static honch_status_t honch_emit_firmware_update_locked(
     return status;
 }
 
+#define HONCH_FAULT_RESET_REASON_MAX_BYTES 64u
+#define HONCH_FAULT_MESSAGE_MAX_BYTES 160u
+#define HONCH_FAULT_COMPONENT_MAX_BYTES 64u
+#define HONCH_FAULT_BUILD_ID_MAX_BYTES 64u
+#define HONCH_FAULT_EXCEPTION_CAUSE_MAX_BYTES 64u
+#define HONCH_FAULT_PC_MAX_BYTES 18u
+#define HONCH_FAULT_BACKTRACE_MAX_BYTES 192u
+#define HONCH_FAULT_TASK_NAME_MAX_BYTES 32u
+
+static bool honch_fault_string_length(
+    const char *value,
+    size_t max_length,
+    size_t *out_length)
+{
+    if (value == NULL || out_length == NULL) {
+        return false;
+    }
+
+    bool saw_non_blank = false;
+    for (size_t length = 0u; length <= max_length; length++) {
+        char c = value[length];
+        if (c == '\0') {
+            *out_length = length;
+            return saw_non_blank;
+        }
+        if (length == max_length) {
+            return false;
+        }
+        if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
+            saw_non_blank = true;
+        }
+    }
+
+    return false;
+}
+
+static honch_wire_v2_value_t honch_boot_reset_reason_value(const honch_fault_snapshot_t *fault_snapshot)
+{
+    size_t length = 0u;
+    if (fault_snapshot != NULL &&
+        honch_fault_string_length(
+            fault_snapshot->reset_reason,
+            HONCH_FAULT_RESET_REASON_MAX_BYTES,
+            &length)) {
+        return honch_strn(fault_snapshot->reset_reason, length);
+    }
+    return honch_str("unknown");
+}
+
 #if HONCH_ENABLE_ERROR_TRACKING
 static const char *honch_fault_kind_source(honch_fault_kind_t kind)
 {
@@ -1035,61 +1084,6 @@ static const char *honch_fault_severity_string(honch_fault_severity_t severity)
     }
 }
 
-#define HONCH_FAULT_RESET_REASON_MAX_BYTES 64u
-#define HONCH_FAULT_MESSAGE_MAX_BYTES 160u
-#define HONCH_FAULT_COMPONENT_MAX_BYTES 64u
-#define HONCH_FAULT_BUILD_ID_MAX_BYTES 64u
-#define HONCH_FAULT_EXCEPTION_CAUSE_MAX_BYTES 64u
-#define HONCH_FAULT_PC_MAX_BYTES 18u
-#define HONCH_FAULT_BACKTRACE_MAX_BYTES 192u
-#define HONCH_FAULT_TASK_NAME_MAX_BYTES 32u
-
-static bool honch_fault_string_length(
-    const char *value,
-    size_t max_length,
-    size_t *out_length)
-{
-    if (value == NULL || out_length == NULL) {
-        return false;
-    }
-
-    bool saw_non_blank = false;
-    for (size_t length = 0u; length <= max_length; length++) {
-        char c = value[length];
-        if (c == '\0') {
-            *out_length = length;
-            return saw_non_blank;
-        }
-        if (length == max_length) {
-            return false;
-        }
-        if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
-            saw_non_blank = true;
-        }
-    }
-
-    return false;
-}
-#endif
-
-static honch_wire_v2_value_t honch_boot_reset_reason_value(const honch_fault_snapshot_t *fault_snapshot)
-{
-#if HONCH_ENABLE_ERROR_TRACKING
-    size_t length = 0u;
-    if (fault_snapshot != NULL &&
-        honch_fault_string_length(
-            fault_snapshot->reset_reason,
-            HONCH_FAULT_RESET_REASON_MAX_BYTES,
-            &length)) {
-        return honch_strn(fault_snapshot->reset_reason, length);
-    }
-#else
-    (void)fault_snapshot;
-#endif
-    return honch_str("unknown");
-}
-
-#if HONCH_ENABLE_ERROR_TRACKING
 static bool honch_fault_snapshot_is_abnormal(const honch_fault_snapshot_t *fault_snapshot)
 {
     return fault_snapshot != NULL && fault_snapshot->kind != HONCH_FAULT_KIND_NONE;
