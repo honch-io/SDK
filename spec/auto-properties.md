@@ -48,17 +48,25 @@ These events are emitted automatically by the SDK:
 | Event | When | Extra Properties |
 |-------|------|-----------------|
 | `$device_boot` | End of `init()` | `reset_reason` (string) |
-| `$error` | End of `init()`, when a supported port reports an abnormal reset | `source`, `severity`, `reset_reason`, optional `message`, optional `component` |
+| `$error` | End of `init()`, when enabled and a supported port reports an abnormal reset | `source`, `severity`, `reset_reason`, optional `message`, optional `component`, optional `crash_summary_version`, optional `firmware_build_id`, optional `fault_pc`, optional `backtrace`, optional `task_name` |
 | `$device_shutdown` | Start of `shutdown()` | — |
 | `$firmware_update` | Boot, if version changed | `previous_version`, `new_version` |
 | `$battery_low` | Battery drops below threshold | `level` (int) |
 | `$session_start` | `session_start()` called | `session_name` (string, optional) |
 | `$session_end` | `session_end()` called | — |
 
-`$error` is lightweight fault telemetry. It records bounded string properties
+`$error` is opt-in lightweight fault telemetry. It records bounded properties
 available during normal SDK init after a previous abnormal reset. It is not a
 coredump, register dump, stack capture, minidump, symbolication feed, or crash
 forensics system.
+
+Code-sensitive symbolication context is separately opt-in where a port exposes
+it. ESP-IDF may send `firmware_build_id`, `fault_pc`, `backtrace`, and
+`task_name` when automatic error tracking and crash symbolication context are
+both enabled and ESP-IDF coredump summary metadata is available. These fields
+are raw identifiers and addresses for server-side symbolication; the SDK does
+not send source code, source paths, symbol files, RAM snapshots, or full
+coredumps.
 
 `reset()` clears SDK identity, state, and queued events. It does not enqueue a
 `$device_reset` lifecycle event.

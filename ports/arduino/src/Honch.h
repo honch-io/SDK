@@ -21,6 +21,7 @@ struct HonchConfig {
   uint32_t flushMinIntervalMs = 0;
   uint32_t flushEventThreshold = 0;
   bool (*connectivityCallback)() = nullptr;
+  bool enableErrorTracking = false;
   bool insecureSkipTlsVerify = false;
   const honch_state_storage_ops_t *stateStorageOps = nullptr;
   const honch_event_queue_ops_t *eventQueueOps = nullptr;

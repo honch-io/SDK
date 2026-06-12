@@ -1719,7 +1719,8 @@ static void test_fault_snapshot_includes_bounded_crash_summary_fields(void)
         .state_storage = &state_storage,
         .event_queue = &event_queue,
         .transport = &transport_ops,
-        .fault_snapshot = &fault
+        .fault_snapshot = &fault,
+        .enable_error_tracking = true
     };
 
     honch_client_t *client = NULL;
@@ -1791,7 +1792,8 @@ static void test_fault_snapshot_omits_oversized_crash_summary_fields(void)
         .state_storage = &state_storage,
         .event_queue = &event_queue,
         .transport = &transport_ops,
-        .fault_snapshot = &fault
+        .fault_snapshot = &fault,
+        .enable_error_tracking = true
     };
 
     honch_client_t *client = NULL;

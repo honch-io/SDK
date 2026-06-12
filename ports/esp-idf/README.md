@@ -135,7 +135,7 @@ values for one app build.
 
 **Lifecycle events** (emitted automatically):
 - `$device_boot` — on init, with `reset_reason` property
-- `$error` — on init after an abnormal ESP reset reason such as panic, watchdog, brownout, or unknown reset
+- `$error` — when `enable_error_tracking` is true, on init after an abnormal ESP reset reason such as panic, watchdog, brownout, or unknown reset
 - `$device_shutdown` — on `honch_shutdown()`, followed by a synchronous flush
 - `$firmware_update` — on boot if firmware version changed and durable state storage is supplied
 - `$battery_low` — when battery drops below threshold (default 15%), emitted once until recovery
@@ -147,19 +147,21 @@ identity and firmware-version state, and queues `$device_boot` before returning.
 It does not perform network I/O; delivery remains cooperative through
 `honch_tick()` or explicit flush calls.
 
-Automatic `$error` capture is based on ESP-IDF reset/crash metadata during
-`honch_init()`. The SDK maps panic, interrupt/task/other watchdog, brownout,
-and unknown reset reasons into a bounded `$error` event with `source`,
-`severity`, and `reset_reason` properties. For abnormal resets it also emits
-`crash_summary_version` and `firmware_build_id` when available. Raw `fault_pc`,
-`backtrace`, and `task_name` fields are emitted only when ESP-IDF exposes
-reliable post-reboot metadata on the configured target. Honch does not save
-coredumps, collect RAM/register/task snapshots, upload symbol files, or replace
-ESP-IDF crash forensics tooling.
+Automatic `$error` capture is disabled by default. When
+`enable_error_tracking` is true, the SDK maps panic, interrupt/task/other
+watchdog, brownout, and unknown reset reasons into a bounded `$error` event
+with `source`, `severity`, and `reset_reason` properties during `honch_init()`.
+When `enable_crash_symbolication` is also true, ESP-IDF flash ELF coredump
+summary metadata is enabled, and ESP-IDF exposes a summary for the previous
+crash, the event may also include `crash_summary_version`,
+`firmware_build_id`, raw `fault_pc`, raw `backtrace`, and `task_name`.
+Honch does not save coredumps, collect RAM/register/task snapshots, upload
+symbol files, send source code/source paths, or replace ESP-IDF crash forensics
+tooling.
 
 `firmware_build_id` is intended to let backend symbolication match raw crash
-addresses to the exact firmware image in a future platform release. Until the
-platform accepts symbol files, these fields are diagnostic metadata only.
+addresses to the exact firmware image. Customers should keep symbol upload and
+address symbolication as a server-side opt-in workflow.
 
 ## Configuration options
 
@@ -180,6 +182,8 @@ platform accepts symbol files, these fields are diagnostic metadata only.
 | `transport_timeout_ms`   | No       | 3000           | Per HTTP request timeout, max 10000 ms     |
 | `battery_callback`       | No       | NULL           | Function returning 0-100 or -1             |
 | `battery_low_threshold`  | No       | 15             | Battery level that triggers `$battery_low` |
+| `enable_error_tracking`  | No       | false          | Emit automatic `$error` after abnormal reset |
+| `enable_crash_symbolication` | No   | false          | Include raw build/address context for symbolication when error tracking is enabled and ESP-IDF coredump summary metadata is available |
 | `connectivity_callback`  | No       | NULL           | Return false while offline or radio is off |
 | `state_storage_ops`      | No       | NULL           | Durable state storage for identity/version |
 | `event_queue_ops`        | No       | NULL           | Durable/custom event queue implementation  |

@@ -25,16 +25,19 @@ Relay packages are not application analytics SDKs. They forward device-originate
 
 Honch is not silent on the wire. The SDK stamps required context and can
 auto-emit `$device_boot`, `$device_shutdown`, `$firmware_update`,
-`$error`, `$battery_low`, `$session_start`, and `$session_end`; those
-auto-emitted events create analytics traffic and queue pressure even when the
-host only calls `init`, session, battery, or shutdown APIs.
+`$battery_low`, `$session_start`, and `$session_end`; those auto-emitted
+events create analytics traffic and queue pressure even when the host only
+calls `init`, session, battery, or shutdown APIs. Automatic `$error` capture is
+disabled by default and must be explicitly enabled by ports that expose it.
 
 Automatic `$error` capture is lightweight crash telemetry, not coredump
-collection. ESP-IDF maps platform reset reasons such as panic, watchdog,
-brownout, and unknown reset into a bounded `$error` event during init, with a
-firmware build identifier for future symbolication. Arduino ESP32 maps reset
-reasons through the same automatic path. C/POSIX and MicroPython do not
-currently install automatic fault hooks.
+collection. When enabled, ESP-IDF maps platform reset reasons such as panic,
+watchdog, brownout, and unknown reset into a bounded `$error` event during
+init. ESP-IDF can also optionally include a firmware build identifier and raw
+crash addresses for server-side symbolication; the SDK does not send source
+code, symbol files, or source paths. Arduino ESP32 maps reset reasons through
+the same opt-in automatic path without raw crash addresses. C/POSIX and
+MicroPython do not currently install automatic fault hooks.
 
 honch_init does synchronous work on the caller's thread. Depending on the
 port and configured storage hooks, init may validate config, read or derive a

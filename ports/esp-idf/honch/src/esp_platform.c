@@ -5,6 +5,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 #include <sys/time.h>
 
 #include "esp_app_desc.h"
@@ -15,6 +17,12 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+
+#if defined(CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH) && CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH && \
+    defined(CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF) && CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF
+#define HONCH_ESP_HAS_COREDUMP_SUMMARY 1
+#include "esp_core_dump.h"
+#endif
 
 static const char *TAG = "honch";
 static const int64_t HONCH_MIN_UNIX_TIME_SECONDS = 1577836800;
@@ -197,21 +205,70 @@ static void honch_esp_crash_summary_fill(honch_esp_crash_summary_t *summary)
         return;
     }
     *summary = (honch_esp_crash_summary_t){0};
+
+#if HONCH_ESP_HAS_COREDUMP_SUMMARY
+    esp_core_dump_summary_t core_summary = {0};
+    if (esp_core_dump_get_summary(&core_summary) != ESP_OK) {
+        return;
+    }
+
+    if (core_summary.exc_pc != 0u) {
+        (void)snprintf(
+            summary->fault_pc,
+            sizeof(summary->fault_pc),
+            "0x%08lx",
+            (unsigned long)core_summary.exc_pc);
+    }
+
+#if defined(CONFIG_IDF_TARGET_ARCH_XTENSA) && CONFIG_IDF_TARGET_ARCH_XTENSA
+    size_t offset = 0u;
+    uint32_t depth = core_summary.exc_bt_info.depth;
+    if (depth > (uint32_t)(sizeof(core_summary.exc_bt_info.bt) / sizeof(core_summary.exc_bt_info.bt[0]))) {
+        depth = (uint32_t)(sizeof(core_summary.exc_bt_info.bt) / sizeof(core_summary.exc_bt_info.bt[0]));
+    }
+    for (uint32_t i = 0u; i < depth; i++) {
+        uint32_t pc = core_summary.exc_bt_info.bt[i];
+        if (pc == 0u) {
+            continue;
+        }
+        int written = snprintf(
+            summary->backtrace + offset,
+            sizeof(summary->backtrace) - offset,
+            "%s0x%08lx",
+            offset == 0u ? "" : ",",
+            (unsigned long)pc);
+        if (written < 0 || (size_t)written >= sizeof(summary->backtrace) - offset) {
+            summary->backtrace[0] = '\0';
+            break;
+        }
+        offset += (size_t)written;
+    }
+#endif
+
+    if (core_summary.exc_task[0] != '\0') {
+        (void)snprintf(summary->task_name, sizeof(summary->task_name), "%s", core_summary.exc_task);
+    }
+#endif
 }
 
 static honch_fault_snapshot_t honch_esp_abnormal_fault_snapshot(
     honch_fault_kind_t kind,
-    const char *reset_reason)
+    const char *reset_reason,
+    bool include_symbolication_context)
 {
     static honch_esp_crash_summary_t summary;
-    honch_esp_crash_summary_fill(&summary);
-    const char *build_id = honch_esp_firmware_build_id();
+    summary = (honch_esp_crash_summary_t){0};
+    const char *build_id = NULL;
+    if (include_symbolication_context) {
+        honch_esp_crash_summary_fill(&summary);
+        build_id = honch_esp_firmware_build_id();
+    }
 
     return (honch_fault_snapshot_t) {
         .kind = kind,
         .severity = HONCH_FAULT_SEVERITY_FATAL,
         .reset_reason = reset_reason,
-        .crash_summary_version = 1u,
+        .crash_summary_version = include_symbolication_context ? 1u : 0u,
         .firmware_build_id = build_id,
         .fault_pc = summary.fault_pc[0] != '\0' ? summary.fault_pc : NULL,
         .backtrace = summary.backtrace[0] != '\0' ? summary.backtrace : NULL,
@@ -219,7 +276,7 @@ static honch_fault_snapshot_t honch_esp_abnormal_fault_snapshot(
     };
 }
 
-honch_fault_snapshot_t honch_esp_fault_snapshot(void)
+honch_fault_snapshot_t honch_esp_fault_snapshot(bool include_symbolication_context)
 {
     switch (esp_reset_reason()) {
         case ESP_RST_POWERON:
@@ -241,15 +298,15 @@ honch_fault_snapshot_t honch_esp_fault_snapshot(void)
                 .reset_reason = "deep_sleep"
             };
         case ESP_RST_PANIC:
-            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_PANIC, "panic");
+            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_PANIC, "panic", include_symbolication_context);
         case ESP_RST_INT_WDT:
-            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, "interrupt_wdt");
+            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, "interrupt_wdt", include_symbolication_context);
         case ESP_RST_TASK_WDT:
-            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, "task_wdt");
+            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, "task_wdt", include_symbolication_context);
         case ESP_RST_WDT:
-            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, "watchdog");
+            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, "watchdog", include_symbolication_context);
         case ESP_RST_BROWNOUT:
-            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_BROWNOUT, "brownout");
+            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_BROWNOUT, "brownout", include_symbolication_context);
         case ESP_RST_SDIO:
             return (honch_fault_snapshot_t) {
                 .kind = HONCH_FAULT_KIND_NONE,
@@ -264,6 +321,6 @@ honch_fault_snapshot_t honch_esp_fault_snapshot(void)
             };
         case ESP_RST_UNKNOWN:
         default:
-            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_UNKNOWN, "unknown");
+            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_UNKNOWN, "unknown", include_symbolication_context);
     }
 }

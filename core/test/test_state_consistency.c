@@ -284,7 +284,7 @@ static void test_normal_reset_does_not_queue_error_event(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
-static void test_abnormal_reset_queues_error_event_on_init(void)
+static void test_abnormal_reset_does_not_queue_error_event_when_disabled(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
     honch_platform_ops_t platform;
@@ -300,6 +300,37 @@ static void test_abnormal_reset_queues_error_event_on_init(void)
         .component = "app"
     };
     config.fault_snapshot = &fault;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(storage.queue_push_calls == 1);
+
+    honch_event_record_t record;
+    assert(honch_event_record_parse(storage.last_queued_data, storage.last_queued_size, &record) == HONCH_OK);
+    assert(strcmp(record.event_name, "$device_boot") == 0);
+    assert_record_string_property(&record, "reset_reason", "panic");
+    honch_event_record_free(&record);
+
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+static void test_abnormal_reset_queues_error_event_when_enabled(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    honch_fault_snapshot_t fault = {
+        .kind = HONCH_FAULT_KIND_PANIC,
+        .severity = HONCH_FAULT_SEVERITY_FATAL,
+        .reset_reason = "panic",
+        .message = "abort",
+        .component = "app"
+    };
+    config.fault_snapshot = &fault;
+    config.enable_error_tracking = true;
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
@@ -332,6 +363,7 @@ static void test_oversized_fault_event_is_skipped_without_failing_init(void)
         .reset_reason = "task_wdt"
     };
     config.fault_snapshot = &fault;
+    config.enable_error_tracking = true;
     config.max_event_bytes = 100u;
 
     honch_client_t *client = NULL;
@@ -365,6 +397,7 @@ static void test_overlong_fault_fields_are_omitted_without_large_allocation(void
         .component = "rtos"
     };
     config.fault_snapshot = &fault;
+    config.enable_error_tracking = true;
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
@@ -1466,7 +1499,8 @@ int main(void)
     test_queue_push_uses_honch_event_record_format();
     test_zero_platform_time_queues_parseable_event_record();
     test_normal_reset_does_not_queue_error_event();
-    test_abnormal_reset_queues_error_event_on_init();
+    test_abnormal_reset_does_not_queue_error_event_when_disabled();
+    test_abnormal_reset_queues_error_event_when_enabled();
     test_oversized_fault_event_is_skipped_without_failing_init();
     test_overlong_fault_fields_are_omitted_without_large_allocation();
     test_core_state_lock_works_without_platform_lock_callbacks();

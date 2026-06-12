@@ -64,6 +64,8 @@ typedef struct {
     int (*battery_callback)(void);       // optional, returns 0-100 or -1 if unknown
     int battery_low_threshold;           // optional, default 15
     bool (*connectivity_callback)(void); // optional, return false while offline/radio off
+    bool enable_error_tracking;          // optional, emits $error after abnormal reset
+    bool enable_crash_symbolication;     // optional, adds build ID and raw crash addresses when ESP-IDF coredump summary is available
     const honch_state_storage_ops_t *state_storage_ops; // optional, enables durable identity/version state
     const honch_event_queue_ops_t *event_queue_ops;     // optional, replaces default RAM event queue
 } honch_config_t;

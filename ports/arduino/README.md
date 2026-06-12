@@ -71,12 +71,13 @@ does not perform network I/O;
 delivery remains cooperative through `honch::defaultClient().tick()` or
 explicit flush calls.
 
-Automatic `$error` capture is based on `esp_reset_reason()` during `begin()`.
-The wrapper maps panic, interrupt/task/other watchdog, brownout, and unknown
-reset reasons into a bounded `$error` event with `source`, `severity`, and
-`reset_reason` properties. It does not install panic handlers, save coredumps,
-collect registers, copy stacks, upload symbol files, or replace ESP32 crash
-forensics tooling.
+Automatic `$error` capture is disabled by default. When
+`config.enableErrorTracking` is true, the wrapper maps panic,
+interrupt/task/other watchdog, brownout, and unknown reset reasons from
+`esp_reset_reason()` into a bounded `$error` event with `source`, `severity`,
+and `reset_reason` properties during `begin()`. It does not install panic
+handlers, save coredumps, collect registers, copy stacks, upload symbol files,
+send source code/source paths, or replace ESP32 crash forensics tooling.
 
 All `HonchClass` methods serialize access to the wrapper-owned client pointer.
 Concurrent calls from multiple FreeRTOS tasks are allowed, but only one wrapper

@@ -1394,7 +1394,7 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
         }
         honch_event_context_free(&event_context);
     }
-    if (status == HONCH_OK) {
+    if (status == HONCH_OK && config->enable_error_tracking) {
         status = honch_emit_fault_locked(next, config->fault_snapshot, &lifecycle_tracker);
     }
     if (status == HONCH_OK && firmware_version_pending_save) {

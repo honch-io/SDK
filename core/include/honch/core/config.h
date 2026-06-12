@@ -95,6 +95,7 @@ typedef struct honch_core_config {
     const honch_event_queue_ops_t *event_queue;
     const honch_transport_ops_t *transport;
     const honch_fault_snapshot_t *fault_snapshot;
+    int enable_error_tracking;
 } honch_core_config_t;
 
 #ifdef __cplusplus

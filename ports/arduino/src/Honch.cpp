@@ -62,6 +62,7 @@ honch_core_config_t honch_arduino_make_core_config(const HonchConfig &config) {
   coreConfig.flush_event_threshold = config.flushEventThreshold;
   coreConfig.connectivity_callback = honch_arduino_connectivity_callback;
   coreConfig.connectivity_userdata = nullptr;
+  coreConfig.enable_error_tracking = config.enableErrorTracking;
   coreConfig.platform = &g_platformOps;
   coreConfig.state_storage = config.stateStorageOps;
   coreConfig.event_queue = &g_eventQueueOps;
