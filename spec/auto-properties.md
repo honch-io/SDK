@@ -60,6 +60,12 @@ available during normal SDK init after a previous abnormal reset. It is not a
 coredump, register dump, stack capture, minidump, symbolication pipeline, or
 crash forensics system.
 
+`$error` emission is best-effort. If the SDK cannot build or enqueue the
+automatic fault event during init because local queue/storage limits are tight,
+the SDK should still complete init and continue normal telemetry operation.
+This avoids making diagnostics failure a device startup failure; `$device_boot`
+and other lifecycle event failures may still follow the normal init error path.
+
 Code-sensitive symbolication context is separately opt-in where a port exposes
 it. Ports may send `exception_cause`, `firmware_build_id`, `fault_pc`,
 `backtrace`, and `task_name` when automatic error tracking and crash

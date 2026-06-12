@@ -57,9 +57,12 @@
 
 ## Decision Items
 
-- [ ] Decide whether `CONFIG_HONCH_CRASH_SYMBOLICATION` should default to `n`.
-- [ ] Decide whether `CONFIG_HONCH_ERROR_TRACKING` default `y` is acceptable while runtime tracking remains opt-in.
-- [ ] Confirm whether `$error` enqueue failure should fail `honch_init()`.
+- [x] Decide whether `CONFIG_HONCH_CRASH_SYMBOLICATION` should default to `n`.
+  - Decision: no; leave ESP-IDF crash symbolication support compiled in by default, with runtime fault capture still opt-in.
+- [x] Decide whether `CONFIG_HONCH_ERROR_TRACKING` default `y` is acceptable while runtime tracking remains opt-in.
+  - Decision: yes; keep the build-level feature available by default.
+- [x] Confirm whether `$error` enqueue failure should fail `honch_init()`.
+  - Decision: no; `$error` emission is best-effort and diagnostics enqueue failure must not make SDK init fail.
 
 ## Verification Target
 

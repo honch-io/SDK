@@ -147,10 +147,11 @@ identity and firmware-version state, and queues `$device_boot` before returning.
 It does not perform network I/O; delivery remains cooperative through
 `honch_tick()` or explicit flush calls.
 
-Automatic `$error` capture is disabled by default. When
-`enable_error_tracking` is true, the SDK maps panic, interrupt/task/other
-watchdog, brownout, and unknown reset reasons into a bounded `$error` event
-with `source`, `severity`, and `reset_reason` properties during `honch_init()`.
+Automatic `$error` capture support is compiled in by default, but runtime
+capture is disabled unless `enable_error_tracking` is true. When enabled, the
+SDK maps panic, interrupt/task/other watchdog, brownout, and unknown reset
+reasons into a bounded `$error` event with `source`, `severity`, and
+`reset_reason` properties during `honch_init()`.
 When `enable_crash_symbolication` is also true, ESP-IDF flash ELF coredump
 summary metadata is enabled, and ESP-IDF exposes a summary for the previous
 crash, the event may also include `crash_summary_version`,
@@ -161,12 +162,18 @@ Honch does not save coredumps, collect RAM/register/task snapshots, upload
 symbol files, send source code/source paths, or replace ESP-IDF crash forensics
 tooling.
 
+The automatic `$error` event is best-effort. If the SDK cannot enqueue it during
+startup because the local queue or storage is full, `honch_init()` still
+completes so diagnostics do not prevent the device application from starting.
+
 `firmware_build_id` is intended to let backend symbolication match raw crash
 addresses to the exact firmware image. Customers should keep symbol upload and
 address symbolication as a server-side opt-in workflow.
 
-Error tracking is also build-strip modular. Disable `CONFIG_HONCH_ERROR_TRACKING`
-to compile out Honch's `$error` emission path. Disable
+Error tracking is also build-strip modular. `CONFIG_HONCH_ERROR_TRACKING` and
+`CONFIG_HONCH_CRASH_SYMBOLICATION` default to enabled so the feature is
+available without extra Kconfig work. Disable `CONFIG_HONCH_ERROR_TRACKING` to
+compile out Honch's `$error` emission path. Disable
 `CONFIG_HONCH_CRASH_SYMBOLICATION` to keep automatic reset/error events but
 remove raw fault-address collection and the ESP-IDF `espcoredump` component
 dependency.

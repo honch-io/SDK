@@ -368,6 +368,8 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn('rsource "ports/esp-idf/honch/Kconfig"', root_kconfig)
         self.assertIn("config HONCH_ERROR_TRACKING", kconfig)
         self.assertIn("config HONCH_CRASH_SYMBOLICATION", kconfig)
+        self.assertRegex(kconfig, r"config HONCH_ERROR_TRACKING\s+bool[^\n]*\n\s+default y")
+        self.assertRegex(kconfig, r"config HONCH_CRASH_SYMBOLICATION\s+bool[^\n]*\n\s+depends on HONCH_ERROR_TRACKING\s+default y")
         self.assertIn("depends on HONCH_ERROR_TRACKING", kconfig)
         self.assertIn("CONFIG_HONCH_ERROR_TRACKING", cmake)
         self.assertIn("CONFIG_HONCH_CRASH_SYMBOLICATION", cmake)
