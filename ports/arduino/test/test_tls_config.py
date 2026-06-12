@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import unittest
 
 
@@ -7,6 +8,76 @@ ROOT = Path(__file__).resolve().parents[3]
 
 def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
+
+
+SHARED_ESP_RESET_REASONS = (
+    "ESP_RST_POWERON",
+    "ESP_RST_SW",
+    "ESP_RST_DEEPSLEEP",
+    "ESP_RST_PANIC",
+    "ESP_RST_INT_WDT",
+    "ESP_RST_TASK_WDT",
+    "ESP_RST_WDT",
+    "ESP_RST_BROWNOUT",
+    "ESP_RST_SDIO",
+    "ESP_RST_EXT",
+    "ESP_RST_USB",
+    "ESP_RST_JTAG",
+    "ESP_RST_EFUSE",
+    "ESP_RST_PWR_GLITCH",
+    "ESP_RST_UNKNOWN",
+)
+
+
+def reset_case_body(source: str, reset_reason: str) -> str:
+    case_start = source.find(f"case {reset_reason}:")
+    if case_start < 0:
+        raise AssertionError(f"{reset_reason} not found")
+    if reset_reason == "ESP_RST_UNKNOWN":
+        return source[case_start:]
+
+    case_labels = re.finditer(r"^\s*(case\s+[A-Z0-9_]+:|default:)", source, re.MULTILINE)
+    for label in case_labels:
+        if label.start() > case_start:
+            return source[case_start:label.start()]
+    return source[case_start:]
+
+
+def arduino_reset_mapping(source: str, reset_reason: str) -> tuple[str, str, str]:
+    body = reset_case_body(source, reset_reason)
+    match = re.search(
+        r"honch_arduino_reset_snapshot\(\s*"
+        r"(HONCH_FAULT_KIND_[A-Z_]+),\s*"
+        r"(HONCH_FAULT_SEVERITY_[A-Z_]+),\s*"
+        r'"([^"]+)"\s*\)',
+        body,
+    )
+    if match is None:
+        raise AssertionError(f"{reset_reason} Arduino mapping not parsed")
+    return match.group(1), match.group(2), match.group(3)
+
+
+def esp_idf_reset_mapping(source: str, reset_reason: str) -> tuple[str, str, str]:
+    body = reset_case_body(source, reset_reason)
+    abnormal = re.search(
+        r"honch_esp_abnormal_fault_snapshot\(\s*"
+        r"(HONCH_FAULT_KIND_[A-Z_]+),\s*"
+        r'"([^"]+)"',
+        body,
+    )
+    if abnormal is not None:
+        return abnormal.group(1), "HONCH_FAULT_SEVERITY_FATAL", abnormal.group(2)
+
+    direct = re.search(
+        r"\.kind\s*=\s*(HONCH_FAULT_KIND_[A-Z_]+).*?"
+        r"\.severity\s*=\s*(HONCH_FAULT_SEVERITY_[A-Z_]+).*?"
+        r'\.reset_reason\s*=\s*"([^"]+)"',
+        body,
+        re.DOTALL,
+    )
+    if direct is None:
+        raise AssertionError(f"{reset_reason} ESP-IDF mapping not parsed")
+    return direct.group(1), direct.group(2), direct.group(3)
 
 
 class ArduinoTLSConfigTests(unittest.TestCase):
@@ -197,6 +268,17 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         self.assertIn('"power_glitch"', platform)
         self.assertIn("HONCH_FAULT_KIND_BROWNOUT", platform)
         self.assertIn("ESP_IDF_VERSION_VAL(5, 1, 0)", platform)
+
+    def test_arduino_reset_mapping_matches_esp_idf_port(self) -> None:
+        arduino_platform = read("ports/arduino/src/honch_arduino_platform.cpp")
+        esp_platform = read("ports/esp-idf/honch/src/esp_platform.c")
+
+        for reset_reason in SHARED_ESP_RESET_REASONS:
+            self.assertEqual(
+                esp_idf_reset_mapping(esp_platform, reset_reason),
+                arduino_reset_mapping(arduino_platform, reset_reason),
+                reset_reason,
+            )
 
     def test_arduino_error_tracking_can_be_compiled_out(self) -> None:
         adapter = read("ports/arduino/src/honch_arduino_adapter.h")

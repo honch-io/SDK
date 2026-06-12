@@ -50,7 +50,7 @@
   - Check `core_summary.exc_bt_info.corrupted`; omit `backtrace` or emit an explicit bounded corruption flag.
   - Add coverage for corrupted summary handling.
 
-- [ ] 10. Reduce duplicated reset mapping.
+- [x] 10. Reduce duplicated reset mapping.
   - Files: ESP-IDF and Arduino reset mapping.
   - Short-term: keep both copies patched identically.
   - Later: centralize mapping or add parity tests so the two ports cannot drift.
