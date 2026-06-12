@@ -40,7 +40,7 @@
   - Keep `$error` emission behind `HONCH_ENABLE_ERROR_TRACKING`, but keep bounded boot reset reason handling available when error tracking is compiled out.
   - OFF builds should still emit supplied boot reset reasons.
 
-- [ ] 8. Fix dead ESP-IDF dependency guard.
+- [x] 8. Fix dead ESP-IDF dependency guard.
   - File: `ports/esp-idf/tests/test_sdk_contract.py`.
   - Parse `HONCH_ESP_REQUIRES` or make dependency assertions indentation-agnostic.
   - The test must fail if `esp_wifi` or other blocked unused dependencies are added.

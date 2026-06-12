@@ -2,6 +2,7 @@
 """Static checks for the ESP-IDF default chunk wire transport."""
 
 from pathlib import Path
+import re
 import unittest
 
 
@@ -32,6 +33,21 @@ def c_function_body(source: str, name: str) -> str:
                 return source[open_brace + 1:index]
 
     raise AssertionError(f"function {name} body is not closed")
+
+
+def cmake_list_values(source: str, variable: str) -> set[str]:
+    values: set[str] = set()
+    patterns = (
+        rf"set\(\s*{re.escape(variable)}\s+(.*?)\)",
+        rf"list\(\s*APPEND\s+{re.escape(variable)}\s+(.*?)\)",
+    )
+    for pattern in patterns:
+        for match in re.finditer(pattern, source, re.DOTALL):
+            body = re.sub(r"#.*", "", match.group(1))
+            for token in re.split(r"\s+", body.strip()):
+                if token:
+                    values.add(token.strip('"'))
+    return values
 
 
 class EspIdfChunkWireTest(unittest.TestCase):
@@ -644,24 +660,29 @@ class EspIdfChunkWireTest(unittest.TestCase):
         root_manifest = read("idf_component.yml")
         component_manifest = read("ports/esp-idf/honch/idf_component.yml")
 
+        component_dependencies = cmake_list_values(cmake, "HONCH_ESP_REQUIRES")
+
         for dependency in (
+            "esp_app_format",
             "esp_http_client",
             "esp-tls",
             "esp_timer",
+            "efuse",
             "freertos",
+            "espcoredump",
         ):
-            self.assertIn(f"    {dependency}", cmake)
+            self.assertIn(dependency, component_dependencies)
 
         for unused_dependency in (
-            "        esp_wifi",
-            "        esp_event",
-            "        esp_netif",
-            "        esp_driver_gpio",
-            "        driver",
-            "        cbor",
-            "        espressif__cjson",
+            "esp_wifi",
+            "esp_event",
+            "esp_netif",
+            "esp_driver_gpio",
+            "driver",
+            "cbor",
+            "espressif__cjson",
         ):
-            self.assertNotIn(unused_dependency, cmake)
+            self.assertNotIn(unused_dependency, component_dependencies)
 
         for manifest in (root_manifest, component_manifest):
             self.assertNotIn("espressif/cbor", manifest)
