@@ -11,6 +11,7 @@ honch_arduino_transport_t g_transport;
 honch_platform_ops_t g_platformOps;
 honch_event_queue_ops_t g_eventQueueOps;
 honch_transport_ops_t g_transportOps;
+honch_fault_snapshot_t gFaultSnapshot;
 honch_status_t gConfigStatus = HONCH_OK;
 bool (*gConnectivityCallback)() = nullptr;
 
@@ -42,6 +43,7 @@ honch_core_config_t honch_arduino_make_core_config(const HonchConfig &config) {
   if (gConfigStatus == HONCH_OK) {
     gConfigStatus = honch_arduino_transport_ops_init(&g_transportOps, &g_transport, config);
   }
+  gFaultSnapshot = honch_arduino_fault_snapshot();
 
   coreConfig.api_key = config.apiKey;
   coreConfig.endpoint_url = config.host;
@@ -64,6 +66,7 @@ honch_core_config_t honch_arduino_make_core_config(const HonchConfig &config) {
   coreConfig.state_storage = config.stateStorageOps;
   coreConfig.event_queue = &g_eventQueueOps;
   coreConfig.transport = &g_transportOps;
+  coreConfig.fault_snapshot = &gFaultSnapshot;
   return coreConfig;
 }
 

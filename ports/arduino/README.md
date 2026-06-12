@@ -65,10 +65,18 @@ void loop() {
 
 `honch::defaultClient().begin()` init does synchronous work on the caller's
 task. It validates config, initializes the C core against the caller-provided
-event buffer, derives initial state from the supplied device/config values, and
-queues `$device_boot` before returning. It does not perform network I/O;
+event buffer, reads the ESP reset reason, derives initial state from the
+supplied device/config values, and queues `$device_boot` before returning. It
+does not perform network I/O;
 delivery remains cooperative through `honch::defaultClient().tick()` or
 explicit flush calls.
+
+Automatic `$error` capture is based on `esp_reset_reason()` during `begin()`.
+The wrapper maps panic, interrupt/task/other watchdog, brownout, and unknown
+reset reasons into a bounded `$error` event with `source`, `severity`, and
+`reset_reason` properties. It does not install panic handlers, save coredumps,
+collect registers, copy stacks, upload symbol files, or replace ESP32 crash
+forensics tooling.
 
 All `HonchClass` methods serialize access to the wrapper-owned client pointer.
 Concurrent calls from multiple FreeRTOS tasks are allowed, but only one wrapper

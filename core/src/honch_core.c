@@ -1034,17 +1034,53 @@ static const char *honch_fault_severity_string(honch_fault_severity_t severity)
     }
 }
 
+#define HONCH_FAULT_RESET_REASON_MAX_BYTES 64u
+#define HONCH_FAULT_MESSAGE_MAX_BYTES 160u
+#define HONCH_FAULT_COMPONENT_MAX_BYTES 64u
+
+static bool honch_fault_string_length(
+    const char *value,
+    size_t max_length,
+    size_t *out_length)
+{
+    if (value == NULL || out_length == NULL) {
+        return false;
+    }
+
+    bool saw_non_blank = false;
+    for (size_t length = 0u; length <= max_length; length++) {
+        char c = value[length];
+        if (c == '\0') {
+            *out_length = length;
+            return saw_non_blank;
+        }
+        if (length == max_length) {
+            return false;
+        }
+        if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
+            saw_non_blank = true;
+        }
+    }
+
+    return false;
+}
+
 static bool honch_fault_snapshot_is_abnormal(const honch_fault_snapshot_t *fault_snapshot)
 {
     return fault_snapshot != NULL && fault_snapshot->kind != HONCH_FAULT_KIND_NONE;
 }
 
-static const char *honch_fault_reset_reason(const honch_fault_snapshot_t *fault_snapshot)
+static honch_wire_v2_value_t honch_fault_reset_reason_value(const honch_fault_snapshot_t *fault_snapshot)
 {
-    if (fault_snapshot == NULL || honch_is_blank(fault_snapshot->reset_reason)) {
-        return "unknown";
+    size_t length = 0u;
+    if (fault_snapshot != NULL &&
+        honch_fault_string_length(
+            fault_snapshot->reset_reason,
+            HONCH_FAULT_RESET_REASON_MAX_BYTES,
+            &length)) {
+        return honch_strn(fault_snapshot->reset_reason, length);
     }
-    return fault_snapshot->reset_reason;
+    return honch_str("unknown");
 }
 
 static honch_status_t honch_emit_fault_locked(
@@ -1077,23 +1113,33 @@ static honch_status_t honch_emit_fault_locked(
             properties,
             &property_count,
             "reset_reason",
-            honch_str(honch_fault_reset_reason(fault_snapshot)),
+            honch_fault_reset_reason_value(fault_snapshot),
             true);
     }
-    if (status == HONCH_OK && !honch_is_blank(fault_snapshot->message)) {
+    size_t message_length = 0u;
+    if (status == HONCH_OK &&
+        honch_fault_string_length(
+            fault_snapshot->message,
+            HONCH_FAULT_MESSAGE_MAX_BYTES,
+            &message_length)) {
         status = honch_append_typed_property(
             properties,
             &property_count,
             "message",
-            honch_str(fault_snapshot->message),
+            honch_strn(fault_snapshot->message, message_length),
             true);
     }
-    if (status == HONCH_OK && !honch_is_blank(fault_snapshot->component)) {
+    size_t component_length = 0u;
+    if (status == HONCH_OK &&
+        honch_fault_string_length(
+            fault_snapshot->component,
+            HONCH_FAULT_COMPONENT_MAX_BYTES,
+            &component_length)) {
         status = honch_append_typed_property(
             properties,
             &property_count,
             "component",
-            honch_str(fault_snapshot->component),
+            honch_strn(fault_snapshot->component, component_length),
             true);
     }
     if (status != HONCH_OK) {
@@ -1254,7 +1300,7 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
         status = honch_prepare_event_context(next, &event_context);
         if (status == HONCH_OK) {
             const honch_wire_v2_property_t boot_properties[] = {
-                honch_prop("reset_reason", honch_str(honch_fault_reset_reason(config->fault_snapshot)))
+                honch_prop("reset_reason", honch_fault_reset_reason_value(config->fault_snapshot))
             };
             status = honch_track_locked_internal(
                 next,

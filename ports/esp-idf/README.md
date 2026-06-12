@@ -135,6 +135,7 @@ values for one app build.
 
 **Lifecycle events** (emitted automatically):
 - `$device_boot` — on init, with `reset_reason` property
+- `$error` — on init after an abnormal ESP reset reason such as panic, watchdog, brownout, or unknown reset
 - `$device_shutdown` — on `honch_shutdown()`, followed by a synchronous flush
 - `$firmware_update` — on boot if firmware version changed and durable state storage is supplied
 - `$battery_low` — when battery drops below threshold (default 15%), emitted once until recovery
@@ -145,6 +146,13 @@ reads ESP reset/MAC identity data, may call host-supplied state storage for
 identity and firmware-version state, and queues `$device_boot` before returning.
 It does not perform network I/O; delivery remains cooperative through
 `honch_tick()` or explicit flush calls.
+
+Automatic `$error` capture is based on `esp_reset_reason()` during
+`honch_init()`. The SDK maps panic, interrupt/task/other watchdog, brownout,
+and unknown reset reasons into a bounded `$error` event with `source`,
+`severity`, and `reset_reason` properties. It does not install panic handlers,
+save coredumps, collect registers, copy stacks, upload symbol files, or replace
+ESP-IDF crash forensics tooling.
 
 ## Configuration options
 

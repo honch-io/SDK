@@ -160,6 +160,25 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         self.assertIn("honch_atomic_bool_compare_exchange", core)
         self.assertIn("honch_atomic_bool_store", core)
 
+    def test_arduino_passes_reset_reason_snapshot_to_core(self) -> None:
+        adapter = read("ports/arduino/src/honch_arduino_adapter.h")
+        platform = read("ports/arduino/src/honch_arduino_platform.cpp")
+        wrapper = read("ports/arduino/src/Honch.cpp")
+
+        self.assertIn("honch_fault_snapshot_t honch_arduino_fault_snapshot()", adapter)
+        self.assertIn("#include <esp_system.h>", platform)
+        self.assertIn("esp_reset_reason()", platform)
+        self.assertIn("ESP_RST_PANIC", platform)
+        self.assertIn("ESP_RST_TASK_WDT", platform)
+        self.assertIn("ESP_RST_INT_WDT", platform)
+        self.assertIn("ESP_RST_BROWNOUT", platform)
+        self.assertIn("HONCH_FAULT_KIND_PANIC", platform)
+        self.assertIn("HONCH_FAULT_KIND_WATCHDOG", platform)
+        self.assertIn("HONCH_FAULT_KIND_BROWNOUT", platform)
+        self.assertIn("honch_fault_snapshot_t gFaultSnapshot;", wrapper)
+        self.assertIn("gFaultSnapshot = honch_arduino_fault_snapshot();", wrapper)
+        self.assertIn("coreConfig.fault_snapshot = &gFaultSnapshot;", wrapper)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -90,6 +90,11 @@ state from the supplied device/config values, and queues `$device_boot` before
 returning. It does not perform network I/O; delivery remains cooperative through
 `tick()` or explicit `flush()` calls.
 
+The MicroPython port does not currently install VM exception hooks, panic hooks,
+or board-specific reset-reason adapters for automatic `$error` capture. If a
+board needs reset-reason telemetry, add it in the user module adapter so the
+Python API stays focused on product analytics calls.
+
 client.tick() and client.flush() may block for up to the configured transport
 timeout because urequests.post holds the MicroPython interpreter while the HTTP
 request is in progress. Do not call tick() from a latency-sensitive control

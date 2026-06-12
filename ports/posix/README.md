@@ -182,6 +182,13 @@ firmware-version state, and queues `$device_boot` before returning. It does not
 perform network I/O; delivery remains cooperative through `honch_tick()` or
 explicit flush calls.
 
+The C/POSIX SDK does not currently install signal handlers, core-pattern
+handlers, or other automatic process crash capture. `$device_boot` uses an
+`unknown` reset reason unless a platform adapter supplies one through the
+portable core config. For Linux-style crash capture, a future integration should
+be a separate, opt-in process/core handler rather than hidden work in
+`honch_init()`.
+
 `honch_shutdown` returns `HONCH_ERROR_NOT_INITIALIZED` when called without a
 client, matching the ESP-IDF SDK's shutdown-before-init behavior. For a valid
 client, it queues `$device_shutdown`, attempts a synchronous shutdown flush,

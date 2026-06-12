@@ -364,6 +364,8 @@ honch_err_t honch_init(const honch_config_t *config)
     core_config.state_storage = config->state_storage_ops;
     core_config.event_queue = &event_queue_ops;
     core_config.transport = &transport_ops;
+    honch_fault_snapshot_t fault_snapshot = honch_esp_fault_snapshot();
+    core_config.fault_snapshot = &fault_snapshot;
 
     honch_client_t *next = NULL;
     status = honch_core_init(&next, &core_config);

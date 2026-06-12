@@ -33,6 +33,30 @@ typedef enum honch_durability_mode {
     HONCH_DURABILITY_DEFAULT = HONCH_DURABILITY_OS_BUFFERED
 } honch_durability_mode_t;
 
+typedef enum honch_fault_kind {
+    HONCH_FAULT_KIND_NONE = 0,
+    HONCH_FAULT_KIND_PANIC = 1,
+    HONCH_FAULT_KIND_WATCHDOG = 2,
+    HONCH_FAULT_KIND_ASSERT = 3,
+    HONCH_FAULT_KIND_BROWNOUT = 4,
+    HONCH_FAULT_KIND_STACK_OVERFLOW = 5,
+    HONCH_FAULT_KIND_UNKNOWN = 6
+} honch_fault_kind_t;
+
+typedef enum honch_fault_severity {
+    HONCH_FAULT_SEVERITY_INFO = 0,
+    HONCH_FAULT_SEVERITY_WARNING = 1,
+    HONCH_FAULT_SEVERITY_FATAL = 2
+} honch_fault_severity_t;
+
+typedef struct honch_fault_snapshot {
+    honch_fault_kind_t kind;
+    honch_fault_severity_t severity;
+    const char *reset_reason;
+    const char *message;
+    const char *component;
+} honch_fault_snapshot_t;
+
 typedef struct honch_core_config {
     const char *api_key;
     const char *endpoint_url;
@@ -64,6 +88,7 @@ typedef struct honch_core_config {
     const honch_state_storage_ops_t *state_storage;
     const honch_event_queue_ops_t *event_queue;
     const honch_transport_ops_t *transport;
+    const honch_fault_snapshot_t *fault_snapshot;
 } honch_core_config_t;
 
 #ifdef __cplusplus

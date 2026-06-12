@@ -10,6 +10,7 @@
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_random.h"
+#include "esp_system.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -170,4 +171,77 @@ honch_status_t honch_esp_default_device_id(char *buffer, size_t buffer_size)
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
     }
     return HONCH_STATUS_OK;
+}
+
+honch_fault_snapshot_t honch_esp_fault_snapshot(void)
+{
+    switch (esp_reset_reason()) {
+        case ESP_RST_POWERON:
+            return (honch_fault_snapshot_t) {
+                .kind = HONCH_FAULT_KIND_NONE,
+                .severity = HONCH_FAULT_SEVERITY_INFO,
+                .reset_reason = "power_on"
+            };
+        case ESP_RST_SW:
+            return (honch_fault_snapshot_t) {
+                .kind = HONCH_FAULT_KIND_NONE,
+                .severity = HONCH_FAULT_SEVERITY_INFO,
+                .reset_reason = "software"
+            };
+        case ESP_RST_DEEPSLEEP:
+            return (honch_fault_snapshot_t) {
+                .kind = HONCH_FAULT_KIND_NONE,
+                .severity = HONCH_FAULT_SEVERITY_INFO,
+                .reset_reason = "deep_sleep"
+            };
+        case ESP_RST_PANIC:
+            return (honch_fault_snapshot_t) {
+                .kind = HONCH_FAULT_KIND_PANIC,
+                .severity = HONCH_FAULT_SEVERITY_FATAL,
+                .reset_reason = "panic"
+            };
+        case ESP_RST_INT_WDT:
+            return (honch_fault_snapshot_t) {
+                .kind = HONCH_FAULT_KIND_WATCHDOG,
+                .severity = HONCH_FAULT_SEVERITY_FATAL,
+                .reset_reason = "interrupt_wdt"
+            };
+        case ESP_RST_TASK_WDT:
+            return (honch_fault_snapshot_t) {
+                .kind = HONCH_FAULT_KIND_WATCHDOG,
+                .severity = HONCH_FAULT_SEVERITY_FATAL,
+                .reset_reason = "task_wdt"
+            };
+        case ESP_RST_WDT:
+            return (honch_fault_snapshot_t) {
+                .kind = HONCH_FAULT_KIND_WATCHDOG,
+                .severity = HONCH_FAULT_SEVERITY_FATAL,
+                .reset_reason = "watchdog"
+            };
+        case ESP_RST_BROWNOUT:
+            return (honch_fault_snapshot_t) {
+                .kind = HONCH_FAULT_KIND_BROWNOUT,
+                .severity = HONCH_FAULT_SEVERITY_FATAL,
+                .reset_reason = "brownout"
+            };
+        case ESP_RST_SDIO:
+            return (honch_fault_snapshot_t) {
+                .kind = HONCH_FAULT_KIND_NONE,
+                .severity = HONCH_FAULT_SEVERITY_INFO,
+                .reset_reason = "sdio"
+            };
+        case ESP_RST_EXT:
+            return (honch_fault_snapshot_t) {
+                .kind = HONCH_FAULT_KIND_NONE,
+                .severity = HONCH_FAULT_SEVERITY_INFO,
+                .reset_reason = "external"
+            };
+        case ESP_RST_UNKNOWN:
+        default:
+            return (honch_fault_snapshot_t) {
+                .kind = HONCH_FAULT_KIND_UNKNOWN,
+                .severity = HONCH_FAULT_SEVERITY_FATAL,
+                .reset_reason = "unknown"
+            };
+    }
 }

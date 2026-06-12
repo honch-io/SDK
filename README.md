@@ -25,9 +25,15 @@ Relay packages are not application analytics SDKs. They forward device-originate
 
 Honch is not silent on the wire. The SDK stamps required context and can
 auto-emit `$device_boot`, `$device_shutdown`, `$firmware_update`,
-`$battery_low`, `$session_start`, and `$session_end`; those auto-emitted events
-create analytics traffic and queue pressure even when the host only calls
-`init`, session, battery, or shutdown APIs.
+`$error`, `$battery_low`, `$session_start`, and `$session_end`; those
+auto-emitted events create analytics traffic and queue pressure even when the
+host only calls `init`, session, battery, or shutdown APIs.
+
+Automatic `$error` capture is lightweight reset-reason telemetry, not coredump
+or crash-forensics collection. ESP-IDF and Arduino ESP32 map platform reset
+reasons such as panic, watchdog, brownout, and unknown reset into a bounded
+`$error` event during init. C/POSIX and MicroPython do not currently install
+automatic fault hooks.
 
 honch_init does synchronous work on the caller's thread. Depending on the
 port and configured storage hooks, init may validate config, read or derive a

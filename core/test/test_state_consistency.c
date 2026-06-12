@@ -326,6 +326,34 @@ static void test_oversized_fault_event_is_skipped_without_failing_init(void)
     honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
     honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    honch_fault_snapshot_t fault = {
+        .kind = HONCH_FAULT_KIND_WATCHDOG,
+        .severity = HONCH_FAULT_SEVERITY_FATAL,
+        .reset_reason = "task_wdt"
+    };
+    config.fault_snapshot = &fault;
+    config.max_event_bytes = 100u;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(storage.queue_push_calls == 1);
+
+    honch_event_record_t record;
+    assert(honch_event_record_parse(storage.last_queued_data, storage.last_queued_size, &record) == HONCH_OK);
+    assert(strcmp(record.event_name, "$device_boot") == 0);
+    honch_event_record_free(&record);
+
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+static void test_overlong_fault_fields_are_omitted_without_large_allocation(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
     char long_message[900];
     memset(long_message, 'x', sizeof(long_message) - 1u);
     long_message[sizeof(long_message) - 1u] = '\0';
@@ -337,15 +365,18 @@ static void test_oversized_fault_event_is_skipped_without_failing_init(void)
         .component = "rtos"
     };
     config.fault_snapshot = &fault;
-    config.max_event_bytes = 512u;
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
-    assert(storage.queue_push_calls == 1);
+    assert(storage.queue_push_calls == 2);
 
     honch_event_record_t record;
     assert(honch_event_record_parse(storage.last_queued_data, storage.last_queued_size, &record) == HONCH_OK);
-    assert(strcmp(record.event_name, "$device_boot") == 0);
+    assert(strcmp(record.event_name, "$error") == 0);
+    assert_record_string_property(&record, "source", "watchdog");
+    assert_record_string_property(&record, "reset_reason", "task_wdt");
+    assert(find_record_property(&record, "message") == NULL);
+    assert_record_string_property(&record, "component", "rtos");
     honch_event_record_free(&record);
 
     assert(honch_core_shutdown(client) == HONCH_OK);
@@ -1437,6 +1468,7 @@ int main(void)
     test_normal_reset_does_not_queue_error_event();
     test_abnormal_reset_queues_error_event_on_init();
     test_oversized_fault_event_is_skipped_without_failing_init();
+    test_overlong_fault_fields_are_omitted_without_large_allocation();
     test_core_state_lock_works_without_platform_lock_callbacks();
     test_init_rejects_mutex_required_platform_without_lock_callbacks();
     test_failed_firmware_update_queue_does_not_advance_persisted_version();

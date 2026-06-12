@@ -48,11 +48,17 @@ These events are emitted automatically by the SDK:
 | Event | When | Extra Properties |
 |-------|------|-----------------|
 | `$device_boot` | End of `init()` | `reset_reason` (string) |
+| `$error` | End of `init()`, when a supported port reports an abnormal reset | `source`, `severity`, `reset_reason`, optional `message`, optional `component` |
 | `$device_shutdown` | Start of `shutdown()` | — |
 | `$firmware_update` | Boot, if version changed | `previous_version`, `new_version` |
 | `$battery_low` | Battery drops below threshold | `level` (int) |
 | `$session_start` | `session_start()` called | `session_name` (string, optional) |
 | `$session_end` | `session_end()` called | — |
+
+`$error` is lightweight fault telemetry. It records bounded string properties
+available during normal SDK init after a previous abnormal reset. It is not a
+coredump, register dump, stack capture, minidump, symbolication feed, or crash
+forensics system.
 
 `reset()` clears SDK identity, state, and queued events. It does not enqueue a
 `$device_reset` lifecycle event.
@@ -69,8 +75,12 @@ Connectivity changes are not auto-detected by the portable core.
 | `"software"` | Software reset |
 | `"panic"` | Panic/crash |
 | `"watchdog"` | Watchdog timer |
-| `"deepsleep"` | Wake from deep sleep |
+| `"interrupt_wdt"` | Interrupt watchdog |
+| `"task_wdt"` | Task watchdog |
+| `"deep_sleep"` | Wake from deep sleep |
 | `"brownout"` | Brownout detector |
+| `"external"` | External reset |
+| `"sdio"` | SDIO reset |
 | `"unknown"` | Other/unrecognized |
 
 ## Explicitly Excluded

@@ -214,6 +214,24 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("honch_client_t", adapter)
         self.assertIn("honch_state_prepare", shims)
 
+    def test_esp_idf_passes_reset_reason_snapshot_to_core(self) -> None:
+        compat = read("ports/esp-idf/honch/src/esp_compat.c")
+        adapter = read("ports/esp-idf/honch/src/esp_core_adapter.h")
+        platform = read("ports/esp-idf/honch/src/esp_platform.c")
+
+        self.assertIn("honch_fault_snapshot_t honch_esp_fault_snapshot(void);", adapter)
+        self.assertIn("#include \"esp_system.h\"", platform)
+        self.assertIn("esp_reset_reason()", platform)
+        self.assertIn("ESP_RST_PANIC", platform)
+        self.assertIn("ESP_RST_TASK_WDT", platform)
+        self.assertIn("ESP_RST_INT_WDT", platform)
+        self.assertIn("ESP_RST_BROWNOUT", platform)
+        self.assertIn("HONCH_FAULT_KIND_PANIC", platform)
+        self.assertIn("HONCH_FAULT_KIND_WATCHDOG", platform)
+        self.assertIn("HONCH_FAULT_KIND_BROWNOUT", platform)
+        self.assertIn("honch_fault_snapshot_t fault_snapshot = honch_esp_fault_snapshot();", compat)
+        self.assertIn("core_config.fault_snapshot = &fault_snapshot;", compat)
+
     def test_esp_default_storage_is_ram_queue_only(self) -> None:
         storage = read("ports/esp-idf/honch/src/esp_storage.c")
         adapter = read("ports/esp-idf/honch/src/esp_core_adapter.h")
