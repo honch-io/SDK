@@ -71,6 +71,30 @@ static honch_status_t fake_random_bytes(void *ctx, uint8_t *buffer, size_t buffe
     return HONCH_OK;
 }
 
+static const honch_wire_v2_property_t *find_record_property(
+    const honch_event_record_t *record,
+    const char *key)
+{
+    for (size_t i = 0u; i < record->property_count; i++) {
+        if (strcmp(record->properties[i].key, key) == 0) {
+            return &record->properties[i];
+        }
+    }
+    return NULL;
+}
+
+static void assert_record_string_property(
+    const honch_event_record_t *record,
+    const char *key,
+    const char *expected)
+{
+    const honch_wire_v2_property_t *property = find_record_property(record, key);
+    assert(property != NULL);
+    assert(property->value.type == HONCH_WIRE_V2_VALUE_TYPE_STRING);
+    assert(property->value.string_value != NULL);
+    assert(strcmp(property->value.string_value, expected) == 0);
+}
+
 static char *fake_state_value(fake_state_storage_t *storage, const char *key)
 {
     if (strcmp(key, "device_id") == 0) {
@@ -228,6 +252,33 @@ static void test_zero_platform_time_queues_parseable_event_record(void)
     honch_event_record_t record;
     assert(honch_event_record_parse(storage.last_queued_data, storage.last_queued_size, &record) == HONCH_OK);
     assert(record.timestamp_ms > 0u);
+    honch_event_record_free(&record);
+
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+static void test_normal_reset_does_not_queue_error_event(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    honch_fault_snapshot_t fault = {
+        .kind = HONCH_FAULT_KIND_NONE,
+        .severity = HONCH_FAULT_SEVERITY_INFO,
+        .reset_reason = "power_on"
+    };
+    config.fault_snapshot = &fault;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+
+    honch_event_record_t record;
+    assert(honch_event_record_parse(storage.last_queued_data, storage.last_queued_size, &record) == HONCH_OK);
+    assert(strcmp(record.event_name, "$device_boot") == 0);
+    assert_record_string_property(&record, "reset_reason", "unknown");
     honch_event_record_free(&record);
 
     assert(honch_core_shutdown(client) == HONCH_OK);
@@ -1316,6 +1367,7 @@ int main(void)
 {
     test_queue_push_uses_honch_event_record_format();
     test_zero_platform_time_queues_parseable_event_record();
+    test_normal_reset_does_not_queue_error_event();
     test_core_state_lock_works_without_platform_lock_callbacks();
     test_init_rejects_mutex_required_platform_without_lock_callbacks();
     test_failed_firmware_update_queue_does_not_advance_persisted_version();
