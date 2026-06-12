@@ -267,6 +267,30 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("HONCH_FAULT_KIND_BROWNOUT", snapshot_body)
         self.assertIn("ESP_IDF_VERSION_VAL(5, 1, 0)", platform)
 
+    def test_esp_idf_attaches_coredump_summary_only_for_panic_reset(self) -> None:
+        platform = read("ports/esp-idf/honch/src/esp_platform.c")
+        snapshot_body = c_function_body(platform, "honch_esp_fault_snapshot")
+
+        self.assertIn(
+            'honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_PANIC, "panic", include_symbolication_context)',
+            snapshot_body,
+        )
+        for reset_reason in (
+            '"interrupt_wdt"',
+            '"task_wdt"',
+            '"watchdog"',
+            '"brownout"',
+            '"power_glitch"',
+        ):
+            self.assertIn(reset_reason, snapshot_body)
+            self.assertNotIn(f"{reset_reason}, include_symbolication_context", snapshot_body)
+        self.assertIn("honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, \"interrupt_wdt\", false)", snapshot_body)
+        self.assertIn("honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, \"task_wdt\", false)", snapshot_body)
+        self.assertIn("honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, \"watchdog\", false)", snapshot_body)
+        self.assertIn("honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_BROWNOUT, \"brownout\", false)", snapshot_body)
+        self.assertIn("HONCH_FAULT_KIND_BROWNOUT,\n                \"power_glitch\",\n                false", snapshot_body)
+        self.assertIn("honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_UNKNOWN, \"unknown\", false)", snapshot_body)
+
     def test_esp_idf_error_tracking_is_build_strip_modular(self) -> None:
         root_kconfig = read("Kconfig")
         cmake = read("ports/esp-idf/honch/CMakeLists.txt")

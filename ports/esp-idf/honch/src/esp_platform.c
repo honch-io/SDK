@@ -303,13 +303,13 @@ honch_fault_snapshot_t honch_esp_fault_snapshot(bool include_symbolication_conte
         case ESP_RST_PANIC:
             return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_PANIC, "panic", include_symbolication_context);
         case ESP_RST_INT_WDT:
-            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, "interrupt_wdt", include_symbolication_context);
+            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, "interrupt_wdt", false);
         case ESP_RST_TASK_WDT:
-            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, "task_wdt", include_symbolication_context);
+            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, "task_wdt", false);
         case ESP_RST_WDT:
-            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, "watchdog", include_symbolication_context);
+            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, "watchdog", false);
         case ESP_RST_BROWNOUT:
-            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_BROWNOUT, "brownout", include_symbolication_context);
+            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_BROWNOUT, "brownout", false);
         case ESP_RST_SDIO:
             return (honch_fault_snapshot_t) {
                 .kind = HONCH_FAULT_KIND_NONE,
@@ -345,11 +345,11 @@ honch_fault_snapshot_t honch_esp_fault_snapshot(bool include_symbolication_conte
             return honch_esp_abnormal_fault_snapshot(
                 HONCH_FAULT_KIND_BROWNOUT,
                 "power_glitch",
-                include_symbolication_context);
+                false);
 #endif
         case ESP_RST_UNKNOWN:
         default:
-            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_UNKNOWN, "unknown", include_symbolication_context);
+            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_UNKNOWN, "unknown", false);
     }
 }
 #endif

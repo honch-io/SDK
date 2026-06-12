@@ -12,7 +12,7 @@
   - Keep boot reset-reason tests active after reset reason is decoupled from error tracking.
   - Verify `cmake -S ports/posix -B /tmp/... -DHONCH_ENABLE_ERROR_TRACKING=OFF && cmake --build ... && ctest ...`.
 
-- [ ] 3. Do not attach stale coredump summaries.
+- [x] 3. Do not attach stale coredump summaries.
   - File: `ports/esp-idf/honch/src/esp_platform.c`.
   - Only attach ESP coredump summary fields for reset reasons that actually produce a fresh summary.
   - Omit `fault_pc`, `backtrace`, `task_name`, and `crash_summary_version` for unrelated watchdog/brownout/unknown resets.
@@ -66,5 +66,5 @@
 - [x] Normal POSIX CMake/ctest.
 - [x] POSIX CMake/ctest with `-DHONCH_ENABLE_ERROR_TRACKING=OFF`.
 - [ ] Python contract tests for ESP-IDF, Arduino, POSIX, and MicroPython.
-- [ ] ESP-IDF footprint build on Citadel.
+- [x] ESP-IDF footprint build on Citadel.
 - [ ] Optional ESP32 crash run for duplicate/stale summary behavior.
