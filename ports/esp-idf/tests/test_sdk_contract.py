@@ -246,9 +246,20 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("backtrace", platform)
         self.assertIn("espcoredump", cmake)
         self.assertNotIn("esp_panic_handler", platform)
-        self.assertIn("core_config.enable_error_tracking = config->enable_error_tracking;", compat)
-        self.assertIn("config->enable_error_tracking && config->enable_crash_symbolication", compat)
+        self.assertIn("core_config.enable_error_tracking = should_emit_fault_snapshot;", compat)
+        self.assertIn("should_emit_fault_snapshot && config->enable_crash_symbolication", compat)
         self.assertIn("core_config.fault_snapshot = &fault_snapshot;", compat)
+
+    def test_esp_idf_consumes_boot_fault_snapshot_once_per_boot(self) -> None:
+        compat = read("ports/esp-idf/honch/src/esp_compat.c")
+        init_body = c_function_body(compat, "honch_init")
+
+        self.assertIn("static bool s_fault_snapshot_consumed = false;", compat)
+        self.assertIn("bool should_emit_fault_snapshot =", init_body)
+        self.assertIn("config->enable_error_tracking && !s_fault_snapshot_consumed", init_body)
+        self.assertIn("core_config.enable_error_tracking = should_emit_fault_snapshot;", init_body)
+        self.assertIn("should_emit_fault_snapshot && config->enable_crash_symbolication", init_body)
+        self.assertIn("if (should_emit_fault_snapshot) {\n        s_fault_snapshot_consumed = true;\n    }", init_body)
 
     def test_esp_idf_maps_idf_5_1_reset_reasons_without_fatal_unknown(self) -> None:
         platform = read("ports/esp-idf/honch/src/esp_platform.c")

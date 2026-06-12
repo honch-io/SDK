@@ -18,7 +18,7 @@
   - Omit `fault_pc`, `backtrace`, `task_name`, and `crash_summary_version` for unrelated watchdog/brownout/unknown resets.
   - Add coverage for symbolication-enabled brownout/watchdog without summary fields.
 
-- [ ] 4. Prevent re-init duplicate `$error` emission.
+- [x] 4. Prevent re-init duplicate `$error` emission.
   - File: `ports/esp-idf/honch/src/esp_compat.c`.
   - Cache that the boot fault snapshot has already been consumed during this boot.
   - Subsequent `honch_shutdown()`/`honch_init()` cycles must not re-emit the same `$error`.

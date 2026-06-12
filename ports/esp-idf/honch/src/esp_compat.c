@@ -30,6 +30,9 @@ static portMUX_TYPE s_client_mutex_init_lock = portMUX_INITIALIZER_UNLOCKED;
 static honch_esp_platform_t s_platform_ctx;
 static honch_esp_storage_t s_storage_ctx;
 static honch_esp_transport_t s_transport_ctx;
+#if HONCH_ENABLE_ERROR_TRACKING
+static bool s_fault_snapshot_consumed = false;
+#endif
 
 static char s_api_key[HONCH_ESP_API_KEY_MAX_LENGTH + 1u];
 static char s_endpoint_url[HONCH_ESP_ENDPOINT_URL_MAX_LENGTH + 1u];
@@ -365,9 +368,11 @@ honch_err_t honch_init(const honch_config_t *config)
     core_config.event_queue = &event_queue_ops;
     core_config.transport = &transport_ops;
 #if HONCH_ENABLE_ERROR_TRACKING
-    core_config.enable_error_tracking = config->enable_error_tracking;
+    bool should_emit_fault_snapshot =
+        config->enable_error_tracking && !s_fault_snapshot_consumed;
+    core_config.enable_error_tracking = should_emit_fault_snapshot;
     honch_fault_snapshot_t fault_snapshot = honch_esp_fault_snapshot(
-        config->enable_error_tracking && config->enable_crash_symbolication);
+        should_emit_fault_snapshot && config->enable_crash_symbolication);
     core_config.fault_snapshot = &fault_snapshot;
 #else
     core_config.enable_error_tracking = 0;
@@ -387,6 +392,11 @@ honch_err_t honch_init(const honch_config_t *config)
     }
 
     honch_esp_init_finish(next);
+#if HONCH_ENABLE_ERROR_TRACKING
+    if (should_emit_fault_snapshot) {
+        s_fault_snapshot_consumed = true;
+    }
+#endif
     return HONCH_OK;
 }
 
