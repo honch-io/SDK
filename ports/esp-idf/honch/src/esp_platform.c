@@ -182,24 +182,12 @@ honch_status_t honch_esp_default_device_id(char *buffer, size_t buffer_size)
 
 static const char *honch_esp_firmware_build_id(void)
 {
-    const esp_app_desc_t *description = esp_app_get_description();
-    if (description == NULL) {
-        return NULL;
-    }
-
     static char build_id[HONCH_ESP_BUILD_ID_MAX_BYTES + 1u];
-    size_t length = 0u;
-    while (length < sizeof(description->app_elf_sha256) &&
-        length < HONCH_ESP_BUILD_ID_MAX_BYTES &&
-        description->app_elf_sha256[length] != '\0') {
-        build_id[length] = description->app_elf_sha256[length];
-        length++;
-    }
-    if (length == 0u) {
+    int written = esp_app_get_elf_sha256(build_id, sizeof(build_id));
+    if (written <= 1 || build_id[0] == '\0') {
         build_id[0] = '\0';
         return NULL;
     }
-    build_id[length] = '\0';
     return build_id;
 }
 
