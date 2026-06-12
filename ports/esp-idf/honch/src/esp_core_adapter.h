@@ -37,6 +37,11 @@ typedef struct honch_esp_transport {
     uint64_t retry_after_ms;
 } honch_esp_transport_t;
 
+#define HONCH_ESP_BUILD_ID_MAX_BYTES 64u
+#define HONCH_ESP_FAULT_PC_MAX_BYTES 18u
+#define HONCH_ESP_BACKTRACE_MAX_BYTES 192u
+#define HONCH_ESP_TASK_NAME_MAX_BYTES 32u
+
 honch_status_t honch_esp_platform_ops_init(honch_platform_ops_t *ops, honch_esp_platform_t *ctx);
 void honch_esp_platform_ops_deinit(honch_esp_platform_t *ctx);
 honch_status_t honch_esp_default_device_id(char *buffer, size_t buffer_size);

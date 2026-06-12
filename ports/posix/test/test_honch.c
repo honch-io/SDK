@@ -1669,6 +1669,146 @@ static void test_lifecycle_events_are_queued(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_fault_snapshot_includes_bounded_crash_summary_fields(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+
+    honch_posix_platform_t platform_ctx;
+    honch_platform_ops_t platform;
+    EXPECT_EQ_INT(honch_posix_platform_ops_init(&platform, &platform_ctx), HONCH_OK);
+
+    honch_posix_storage_t storage_ctx;
+    honch_state_storage_ops_t state_storage;
+    honch_event_queue_ops_t event_queue;
+    EXPECT_EQ_INT(honch_posix_storage_ops_init(&state_storage, &event_queue, &storage_ctx, queue_dir), HONCH_OK);
+
+    fake_transport_context_t transport = {.response_code = 204L};
+    honch_transport_ops_t transport_ops = {
+        .post_chunk = fake_core_transport,
+        .ctx = &transport
+    };
+
+    const honch_fault_snapshot_t fault = {
+        .kind = HONCH_FAULT_KIND_PANIC,
+        .severity = HONCH_FAULT_SEVERITY_FATAL,
+        .reset_reason = "panic",
+        .message = "automatic crash summary",
+        .component = "esp-idf",
+        .crash_summary_version = 1u,
+        .firmware_build_id = "fw-build-abc123",
+        .exception_cause = "LoadProhibited",
+        .fault_pc = "0x400d1234",
+        .backtrace = "0x400d1234,0x40081234,0x40085678",
+        .task_name = "main"
+    };
+    honch_core_config_t config = {
+        .api_key = "test-key",
+        .endpoint_url = "http://collector.local/",
+        .device_id = "device-1",
+        .device_model = "X3-Pro",
+        .firmware_version = "3.4.1",
+        .environment = "production",
+        .sdk_platform = "c-posix",
+        .queue_directory = queue_dir,
+        .batch_size = 10u,
+        .max_queued_events = 10u,
+        .max_event_bytes = 8192u,
+        .flush_min_interval_ms = HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS,
+        .platform = &platform,
+        .state_storage = &state_storage,
+        .event_queue = &event_queue,
+        .transport = &transport_ops,
+        .fault_snapshot = &fault
+    };
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_core_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_core_flush(client), HONCH_OK);
+
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$error\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"source\":\"panic\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"severity\":\"fatal\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"reset_reason\":\"panic\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"crash_summary_version\":1");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"firmware_build_id\":\"fw-build-abc123\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"exception_cause\":\"LoadProhibited\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"fault_pc\":\"0x400d1234\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"backtrace\":\"0x400d1234,0x40081234,0x40085678\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"task_name\":\"main\"");
+
+    honch_core_shutdown(client);
+}
+
+static void test_fault_snapshot_omits_oversized_crash_summary_fields(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+
+    honch_posix_platform_t platform_ctx;
+    honch_platform_ops_t platform;
+    EXPECT_EQ_INT(honch_posix_platform_ops_init(&platform, &platform_ctx), HONCH_OK);
+
+    honch_posix_storage_t storage_ctx;
+    honch_state_storage_ops_t state_storage;
+    honch_event_queue_ops_t event_queue;
+    EXPECT_EQ_INT(honch_posix_storage_ops_init(&state_storage, &event_queue, &storage_ctx, queue_dir), HONCH_OK);
+
+    fake_transport_context_t transport = {.response_code = 204L};
+    honch_transport_ops_t transport_ops = {
+        .post_chunk = fake_core_transport,
+        .ctx = &transport
+    };
+
+    const honch_fault_snapshot_t fault = {
+        .kind = HONCH_FAULT_KIND_PANIC,
+        .severity = HONCH_FAULT_SEVERITY_FATAL,
+        .reset_reason = "panic",
+        .crash_summary_version = 1u,
+        .firmware_build_id = "build-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-0123456789-over",
+        .exception_cause = "LoadProhibited",
+        .fault_pc = "0x400d1234-extra-too-long",
+        .backtrace =
+            "0x40000000,0x40000001,0x40000002,0x40000003,0x40000004,0x40000005,"
+            "0x40000006,0x40000007,0x40000008,0x40000009,0x4000000a,0x4000000b,"
+            "0x4000000c,0x4000000d,0x4000000e,0x4000000f,0x40000010,0x40000011",
+        .task_name = "main-task-name-that-is-too-long-for-field"
+    };
+    honch_core_config_t config = {
+        .api_key = "test-key",
+        .endpoint_url = "http://collector.local/",
+        .device_id = "device-1",
+        .device_model = "X3-Pro",
+        .firmware_version = "3.4.1",
+        .environment = "production",
+        .sdk_platform = "c-posix",
+        .queue_directory = queue_dir,
+        .batch_size = 10u,
+        .max_queued_events = 10u,
+        .max_event_bytes = 8192u,
+        .flush_min_interval_ms = HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS,
+        .platform = &platform,
+        .state_storage = &state_storage,
+        .event_queue = &event_queue,
+        .transport = &transport_ops,
+        .fault_snapshot = &fault
+    };
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_core_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_core_flush(client), HONCH_OK);
+
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$error\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"crash_summary_version\":1");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"exception_cause\":\"LoadProhibited\"");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "firmware_build_id");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "fault_pc");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "backtrace");
+    EXPECT_STR_NOT_CONTAINS(transport.last_payload, "task_name");
+
+    honch_core_shutdown(client);
+}
+
 static void test_shutdown_flush_reports_transport_error(void)
 {
     char queue_dir[128];
@@ -3046,6 +3186,8 @@ int main(void)
     test_queue_record_omits_promoted_context_properties();
     test_session_events_and_context();
     test_lifecycle_events_are_queued();
+    test_fault_snapshot_includes_bounded_crash_summary_fields();
+    test_fault_snapshot_omits_oversized_crash_summary_fields();
     test_shutdown_flush_reports_transport_error();
     test_core_state_lock_works_without_platform_lock_callbacks();
     test_flush_marks_realtime_time_source();

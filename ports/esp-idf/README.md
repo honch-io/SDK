@@ -147,12 +147,19 @@ identity and firmware-version state, and queues `$device_boot` before returning.
 It does not perform network I/O; delivery remains cooperative through
 `honch_tick()` or explicit flush calls.
 
-Automatic `$error` capture is based on `esp_reset_reason()` during
+Automatic `$error` capture is based on ESP-IDF reset/crash metadata during
 `honch_init()`. The SDK maps panic, interrupt/task/other watchdog, brownout,
 and unknown reset reasons into a bounded `$error` event with `source`,
-`severity`, and `reset_reason` properties. It does not install panic handlers,
-save coredumps, collect registers, copy stacks, upload symbol files, or replace
+`severity`, and `reset_reason` properties. For abnormal resets it also emits
+`crash_summary_version` and `firmware_build_id` when available. Raw `fault_pc`,
+`backtrace`, and `task_name` fields are emitted only when ESP-IDF exposes
+reliable post-reboot metadata on the configured target. Honch does not save
+coredumps, collect RAM/register/task snapshots, upload symbol files, or replace
 ESP-IDF crash forensics tooling.
+
+`firmware_build_id` is intended to let backend symbolication match raw crash
+addresses to the exact firmware image in a future platform release. Until the
+platform accepts symbol files, these fields are diagnostic metadata only.
 
 ## Configuration options
 

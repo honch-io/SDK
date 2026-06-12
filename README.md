@@ -29,11 +29,12 @@ auto-emit `$device_boot`, `$device_shutdown`, `$firmware_update`,
 auto-emitted events create analytics traffic and queue pressure even when the
 host only calls `init`, session, battery, or shutdown APIs.
 
-Automatic `$error` capture is lightweight reset-reason telemetry, not coredump
-or crash-forensics collection. ESP-IDF and Arduino ESP32 map platform reset
-reasons such as panic, watchdog, brownout, and unknown reset into a bounded
-`$error` event during init. C/POSIX and MicroPython do not currently install
-automatic fault hooks.
+Automatic `$error` capture is lightweight crash telemetry, not coredump
+collection. ESP-IDF maps platform reset reasons such as panic, watchdog,
+brownout, and unknown reset into a bounded `$error` event during init, with a
+firmware build identifier for future symbolication. Arduino ESP32 maps reset
+reasons through the same automatic path. C/POSIX and MicroPython do not
+currently install automatic fault hooks.
 
 honch_init does synchronous work on the caller's thread. Depending on the
 port and configured storage hooks, init may validate config, read or derive a

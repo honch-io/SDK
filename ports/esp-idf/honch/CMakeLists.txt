@@ -32,6 +32,7 @@ idf_component_register(
         "${HONCH_ESP_COMPONENT_DIR}/src"
         "${HONCH_SDK_ROOT}/core/src"
     REQUIRES
+        esp_app_format
         esp_http_client
         esp-tls
         esp_timer

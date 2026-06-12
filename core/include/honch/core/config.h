@@ -55,6 +55,12 @@ typedef struct honch_fault_snapshot {
     const char *reset_reason;
     const char *message;
     const char *component;
+    unsigned int crash_summary_version;
+    const char *firmware_build_id;
+    const char *exception_cause;
+    const char *fault_pc;
+    const char *backtrace;
+    const char *task_name;
 } honch_fault_snapshot_t;
 
 typedef struct honch_core_config {

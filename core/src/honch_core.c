@@ -1037,6 +1037,11 @@ static const char *honch_fault_severity_string(honch_fault_severity_t severity)
 #define HONCH_FAULT_RESET_REASON_MAX_BYTES 64u
 #define HONCH_FAULT_MESSAGE_MAX_BYTES 160u
 #define HONCH_FAULT_COMPONENT_MAX_BYTES 64u
+#define HONCH_FAULT_BUILD_ID_MAX_BYTES 64u
+#define HONCH_FAULT_EXCEPTION_CAUSE_MAX_BYTES 64u
+#define HONCH_FAULT_PC_MAX_BYTES 18u
+#define HONCH_FAULT_BACKTRACE_MAX_BYTES 192u
+#define HONCH_FAULT_TASK_NAME_MAX_BYTES 32u
 
 static bool honch_fault_string_length(
     const char *value,
@@ -1092,7 +1097,7 @@ static honch_status_t honch_emit_fault_locked(
         return HONCH_OK;
     }
 
-    honch_wire_v2_property_t properties[5];
+    honch_wire_v2_property_t properties[11];
     size_t property_count = 0u;
     honch_status_t status = honch_append_typed_property(
         properties,
@@ -1114,6 +1119,14 @@ static honch_status_t honch_emit_fault_locked(
             &property_count,
             "reset_reason",
             honch_fault_reset_reason_value(fault_snapshot),
+            true);
+    }
+    if (status == HONCH_OK && fault_snapshot->crash_summary_version > 0u) {
+        status = honch_append_typed_property(
+            properties,
+            &property_count,
+            "crash_summary_version",
+            honch_u64((uint64_t)fault_snapshot->crash_summary_version),
             true);
     }
     size_t message_length = 0u;
@@ -1140,6 +1153,71 @@ static honch_status_t honch_emit_fault_locked(
             &property_count,
             "component",
             honch_strn(fault_snapshot->component, component_length),
+            true);
+    }
+    size_t build_id_length = 0u;
+    if (status == HONCH_OK &&
+        honch_fault_string_length(
+            fault_snapshot->firmware_build_id,
+            HONCH_FAULT_BUILD_ID_MAX_BYTES,
+            &build_id_length)) {
+        status = honch_append_typed_property(
+            properties,
+            &property_count,
+            "firmware_build_id",
+            honch_strn(fault_snapshot->firmware_build_id, build_id_length),
+            true);
+    }
+    size_t exception_cause_length = 0u;
+    if (status == HONCH_OK &&
+        honch_fault_string_length(
+            fault_snapshot->exception_cause,
+            HONCH_FAULT_EXCEPTION_CAUSE_MAX_BYTES,
+            &exception_cause_length)) {
+        status = honch_append_typed_property(
+            properties,
+            &property_count,
+            "exception_cause",
+            honch_strn(fault_snapshot->exception_cause, exception_cause_length),
+            true);
+    }
+    size_t fault_pc_length = 0u;
+    if (status == HONCH_OK &&
+        honch_fault_string_length(
+            fault_snapshot->fault_pc,
+            HONCH_FAULT_PC_MAX_BYTES,
+            &fault_pc_length)) {
+        status = honch_append_typed_property(
+            properties,
+            &property_count,
+            "fault_pc",
+            honch_strn(fault_snapshot->fault_pc, fault_pc_length),
+            true);
+    }
+    size_t backtrace_length = 0u;
+    if (status == HONCH_OK &&
+        honch_fault_string_length(
+            fault_snapshot->backtrace,
+            HONCH_FAULT_BACKTRACE_MAX_BYTES,
+            &backtrace_length)) {
+        status = honch_append_typed_property(
+            properties,
+            &property_count,
+            "backtrace",
+            honch_strn(fault_snapshot->backtrace, backtrace_length),
+            true);
+    }
+    size_t task_name_length = 0u;
+    if (status == HONCH_OK &&
+        honch_fault_string_length(
+            fault_snapshot->task_name,
+            HONCH_FAULT_TASK_NAME_MAX_BYTES,
+            &task_name_length)) {
+        status = honch_append_typed_property(
+            properties,
+            &property_count,
+            "task_name",
+            honch_strn(fault_snapshot->task_name, task_name_length),
             true);
     }
     if (status != HONCH_OK) {

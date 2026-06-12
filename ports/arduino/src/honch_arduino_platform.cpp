@@ -90,107 +90,82 @@ honch_status_t honch_arduino_device_id(void *ctx, char *buffer, size_t bufferSiz
   return HONCH_OK;
 }
 
+static honch_fault_snapshot_t honch_arduino_reset_snapshot(
+    honch_fault_kind_t kind,
+    honch_fault_severity_t severity,
+    const char *reset_reason) {
+  honch_fault_snapshot_t snapshot = {};
+  snapshot.kind = kind;
+  snapshot.severity = severity;
+  snapshot.reset_reason = reset_reason;
+  return snapshot;
+}
+
 honch_fault_snapshot_t honch_arduino_fault_snapshot() {
 #ifdef ARDUINO
   switch (esp_reset_reason()) {
     case ESP_RST_POWERON:
-      return honch_fault_snapshot_t{
+      return honch_arduino_reset_snapshot(
           HONCH_FAULT_KIND_NONE,
           HONCH_FAULT_SEVERITY_INFO,
-          "power_on",
-          nullptr,
-          nullptr,
-      };
+          "power_on");
     case ESP_RST_SW:
-      return honch_fault_snapshot_t{
+      return honch_arduino_reset_snapshot(
           HONCH_FAULT_KIND_NONE,
           HONCH_FAULT_SEVERITY_INFO,
-          "software",
-          nullptr,
-          nullptr,
-      };
+          "software");
     case ESP_RST_DEEPSLEEP:
-      return honch_fault_snapshot_t{
+      return honch_arduino_reset_snapshot(
           HONCH_FAULT_KIND_NONE,
           HONCH_FAULT_SEVERITY_INFO,
-          "deep_sleep",
-          nullptr,
-          nullptr,
-      };
+          "deep_sleep");
     case ESP_RST_PANIC:
-      return honch_fault_snapshot_t{
+      return honch_arduino_reset_snapshot(
           HONCH_FAULT_KIND_PANIC,
           HONCH_FAULT_SEVERITY_FATAL,
-          "panic",
-          nullptr,
-          nullptr,
-      };
+          "panic");
     case ESP_RST_INT_WDT:
-      return honch_fault_snapshot_t{
+      return honch_arduino_reset_snapshot(
           HONCH_FAULT_KIND_WATCHDOG,
           HONCH_FAULT_SEVERITY_FATAL,
-          "interrupt_wdt",
-          nullptr,
-          nullptr,
-      };
+          "interrupt_wdt");
     case ESP_RST_TASK_WDT:
-      return honch_fault_snapshot_t{
+      return honch_arduino_reset_snapshot(
           HONCH_FAULT_KIND_WATCHDOG,
           HONCH_FAULT_SEVERITY_FATAL,
-          "task_wdt",
-          nullptr,
-          nullptr,
-      };
+          "task_wdt");
     case ESP_RST_WDT:
-      return honch_fault_snapshot_t{
+      return honch_arduino_reset_snapshot(
           HONCH_FAULT_KIND_WATCHDOG,
           HONCH_FAULT_SEVERITY_FATAL,
-          "watchdog",
-          nullptr,
-          nullptr,
-      };
+          "watchdog");
     case ESP_RST_BROWNOUT:
-      return honch_fault_snapshot_t{
+      return honch_arduino_reset_snapshot(
           HONCH_FAULT_KIND_BROWNOUT,
           HONCH_FAULT_SEVERITY_FATAL,
-          "brownout",
-          nullptr,
-          nullptr,
-      };
+          "brownout");
     case ESP_RST_SDIO:
-      return honch_fault_snapshot_t{
+      return honch_arduino_reset_snapshot(
           HONCH_FAULT_KIND_NONE,
           HONCH_FAULT_SEVERITY_INFO,
-          "sdio",
-          nullptr,
-          nullptr,
-      };
+          "sdio");
     case ESP_RST_EXT:
-      return honch_fault_snapshot_t{
+      return honch_arduino_reset_snapshot(
           HONCH_FAULT_KIND_NONE,
           HONCH_FAULT_SEVERITY_INFO,
-          "external",
-          nullptr,
-          nullptr,
-      };
+          "external");
     case ESP_RST_UNKNOWN:
     default:
-      return honch_fault_snapshot_t{
+      return honch_arduino_reset_snapshot(
           HONCH_FAULT_KIND_UNKNOWN,
           HONCH_FAULT_SEVERITY_FATAL,
-          "unknown",
-          nullptr,
-          nullptr,
-      };
+          "unknown");
   }
 #else
-  return honch_fault_snapshot_t{
+  return honch_arduino_reset_snapshot(
       HONCH_FAULT_KIND_NONE,
       HONCH_FAULT_SEVERITY_INFO,
-      "host",
-      nullptr,
-      nullptr,
-  };
+      "host");
 #endif
 }
 

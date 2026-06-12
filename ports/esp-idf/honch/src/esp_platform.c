@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <sys/time.h>
 
+#include "esp_app_desc.h"
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_random.h"
@@ -18,6 +19,12 @@
 static const char *TAG = "honch";
 static const int64_t HONCH_MIN_UNIX_TIME_SECONDS = 1577836800;
 #define HONCH_ESP_MUTEX_LOCK_TIMEOUT_MS 10u
+
+typedef struct honch_esp_crash_summary {
+    char fault_pc[HONCH_ESP_FAULT_PC_MAX_BYTES + 1u];
+    char backtrace[HONCH_ESP_BACKTRACE_MAX_BYTES + 1u];
+    char task_name[HONCH_ESP_TASK_NAME_MAX_BYTES + 1u];
+} honch_esp_crash_summary_t;
 
 static TickType_t honch_esp_lock_ticks(uint32_t timeout_ms)
 {
@@ -173,6 +180,57 @@ honch_status_t honch_esp_default_device_id(char *buffer, size_t buffer_size)
     return HONCH_STATUS_OK;
 }
 
+static const char *honch_esp_firmware_build_id(void)
+{
+    const esp_app_desc_t *description = esp_app_get_description();
+    if (description == NULL) {
+        return NULL;
+    }
+
+    static char build_id[HONCH_ESP_BUILD_ID_MAX_BYTES + 1u];
+    size_t length = 0u;
+    while (length < sizeof(description->app_elf_sha256) &&
+        length < HONCH_ESP_BUILD_ID_MAX_BYTES &&
+        description->app_elf_sha256[length] != '\0') {
+        build_id[length] = description->app_elf_sha256[length];
+        length++;
+    }
+    if (length == 0u) {
+        build_id[0] = '\0';
+        return NULL;
+    }
+    build_id[length] = '\0';
+    return build_id;
+}
+
+static void honch_esp_crash_summary_fill(honch_esp_crash_summary_t *summary)
+{
+    if (summary == NULL) {
+        return;
+    }
+    *summary = (honch_esp_crash_summary_t){0};
+}
+
+static honch_fault_snapshot_t honch_esp_abnormal_fault_snapshot(
+    honch_fault_kind_t kind,
+    const char *reset_reason)
+{
+    static honch_esp_crash_summary_t summary;
+    honch_esp_crash_summary_fill(&summary);
+    const char *build_id = honch_esp_firmware_build_id();
+
+    return (honch_fault_snapshot_t) {
+        .kind = kind,
+        .severity = HONCH_FAULT_SEVERITY_FATAL,
+        .reset_reason = reset_reason,
+        .crash_summary_version = 1u,
+        .firmware_build_id = build_id,
+        .fault_pc = summary.fault_pc[0] != '\0' ? summary.fault_pc : NULL,
+        .backtrace = summary.backtrace[0] != '\0' ? summary.backtrace : NULL,
+        .task_name = summary.task_name[0] != '\0' ? summary.task_name : NULL
+    };
+}
+
 honch_fault_snapshot_t honch_esp_fault_snapshot(void)
 {
     switch (esp_reset_reason()) {
@@ -195,35 +253,15 @@ honch_fault_snapshot_t honch_esp_fault_snapshot(void)
                 .reset_reason = "deep_sleep"
             };
         case ESP_RST_PANIC:
-            return (honch_fault_snapshot_t) {
-                .kind = HONCH_FAULT_KIND_PANIC,
-                .severity = HONCH_FAULT_SEVERITY_FATAL,
-                .reset_reason = "panic"
-            };
+            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_PANIC, "panic");
         case ESP_RST_INT_WDT:
-            return (honch_fault_snapshot_t) {
-                .kind = HONCH_FAULT_KIND_WATCHDOG,
-                .severity = HONCH_FAULT_SEVERITY_FATAL,
-                .reset_reason = "interrupt_wdt"
-            };
+            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, "interrupt_wdt");
         case ESP_RST_TASK_WDT:
-            return (honch_fault_snapshot_t) {
-                .kind = HONCH_FAULT_KIND_WATCHDOG,
-                .severity = HONCH_FAULT_SEVERITY_FATAL,
-                .reset_reason = "task_wdt"
-            };
+            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, "task_wdt");
         case ESP_RST_WDT:
-            return (honch_fault_snapshot_t) {
-                .kind = HONCH_FAULT_KIND_WATCHDOG,
-                .severity = HONCH_FAULT_SEVERITY_FATAL,
-                .reset_reason = "watchdog"
-            };
+            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, "watchdog");
         case ESP_RST_BROWNOUT:
-            return (honch_fault_snapshot_t) {
-                .kind = HONCH_FAULT_KIND_BROWNOUT,
-                .severity = HONCH_FAULT_SEVERITY_FATAL,
-                .reset_reason = "brownout"
-            };
+            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_BROWNOUT, "brownout");
         case ESP_RST_SDIO:
             return (honch_fault_snapshot_t) {
                 .kind = HONCH_FAULT_KIND_NONE,
@@ -238,10 +276,6 @@ honch_fault_snapshot_t honch_esp_fault_snapshot(void)
             };
         case ESP_RST_UNKNOWN:
         default:
-            return (honch_fault_snapshot_t) {
-                .kind = HONCH_FAULT_KIND_UNKNOWN,
-                .severity = HONCH_FAULT_SEVERITY_FATAL,
-                .reset_reason = "unknown"
-            };
+            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_UNKNOWN, "unknown");
     }
 }
