@@ -57,8 +57,8 @@ These events are emitted automatically by the SDK:
 
 `$error` is opt-in lightweight fault telemetry. It records bounded properties
 available during normal SDK init after a previous abnormal reset. It is not a
-coredump, register dump, stack capture, minidump, symbolication feed, or crash
-forensics system.
+coredump, register dump, stack capture, minidump, symbolication pipeline, or
+crash forensics system.
 
 Code-sensitive symbolication context is separately opt-in where a port exposes
 it. Ports may send `exception_cause`, `firmware_build_id`, `fault_pc`,
