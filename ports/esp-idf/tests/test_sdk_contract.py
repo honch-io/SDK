@@ -250,6 +250,22 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("should_emit_fault_snapshot && config->enable_crash_symbolication", compat)
         self.assertIn("core_config.fault_snapshot = &fault_snapshot;", compat)
 
+    def test_esp_public_config_appends_error_tracking_fields(self) -> None:
+        public = read("ports/esp-idf/honch/include/honch.h")
+
+        self.assertLess(
+            public.index("const honch_state_storage_ops_t *state_storage_ops;"),
+            public.index("const honch_event_queue_ops_t *event_queue_ops;"),
+        )
+        self.assertLess(
+            public.index("const honch_event_queue_ops_t *event_queue_ops;"),
+            public.index("bool enable_error_tracking;"),
+        )
+        self.assertLess(
+            public.index("bool enable_error_tracking;"),
+            public.index("bool enable_crash_symbolication;"),
+        )
+
     def test_esp_idf_consumes_boot_fault_snapshot_once_per_boot(self) -> None:
         compat = read("ports/esp-idf/honch/src/esp_compat.c")
         init_body = c_function_body(compat, "honch_init")

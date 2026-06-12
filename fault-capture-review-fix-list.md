@@ -30,7 +30,7 @@
   - Set `crash_summary_version=1` only when a relevant summary exists.
   - Decide whether `firmware_build_id` remains independent or is summary-scoped, then document it.
 
-- [ ] 6. Preserve public `honch_config_t` positional compatibility.
+- [x] 6. Preserve public `honch_config_t` positional compatibility.
   - File: `ports/esp-idf/honch/include/honch.h`.
   - Move `enable_error_tracking` and `enable_crash_symbolication` to the end of `honch_config_t`.
   - Add a contract test that pins field order or old positional initializer compatibility.
