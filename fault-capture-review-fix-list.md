@@ -6,7 +6,7 @@
   - Treat USB/JTAG/EFUSE as non-fatal reset reasons. Decide and document whether power glitch maps to `brownout` or a distinct abnormal reason.
   - Add ESP-IDF and Arduino contract tests so these values cannot fall into fatal `unknown`.
 
-- [ ] 2. Make `HONCH_ENABLE_ERROR_TRACKING=OFF` testable.
+- [x] 2. Make `HONCH_ENABLE_ERROR_TRACKING=OFF` testable.
   - Files: `core/test/test_state_consistency.c`, `ports/posix/test/test_honch.c`.
   - Guard `$error`-specific tests with `#if HONCH_ENABLE_ERROR_TRACKING`.
   - Keep boot reset-reason tests active after reset reason is decoupled from error tracking.
@@ -63,8 +63,8 @@
 
 ## Verification Target
 
-- [ ] Normal POSIX CMake/ctest.
-- [ ] POSIX CMake/ctest with `-DHONCH_ENABLE_ERROR_TRACKING=OFF`.
+- [x] Normal POSIX CMake/ctest.
+- [x] POSIX CMake/ctest with `-DHONCH_ENABLE_ERROR_TRACKING=OFF`.
 - [ ] Python contract tests for ESP-IDF, Arduino, POSIX, and MicroPython.
 - [ ] ESP-IDF footprint build on Citadel.
 - [ ] Optional ESP32 crash run for duplicate/stale summary behavior.

@@ -86,6 +86,7 @@ function(honch_configure_posix_target target)
     )
 
     target_compile_definitions(${target} PRIVATE
+        HONCH_ENABLE_ERROR_TRACKING=$<BOOL:${HONCH_ENABLE_ERROR_TRACKING}>
         _POSIX_C_SOURCE=200809L
     )
 
@@ -110,6 +111,7 @@ if(HONCH_BUILD_TESTS)
 
     target_link_libraries(honch_posix_tests PRIVATE honch_posix_test)
     target_compile_definitions(honch_posix_tests PRIVATE
+        HONCH_ENABLE_ERROR_TRACKING=$<BOOL:${HONCH_ENABLE_ERROR_TRACKING}>
         HONCH_TESTING
         _POSIX_C_SOURCE=200809L
         _DEFAULT_SOURCE
@@ -130,6 +132,7 @@ if(HONCH_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/../../core/src
     )
     target_compile_definitions(honch_posix_state_consistency_tests PRIVATE
+        HONCH_ENABLE_ERROR_TRACKING=$<BOOL:${HONCH_ENABLE_ERROR_TRACKING}>
         _POSIX_C_SOURCE=200809L
         _DEFAULT_SOURCE
         _DARWIN_C_SOURCE

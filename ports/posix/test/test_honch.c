@@ -1669,6 +1669,7 @@ static void test_lifecycle_events_are_queued(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+#if HONCH_ENABLE_ERROR_TRACKING
 static void test_fault_snapshot_includes_bounded_crash_summary_fields(void)
 {
     char queue_dir[128];
@@ -1810,6 +1811,7 @@ static void test_fault_snapshot_omits_oversized_crash_summary_fields(void)
 
     honch_core_shutdown(client);
 }
+#endif
 
 static void test_shutdown_flush_reports_transport_error(void)
 {
@@ -3188,8 +3190,10 @@ int main(void)
     test_queue_record_omits_promoted_context_properties();
     test_session_events_and_context();
     test_lifecycle_events_are_queued();
+#if HONCH_ENABLE_ERROR_TRACKING
     test_fault_snapshot_includes_bounded_crash_summary_fields();
     test_fault_snapshot_omits_oversized_crash_summary_fields();
+#endif
     test_shutdown_flush_reports_transport_error();
     test_core_state_lock_works_without_platform_lock_callbacks();
     test_flush_marks_realtime_time_source();

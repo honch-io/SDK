@@ -71,6 +71,7 @@ static honch_status_t fake_random_bytes(void *ctx, uint8_t *buffer, size_t buffe
     return HONCH_OK;
 }
 
+#if HONCH_ENABLE_ERROR_TRACKING
 static const honch_wire_v2_property_t *find_record_property(
     const honch_event_record_t *record,
     const char *key)
@@ -82,7 +83,9 @@ static const honch_wire_v2_property_t *find_record_property(
     }
     return NULL;
 }
+#endif
 
+#if HONCH_ENABLE_ERROR_TRACKING
 static void assert_record_string_property(
     const honch_event_record_t *record,
     const char *key,
@@ -94,6 +97,7 @@ static void assert_record_string_property(
     assert(property->value.string_value != NULL);
     assert(strcmp(property->value.string_value, expected) == 0);
 }
+#endif
 
 static char *fake_state_value(fake_state_storage_t *storage, const char *key)
 {
@@ -257,6 +261,7 @@ static void test_zero_platform_time_queues_parseable_event_record(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
+#if HONCH_ENABLE_ERROR_TRACKING
 static void test_normal_reset_does_not_queue_error_event(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
@@ -414,6 +419,7 @@ static void test_overlong_fault_fields_are_omitted_without_large_allocation(void
 
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
+#endif
 
 static honch_status_t fake_queue_consume(void *ctx, uint64_t sequence)
 {
@@ -777,6 +783,7 @@ static void test_failed_init_rolls_back_queued_lifecycle_events(void)
     assert(strcmp(storage.firmware_version, "1.0.0") == 0);
 }
 
+#if HONCH_ENABLE_ERROR_TRACKING
 static void test_failed_error_capture_queue_rolls_back_lifecycle_events(void)
 {
     fake_state_storage_t storage = {
@@ -805,6 +812,7 @@ static void test_failed_error_capture_queue_rolls_back_lifecycle_events(void)
     assert(storage.queue_depth == 0u);
     assert(storage.queued_sequence_count == 0u);
 }
+#endif
 
 static void test_failed_reset_second_identity_write_preserves_persisted_identity(void)
 {
@@ -1527,16 +1535,20 @@ int main(void)
 {
     test_queue_push_uses_honch_event_record_format();
     test_zero_platform_time_queues_parseable_event_record();
+#if HONCH_ENABLE_ERROR_TRACKING
     test_normal_reset_does_not_queue_error_event();
     test_abnormal_reset_does_not_queue_error_event_when_disabled();
     test_abnormal_reset_queues_error_event_when_enabled();
     test_oversized_fault_event_is_skipped_without_failing_init();
     test_overlong_fault_fields_are_omitted_without_large_allocation();
+#endif
     test_core_state_lock_works_without_platform_lock_callbacks();
     test_init_rejects_mutex_required_platform_without_lock_callbacks();
     test_failed_firmware_update_queue_does_not_advance_persisted_version();
     test_failed_init_rolls_back_queued_lifecycle_events();
+#if HONCH_ENABLE_ERROR_TRACKING
     test_failed_error_capture_queue_rolls_back_lifecycle_events();
+#endif
     test_failed_reset_second_identity_write_preserves_persisted_identity();
     test_set_property_rejects_blank_key();
     test_set_property_rejects_reserved_key();
