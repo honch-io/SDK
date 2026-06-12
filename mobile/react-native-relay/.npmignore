@@ -1,0 +1,6 @@
+# Dev-only — keep the published tarball to source + native module + example
+test/
+e2e/
+scripts/
+bun.lock
+PRODUCTION_READINESS.md
