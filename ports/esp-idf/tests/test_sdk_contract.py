@@ -349,6 +349,15 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("build_id = has_crash_summary ? honch_esp_firmware_build_id() : NULL;", abnormal_body)
         self.assertIn(".crash_summary_version = has_crash_summary ? 1u : 0u", abnormal_body)
 
+    def test_esp_idf_omits_corrupted_xtensa_backtraces(self) -> None:
+        platform = read("ports/esp-idf/honch/src/esp_platform.c")
+        fill_body = c_function_body(platform, "honch_esp_crash_summary_fill")
+        corrupted_check = "if (!core_summary.exc_bt_info.corrupted)"
+        loop_start = "for (uint32_t i = 0u; i < depth; i++)"
+
+        self.assertIn(corrupted_check, fill_body)
+        self.assertLess(fill_body.find(corrupted_check), fill_body.find(loop_start))
+
     def test_esp_idf_error_tracking_is_build_strip_modular(self) -> None:
         root_kconfig = read("Kconfig")
         cmake = read("ports/esp-idf/honch/CMakeLists.txt")

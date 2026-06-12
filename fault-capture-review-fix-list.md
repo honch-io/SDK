@@ -45,7 +45,7 @@
   - Parse `HONCH_ESP_REQUIRES` or make dependency assertions indentation-agnostic.
   - The test must fail if `esp_wifi` or other blocked unused dependencies are added.
 
-- [ ] 9. Omit corrupted Xtensa backtraces.
+- [x] 9. Omit corrupted Xtensa backtraces.
   - File: `ports/esp-idf/honch/src/esp_platform.c`.
   - Check `core_summary.exc_bt_info.corrupted`; omit `backtrace` or emit an explicit bounded corruption flag.
   - Add coverage for corrupted summary handling.

@@ -224,27 +224,29 @@ static bool honch_esp_crash_summary_fill(honch_esp_crash_summary_t *summary)
     }
 
 #if defined(CONFIG_IDF_TARGET_ARCH_XTENSA) && CONFIG_IDF_TARGET_ARCH_XTENSA
-    size_t offset = 0u;
-    uint32_t depth = core_summary.exc_bt_info.depth;
-    if (depth > (uint32_t)(sizeof(core_summary.exc_bt_info.bt) / sizeof(core_summary.exc_bt_info.bt[0]))) {
-        depth = (uint32_t)(sizeof(core_summary.exc_bt_info.bt) / sizeof(core_summary.exc_bt_info.bt[0]));
-    }
-    for (uint32_t i = 0u; i < depth; i++) {
-        uint32_t pc = core_summary.exc_bt_info.bt[i];
-        if (pc == 0u) {
-            continue;
+    if (!core_summary.exc_bt_info.corrupted) {
+        size_t offset = 0u;
+        uint32_t depth = core_summary.exc_bt_info.depth;
+        if (depth > (uint32_t)(sizeof(core_summary.exc_bt_info.bt) / sizeof(core_summary.exc_bt_info.bt[0]))) {
+            depth = (uint32_t)(sizeof(core_summary.exc_bt_info.bt) / sizeof(core_summary.exc_bt_info.bt[0]));
         }
-        int written = snprintf(
-            summary->backtrace + offset,
-            sizeof(summary->backtrace) - offset,
-            "%s0x%08lx",
-            offset == 0u ? "" : ",",
-            (unsigned long)pc);
-        if (written < 0 || (size_t)written >= sizeof(summary->backtrace) - offset) {
-            summary->backtrace[0] = '\0';
-            break;
+        for (uint32_t i = 0u; i < depth; i++) {
+            uint32_t pc = core_summary.exc_bt_info.bt[i];
+            if (pc == 0u) {
+                continue;
+            }
+            int written = snprintf(
+                summary->backtrace + offset,
+                sizeof(summary->backtrace) - offset,
+                "%s0x%08lx",
+                offset == 0u ? "" : ",",
+                (unsigned long)pc);
+            if (written < 0 || (size_t)written >= sizeof(summary->backtrace) - offset) {
+                summary->backtrace[0] = '\0';
+                break;
+            }
+            offset += (size_t)written;
         }
-        offset += (size_t)written;
     }
 #endif
 
