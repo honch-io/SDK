@@ -90,6 +90,7 @@ honch_status_t honch_arduino_device_id(void *ctx, char *buffer, size_t bufferSiz
   return HONCH_OK;
 }
 
+#if HONCH_ENABLE_ERROR_TRACKING
 static honch_fault_snapshot_t honch_arduino_reset_snapshot(
     honch_fault_kind_t kind,
     honch_fault_severity_t severity,
@@ -168,6 +169,7 @@ honch_fault_snapshot_t honch_arduino_fault_snapshot() {
       "host");
 #endif
 }
+#endif
 
 void honch_arduino_log(void *ctx, honch_log_level_t level, const char *message) {
   (void)ctx;

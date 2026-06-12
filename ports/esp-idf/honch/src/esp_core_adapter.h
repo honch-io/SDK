@@ -18,6 +18,10 @@
 #include "esp_http_client.h"
 #include "freertos/FreeRTOS.h"
 
+#ifndef HONCH_ENABLE_CRASH_SYMBOLICATION
+#define HONCH_ENABLE_CRASH_SYMBOLICATION 1
+#endif
+
 typedef honch_client_t honch_esp_core_client_t;
 
 typedef struct honch_esp_platform {
@@ -45,7 +49,9 @@ typedef struct honch_esp_transport {
 honch_status_t honch_esp_platform_ops_init(honch_platform_ops_t *ops, honch_esp_platform_t *ctx);
 void honch_esp_platform_ops_deinit(honch_esp_platform_t *ctx);
 honch_status_t honch_esp_default_device_id(char *buffer, size_t buffer_size);
+#if HONCH_ENABLE_ERROR_TRACKING
 honch_fault_snapshot_t honch_esp_fault_snapshot(bool include_symbolication_context);
+#endif
 honch_status_t honch_esp_event_queue_ops_init(
     honch_event_queue_ops_t *ops,
     honch_esp_storage_t *ctx,

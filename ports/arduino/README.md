@@ -78,6 +78,8 @@ interrupt/task/other watchdog, brownout, and unknown reset reasons from
 and `reset_reason` properties during `begin()`. It does not install panic
 handlers, save coredumps, collect registers, copy stacks, upload symbol files,
 send source code/source paths, or replace ESP32 crash forensics tooling.
+Define `HONCH_ENABLE_ERROR_TRACKING=0` in the Arduino build flags to compile
+out the wrapper reset-snapshot path entirely.
 
 All `HonchClass` methods serialize access to the wrapper-owned client pointer.
 Concurrent calls from multiple FreeRTOS tasks are allowed, but only one wrapper

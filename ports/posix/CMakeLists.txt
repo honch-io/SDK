@@ -9,6 +9,7 @@ option(HONCH_BUILD_TESTS "Build Honch POSIX SDK tests" ON)
 option(HONCH_BUILD_EXAMPLES "Build Honch POSIX SDK examples" ON)
 option(HONCH_BUILD_BENCHMARKS "Build Honch POSIX SDK benchmarks" OFF)
 option(HONCH_BUILD_E2E "Build Honch POSIX SDK end-to-end tests" OFF)
+option(HONCH_ENABLE_ERROR_TRACKING "Compile Honch automatic error tracking support" ON)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)

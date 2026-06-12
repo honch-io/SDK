@@ -250,6 +250,27 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("config->enable_error_tracking && config->enable_crash_symbolication", compat)
         self.assertIn("core_config.fault_snapshot = &fault_snapshot;", compat)
 
+    def test_esp_idf_error_tracking_is_build_strip_modular(self) -> None:
+        root_kconfig = read("Kconfig")
+        cmake = read("ports/esp-idf/honch/CMakeLists.txt")
+        kconfig = read("ports/esp-idf/honch/Kconfig")
+        compat = read("ports/esp-idf/honch/src/esp_compat.c")
+        adapter = read("ports/esp-idf/honch/src/esp_core_adapter.h")
+
+        self.assertIn('rsource "ports/esp-idf/honch/Kconfig"', root_kconfig)
+        self.assertIn("config HONCH_ERROR_TRACKING", kconfig)
+        self.assertIn("config HONCH_CRASH_SYMBOLICATION", kconfig)
+        self.assertIn("depends on HONCH_ERROR_TRACKING", kconfig)
+        self.assertIn("CONFIG_HONCH_ERROR_TRACKING", cmake)
+        self.assertIn("CONFIG_HONCH_CRASH_SYMBOLICATION", cmake)
+        self.assertIn("HONCH_ENABLE_ERROR_TRACKING=0", cmake)
+        self.assertIn("HONCH_ENABLE_CRASH_SYMBOLICATION=0", cmake)
+        self.assertIn("if(CONFIG_HONCH_CRASH_SYMBOLICATION)", cmake)
+        self.assertIn("list(APPEND HONCH_ESP_REQUIRES espcoredump)", cmake)
+        self.assertNotIn("espcoredump\n        esp_http_client", cmake)
+        self.assertIn("#if HONCH_ENABLE_ERROR_TRACKING", compat)
+        self.assertIn("#if HONCH_ENABLE_ERROR_TRACKING", adapter)
+
     def test_esp_default_storage_is_ram_queue_only(self) -> None:
         storage = read("ports/esp-idf/honch/src/esp_storage.c")
         adapter = read("ports/esp-idf/honch/src/esp_core_adapter.h")
@@ -546,7 +567,7 @@ class EspIdfChunkWireTest(unittest.TestCase):
             "esp_timer",
             "freertos",
         ):
-            self.assertIn(f"        {dependency}", cmake)
+            self.assertIn(f"    {dependency}", cmake)
 
         for unused_dependency in (
             "        esp_wifi",

@@ -39,6 +39,12 @@ code, symbol files, or source paths. Arduino ESP32 maps reset reasons through
 the same opt-in automatic path without raw crash addresses. C/POSIX and
 MicroPython do not currently install automatic fault hooks.
 
+Automatic error tracking is build-strip modular. CMake and embedded ports may
+compile with `HONCH_ENABLE_ERROR_TRACKING=0` to remove the SDK-owned `$error`
+emission path from firmware. ESP-IDF also exposes `CONFIG_HONCH_ERROR_TRACKING`
+and `CONFIG_HONCH_CRASH_SYMBOLICATION`; disabling crash symbolication removes
+the ESP-IDF coredump-summary dependency while preserving normal analytics.
+
 honch_init does synchronous work on the caller's thread. Depending on the
 port and configured storage hooks, init may validate config, read or derive a
 device ID, read or write state such as firmware version, create or reconcile

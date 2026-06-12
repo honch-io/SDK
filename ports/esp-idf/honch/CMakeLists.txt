@@ -21,6 +21,19 @@ set(HONCH_CORE_SOURCES
 )
 list(TRANSFORM HONCH_CORE_SOURCES PREPEND "${HONCH_SDK_ROOT}/")
 
+set(HONCH_ESP_REQUIRES
+    esp_app_format
+    esp_http_client
+    esp-tls
+    esp_timer
+    efuse
+    freertos
+)
+
+if(CONFIG_HONCH_CRASH_SYMBOLICATION)
+    list(APPEND HONCH_ESP_REQUIRES espcoredump)
+endif()
+
 idf_component_register(
     SRCS
         ${HONCH_ESP_PORT_SOURCES}
@@ -32,14 +45,20 @@ idf_component_register(
         "${HONCH_ESP_COMPONENT_DIR}/src"
         "${HONCH_SDK_ROOT}/core/src"
     REQUIRES
-        esp_app_format
-        espcoredump
-        esp_http_client
-        esp-tls
-        esp_timer
-        efuse
-        freertos
+        ${HONCH_ESP_REQUIRES}
 )
+
+if(CONFIG_HONCH_ERROR_TRACKING)
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_ERROR_TRACKING=1)
+else()
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_ERROR_TRACKING=0)
+endif()
+
+if(CONFIG_HONCH_CRASH_SYMBOLICATION)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE HONCH_ENABLE_CRASH_SYMBOLICATION=1)
+else()
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE HONCH_ENABLE_CRASH_SYMBOLICATION=0)
+endif()
 
 if(CONFIG_RATE_SWEEP_FLUSH_TIMING)
     target_compile_definitions(${COMPONENT_LIB} PRIVATE HONCH_FLUSH_TIMING=1)

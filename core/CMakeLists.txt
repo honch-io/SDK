@@ -1,3 +1,5 @@
+option(HONCH_ENABLE_ERROR_TRACKING "Compile Honch automatic error tracking support" ON)
+
 set(HONCH_CORE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_core.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_event_record.c
@@ -27,6 +29,10 @@ function(honch_configure_core_objects target)
     )
 
     target_compile_features(${target} PUBLIC c_std_11)
+
+    target_compile_definitions(${target} PUBLIC
+        HONCH_ENABLE_ERROR_TRACKING=$<BOOL:${HONCH_ENABLE_ERROR_TRACKING}>
+    )
 
     target_compile_options(${target} PRIVATE
         $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>

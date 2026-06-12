@@ -68,6 +68,10 @@ ctest --test-dir build --output-on-failure
 
 The C targets build with warnings enabled and warnings treated as errors.
 
+Automatic `$error` support is compiled in by default for source compatibility.
+Use `-DHONCH_ENABLE_ERROR_TRACKING=OFF` to compile out the shared core fault
+snapshot and `$error` emission path.
+
 ## Install
 
 Install the production library and headers:

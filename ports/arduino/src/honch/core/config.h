@@ -11,6 +11,10 @@
 
 #define HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS 0xffffffffu
 
+#ifndef HONCH_ENABLE_ERROR_TRACKING
+#define HONCH_ENABLE_ERROR_TRACKING 1
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

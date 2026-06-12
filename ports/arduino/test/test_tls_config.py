@@ -182,6 +182,19 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         self.assertIn("coreConfig.enable_error_tracking = config.enableErrorTracking;", wrapper)
         self.assertIn("coreConfig.fault_snapshot = &gFaultSnapshot;", wrapper)
 
+    def test_arduino_error_tracking_can_be_compiled_out(self) -> None:
+        adapter = read("ports/arduino/src/honch_arduino_adapter.h")
+        platform = read("ports/arduino/src/honch_arduino_platform.cpp")
+        wrapper = read("ports/arduino/src/Honch.cpp")
+        core = read("ports/arduino/src/honch_core.c")
+        config = read("ports/arduino/src/honch/core/config.h")
+
+        self.assertIn("#if HONCH_ENABLE_ERROR_TRACKING", adapter)
+        self.assertIn("#if HONCH_ENABLE_ERROR_TRACKING", platform)
+        self.assertIn("#if HONCH_ENABLE_ERROR_TRACKING", wrapper)
+        self.assertIn("#if HONCH_ENABLE_ERROR_TRACKING", core)
+        self.assertIn("#ifndef HONCH_ENABLE_ERROR_TRACKING", config)
+
 
 if __name__ == "__main__":
     unittest.main()

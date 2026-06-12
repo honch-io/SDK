@@ -18,7 +18,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
-#if defined(CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH) && CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH && \
+#if HONCH_ENABLE_CRASH_SYMBOLICATION && \
+    defined(CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH) && CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH && \
     defined(CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF) && CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF
 #define HONCH_ESP_HAS_COREDUMP_SUMMARY 1
 #include "esp_core_dump.h"
@@ -27,12 +28,6 @@
 static const char *TAG = "honch";
 static const int64_t HONCH_MIN_UNIX_TIME_SECONDS = 1577836800;
 #define HONCH_ESP_MUTEX_LOCK_TIMEOUT_MS 10u
-
-typedef struct honch_esp_crash_summary {
-    char fault_pc[HONCH_ESP_FAULT_PC_MAX_BYTES + 1u];
-    char backtrace[HONCH_ESP_BACKTRACE_MAX_BYTES + 1u];
-    char task_name[HONCH_ESP_TASK_NAME_MAX_BYTES + 1u];
-} honch_esp_crash_summary_t;
 
 static TickType_t honch_esp_lock_ticks(uint32_t timeout_ms)
 {
@@ -188,6 +183,13 @@ honch_status_t honch_esp_default_device_id(char *buffer, size_t buffer_size)
     return HONCH_STATUS_OK;
 }
 
+#if HONCH_ENABLE_ERROR_TRACKING
+typedef struct honch_esp_crash_summary {
+    char fault_pc[HONCH_ESP_FAULT_PC_MAX_BYTES + 1u];
+    char backtrace[HONCH_ESP_BACKTRACE_MAX_BYTES + 1u];
+    char task_name[HONCH_ESP_TASK_NAME_MAX_BYTES + 1u];
+} honch_esp_crash_summary_t;
+
 static const char *honch_esp_firmware_build_id(void)
 {
     static char build_id[HONCH_ESP_BUILD_ID_MAX_BYTES + 1u];
@@ -324,3 +326,4 @@ honch_fault_snapshot_t honch_esp_fault_snapshot(bool include_symbolication_conte
             return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_UNKNOWN, "unknown", include_symbolication_context);
     }
 }
+#endif

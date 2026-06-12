@@ -37,6 +37,24 @@ class PosixCMakeTargetTests(unittest.TestCase):
         self.assertIn("target_compile_options(honch_core_bench_objects PRIVATE", cmake)
         self.assertNotIn("target_compile_options(honch_core_objects PRIVATE\n        -include", cmake)
 
+    def test_core_error_tracking_can_be_compiled_out(self) -> None:
+        core_cmake = (ROOT / "core/CMakeLists.txt").read_text(encoding="utf-8")
+        posix_cmake = (ROOT / "ports/posix/CMakeLists.txt").read_text(encoding="utf-8")
+        core_config = (ROOT / "core/include/honch/core/config.h").read_text(encoding="utf-8")
+        core = (ROOT / "core/src/honch_core.c").read_text(encoding="utf-8")
+
+        self.assertIn(
+            'option(HONCH_ENABLE_ERROR_TRACKING "Compile Honch automatic error tracking support" ON)',
+            core_cmake,
+        )
+        self.assertIn(
+            "HONCH_ENABLE_ERROR_TRACKING=$<BOOL:${HONCH_ENABLE_ERROR_TRACKING}>",
+            core_cmake,
+        )
+        self.assertIn("option(HONCH_ENABLE_ERROR_TRACKING", posix_cmake)
+        self.assertIn("#ifndef HONCH_ENABLE_ERROR_TRACKING", core_config)
+        self.assertIn("#if HONCH_ENABLE_ERROR_TRACKING", core)
+
     def test_posix_benchmarks_configure_when_parent_preloads_core_without_benchmarks(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             source_dir = Path(temp_dir) / "source"

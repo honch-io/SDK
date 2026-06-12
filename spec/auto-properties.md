@@ -68,6 +68,12 @@ are raw identifiers and addresses for server-side symbolication; the SDK does
 not send source code, source paths, symbol files, RAM snapshots, or full
 coredumps.
 
+Ports may make `$error` support build-strip modular. When
+`HONCH_ENABLE_ERROR_TRACKING=0` or an equivalent port build option is used, SDK
+fault snapshot collection and `$error` emission are compiled out. Runtime
+configuration fields may remain present for source compatibility but are inert
+in that build.
+
 `reset()` clears SDK identity, state, and queued events. It does not enqueue a
 `$device_reset` lifecycle event.
 

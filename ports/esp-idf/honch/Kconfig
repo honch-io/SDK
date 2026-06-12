@@ -1,0 +1,19 @@
+menu "Honch SDK"
+
+config HONCH_ERROR_TRACKING
+    bool "Enable automatic error tracking"
+    default y
+    help
+        Compile Honch automatic error tracking support. Disable this to strip
+        the SDK-owned fault snapshot and $error emission path from firmware.
+
+config HONCH_CRASH_SYMBOLICATION
+    bool "Enable crash symbolication context"
+    depends on HONCH_ERROR_TRACKING
+    default y
+    help
+        Include firmware build IDs and raw crash addresses from ESP-IDF ELF
+        coredump summaries so Honch can resolve function and source lines after
+        matching symbols are uploaded.
+
+endmenu

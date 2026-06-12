@@ -163,6 +163,12 @@ tooling.
 addresses to the exact firmware image. Customers should keep symbol upload and
 address symbolication as a server-side opt-in workflow.
 
+Error tracking is also build-strip modular. Disable `CONFIG_HONCH_ERROR_TRACKING`
+to compile out Honch's `$error` emission path. Disable
+`CONFIG_HONCH_CRASH_SYMBOLICATION` to keep automatic reset/error events but
+remove raw fault-address collection and the ESP-IDF `espcoredump` component
+dependency.
+
 ## Configuration options
 
 | Field                    | Required | Default        | Description                                |
