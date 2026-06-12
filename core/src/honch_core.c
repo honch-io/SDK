@@ -999,6 +999,126 @@ static honch_status_t honch_emit_firmware_update_locked(
     return status;
 }
 
+static const char *honch_fault_kind_source(honch_fault_kind_t kind)
+{
+    switch (kind) {
+    case HONCH_FAULT_KIND_NONE:
+        return "none";
+    case HONCH_FAULT_KIND_PANIC:
+        return "panic";
+    case HONCH_FAULT_KIND_WATCHDOG:
+        return "watchdog";
+    case HONCH_FAULT_KIND_ASSERT:
+        return "assert";
+    case HONCH_FAULT_KIND_BROWNOUT:
+        return "brownout";
+    case HONCH_FAULT_KIND_STACK_OVERFLOW:
+        return "stack_overflow";
+    case HONCH_FAULT_KIND_UNKNOWN:
+    default:
+        return "unknown";
+    }
+}
+
+static const char *honch_fault_severity_string(honch_fault_severity_t severity)
+{
+    switch (severity) {
+    case HONCH_FAULT_SEVERITY_INFO:
+        return "info";
+    case HONCH_FAULT_SEVERITY_WARNING:
+        return "warning";
+    case HONCH_FAULT_SEVERITY_FATAL:
+        return "fatal";
+    default:
+        return "fatal";
+    }
+}
+
+static bool honch_fault_snapshot_is_abnormal(const honch_fault_snapshot_t *fault_snapshot)
+{
+    return fault_snapshot != NULL && fault_snapshot->kind != HONCH_FAULT_KIND_NONE;
+}
+
+static const char *honch_fault_reset_reason(const honch_fault_snapshot_t *fault_snapshot)
+{
+    if (fault_snapshot == NULL || honch_is_blank(fault_snapshot->reset_reason)) {
+        return "unknown";
+    }
+    return fault_snapshot->reset_reason;
+}
+
+static honch_status_t honch_emit_fault_locked(
+    honch_client_t *client,
+    const honch_fault_snapshot_t *fault_snapshot,
+    honch_lifecycle_queue_tracker_t *lifecycle_tracker)
+{
+    if (!honch_fault_snapshot_is_abnormal(fault_snapshot)) {
+        return HONCH_OK;
+    }
+
+    honch_wire_v2_property_t properties[5];
+    size_t property_count = 0u;
+    honch_status_t status = honch_append_typed_property(
+        properties,
+        &property_count,
+        "source",
+        honch_str(honch_fault_kind_source(fault_snapshot->kind)),
+        true);
+    if (status == HONCH_OK) {
+        status = honch_append_typed_property(
+            properties,
+            &property_count,
+            "severity",
+            honch_str(honch_fault_severity_string(fault_snapshot->severity)),
+            true);
+    }
+    if (status == HONCH_OK) {
+        status = honch_append_typed_property(
+            properties,
+            &property_count,
+            "reset_reason",
+            honch_str(honch_fault_reset_reason(fault_snapshot)),
+            true);
+    }
+    if (status == HONCH_OK && !honch_is_blank(fault_snapshot->message)) {
+        status = honch_append_typed_property(
+            properties,
+            &property_count,
+            "message",
+            honch_str(fault_snapshot->message),
+            true);
+    }
+    if (status == HONCH_OK && !honch_is_blank(fault_snapshot->component)) {
+        status = honch_append_typed_property(
+            properties,
+            &property_count,
+            "component",
+            honch_str(fault_snapshot->component),
+            true);
+    }
+    if (status != HONCH_OK) {
+        return HONCH_OK;
+    }
+
+    honch_event_context_t event_context = {.battery_level = -1};
+    status = honch_prepare_event_context(client, &event_context);
+    if (status == HONCH_OK) {
+        status = honch_track_locked_internal(
+            client,
+            "$error",
+            properties,
+            property_count,
+            NULL,
+            0u,
+            event_context.battery_level,
+            true,
+            &event_context.auto_properties,
+            lifecycle_tracker);
+    }
+    honch_event_context_free(&event_context);
+    return HONCH_OK;
+}
+
 honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_t *config)
 {
     if (client == NULL || config == NULL || honch_is_blank(config->api_key) ||
@@ -1134,7 +1254,7 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
         status = honch_prepare_event_context(next, &event_context);
         if (status == HONCH_OK) {
             const honch_wire_v2_property_t boot_properties[] = {
-                honch_prop("reset_reason", honch_str("unknown"))
+                honch_prop("reset_reason", honch_str(honch_fault_reset_reason(config->fault_snapshot)))
             };
             status = honch_track_locked_internal(
                 next,
@@ -1149,6 +1269,9 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
                 &lifecycle_tracker);
         }
         honch_event_context_free(&event_context);
+    }
+    if (status == HONCH_OK) {
+        status = honch_emit_fault_locked(next, config->fault_snapshot, &lifecycle_tracker);
     }
     if (status == HONCH_OK && firmware_version_pending_save) {
         status = honch_state_save_firmware_version(next);
