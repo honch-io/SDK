@@ -24,7 +24,7 @@
   - Subsequent `honch_shutdown()`/`honch_init()` cycles must not re-emit the same `$error`.
   - Add coverage for two init cycles after one panic snapshot yielding one `$error`.
 
-- [ ] 5. Only set `crash_summary_version` when a summary exists.
+- [x] 5. Only set `crash_summary_version` when a summary exists.
   - File: `ports/esp-idf/honch/src/esp_platform.c`.
   - Make crash summary fill return whether summary retrieval succeeded.
   - Set `crash_summary_version=1` only when a relevant summary exists.

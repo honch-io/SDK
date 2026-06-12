@@ -240,7 +240,7 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("esp_core_dump_get_summary", platform)
         self.assertIn("CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH", platform)
         self.assertIn("CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF", platform)
-        self.assertIn("crash_summary_version = include_symbolication_context ? 1u : 0u", platform)
+        self.assertIn("crash_summary_version = has_crash_summary ? 1u : 0u", platform)
         self.assertIn("firmware_build_id", platform)
         self.assertIn("fault_pc", platform)
         self.assertIn("backtrace", platform)
@@ -301,6 +301,21 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_BROWNOUT, \"brownout\", false)", snapshot_body)
         self.assertIn("HONCH_FAULT_KIND_BROWNOUT,\n                \"power_glitch\",\n                false", snapshot_body)
         self.assertIn("honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_UNKNOWN, \"unknown\", false)", snapshot_body)
+
+    def test_esp_idf_claims_crash_summary_only_when_summary_read_succeeds(self) -> None:
+        platform = read("ports/esp-idf/honch/src/esp_platform.c")
+        fill_body = c_function_body(platform, "honch_esp_crash_summary_fill")
+        abnormal_body = c_function_body(platform, "honch_esp_abnormal_fault_snapshot")
+
+        self.assertIn("static bool honch_esp_crash_summary_fill", platform)
+        self.assertIn("return false;", fill_body)
+        self.assertIn("return true;", fill_body)
+        self.assertIn(
+            "bool has_crash_summary = include_symbolication_context && honch_esp_crash_summary_fill(&summary);",
+            abnormal_body,
+        )
+        self.assertIn("build_id = has_crash_summary ? honch_esp_firmware_build_id() : NULL;", abnormal_body)
+        self.assertIn(".crash_summary_version = has_crash_summary ? 1u : 0u", abnormal_body)
 
     def test_esp_idf_error_tracking_is_build_strip_modular(self) -> None:
         root_kconfig = read("Kconfig")

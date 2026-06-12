@@ -202,17 +202,17 @@ static const char *honch_esp_firmware_build_id(void)
     return build_id;
 }
 
-static void honch_esp_crash_summary_fill(honch_esp_crash_summary_t *summary)
+static bool honch_esp_crash_summary_fill(honch_esp_crash_summary_t *summary)
 {
     if (summary == NULL) {
-        return;
+        return false;
     }
     *summary = (honch_esp_crash_summary_t){0};
 
 #if HONCH_ESP_HAS_COREDUMP_SUMMARY
     esp_core_dump_summary_t core_summary = {0};
     if (esp_core_dump_get_summary(&core_summary) != ESP_OK) {
-        return;
+        return false;
     }
 
     if (core_summary.exc_pc != 0u) {
@@ -251,7 +251,9 @@ static void honch_esp_crash_summary_fill(honch_esp_crash_summary_t *summary)
     if (core_summary.exc_task[0] != '\0') {
         (void)snprintf(summary->task_name, sizeof(summary->task_name), "%s", core_summary.exc_task);
     }
+    return true;
 #endif
+    return false;
 }
 
 static honch_fault_snapshot_t honch_esp_abnormal_fault_snapshot(
@@ -261,17 +263,14 @@ static honch_fault_snapshot_t honch_esp_abnormal_fault_snapshot(
 {
     static honch_esp_crash_summary_t summary;
     summary = (honch_esp_crash_summary_t){0};
-    const char *build_id = NULL;
-    if (include_symbolication_context) {
-        honch_esp_crash_summary_fill(&summary);
-        build_id = honch_esp_firmware_build_id();
-    }
+    bool has_crash_summary = include_symbolication_context && honch_esp_crash_summary_fill(&summary);
+    const char *build_id = has_crash_summary ? honch_esp_firmware_build_id() : NULL;
 
     return (honch_fault_snapshot_t) {
         .kind = kind,
         .severity = HONCH_FAULT_SEVERITY_FATAL,
         .reset_reason = reset_reason,
-        .crash_summary_version = include_symbolication_context ? 1u : 0u,
+        .crash_summary_version = has_crash_summary ? 1u : 0u,
         .firmware_build_id = build_id,
         .fault_pc = summary.fault_pc[0] != '\0' ? summary.fault_pc : NULL,
         .backtrace = summary.backtrace[0] != '\0' ? summary.backtrace : NULL,
