@@ -10,6 +10,7 @@
 #include <sys/time.h>
 
 #include "esp_app_desc.h"
+#include "esp_idf_version.h"
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_random.h"
@@ -321,6 +322,31 @@ honch_fault_snapshot_t honch_esp_fault_snapshot(bool include_symbolication_conte
                 .severity = HONCH_FAULT_SEVERITY_INFO,
                 .reset_reason = "external"
             };
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0)
+        case ESP_RST_USB:
+            return (honch_fault_snapshot_t) {
+                .kind = HONCH_FAULT_KIND_NONE,
+                .severity = HONCH_FAULT_SEVERITY_INFO,
+                .reset_reason = "usb"
+            };
+        case ESP_RST_JTAG:
+            return (honch_fault_snapshot_t) {
+                .kind = HONCH_FAULT_KIND_NONE,
+                .severity = HONCH_FAULT_SEVERITY_INFO,
+                .reset_reason = "jtag"
+            };
+        case ESP_RST_EFUSE:
+            return (honch_fault_snapshot_t) {
+                .kind = HONCH_FAULT_KIND_NONE,
+                .severity = HONCH_FAULT_SEVERITY_INFO,
+                .reset_reason = "efuse"
+            };
+        case ESP_RST_PWR_GLITCH:
+            return honch_esp_abnormal_fault_snapshot(
+                HONCH_FAULT_KIND_BROWNOUT,
+                "power_glitch",
+                include_symbolication_context);
+#endif
         case ESP_RST_UNKNOWN:
         default:
             return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_UNKNOWN, "unknown", include_symbolication_context);

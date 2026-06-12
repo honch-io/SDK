@@ -95,6 +95,10 @@ Connectivity changes are not auto-detected by the portable core.
 | `"brownout"` | Brownout detector |
 | `"external"` | External reset |
 | `"sdio"` | SDIO reset |
+| `"usb"` | Native USB reset |
+| `"jtag"` | JTAG reset |
+| `"efuse"` | eFuse error reset |
+| `"power_glitch"` | Power glitch detector |
 | `"unknown"` | Other/unrecognized |
 
 ## Explicitly Excluded

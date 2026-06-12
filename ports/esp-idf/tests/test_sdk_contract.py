@@ -250,6 +250,23 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("config->enable_error_tracking && config->enable_crash_symbolication", compat)
         self.assertIn("core_config.fault_snapshot = &fault_snapshot;", compat)
 
+    def test_esp_idf_maps_idf_5_1_reset_reasons_without_fatal_unknown(self) -> None:
+        platform = read("ports/esp-idf/honch/src/esp_platform.c")
+        snapshot_body = c_function_body(platform, "honch_esp_fault_snapshot")
+
+        for reset_reason, reset_string in (
+            ("ESP_RST_USB", '"usb"'),
+            ("ESP_RST_JTAG", '"jtag"'),
+            ("ESP_RST_EFUSE", '"efuse"'),
+        ):
+            self.assertIn(reset_reason, snapshot_body)
+            self.assertIn(reset_string, snapshot_body)
+
+        self.assertIn("ESP_RST_PWR_GLITCH", snapshot_body)
+        self.assertIn('"power_glitch"', snapshot_body)
+        self.assertIn("HONCH_FAULT_KIND_BROWNOUT", snapshot_body)
+        self.assertIn("ESP_IDF_VERSION_VAL(5, 1, 0)", platform)
+
     def test_esp_idf_error_tracking_is_build_strip_modular(self) -> None:
         root_kconfig = read("Kconfig")
         cmake = read("ports/esp-idf/honch/CMakeLists.txt")

@@ -8,6 +8,7 @@
 #ifdef ARDUINO
 #include <Arduino.h>
 #include <Esp.h>
+#include <esp_idf_version.h>
 #include <esp_system.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
@@ -155,6 +156,28 @@ honch_fault_snapshot_t honch_arduino_fault_snapshot() {
           HONCH_FAULT_KIND_NONE,
           HONCH_FAULT_SEVERITY_INFO,
           "external");
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0)
+    case ESP_RST_USB:
+      return honch_arduino_reset_snapshot(
+          HONCH_FAULT_KIND_NONE,
+          HONCH_FAULT_SEVERITY_INFO,
+          "usb");
+    case ESP_RST_JTAG:
+      return honch_arduino_reset_snapshot(
+          HONCH_FAULT_KIND_NONE,
+          HONCH_FAULT_SEVERITY_INFO,
+          "jtag");
+    case ESP_RST_EFUSE:
+      return honch_arduino_reset_snapshot(
+          HONCH_FAULT_KIND_NONE,
+          HONCH_FAULT_SEVERITY_INFO,
+          "efuse");
+    case ESP_RST_PWR_GLITCH:
+      return honch_arduino_reset_snapshot(
+          HONCH_FAULT_KIND_BROWNOUT,
+          HONCH_FAULT_SEVERITY_FATAL,
+          "power_glitch");
+#endif
     case ESP_RST_UNKNOWN:
     default:
       return honch_arduino_reset_snapshot(

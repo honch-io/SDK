@@ -182,6 +182,22 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         self.assertIn("coreConfig.enable_error_tracking = config.enableErrorTracking;", wrapper)
         self.assertIn("coreConfig.fault_snapshot = &gFaultSnapshot;", wrapper)
 
+    def test_arduino_maps_idf_5_1_reset_reasons_without_fatal_unknown(self) -> None:
+        platform = read("ports/arduino/src/honch_arduino_platform.cpp")
+
+        for reset_reason, reset_string in (
+            ("ESP_RST_USB", '"usb"'),
+            ("ESP_RST_JTAG", '"jtag"'),
+            ("ESP_RST_EFUSE", '"efuse"'),
+        ):
+            self.assertIn(reset_reason, platform)
+            self.assertIn(reset_string, platform)
+
+        self.assertIn("ESP_RST_PWR_GLITCH", platform)
+        self.assertIn('"power_glitch"', platform)
+        self.assertIn("HONCH_FAULT_KIND_BROWNOUT", platform)
+        self.assertIn("ESP_IDF_VERSION_VAL(5, 1, 0)", platform)
+
     def test_arduino_error_tracking_can_be_compiled_out(self) -> None:
         adapter = read("ports/arduino/src/honch_arduino_adapter.h")
         platform = read("ports/arduino/src/honch_arduino_platform.cpp")
