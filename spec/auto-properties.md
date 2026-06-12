@@ -48,7 +48,7 @@ These events are emitted automatically by the SDK:
 | Event | When | Extra Properties |
 |-------|------|-----------------|
 | `$device_boot` | End of `init()` | `reset_reason` (string) |
-| `$error` | End of `init()`, when enabled and a supported port reports an abnormal reset | `source`, `severity`, `reset_reason`, optional `message`, optional `component`, optional `crash_summary_version`, optional `firmware_build_id`, optional `fault_pc`, optional `backtrace`, optional `task_name` |
+| `$error` | End of `init()`, when enabled and a supported port reports an abnormal reset | `source`, `severity`, `reset_reason`, optional `message`, optional `component`, optional `crash_summary_version`, optional `firmware_build_id`, optional `exception_cause`, optional `fault_pc`, optional `backtrace`, optional `task_name` |
 | `$device_shutdown` | Start of `shutdown()` | — |
 | `$firmware_update` | Boot, if version changed | `previous_version`, `new_version` |
 | `$battery_low` | Battery drops below threshold | `level` (int) |
@@ -61,12 +61,12 @@ coredump, register dump, stack capture, minidump, symbolication feed, or crash
 forensics system.
 
 Code-sensitive symbolication context is separately opt-in where a port exposes
-it. ESP-IDF may send `firmware_build_id`, `fault_pc`, `backtrace`, and
-`task_name` when automatic error tracking and crash symbolication context are
-both enabled and ESP-IDF coredump summary metadata is available. These fields
-are raw identifiers and addresses for server-side symbolication; the SDK does
-not send source code, source paths, symbol files, RAM snapshots, or full
-coredumps.
+it. Ports may send `exception_cause`, `firmware_build_id`, `fault_pc`,
+`backtrace`, and `task_name` when automatic error tracking and crash
+symbolication context are both enabled and platform crash summary metadata is
+available. These fields are raw identifiers, reasons, and addresses for
+server-side symbolication; the SDK does not send source code, source paths,
+symbol files, RAM snapshots, or full coredumps.
 
 Ports may make `$error` support build-strip modular. When
 `HONCH_ENABLE_ERROR_TRACKING=0` or an equivalent port build option is used, SDK

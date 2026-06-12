@@ -1247,7 +1247,9 @@ static honch_status_t honch_emit_fault_locked(
             lifecycle_tracker);
     }
     honch_event_context_free(&event_context);
-    return HONCH_OK;
+    return status == HONCH_ERROR_INVALID_ARGUMENT || status == HONCH_ERROR_REJECTED ?
+        HONCH_OK :
+        status;
 }
 #endif
 

@@ -777,6 +777,35 @@ static void test_failed_init_rolls_back_queued_lifecycle_events(void)
     assert(strcmp(storage.firmware_version, "1.0.0") == 0);
 }
 
+static void test_failed_error_capture_queue_rolls_back_lifecycle_events(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .fail_queue_push_call = 2,
+        .track_queue_depth = 1
+    };
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    honch_fault_snapshot_t fault = {
+        .kind = HONCH_FAULT_KIND_PANIC,
+        .severity = HONCH_FAULT_SEVERITY_FATAL,
+        .reset_reason = "panic"
+    };
+    config.fault_snapshot = &fault;
+    config.enable_error_tracking = true;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_ERROR_IO);
+    assert(client == NULL);
+    assert(storage.queue_push_calls == 2);
+    assert(storage.queue_consume_calls == 1);
+    assert(storage.queue_depth == 0u);
+    assert(storage.queued_sequence_count == 0u);
+}
+
 static void test_failed_reset_second_identity_write_preserves_persisted_identity(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
@@ -1507,6 +1536,7 @@ int main(void)
     test_init_rejects_mutex_required_platform_without_lock_callbacks();
     test_failed_firmware_update_queue_does_not_advance_persisted_version();
     test_failed_init_rolls_back_queued_lifecycle_events();
+    test_failed_error_capture_queue_rolls_back_lifecycle_events();
     test_failed_reset_second_identity_write_preserves_persisted_identity();
     test_set_property_rejects_blank_key();
     test_set_property_rejects_reserved_key();

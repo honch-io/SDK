@@ -154,7 +154,9 @@ with `source`, `severity`, and `reset_reason` properties during `honch_init()`.
 When `enable_crash_symbolication` is also true, ESP-IDF flash ELF coredump
 summary metadata is enabled, and ESP-IDF exposes a summary for the previous
 crash, the event may also include `crash_summary_version`,
-`firmware_build_id`, raw `fault_pc`, raw `backtrace`, and `task_name`.
+`firmware_build_id`, raw `fault_pc`, raw `backtrace`, and `task_name`. The
+shared `$error` contract also supports optional `exception_cause` for ports
+that can provide a bounded CPU exception name.
 Honch does not save coredumps, collect RAM/register/task snapshots, upload
 symbol files, send source code/source paths, or replace ESP-IDF crash forensics
 tooling.
