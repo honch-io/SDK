@@ -68,6 +68,6 @@
 
 - [x] Normal POSIX CMake/ctest.
 - [x] POSIX CMake/ctest with `-DHONCH_ENABLE_ERROR_TRACKING=OFF`.
-- [ ] Python contract tests for ESP-IDF, Arduino, POSIX, and MicroPython.
+- [x] Python contract tests for ESP-IDF, Arduino, POSIX, and MicroPython.
 - [x] ESP-IDF footprint build on Citadel.
 - [ ] Optional ESP32 crash run for duplicate/stale summary behavior.
