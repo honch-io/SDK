@@ -160,6 +160,19 @@ bool HonchClass::track(const char *eventName, const honch_property_t *properties
   return ok;
 }
 
+bool HonchClass::reportError(
+    const honch_error_report_t &report,
+    const honch_property_t *properties,
+    size_t propertyCount) {
+  honch_status_t lockStatus = lockInstance();
+  if (lockStatus != HONCH_OK) {
+    return false;
+  }
+  bool ok = setLastStatusLocked(honch_core_report_error(_client, &report, properties, propertyCount));
+  unlockInstance();
+  return ok;
+}
+
 bool HonchClass::identify(const char *distinctId, const honch_property_t *traits, size_t traitCount) {
   honch_status_t lockStatus = lockInstance();
   if (lockStatus != HONCH_OK) {

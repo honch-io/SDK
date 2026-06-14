@@ -28,8 +28,15 @@ Honch is not silent on the wire. The SDK stamps required context and can
 auto-emit `$device_boot`, `$device_shutdown`, `$firmware_update`,
 `$battery_low`, `$session_start`, and `$session_end`; those auto-emitted
 events create analytics traffic and queue pressure even when the host only
-calls `init`, session, battery, or shutdown APIs. Automatic `$error` capture is
-disabled by default and must be explicitly enabled by ports that expose it.
+calls `init`, session, battery, or shutdown APIs. Runtime `$error` reporting is
+available through the SDK `report_error` APIs where ports expose them.
+Automatic boot-after-fault `$error` capture is disabled by default and must be
+explicitly enabled by ports that expose it.
+
+`report_error` queues a normal `$error` analytics event with bounded
+`source="runtime"`, `severity`, `message`, and optional type/component/code/
+backtrace fields plus caller properties. It follows the same queue, tick, flush,
+and retry policy as `track`; it does not perform immediate network I/O.
 
 Automatic `$error` capture is lightweight crash telemetry, not coredump
 collection. When enabled, ESP-IDF maps platform reset reasons such as panic,
@@ -37,8 +44,8 @@ watchdog, brownout, and unknown reset into a bounded `$error` event during
 init. ESP-IDF can also optionally include a firmware build identifier and raw
 crash addresses for server-side symbolication; the SDK does not send source
 code, symbol files, or source paths. Arduino ESP32 maps reset reasons through
-the same opt-in automatic path without raw crash addresses. C/POSIX and
-MicroPython do not currently install automatic fault hooks.
+the same opt-in automatic path without raw crash addresses. C/POSIX can install
+opt-in signal breadcrumbs that are converted to `$error` on the next init.
 
 Automatic error tracking is build-strip modular. CMake and embedded ports may
 compile with `HONCH_ENABLE_ERROR_TRACKING=0` to remove the SDK-owned `$error`

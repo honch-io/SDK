@@ -90,10 +90,12 @@ state from the supplied device/config values, and queues `$device_boot` before
 returning. It does not perform network I/O; delivery remains cooperative through
 `tick()` or explicit `flush()` calls.
 
-The MicroPython port does not currently install VM exception hooks, panic hooks,
-or board-specific reset-reason adapters for automatic `$error` capture. If a
-board needs reset-reason telemetry, add it in the user module adapter so the
-Python API stays focused on product analytics calls.
+Use `client.report_error(...)` from runtime exception paths to queue `$error`.
+`client.run_with_error_tracking(fn, *args, **kwargs)` wraps a callable, reports
+raised exceptions, then re-raises them. `client.install_error_hook()` installs a
+best-effort `sys.excepthook` wrapper only on runtimes that expose that hook.
+The port still does not install panic hooks or board-specific reset-reason
+adapters; board reset telemetry belongs in the user module adapter.
 
 client.tick() and client.flush() may block for up to the configured transport
 timeout because urequests.post holds the MicroPython interpreter while the HTTP
@@ -114,6 +116,9 @@ be fast and read host-owned connectivity state.
 
 ```python
 client.track(event_name, properties=None)
+client.report_error(message, severity="error", error_type=None, component=None, code=None, backtrace=None, properties=None)
+client.run_with_error_tracking(fn, *args, **kwargs)
+client.install_error_hook()
 client.identify(distinct_id, traits=None)
 client.set_property(key, value=None)
 client.session_start(session_name=None)

@@ -26,6 +26,9 @@ class FakeCoreClient:
     def set_property(self, key, value):
         self.calls.append(("set_property", key, value))
 
+    def report_error(self, report, properties):
+        self.calls.append(("report_error", report, properties))
+
     def session_start(self, session_name):
         self.calls.append(("session_start", session_name))
 
@@ -103,6 +106,7 @@ class ClientWrapperTests(unittest.TestCase):
         self.assertNotIn("enable_wire_v2", client._core.config)
 
         client.track("pressed", {"button": "power"})
+        client.report_error("runtime failed", severity="error", error_type="RuntimeError", properties={"handled": False})
         client.identify("user-1", {"plan": "beta"})
         client.set_property("mode", "hdr")
         client.session_start("recording")
@@ -117,6 +121,18 @@ class ClientWrapperTests(unittest.TestCase):
             client._core.calls,
             [
                 ("track", "pressed", {"button": "power"}),
+                (
+                    "report_error",
+                    {
+                        "message": "runtime failed",
+                        "severity": "error",
+                        "type": "RuntimeError",
+                        "component": None,
+                        "code": None,
+                        "backtrace": None,
+                    },
+                    {"handled": False},
+                ),
                 ("identify", "user-1", {"plan": "beta"}),
                 ("set_property", "mode", "hdr"),
                 ("session_start", "recording"),

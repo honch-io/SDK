@@ -45,6 +45,64 @@ class Honch:
         require_event_name(event_name)
         self._call("track", event_name, require_properties(properties))
 
+    def report_error(
+        self,
+        message,
+        *,
+        severity="error",
+        error_type=None,
+        component=None,
+        code=None,
+        backtrace=None,
+        properties=None,
+    ):
+        if severity not in ("info", "warning", "error", "fatal"):
+            raise InvalidArgumentError("invalid error severity")
+        if not isinstance(message, str) or message.strip() == "":
+            raise InvalidArgumentError("invalid error message")
+        report = {
+            "message": message,
+            "severity": severity,
+            "type": error_type,
+            "component": component,
+            "code": code,
+            "backtrace": backtrace,
+        }
+        self._call("report_error", report, require_properties(properties))
+
+    def run_with_error_tracking(self, fn, *args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:
+            self.report_error(
+                str(exc) or repr(exc),
+                severity="fatal",
+                error_type=exc.__class__.__name__,
+            )
+            raise
+
+    def install_error_hook(self):
+        try:
+            import sys
+        except ImportError:
+            return False
+        previous_hook = getattr(sys, "excepthook", None)
+        if previous_hook is None:
+            return False
+
+        def honch_excepthook(exc_type, exc, tb):
+            try:
+                self.report_error(
+                    str(exc) or repr(exc),
+                    severity="fatal",
+                    error_type=getattr(exc_type, "__name__", "Exception"),
+                )
+            finally:
+                previous_hook(exc_type, exc, tb)
+
+        sys.excepthook = honch_excepthook
+        return True
+
     def identify(self, distinct_id, traits=None):
         require_distinct_id(distinct_id)
         self._call("identify", distinct_id, require_properties(traits))

@@ -135,7 +135,7 @@ values for one app build.
 
 **Lifecycle events** (emitted automatically):
 - `$device_boot` — on init, with `reset_reason` property
-- `$error` — when `enable_error_tracking` is true, on init after an abnormal ESP reset reason such as panic, watchdog, brownout, or unknown reset
+- `$error` — when you call `honch_report_error()`, or when `enable_error_tracking` is true on init after an abnormal ESP reset reason such as panic, watchdog, brownout, or unknown reset
 - `$device_shutdown` — on `honch_shutdown()`, followed by a synchronous flush
 - `$firmware_update` — on boot if firmware version changed and durable state storage is supplied
 - `$battery_low` — when battery drops below threshold (default 15%), emitted once until recovery
@@ -147,7 +147,11 @@ identity and firmware-version state, and queues `$device_boot` before returning.
 It does not perform network I/O; delivery remains cooperative through
 `honch_tick()` or explicit flush calls.
 
-Automatic `$error` capture support is compiled in by default, but runtime
+Call `honch_report_error()` from normal task context to queue runtime `$error`
+events. It follows the same queue and flush policy as `honch_track()` and does
+not perform immediate network I/O.
+
+Automatic `$error` capture support is compiled in by default, but boot fault
 capture is disabled unless `enable_error_tracking` is true. When enabled, the
 SDK maps panic, interrupt/task/other watchdog, brownout, and unknown reset
 reasons into a bounded `$error` event with `source`, `severity`, and

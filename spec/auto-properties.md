@@ -55,10 +55,15 @@ These events are emitted automatically by the SDK:
 | `$session_start` | `session_start()` called | `session_name` (string, optional) |
 | `$session_end` | `session_end()` called | — |
 
-`$error` is opt-in lightweight fault telemetry. It records bounded properties
-available during normal SDK init after a previous abnormal reset. It is not a
-coredump, register dump, stack capture, minidump, symbolication pipeline, or
-crash forensics system.
+`$error` is lightweight error telemetry. Runtime SDK `report_error` APIs queue
+`$error` events with `source="runtime"`, a severity, a message, and optional
+type/component/code/backtrace fields. These calls use the normal event queue and
+delivery policy; they do not force an immediate upload.
+
+Automatic `$error` capture records bounded properties available during normal
+SDK init after a previous abnormal reset or supported crash breadcrumb. It is
+not a coredump, register dump, stack capture, minidump, symbolication pipeline,
+or crash forensics system.
 
 `$error` emission is best-effort. If the SDK cannot build or enqueue the
 automatic fault event during init because local queue/storage limits are tight,

@@ -445,6 +445,21 @@ honch_err_t honch_identify(const char *distinct_id, const honch_property_t *prop
     return honch_esp_status_to_err(status);
 }
 
+honch_err_t honch_report_error(
+    const honch_error_report_t *report,
+    const honch_property_t *properties,
+    size_t property_count)
+{
+    honch_client_t *client = NULL;
+    honch_err_t err = honch_esp_client_acquire(&client);
+    if (err != HONCH_OK) {
+        return err;
+    }
+    honch_status_t status = honch_core_report_error(client, report, properties, property_count);
+    honch_esp_client_release(client);
+    return honch_esp_status_to_err(status);
+}
+
 honch_err_t honch_set_property(const char *key, honch_value_t value)
 {
     honch_client_t *client = NULL;

@@ -148,7 +148,7 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertNotIn("build_event", client)
         self.assertNotIn("post_batch", client)
 
-    def test_micropython_has_no_manual_error_capture_surface(self):
+    def test_micropython_exposes_runtime_error_reporting(self):
         combined = "\n".join(
             [
                 self.read("ports/micropython/honch/client.py"),
@@ -157,14 +157,10 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
             ]
         )
 
-        for token in [
-            "capture_error",
-            "MP_QSTR_capture_error",
-            "honch_core_capture_error",
-            "HONCH_ERROR_HERE",
-            "HONCH_ERROR_CODE",
-        ]:
-            self.assertNotIn(token, combined)
+        self.assertIn("def report_error", combined)
+        self.assertIn("MP_QSTR_report_error", combined)
+        self.assertIn("honch_core_report_error", combined)
+        self.assertNotIn("capture_error", combined)
 
     def test_package_metadata_versions_match(self):
         init_py = self.read("ports/micropython/honch/__init__.py")

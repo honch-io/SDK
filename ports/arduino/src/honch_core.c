@@ -1002,6 +1002,8 @@ static honch_status_t honch_emit_firmware_update_locked(
 #define HONCH_FAULT_RESET_REASON_MAX_BYTES 64u
 #define HONCH_FAULT_MESSAGE_MAX_BYTES 160u
 #define HONCH_FAULT_COMPONENT_MAX_BYTES 64u
+#define HONCH_ERROR_TYPE_MAX_BYTES 64u
+#define HONCH_ERROR_CODE_MAX_BYTES 64u
 #define HONCH_FAULT_BUILD_ID_MAX_BYTES 64u
 #define HONCH_FAULT_EXCEPTION_CAUSE_MAX_BYTES 64u
 #define HONCH_FAULT_PC_MAX_BYTES 18u
@@ -1087,6 +1089,163 @@ static const char *honch_fault_severity_string(honch_fault_severity_t severity)
 static bool honch_fault_snapshot_is_abnormal(const honch_fault_snapshot_t *fault_snapshot)
 {
     return fault_snapshot != NULL && fault_snapshot->kind != HONCH_FAULT_KIND_NONE;
+}
+
+static const char *honch_error_severity_string(honch_error_severity_t severity)
+{
+    switch (severity) {
+    case HONCH_ERROR_SEVERITY_INFO:
+        return "info";
+    case HONCH_ERROR_SEVERITY_WARNING:
+        return "warning";
+    case HONCH_ERROR_SEVERITY_ERROR:
+        return "error";
+    case HONCH_ERROR_SEVERITY_FATAL:
+        return "fatal";
+    default:
+        return NULL;
+    }
+}
+
+static bool honch_error_property_key_is_owned(const char *key)
+{
+    static const char *owned_keys[] = {
+        "source",
+        "severity",
+        "message",
+        "type",
+        "component",
+        "code",
+        "backtrace",
+        "reset_reason",
+        "fault_pc",
+        "exception_cause",
+        "firmware_build_id",
+        "task_name",
+        "crash_summary_version"
+    };
+    if (key == NULL) {
+        return false;
+    }
+    for (size_t i = 0u; i < sizeof(owned_keys) / sizeof(owned_keys[0]); i++) {
+        if (strcmp(key, owned_keys[i]) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static honch_status_t honch_validate_error_extra_properties(
+    const honch_wire_v2_property_t *properties,
+    size_t property_count)
+{
+    if ((property_count > 0u && properties == NULL) ||
+        property_count > HONCH_MAX_EVENT_PROPERTIES) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    for (size_t i = 0u; i < property_count; i++) {
+        if (honch_validate_user_property_key(properties[i].key) != HONCH_OK ||
+            honch_error_property_key_is_owned(properties[i].key)) {
+            return HONCH_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    return HONCH_OK;
+}
+
+static honch_status_t honch_append_runtime_error_string(
+    honch_wire_v2_property_t *properties,
+    size_t *property_count,
+    const char *key,
+    const char *value,
+    size_t max_length,
+    bool required)
+{
+    size_t length = 0u;
+    if (!honch_fault_string_length(value, max_length, &length)) {
+        return required || value != NULL ? HONCH_ERROR_INVALID_ARGUMENT : HONCH_OK;
+    }
+    return honch_append_typed_property(
+        properties,
+        property_count,
+        key,
+        honch_strn(value, length),
+        true);
+}
+
+static honch_status_t honch_build_runtime_error_properties(
+    const honch_error_report_t *report,
+    honch_wire_v2_property_t *properties,
+    size_t *property_count)
+{
+    if (report == NULL || properties == NULL || property_count == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    const char *severity = honch_error_severity_string(report->severity);
+    if (severity == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    *property_count = 0u;
+    honch_status_t status = honch_append_typed_property(
+        properties,
+        property_count,
+        "source",
+        honch_str("runtime"),
+        true);
+    if (status == HONCH_OK) {
+        status = honch_append_typed_property(
+            properties,
+            property_count,
+            "severity",
+            honch_str(severity),
+            true);
+    }
+    if (status == HONCH_OK) {
+        status = honch_append_runtime_error_string(
+            properties,
+            property_count,
+            "message",
+            report->message,
+            HONCH_FAULT_MESSAGE_MAX_BYTES,
+            true);
+    }
+    if (status == HONCH_OK) {
+        status = honch_append_runtime_error_string(
+            properties,
+            property_count,
+            "type",
+            report->type,
+            HONCH_ERROR_TYPE_MAX_BYTES,
+            false);
+    }
+    if (status == HONCH_OK) {
+        status = honch_append_runtime_error_string(
+            properties,
+            property_count,
+            "component",
+            report->component,
+            HONCH_FAULT_COMPONENT_MAX_BYTES,
+            false);
+    }
+    if (status == HONCH_OK) {
+        status = honch_append_runtime_error_string(
+            properties,
+            property_count,
+            "code",
+            report->code,
+            HONCH_ERROR_CODE_MAX_BYTES,
+            false);
+    }
+    if (status == HONCH_OK) {
+        status = honch_append_runtime_error_string(
+            properties,
+            property_count,
+            "backtrace",
+            report->backtrace,
+            HONCH_FAULT_BACKTRACE_MAX_BYTES,
+            false);
+    }
+    return status;
 }
 
 static honch_status_t honch_emit_fault_locked(
@@ -1481,6 +1640,74 @@ honch_status_t honch_core_track(
     honch_event_context_free(&event_context);
     honch_client_leave(client);
     return status;
+}
+
+honch_status_t honch_core_report_error(
+    honch_client_t *client,
+    const honch_error_report_t *report,
+    const honch_wire_v2_property_t *properties,
+    size_t property_count)
+{
+#if !HONCH_ENABLE_ERROR_TRACKING
+    (void)report;
+    (void)properties;
+    (void)property_count;
+    honch_status_t disabled_status = honch_client_enter(client);
+    if (disabled_status != HONCH_OK) {
+        return disabled_status;
+    }
+    honch_client_leave(client);
+    return HONCH_ERROR_NOT_SUPPORTED;
+#else
+    honch_status_t status = honch_client_enter(client);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    status = honch_validate_error_extra_properties(properties, property_count);
+    honch_wire_v2_property_t trusted_properties[7];
+    size_t trusted_property_count = 0u;
+    if (status == HONCH_OK) {
+        status = honch_build_runtime_error_properties(
+            report,
+            trusted_properties,
+            &trusted_property_count);
+    }
+    if (status != HONCH_OK) {
+        honch_client_leave(client);
+        return status;
+    }
+
+    honch_event_context_t event_context = {.battery_level = -1};
+    status = honch_prepare_event_context(client, &event_context);
+    if (status != HONCH_OK) {
+        honch_client_leave(client);
+        return status;
+    }
+
+    status = honch_client_lock(client);
+    if (status != HONCH_OK) {
+        honch_event_context_free(&event_context);
+        honch_client_leave(client);
+        return status;
+    }
+
+    status = honch_track_locked_internal(
+        client,
+        "$error",
+        properties,
+        property_count,
+        trusted_properties,
+        trusted_property_count,
+        event_context.battery_level,
+        true,
+        &event_context.auto_properties,
+        NULL);
+    honch_client_unlock(client);
+    honch_event_context_free(&event_context);
+    honch_client_leave(client);
+    return status;
+#endif
 }
 
 honch_status_t honch_core_identify(

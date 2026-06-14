@@ -2,7 +2,97 @@
 #include "honch/posix/honch.h"
 #include "honch_internal.h"
 
+#include <fcntl.h>
+#include <signal.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+static char s_error_breadcrumb_path[512];
+
+static const char *honch_posix_signal_code(int signum)
+{
+    switch (signum) {
+    case SIGABRT:
+        return "SIGABRT";
+    case SIGSEGV:
+        return "SIGSEGV";
+    case SIGBUS:
+        return "SIGBUS";
+    case SIGILL:
+        return "SIGILL";
+    case SIGFPE:
+        return "SIGFPE";
+    default:
+        return "SIGNAL";
+    }
+}
+
+static void honch_posix_signal_handler(int signum)
+{
+    int fd = open(s_error_breadcrumb_path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (fd >= 0) {
+        char message[32];
+        size_t used = 0u;
+        const char prefix[] = "signal:";
+        for (size_t i = 0u; i < sizeof(prefix) - 1u; i++) {
+            message[used++] = prefix[i];
+        }
+        unsigned int value = signum < 0 ? 0u : (unsigned int)signum;
+        char digits[10];
+        size_t digit_count = 0u;
+        do {
+            digits[digit_count++] = (char)('0' + (value % 10u));
+            value /= 10u;
+        } while (value > 0u && digit_count < sizeof(digits));
+        while (digit_count > 0u && used < sizeof(message) - 1u) {
+            message[used++] = digits[--digit_count];
+        }
+        message[used++] = '\n';
+        (void)write(fd, message, used);
+        (void)close(fd);
+    }
+    (void)signal(signum, SIG_DFL);
+    (void)raise(signum);
+}
+
+static honch_status_t honch_posix_import_error_breadcrumb(honch_client_t *client)
+{
+    if (client == NULL || s_error_breadcrumb_path[0] == '\0') {
+        return HONCH_OK;
+    }
+    FILE *file = fopen(s_error_breadcrumb_path, "r");
+    if (file == NULL) {
+        return HONCH_OK;
+    }
+    int signum = 0;
+    int matched = fscanf(file, "signal:%d", &signum);
+    (void)fclose(file);
+    (void)unlink(s_error_breadcrumb_path);
+    if (matched != 1 || signum <= 0) {
+        return HONCH_OK;
+    }
+
+    honch_error_report_t report = {
+        .severity = HONCH_ERROR_SEVERITY_FATAL,
+        .message = "process terminated by signal",
+        .type = "Signal",
+        .component = "process",
+        .code = honch_posix_signal_code(signum)
+    };
+    return honch_core_report_error(client, &report, NULL, 0u);
+}
+
+static honch_status_t honch_posix_install_signal_handler(int signum)
+{
+    struct sigaction action;
+    memset(&action, 0, sizeof(action));
+    action.sa_handler = honch_posix_signal_handler;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = SA_RESETHAND;
+    return sigaction(signum, &action, NULL) == 0 ? HONCH_OK : HONCH_ERROR_IO;
+}
 
 static void honch_posix_config_to_core(const honch_config_t *config, honch_core_config_t *core_config)
 {
@@ -84,6 +174,7 @@ honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
     status = honch_core_init(client, &core_config);
     if (status == HONCH_OK) {
         transport_ctx->client = *client;
+        (void)honch_posix_import_error_breadcrumb(*client);
     } else {
         honch_posix_transport_ops_deinit(transport_ctx);
         free(transport_ctx);
@@ -107,6 +198,49 @@ honch_status_t honch_identify(
     size_t trait_count)
 {
     return honch_core_identify(client, distinct_id, traits, trait_count);
+}
+
+honch_status_t honch_report_error(
+    honch_client_t *client,
+    const honch_error_report_t *report,
+    const honch_property_t *properties,
+    size_t property_count)
+{
+    return honch_core_report_error(client, report, properties, property_count);
+}
+
+honch_status_t honch_install_error_handlers(const char *queue_directory)
+{
+    if (queue_directory == NULL || queue_directory[0] == '\0') {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    int written = snprintf(
+        s_error_breadcrumb_path,
+        sizeof(s_error_breadcrumb_path),
+        "%s/runtime-error.breadcrumb",
+        queue_directory);
+    if (written <= 0 || (size_t)written >= sizeof(s_error_breadcrumb_path)) {
+        s_error_breadcrumb_path[0] = '\0';
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+
+    honch_status_t status = honch_posix_install_signal_handler(SIGABRT);
+    if (status == HONCH_OK) {
+        status = honch_posix_install_signal_handler(SIGSEGV);
+    }
+    if (status == HONCH_OK) {
+        status = honch_posix_install_signal_handler(SIGBUS);
+    }
+    if (status == HONCH_OK) {
+        status = honch_posix_install_signal_handler(SIGILL);
+    }
+    if (status == HONCH_OK) {
+        status = honch_posix_install_signal_handler(SIGFPE);
+    }
+    if (status != HONCH_OK) {
+        s_error_breadcrumb_path[0] = '\0';
+    }
+    return status;
 }
 
 honch_status_t honch_set_property(honch_client_t *client, const char *key, honch_value_t value)

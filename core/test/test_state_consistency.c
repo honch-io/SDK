@@ -417,6 +417,88 @@ static void test_overlong_fault_fields_are_omitted_without_large_allocation(void
 }
 #endif
 
+static void test_runtime_error_report_queues_error_event(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    honch_error_report_t report = {
+        .severity = HONCH_ERROR_SEVERITY_ERROR,
+        .message = "camera worker failed",
+        .type = "RuntimeError",
+        .component = "camera",
+        .code = "E_CAMERA",
+        .backtrace = "capture_loop:42"
+    };
+    const honch_wire_v2_property_t properties[] = {
+        honch_prop("retryable", honch_bool(true))
+    };
+
+#if HONCH_ENABLE_ERROR_TRACKING
+    honch_status_t expected_status = HONCH_OK;
+#else
+    honch_status_t expected_status = HONCH_ERROR_NOT_SUPPORTED;
+#endif
+    assert(honch_core_report_error(client, &report, properties, 1u) == expected_status);
+
+#if HONCH_ENABLE_ERROR_TRACKING
+    assert(storage.queue_push_calls == 2);
+    honch_event_record_t record;
+    assert(honch_event_record_parse(storage.last_queued_data, storage.last_queued_size, &record) == HONCH_OK);
+    assert(strcmp(record.event_name, "$error") == 0);
+    assert_record_string_property(&record, "source", "runtime");
+    assert_record_string_property(&record, "severity", "error");
+    assert_record_string_property(&record, "message", "camera worker failed");
+    assert_record_string_property(&record, "type", "RuntimeError");
+    assert_record_string_property(&record, "component", "camera");
+    assert_record_string_property(&record, "code", "E_CAMERA");
+    assert_record_string_property(&record, "backtrace", "capture_loop:42");
+    const honch_wire_v2_property_t *retryable = find_record_property(&record, "retryable");
+    assert(retryable != NULL);
+    assert(retryable->value.type == HONCH_WIRE_V2_VALUE_TYPE_BOOL);
+    assert(retryable->value.bool_value);
+    honch_event_record_free(&record);
+#else
+    assert(storage.queue_push_calls == 1);
+#endif
+
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+#if HONCH_ENABLE_ERROR_TRACKING
+static void test_runtime_error_report_rejects_sdk_owned_property(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    int queue_push_calls = storage.queue_push_calls;
+    honch_error_report_t report = {
+        .severity = HONCH_ERROR_SEVERITY_WARNING,
+        .message = "reserved key probe"
+    };
+    const honch_wire_v2_property_t properties[] = {
+        honch_prop("message", honch_str("spoofed"))
+    };
+
+    assert(honch_core_report_error(client, &report, properties, 1u) ==
+        HONCH_ERROR_INVALID_ARGUMENT);
+    assert(storage.queue_push_calls == queue_push_calls);
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+#endif
+
 static honch_status_t fake_queue_consume(void *ctx, uint64_t sequence)
 {
     fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
@@ -1537,6 +1619,10 @@ int main(void)
     test_abnormal_reset_queues_error_event_when_enabled();
     test_oversized_fault_event_is_skipped_without_failing_init();
     test_overlong_fault_fields_are_omitted_without_large_allocation();
+#endif
+    test_runtime_error_report_queues_error_event();
+#if HONCH_ENABLE_ERROR_TRACKING
+    test_runtime_error_report_rejects_sdk_owned_property();
 #endif
     test_core_state_lock_works_without_platform_lock_callbacks();
     test_init_rejects_mutex_required_platform_without_lock_callbacks();

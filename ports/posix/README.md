@@ -127,6 +127,8 @@ API:
 honch_status_t honch_init(honch_client_t **client, const honch_config_t *config);
 honch_status_t honch_track(honch_client_t *client, const char *event_name, const honch_property_t *properties, size_t property_count);
 honch_status_t honch_identify(honch_client_t *client, const char *distinct_id, const honch_property_t *traits, size_t trait_count);
+honch_status_t honch_report_error(honch_client_t *client, const honch_error_report_t *report, const honch_property_t *properties, size_t property_count);
+honch_status_t honch_install_error_handlers(const char *queue_directory);
 honch_status_t honch_set_property(honch_client_t *client, const char *key, honch_value_t value);
 honch_status_t honch_session_start(honch_client_t *client, const char *session_name);
 honch_status_t honch_session_end(honch_client_t *client);
@@ -186,12 +188,12 @@ firmware-version state, and queues `$device_boot` before returning. It does not
 perform network I/O; delivery remains cooperative through `honch_tick()` or
 explicit flush calls.
 
-The C/POSIX SDK does not currently install signal handlers, core-pattern
-handlers, or other automatic process crash capture. `$device_boot` uses an
-`unknown` reset reason unless a platform adapter supplies one through the
-portable core config. For Linux-style crash capture, a future integration should
-be a separate, opt-in process/core handler rather than hidden work in
-`honch_init()`.
+Use `honch_report_error()` from normal runtime error paths to queue `$error`.
+Call `honch_install_error_handlers(queue_directory)` to opt into fatal POSIX
+signal breadcrumbs. The handler only writes a bounded breadcrumb with
+async-signal-safe syscalls; the next `honch_init()` imports it as `$error`.
+`$device_boot` uses an `unknown` reset reason unless a platform adapter supplies
+one through the portable core config.
 
 `honch_shutdown` returns `HONCH_ERROR_NOT_INITIALIZED` when called without a
 client, matching the ESP-IDF SDK's shutdown-before-init behavior. For a valid

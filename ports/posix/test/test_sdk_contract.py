@@ -278,7 +278,7 @@ class PosixChunkWireTest(unittest.TestCase):
         self.assertNotIn("disable_gzip", public + compat)
         self.assertNotIn("gzip_min_bytes", public + compat)
 
-    def test_public_api_has_no_manual_error_capture_surface(self) -> None:
+    def test_public_api_exposes_runtime_error_reporting(self) -> None:
         public = "\n".join(
             [
                 read("include/honch/honch.h"),
@@ -289,15 +289,11 @@ class PosixChunkWireTest(unittest.TestCase):
             ]
         )
 
-        for token in [
-            "honch_capture_error",
-            "honch_core_capture_error",
-            "capture_error",
-            "captureError",
-            "HONCH_ERROR_HERE",
-            "HONCH_ERROR_CODE",
-        ]:
-            self.assertNotIn(token, public)
+        self.assertIn("honch_error_report_t", public)
+        self.assertIn("honch_core_report_error", public)
+        self.assertIn("honch_report_error", public)
+        self.assertIn("reportError", public)
+        self.assertNotIn("capture_error", public)
 
     def test_docs_reference_chunk_wire_contract(self) -> None:
         readme = read("README.md")
