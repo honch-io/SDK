@@ -18,6 +18,7 @@ Stable SDKs are supported integration paths for product work. Preview SDKs are u
 | Package | Public status | Version | Path |
 | --- | --- | --- | --- |
 | React Native Relay | Preview | `0.1.0` | [`mobile/react-native-relay/`](mobile/react-native-relay/) |
+| Swift Relay | Preview | `0.1.0` | [`mobile/swift-relay/`](mobile/swift-relay/) |
 
 Relay packages are not application analytics SDKs. They forward device-originated Honch payloads through companion apps, so production rollout should include host-app and target-device validation.
 
@@ -65,6 +66,7 @@ queues should measure consume cost on their target hardware.
 - [`ports/micropython/`](ports/micropython/) — MicroPython wrapper and `_honch_core` user module.
 - [`ports/arduino/`](ports/arduino/) — preview Arduino ESP32 wrapper around the shared C core.
 - [`mobile/react-native-relay/`](mobile/react-native-relay/) — preview relay package for forwarding device-originated payloads through companion apps.
+- [`mobile/swift-relay/`](mobile/swift-relay/) — preview native Swift relay package for forwarding device-originated payloads through companion apps.
 - [`spec/`](spec/) — shared SDK/Capture contracts and conformance fixtures.
 
 ## Build And Test
