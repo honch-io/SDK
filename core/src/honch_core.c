@@ -816,6 +816,9 @@ static void honch_scheduler_record_flush_result(
 
 static bool honch_scheduler_due_locked(honch_client_t *client, uint64_t now)
 {
+    if (client->uploads_paused) {
+        return false;
+    }
     if (client->next_retry_flush_ms > now) {
         return false;
     }
@@ -2122,8 +2125,12 @@ honch_status_t honch_core_set_uploads_paused(honch_client_t *client, int paused)
         return status;
     }
 
-    client->uploads_paused = paused != 0;
-    if (client->uploads_paused) {
+    bool next_paused = paused != 0;
+    bool was_paused = client->uploads_paused;
+    client->uploads_paused = next_paused;
+    if (next_paused) {
+        client->scheduler_flush_requested = false;
+    } else if (was_paused) {
         client->scheduler_flush_requested = true;
     }
 
