@@ -24,6 +24,7 @@ struct ContractTests {
         try await testFileStoreCompletesMessageAcrossRestart()
         try await testFileStorePersistsRetryMetadataAcrossRestart()
         try await testFileStoreDeleteRemovesMessageAndChunks()
+        try testRelayConfigDefaultsToSecureIngestEndpoint()
         try testBuildsSingleWireV2UploadFrame()
         try testEncodesMultiByteWireV2MessageId()
         try testRetryPolicyParsesNumericRetryAfter()
@@ -60,6 +61,18 @@ private func expectEqual<T: Equatable>(_ actual: T, _ expected: T, _ message: St
     if actual != expected {
         throw ContractTestFailure("\(message): expected \(expected), got \(actual)")
     }
+}
+
+private func testRelayConfigDefaultsToSecureIngestEndpoint() throws {
+    let config = HonchRelayConfig(
+        projectKey: "project-key",
+        relayId: "relay-1",
+        relaySdkVersion: "0.1.0",
+        streamId: { "relay-\($0.deviceId)" },
+        messageId: { UInt64($0.sequence) ?? 0 }
+    )
+
+    try expectEqual(config.endpointURL, URL(string: "https://i.honch.io")!, "default endpoint")
 }
 
 private func testDecodesValidSingleRelayFrame() throws {

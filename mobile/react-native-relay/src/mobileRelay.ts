@@ -15,7 +15,7 @@ export type MobileRelayOptions = {
 
 export function createMobileRelay(options: MobileRelayOptions) {
   const uploaderConfig: RelayUploaderConfig = {
-    endpointUrl: "http://i.honch.io",
+    endpointUrl: "https://i.honch.io",
     relaySdkPlatform: "ios",
     ...options.uploaderConfig,
   };

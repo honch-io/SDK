@@ -947,6 +947,24 @@ static void test_shutdown_reports_status(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+static void test_blank_endpoint_defaults_to_secure_ingest(void)
+{
+    char queue_dir[128];
+    make_temp_dir(queue_dir, sizeof(queue_dir));
+    honch_config_t config = test_config(queue_dir);
+    config.endpoint_url = NULL;
+
+    fake_transport_context_t transport = {.response_code = 204L};
+    honch_test_set_transport(fake_transport, &transport);
+
+    honch_client_t *client = NULL;
+    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
+    EXPECT_TRUE(strcmp(transport.last_url, "https://i.honch.io/capture") == 0);
+    EXPECT_EQ_INT(honch_shutdown(client), HONCH_OK);
+    honch_test_set_transport(NULL, NULL);
+}
+
 static void test_track_persists_event(void)
 {
     char queue_dir[128];
@@ -3249,6 +3267,7 @@ int main(void)
     test_generated_device_id_persists();
     test_existing_invalid_state_path_fails_init();
     test_configured_device_id_accessor();
+    test_blank_endpoint_defaults_to_secure_ingest();
     test_set_property_emits_event_and_autostamp_conflicts_win();
     test_conformance_basic_track_fixture();
     test_conformance_auto_stamp_conflict_fixture();

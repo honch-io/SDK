@@ -94,6 +94,33 @@ describe("createMobileRelay", () => {
     expect(await relay.pending()).toEqual([]);
   });
 
+  it("defaults uploads to the secure Honch ingest endpoint", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    const relay = createMobileRelay({
+      durableStore: createMemoryDurableStore(),
+      uploaderConfig: {
+        projectKey: "test-key",
+        relayId: "relay-1",
+        relaySdkVersion: "0.1.0",
+        streamId: () => "relay-stream",
+        messageId: (message: { sequence: string }) => Number(message.sequence)
+      },
+      schedulerNative: {
+        async scheduleUpload() {},
+        async cancelUpload() {}
+      }
+    });
+    await relay.receiveFrame("device-a", frame([4]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await relay.drainUploads();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://i.honch.io/capture",
+      expect.any(Object)
+    );
+  });
+
   it("keeps uploaded payloads pending when capture only stores a chunk", async () => {
     const scheduled: number[] = [];
     const relay = createMobileRelay({
