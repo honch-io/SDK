@@ -24,20 +24,29 @@ from typing import Iterable
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_LOG_ROOT = Path("/private/tmp")
-ESP_IDF_TOOLS = "/Volumes/X9 Pro/Espressif/tools"
-ESP_IDF_EXPORT = "/Volumes/X9 Pro/Espressif/esp-idf-v6.0.1/export.sh"
+ESP_IDF_TOOLS = os.environ.get("HONCH_E2E_ESP_IDF_TOOLS", "/Volumes/X9 Pro/Espressif/tools")
+ESP_IDF_EXPORT = os.environ.get("HONCH_E2E_ESP_IDF_EXPORT", "/Volumes/X9 Pro/Espressif/esp-idf-v6.0.1/export.sh")
 ESP_IDF_SOURCE = f"export IDF_TOOLS_PATH='{ESP_IDF_TOOLS}' && source '{ESP_IDF_EXPORT}'"
-ARDUINO_HOME = "/Volumes/X9 Pro/Arduino"
-ARDUINO_BUILD_ROOT = "/Volumes/X9 Pro/honch-arduino-verify"
-PLATFORMIO_BIN_DIR = "/Volumes/X9 Pro/honch-platformio-venv/bin"
-PLATFORMIO_CORE_DIR = "/Volumes/X9 Pro/honch-platformio-core"
-MICROPYTHON_UNIX_BIN = "/Volumes/X9 Pro/honch-micropython/ports/unix/build-standard/micropython"
-MICROPYTHON_LIB_ROOT = "/Volumes/X9 Pro/honch-micropython/lib/micropython-lib"
+ARDUINO_HOME = os.environ.get("HONCH_E2E_ARDUINO_HOME", "/Volumes/X9 Pro/Arduino")
+ARDUINO_BUILD_ROOT = os.environ.get("HONCH_E2E_ARDUINO_BUILD_ROOT", "/Volumes/X9 Pro/honch-arduino-verify")
+PLATFORMIO_BIN_DIR = os.environ.get("HONCH_E2E_PLATFORMIO_BIN_DIR", "/Volumes/X9 Pro/honch-platformio-venv/bin")
+PLATFORMIO_CORE_DIR = os.environ.get("HONCH_E2E_PLATFORMIO_CORE_DIR", "/Volumes/X9 Pro/honch-platformio-core")
+MICROPYTHON_UNIX_BIN = os.environ.get(
+    "HONCH_E2E_MICROPYTHON_UNIX_BIN",
+    "/Volumes/X9 Pro/honch-micropython/ports/unix/build-standard/micropython",
+)
+MICROPYTHON_LIB_ROOT = os.environ.get(
+    "HONCH_E2E_MICROPYTHON_LIB_ROOT",
+    "/Volumes/X9 Pro/honch-micropython/lib/micropython-lib",
+)
 MICROPYTHON_UREQUESTS_PATH = f"{MICROPYTHON_LIB_ROOT}/micropython/urequests"
 MICROPYTHON_REQUESTS_PATH = f"{MICROPYTHON_LIB_ROOT}/python-ecosys/requests"
 QEMU_XTENSA_BIN_DIR = (
-    "/Volumes/X9 Pro/Espressif/tools/tools/qemu-xtensa/"
-    "esp_develop_9.2.2_20250817/qemu/bin"
+    os.environ.get(
+        "HONCH_E2E_QEMU_XTENSA_BIN_DIR",
+        "/Volumes/X9 Pro/Espressif/tools/tools/qemu-xtensa/"
+        "esp_develop_9.2.2_20250817/qemu/bin",
+    )
 )
 EXTRA_TOOL_PATHS = (PLATFORMIO_BIN_DIR, QEMU_XTENSA_BIN_DIR)
 DEFAULT_E2E_ENV = {
