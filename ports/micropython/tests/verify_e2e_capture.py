@@ -89,6 +89,7 @@ def main():
 
     row = wait_for_event(clickhouse_url, database, project_id, event_edge)
     assert_common_row(row, event_edge)
+    first_device_id = row["device_id"]
     assert '"source":"micropython-e2e"' in row["properties"], row
     assert '"quote":' in row["properties"], row
     assert "say" in row["properties"] and "hi" in row["properties"], row
