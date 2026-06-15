@@ -257,8 +257,12 @@ static queue_stats_t collect_queue_stats(const char *queue_dir)
     queue_stats_t stats = {0};
     char pending[PATH_MAX];
     char dead[PATH_MAX];
-    snprintf(pending, sizeof(pending), "%s/pending", queue_dir);
-    snprintf(dead, sizeof(dead), "%s/dead", queue_dir);
+    int pending_len = snprintf(pending, sizeof(pending), "%s/pending", queue_dir);
+    int dead_len = snprintf(dead, sizeof(dead), "%s/dead", queue_dir);
+    if (pending_len < 0 || (size_t)pending_len >= sizeof(pending) ||
+        dead_len < 0 || (size_t)dead_len >= sizeof(dead)) {
+        return stats;
+    }
     scan_cbor_files(pending, &stats.pending_files, &stats.pending_bytes);
     scan_cbor_files(dead, &stats.dead_files, &stats.dead_bytes);
     return stats;

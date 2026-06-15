@@ -43,7 +43,9 @@ int main() {
       .severity = HONCH_ERROR_SEVERITY_ERROR,
       .message = "host wrapper runtime error",
       .type = "RuntimeError",
-      .component = "host"
+      .component = "host",
+      .code = NULL,
+      .backtrace = NULL
   };
   assert(client.track("button_pressed", buttonProps, 1u));
   assert(client.reportError(report, buttonProps, 1u));

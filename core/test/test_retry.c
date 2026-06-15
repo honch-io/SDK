@@ -51,6 +51,43 @@ typedef struct fake_clock {
     uint64_t uptime_ms;
 } fake_clock_t;
 
+static void *g_payload_allocations[128];
+static size_t g_payload_allocation_count = 0u;
+
+static void track_payload_allocation(void *data)
+{
+    if (data == NULL) {
+        return;
+    }
+    assert(g_payload_allocation_count < sizeof(g_payload_allocations) / sizeof(g_payload_allocations[0]));
+    g_payload_allocations[g_payload_allocation_count++] = data;
+}
+
+static void free_tracked_payload(void *data)
+{
+    if (data == NULL) {
+        return;
+    }
+    for (size_t i = 0u; i < g_payload_allocation_count; i++) {
+        if (g_payload_allocations[i] == data) {
+            g_payload_allocations[i] = g_payload_allocations[g_payload_allocation_count - 1u];
+            g_payload_allocations[g_payload_allocation_count - 1u] = NULL;
+            g_payload_allocation_count--;
+            break;
+        }
+    }
+    free(data);
+}
+
+static void free_tracked_payloads(void)
+{
+    for (size_t i = 0u; i < g_payload_allocation_count; i++) {
+        free(g_payload_allocations[i]);
+        g_payload_allocations[i] = NULL;
+    }
+    g_payload_allocation_count = 0u;
+}
+
 static uint64_t fake_clock_now_ms(void *ctx)
 {
     return ((const fake_clock_t *)ctx)->now_ms;
@@ -450,6 +487,7 @@ static honch_payload_t build_test_event_for_distinct(
     honch_payload_t payload = {0};
     assert(honch_event_record_build(event_name, distinct_id, NULL, timestamp_ms, properties, property_count, &payload) ==
         HONCH_OK);
+    track_payload_allocation(payload.data);
     return payload;
 }
 
@@ -504,7 +542,7 @@ static void test_hqr1_validate_rejects_embedded_nul_in_required_strings(void)
     property_key[4] = '\0';
     assert(!honch_event_record_validate(event.data, event.length));
 
-    free(event.data);
+    free_tracked_payload(event.data);
 }
 
 static void test_hqr1_rejects_values_deeper_than_wire_v2_limit(void)
@@ -519,7 +557,7 @@ static void test_hqr1_rejects_values_deeper_than_wire_v2_limit(void)
     };
     honch_payload_t payload = {0};
     assert(honch_event_record_build("depth", "device-1", NULL, 1234u, allowed_properties, 1u, &payload) == HONCH_OK);
-    free(payload.data);
+    free_tracked_payload(payload.data);
 
     honch_wire_v2_value_t nested_levels[10];
     nested_levels[0] = honch_i64(1);
@@ -1359,6 +1397,7 @@ static void test_network_error_preserves_events(void)
 
 int main(void)
 {
+    atexit(free_tracked_payloads);
     test_hqr1_validate_rejects_embedded_nul_in_required_strings();
     test_hqr1_rejects_values_deeper_than_wire_v2_limit();
     test_hqr1_rejects_duplicate_top_level_property_keys();
