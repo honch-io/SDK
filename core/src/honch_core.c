@@ -1424,7 +1424,7 @@ static honch_status_t honch_emit_fault_locked(
 honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_t *config)
 {
     if (client == NULL || config == NULL || honch_is_blank(config->api_key) ||
-        honch_is_blank(config->endpoint_url) || honch_is_blank(config->device_model) ||
+        honch_is_blank(config->device_model) ||
         honch_is_blank(config->firmware_version)) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
@@ -1468,7 +1468,7 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     }
 
     next->api_key = honch_strdup(config->api_key);
-    next->endpoint_url = honch_strdup(config->endpoint_url);
+    next->endpoint_url = honch_strdup(honch_is_blank(config->endpoint_url) ? "http://i.honch.io" : config->endpoint_url);
     next->queue_directory = honch_strdup(honch_is_blank(config->queue_directory) ? "" : config->queue_directory);
     next->sdk_platform = honch_strdup(honch_is_blank(config->sdk_platform) ? "c-posix" : config->sdk_platform);
     next->batch_size = config->batch_size == 0u ? HONCH_DEFAULT_BATCH_SIZE : config->batch_size;

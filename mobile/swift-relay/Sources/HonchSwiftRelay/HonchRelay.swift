@@ -48,7 +48,7 @@ public struct HonchRelayConfig: Sendable {
     public let messageId: @Sendable (StoredRelayMessage) -> UInt64
 
     public init(
-        endpointURL: URL,
+        endpointURL: URL = URL(string: "http://i.honch.io")!,
         projectKey: String,
         relayId: String,
         relaySdkPlatform: String = "ios",

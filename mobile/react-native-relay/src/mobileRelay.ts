@@ -8,12 +8,18 @@ import type { RelayUploadSchedulerNative } from "./scheduler";
 
 export type MobileRelayOptions = {
   durableStore: RelayDurableStore;
-  uploaderConfig: RelayUploaderConfig;
+  uploaderConfig: Partial<RelayUploaderConfig> & Pick<RelayUploaderConfig, 'projectKey' | 'relayId' | 'relaySdkVersion' | 'streamId' | 'messageId'>;
   schedulerNative?: RelayUploadSchedulerNative;
   random?: () => number;
 };
 
 export function createMobileRelay(options: MobileRelayOptions) {
+  const uploaderConfig: RelayUploaderConfig = {
+    endpointUrl: "http://i.honch.io",
+    relaySdkPlatform: "ios",
+    ...options.uploaderConfig,
+  };
+
   const queue = createDurableRelayQueue(options.durableStore);
   const receiver = createRelayFrameReceiver({ queue });
   const scheduler =
@@ -50,7 +56,7 @@ export function createMobileRelay(options: MobileRelayOptions) {
       const drainStartedAtMs = Date.now();
       return drainRelayQueue({
         queue,
-        upload: (message) => uploadRelayMessageOutcome(options.uploaderConfig, message),
+        upload: (message) => uploadRelayMessageOutcome(uploaderConfig, message),
         now: () => drainStartedAtMs,
         random: options.random
       }).then(async () => {
