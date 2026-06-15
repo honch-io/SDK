@@ -193,12 +193,12 @@ dependency.
 | `environment`            | No       | `"production"` | Environment tag                            |
 | `event_buffer`           | Yes      | —              | Caller-owned buffer for queue staging      |
 | `event_buffer_size`      | Yes      | —              | Size of the buffer (recommend >= 8192)     |
-| `flush_interval_seconds` | No       | 60             | How often to flush events                  |
-| `flush_min_interval_ms`  | No       | 10000          | Minimum spacing between outbound uploads   |
-| `flush_event_threshold`  | No       | 30             | Flush when this many events are queued     |
+| `flush_interval_seconds` | No       | 120            | How often to flush events                  |
+| `flush_min_interval_ms`  | No       | 15000          | Minimum spacing between outbound uploads   |
+| `flush_event_threshold`  | No       | 20             | Flush when this many events are queued     |
 | `flush_max_batches`      | No       | 1              | Max batches sent by one `honch_flush()`    |
 | `shutdown_flush_max_batches` | No   | 1              | Max batches sent during `honch_shutdown()` |
-| `transport_timeout_ms`   | No       | 3000           | Per HTTP request timeout, max 10000 ms     |
+| `transport_timeout_ms`   | No       | 2500           | Per HTTP request timeout, max 10000 ms     |
 | `battery_callback`       | No       | NULL           | Function returning 0-100 or -1             |
 | `battery_low_threshold`  | No       | 15             | Battery level that triggers `$battery_low` |
 | `enable_error_tracking`  | No       | false          | Emit automatic `$error` after abnormal reset |
@@ -225,7 +225,7 @@ pending and `honch_flush()` returns `HONCH_ERR_OFFLINE` without DNS, TLS, retry
 backoff growth, or transport I/O.
 
 Successful outbound uploads are spaced by `flush_min_interval_ms`, which
-defaults to 10000 ms so telemetry does not continuously share the radio with
+defaults to 15000 ms so telemetry does not continuously share the radio with
 product traffic. If events remain queued during the quiet window, `honch_tick()`
 keeps the flush request pending and sends later. For benchmark, factory, or
 explicit high-throughput modes, set `flush_min_interval_ms` to

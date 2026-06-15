@@ -162,9 +162,9 @@ Optional config:
 - `max_queued_events`
 - `max_event_bytes`
 - `transport_timeout_ms`
-- `flush_interval_seconds`: defaults to `60`
-- `flush_min_interval_ms`: defaults to `10000`; use `HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS` for benchmarks
-- `flush_event_threshold`: defaults to `30`
+- `flush_interval_seconds`: defaults to `120`
+- `flush_min_interval_ms`: defaults to `15000`; use `HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS` for benchmarks
+- `flush_event_threshold`: defaults to `20`
 - `flush_retry_initial_ms`: defaults to `1000`
 - `flush_retry_max_ms`: defaults to `300000`
 - `battery_callback`: returns `0`-`100`, or negative when unknown
@@ -245,9 +245,9 @@ callback should return quickly because event enqueueing waits for it to finish.
 
 Call `honch_tick()` periodically from your main loop or scheduler to perform
 bounded cooperative flush work. When `flush_interval_seconds` or
-`flush_event_threshold` are zero, the SDK uses defaults of 60 seconds and 30
+`flush_event_threshold` are zero, the SDK uses defaults of 120 seconds and 20
 queued events. Successful outbound uploads are spaced by
-`flush_min_interval_ms`, which defaults to 10000 ms. Retryable transport
+`flush_min_interval_ms`, which defaults to 15000 ms. Retryable transport
 failures use exponential backoff with jitter. Shutdown always attempts a
 synchronous best-effort flush for a valid client.
 
@@ -325,7 +325,7 @@ int main(void)
         .max_event_bytes = 8192,
         .transport_timeout_ms = 10000,
         .flush_interval_seconds = 60,
-        .flush_min_interval_ms = 10000,
+        .flush_min_interval_ms = 15000,
         .flush_event_threshold = 30,
         .battery_callback = NULL,
         .battery_low_threshold = 15,

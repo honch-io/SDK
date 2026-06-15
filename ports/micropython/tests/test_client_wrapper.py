@@ -220,7 +220,7 @@ class ClientWrapperTests(unittest.TestCase):
         }
 
         client = honch.Honch(**base_config)
-        self.assertEqual(client.config.transport_timeout_ms, 3000)
+        self.assertEqual(client.config.transport_timeout_ms, 2500)
 
         for timeout_ms in (0, -1):
             config = dict(base_config)

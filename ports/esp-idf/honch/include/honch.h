@@ -55,12 +55,12 @@ typedef struct {
     const char *environment;             // optional, defaults to "production"
     uint8_t *event_buffer;               // required, caller-owned, used for queue
     size_t event_buffer_size;            // required, recommend >= 8192
-    uint32_t flush_interval_seconds;     // optional, default 60
-    uint32_t flush_min_interval_ms;      // optional, default 10000
-    uint32_t flush_event_threshold;      // optional, default 30
+    uint32_t flush_interval_seconds;     // optional, default 120
+    uint32_t flush_min_interval_ms;      // optional, default 15000
+    uint32_t flush_event_threshold;      // optional, default 20
     uint32_t flush_max_batches;          // optional, default 1
     uint32_t shutdown_flush_max_batches; // optional, default 1
-    uint32_t transport_timeout_ms;       // optional, default 3000
+    uint32_t transport_timeout_ms;       // optional, default 2500
     int (*battery_callback)(void);       // optional, returns 0-100 or -1 if unknown
     int battery_low_threshold;           // optional, default 15
     bool (*connectivity_callback)(void); // optional, return false while offline/radio off

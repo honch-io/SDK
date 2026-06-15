@@ -44,9 +44,9 @@ void setup() {
     .environment = "production",
     .eventBuffer = eventBuffer,
     .eventBufferSize = sizeof(eventBuffer),
-    .flushIntervalSeconds = 60,
-    .flushMinIntervalMs = 10000,
-    .flushEventThreshold = 30,
+    .flushIntervalSeconds = 120,
+    .flushMinIntervalMs = 15000,
+    .flushEventThreshold = 20,
     .insecureSkipTlsVerify = false,
   };
 
@@ -96,10 +96,10 @@ valid only until the next successful `reset()` or `shutdown()`.
 
 `honch::defaultClient().tick()` performs scheduled flush work when the interval elapses or the
 event threshold is reached. Successful outbound uploads are spaced by
-`flushMinIntervalMs`; leave it at the 10000 ms default for consumer firmware, or
+`flushMinIntervalMs`; leave it at the 15000 ms default for consumer firmware, or
 set it to `HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS` for benchmark or explicit
 high-throughput modes.
-`transportTimeoutMs` bounds each synchronous HTTP POST; leave it at the 3000 ms
+`transportTimeoutMs` bounds each synchronous HTTP POST; leave it at the 2500 ms
 default unless the capture endpoint and network need a different per-request
 timeout. Values above the hard maximum of 10000 ms are clamped.
 

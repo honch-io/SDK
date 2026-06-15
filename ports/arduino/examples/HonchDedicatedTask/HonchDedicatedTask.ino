@@ -41,9 +41,9 @@ void setup() {
   config.environment = "production";
   config.eventBuffer = eventBuffer;
   config.eventBufferSize = sizeof(eventBuffer);
-  config.flushIntervalSeconds = 60;
-  config.flushMinIntervalMs = 10000;
-  config.flushEventThreshold = 30;
+  config.flushIntervalSeconds = 120;
+  config.flushMinIntervalMs = 15000;
+  config.flushEventThreshold = 20;
   config.connectivityCallback = honchConnected;
   config.insecureSkipTlsVerify = false;
 

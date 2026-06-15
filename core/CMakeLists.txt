@@ -1,6 +1,7 @@
 option(HONCH_ENABLE_ERROR_TRACKING "Compile Honch automatic error tracking support" ON)
 
 set(HONCH_CORE_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_capture_transport.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_core.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_event_record.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_lifecycle.c
@@ -94,6 +95,17 @@ if(HONCH_BUILD_TESTS)
     )
 
     add_test(NAME honch_core_wire_v2_tests COMMAND honch_core_wire_v2_tests)
+
+    add_executable(honch_core_capture_transport_tests
+        test/test_capture_transport.c
+    )
+
+    target_link_libraries(honch_core_capture_transport_tests PRIVATE honch_core)
+    target_compile_options(honch_core_capture_transport_tests PRIVATE
+        $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
+    )
+
+    add_test(NAME honch_core_capture_transport_tests COMMAND honch_core_capture_transport_tests)
 
     add_executable(honch_core_state_consistency_tests
         test/test_state_consistency.c

@@ -64,6 +64,7 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("ports/esp-idf/honch/CMakeLists.txt", root_cmake)
         self.assertIn("description: \"Honch product analytics SDK for ESP-IDF\"", root_manifest)
         self.assertIn("HONCH_SDK_ROOT", component_cmake)
+        self.assertIn("core/src/honch_capture_transport.c", component_cmake)
         self.assertIn("core/src/honch_core.c", component_cmake)
         self.assertIn("HONCH_FLUSH_TIMING", component_cmake)
         self.assertIn('set(EXTRA_COMPONENT_DIRS "../../..")', example_cmake)
@@ -427,7 +428,7 @@ class EspIdfChunkWireTest(unittest.TestCase):
         app_main = c_function_body(example, "app_main")
         honch_task = c_function_body(example, "honch_telemetry_task")
 
-        self.assertIn("#define HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS 3000u", internal)
+        self.assertIn("#define HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS 2500u", internal)
         self.assertIn("flush_interval_seconds", public_header)
         self.assertIn("flush_event_threshold", public_header)
         self.assertIn("uint32_t transport_timeout_ms", public_header)
@@ -459,7 +460,7 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("SDK-owned worker task", readme)
         self.assertIn("application-owned FreeRTOS task", readme)
         self.assertIn("transport_timeout_ms", readme)
-        self.assertIn("3000", readme)
+        self.assertIn("2500", readme)
         self.assertIn("maximum of 10000 ms", readme)
         self.assertNotIn("disable_background_flush", compat + public_header + readme)
 
@@ -506,7 +507,7 @@ class EspIdfChunkWireTest(unittest.TestCase):
         internal = read("core/src/honch_internal.h")
         config = read("core/include/honch/core/config.h")
 
-        self.assertIn("#define HONCH_DEFAULT_FLUSH_MIN_INTERVAL_MS 10000u", internal)
+        self.assertIn("#define HONCH_DEFAULT_FLUSH_MIN_INTERVAL_MS 15000u", internal)
         self.assertIn("unsigned int flush_min_interval_ms", config)
         self.assertIn("uint32_t flush_min_interval_ms", public_header)
         self.assertIn("core_config.flush_min_interval_ms = config->flush_min_interval_ms", compat)

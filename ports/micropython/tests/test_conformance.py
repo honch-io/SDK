@@ -237,6 +237,7 @@ class ConformanceFixtureTests(unittest.TestCase):
 
         self.assertEqual(fixture["expected_capture_response_code"], 204)
         self.assertIn("honch_core_flush(self->client)", module)
+        self.assertIn("../../../../core/src/honch_capture_transport.c", cmake)
         self.assertIn("../../../../core/src/honch_wire_v2.c", cmake)
         self.assertIn("../../../../core/src/honch_event_record.c", cmake)
 

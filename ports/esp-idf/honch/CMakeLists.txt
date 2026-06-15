@@ -11,6 +11,7 @@ set(HONCH_ESP_PORT_SOURCES
 list(TRANSFORM HONCH_ESP_PORT_SOURCES PREPEND "${HONCH_ESP_COMPONENT_DIR}/")
 
 set(HONCH_CORE_SOURCES
+    "core/src/honch_capture_transport.c"
     "core/src/honch_core.c"
     "core/src/honch_event_record.c"
     "core/src/honch_lifecycle.c"

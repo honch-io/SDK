@@ -6,6 +6,7 @@ SRC_USERMOD_C += \
 	$(HONCH_MICROPYTHON_DIR)/mphal_adapter.c \
 	$(HONCH_MICROPYTHON_DIR)/mpstorage_adapter.c \
 	$(HONCH_MICROPYTHON_DIR)/mptransport_adapter.c \
+	$(HONCH_CORE_DIR)/src/honch_capture_transport.c \
 	$(HONCH_CORE_DIR)/src/honch_core.c \
 	$(HONCH_CORE_DIR)/src/honch_event_record.c \
 	$(HONCH_CORE_DIR)/src/honch_lifecycle.c \

@@ -13,6 +13,7 @@ typedef struct fake_state_storage {
     char firmware_version[64];
     size_t queue_depth;
     uint64_t now_ms;
+    uint64_t uptime_ms;
     int force_now_ms;
     honch_status_t queue_push_status;
     uint64_t queued_sequences[8];
@@ -60,6 +61,15 @@ static uint64_t fake_now_ms(void *ctx)
         return storage->now_ms;
     }
     return 1000u;
+}
+
+static uint64_t fake_uptime_ms(void *ctx)
+{
+    fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
+    if (storage != NULL && storage->uptime_ms > 0u) {
+        return storage->uptime_ms;
+    }
+    return fake_now_ms(ctx);
 }
 
 static honch_status_t fake_random_bytes(void *ctx, uint8_t *buffer, size_t buffer_size)
@@ -254,6 +264,51 @@ static void test_zero_platform_time_queues_parseable_event_record(void)
     assert(record.timestamp_ms > 0u);
     honch_event_record_free(&record);
 
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+static void test_pre_wall_clock_track_uses_uptime_timestamp(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .now_ms = 1000u,
+        .uptime_ms = 123456u,
+        .force_now_ms = 1
+    };
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(honch_core_track(client, "early_event", NULL, 0u) == HONCH_OK);
+
+    honch_event_record_t record;
+    assert(honch_event_record_parse(storage.last_queued_data, storage.last_queued_size, &record) == HONCH_OK);
+    assert(record.timestamp_ms == 123456u);
+    honch_event_record_free(&record);
+
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+static void test_core_applies_embedded_defaults_when_tuning_is_omitted(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(client->max_event_bytes == 8192u);
+    assert(client->transport_timeout_ms == 2500u);
+    assert(client->flush_interval_seconds == 120u);
+    assert(client->flush_min_interval_ms == 15000u);
+    assert(client->flush_event_threshold == 20u);
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
@@ -747,7 +802,7 @@ static honch_core_config_t fake_config(
 {
     *platform = (honch_platform_ops_t) {
         .now_ms = fake_now_ms,
-        .uptime_ms = fake_now_ms,
+        .uptime_ms = fake_uptime_ms,
         .random_bytes = fake_random_bytes,
         .ctx = storage
     };
@@ -1547,6 +1602,41 @@ static void test_flush_returns_offline_without_transport_attempt(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
+static void test_pause_resume_uploads_blocks_flush_without_dropping_events(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .track_queue_depth = 1,
+        .now_ms = 20000u,
+        .force_now_ms = 1
+    };
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    config.flush_event_threshold = 1u;
+    config.flush_min_interval_ms = HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(honch_core_track(client, "paused_flush", NULL, 0u) == HONCH_OK);
+    assert(storage.queue_depth == 2u);
+
+    assert(honch_core_pause_uploads(client) == HONCH_OK);
+    assert(client->uploads_paused);
+    assert(honch_core_flush(client) == HONCH_ERROR_OFFLINE);
+    assert(storage.post_chunk_calls == 0);
+    assert(storage.queue_depth == 2u);
+
+    assert(honch_core_resume_uploads(client) == HONCH_OK);
+    assert(!client->uploads_paused);
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(storage.post_chunk_calls == 1);
+
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
 static void test_flush_returns_offline_before_min_spacing_rate_limit(void)
 {
     fake_state_storage_t storage = {
@@ -1613,6 +1703,8 @@ int main(void)
 {
     test_queue_push_uses_honch_event_record_format();
     test_zero_platform_time_queues_parseable_event_record();
+    test_pre_wall_clock_track_uses_uptime_timestamp();
+    test_core_applies_embedded_defaults_when_tuning_is_omitted();
     test_normal_reset_does_not_queue_error_event();
     test_abnormal_reset_does_not_queue_error_event_when_disabled();
 #if HONCH_ENABLE_ERROR_TRACKING
@@ -1655,6 +1747,7 @@ int main(void)
     test_empty_flush_is_not_rate_limited_during_min_spacing();
     test_tick_skips_transport_while_connectivity_unavailable();
     test_flush_returns_offline_without_transport_attempt();
+    test_pause_resume_uploads_blocks_flush_without_dropping_events();
     test_flush_returns_offline_before_min_spacing_rate_limit();
     test_zero_min_spacing_allows_back_to_back_flushes();
     return 0;

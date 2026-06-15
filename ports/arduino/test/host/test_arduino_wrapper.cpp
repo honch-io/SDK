@@ -24,8 +24,8 @@ int main() {
     .environment = "test",
     .eventBuffer = buffer,
     .eventBufferSize = sizeof(buffer),
-    .flushIntervalSeconds = 60,
-    .flushEventThreshold = 30,
+    .flushIntervalSeconds = 120,
+    .flushEventThreshold = 20,
     .insecureSkipTlsVerify = true,
   };
 
@@ -128,7 +128,7 @@ int main() {
   honch_arduino_host_set_millis(10000);
   assert(client.begin(defaultScheduledConfig));
   assert(client.track("default_interval"));
-  honch_arduino_host_advance_millis(59000);
+  honch_arduino_host_advance_millis(119000);
   assert(client.tick());
   assert(honch_arduino_host_transport_call_count() == 0);
   honch_arduino_host_advance_millis(1000);

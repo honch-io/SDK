@@ -51,6 +51,9 @@ honch_status_t honch_core_session_start(honch_client_t *client, const char *sess
 honch_status_t honch_core_session_end(honch_client_t *client);
 honch_status_t honch_core_tick(honch_client_t *client);
 honch_status_t honch_core_flush(honch_client_t *client);
+honch_status_t honch_core_pause_uploads(honch_client_t *client);
+honch_status_t honch_core_resume_uploads(honch_client_t *client);
+honch_status_t honch_core_set_uploads_paused(honch_client_t *client, int paused);
 honch_status_t honch_core_reset(honch_client_t *client);
 honch_status_t honch_core_shutdown(honch_client_t *client);
 const char *honch_core_get_device_id(honch_client_t *client);

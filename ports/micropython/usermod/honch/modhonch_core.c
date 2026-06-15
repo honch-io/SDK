@@ -16,7 +16,7 @@ extern const mp_obj_type_t honch_micropython_client_type;
 #define HONCH_MP_MAX_TYPED_VALUES 64u
 #define HONCH_MP_MAX_TYPED_PAIRS 64u
 #define HONCH_MP_MAX_PROPERTIES 64u
-#define DEFAULT_TRANSPORT_TIMEOUT_MS 3000u
+#define DEFAULT_TRANSPORT_TIMEOUT_MS 2500u
 
 typedef struct honch_mp_typed_pool {
     honch_value_t values[HONCH_MP_MAX_TYPED_VALUES];

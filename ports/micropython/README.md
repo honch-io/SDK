@@ -75,7 +75,7 @@ Optional:
 - `max_event_bytes`
 - `transport_timeout_ms` (finite positive milliseconds, clamped to 10000)
 - `flush_interval_seconds`
-- `flush_min_interval_ms` (default `10000`; use `0xFFFFFFFF` to disable for benchmarks)
+- `flush_min_interval_ms` (default `15000`; use `0xFFFFFFFF` to disable for benchmarks)
 - `flush_event_threshold`
 - `flush_retry_initial_ms`
 - `flush_retry_max_ms`

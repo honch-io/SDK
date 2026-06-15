@@ -14,11 +14,11 @@
 #define HONCH_MAX_BATCH_SIZE 50u
 #endif
 #define HONCH_DEFAULT_MAX_QUEUED_EVENTS 1000u
-#define HONCH_DEFAULT_MAX_EVENT_BYTES 16384u
-#define HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS 3000u
-#define HONCH_DEFAULT_FLUSH_INTERVAL_SECONDS 60u
-#define HONCH_DEFAULT_FLUSH_MIN_INTERVAL_MS 10000u
-#define HONCH_DEFAULT_FLUSH_EVENT_THRESHOLD 30u
+#define HONCH_DEFAULT_MAX_EVENT_BYTES 8192u
+#define HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS 2500u
+#define HONCH_DEFAULT_FLUSH_INTERVAL_SECONDS 120u
+#define HONCH_DEFAULT_FLUSH_MIN_INTERVAL_MS 15000u
+#define HONCH_DEFAULT_FLUSH_EVENT_THRESHOLD 20u
 #define HONCH_DEFAULT_FLUSH_MAX_BATCHES 1u
 #define HONCH_DEFAULT_SHUTDOWN_FLUSH_MAX_BATCHES 1u
 #define HONCH_TICK_MAX_CHUNKS 1u
@@ -189,6 +189,7 @@ struct honch_client {
     bool scheduler_flush_requested;
     bool flush_in_progress;
     bool outbound_upload_attempted;
+    bool uploads_paused;
     bool closing;
     size_t active_calls;
     int (*battery_callback)(void);

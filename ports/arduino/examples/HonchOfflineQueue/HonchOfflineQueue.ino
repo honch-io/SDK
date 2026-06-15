@@ -24,8 +24,8 @@ void setup() {
   config.environment = "production";
   config.eventBuffer = eventBuffer;
   config.eventBufferSize = sizeof(eventBuffer);
-  config.flushIntervalSeconds = 60;
-  config.flushEventThreshold = 30;
+  config.flushIntervalSeconds = 120;
+  config.flushEventThreshold = 20;
   config.insecureSkipTlsVerify = false;
 
   honch::defaultClient().begin(config);

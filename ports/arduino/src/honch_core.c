@@ -391,6 +391,15 @@ static uint64_t honch_client_now_millis(honch_client_t *client)
 static uint64_t honch_client_event_timestamp_millis(honch_client_t *client)
 {
     uint64_t now_ms = honch_client_now_millis(client);
+    if (now_ms >= HONCH_MIN_UNIX_TIME_MS) {
+        return now_ms;
+    }
+    if (client != NULL && client->platform != NULL && client->platform->uptime_ms != NULL) {
+        uint64_t uptime_ms = client->platform->uptime_ms(client->platform->ctx);
+        if (uptime_ms > 0u) {
+            return uptime_ms;
+        }
+    }
     return now_ms == 0u ? 1u : now_ms;
 }
 
@@ -846,6 +855,9 @@ static honch_status_t honch_scheduler_check_outbound_spacing_locked(
 
 static bool honch_scheduler_connectivity_ready_locked(honch_client_t *client)
 {
+    if (client != NULL && client->uploads_paused) {
+        return false;
+    }
     if (client == NULL || client->connectivity_callback == NULL) {
         return true;
     }
@@ -2095,6 +2107,39 @@ honch_status_t honch_core_flush(honch_client_t *client)
     honch_client_unlock(client);
     honch_client_leave(client);
     return status;
+}
+
+honch_status_t honch_core_set_uploads_paused(honch_client_t *client, int paused)
+{
+    honch_status_t status = honch_client_enter(client);
+    if (status != HONCH_OK) {
+        return status;
+    }
+
+    status = honch_client_lock(client);
+    if (status != HONCH_OK) {
+        honch_client_leave(client);
+        return status;
+    }
+
+    client->uploads_paused = paused != 0;
+    if (client->uploads_paused) {
+        client->scheduler_flush_requested = true;
+    }
+
+    honch_client_unlock(client);
+    honch_client_leave(client);
+    return HONCH_OK;
+}
+
+honch_status_t honch_core_pause_uploads(honch_client_t *client)
+{
+    return honch_core_set_uploads_paused(client, 1);
+}
+
+honch_status_t honch_core_resume_uploads(honch_client_t *client)
+{
+    return honch_core_set_uploads_paused(client, 0);
 }
 
 honch_status_t honch_core_reset(honch_client_t *client)
