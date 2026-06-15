@@ -561,7 +561,8 @@ def make_log_dir(log_root: Path) -> Path:
 
 def run_step(entry: Step, log_dir: Path, dry_run: bool) -> Result:
     env = os.environ.copy()
-    env.update(entry.env)
+    for key, value in entry.env.items():
+        env.setdefault(key, value)
     extra_paths = [path for path in EXTRA_TOOL_PATHS if Path(path).exists()]
     if extra_paths:
         env["PATH"] = os.pathsep.join([*extra_paths, env.get("PATH", "")])
