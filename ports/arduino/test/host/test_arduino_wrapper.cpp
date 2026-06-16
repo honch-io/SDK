@@ -29,6 +29,21 @@ int main() {
     .insecureSkipTlsVerify = true,
   };
 
+  HonchConfig minimalConfig = {
+    .apiKey = "test-key",
+    .deviceModel = "host-esp32",
+    .firmwareVersion = "1.0.0",
+    .eventBuffer = buffer,
+    .eventBufferSize = sizeof(buffer),
+  };
+  honch_core_config_t minimalCoreConfig = honch_arduino_make_core_config(minimalConfig);
+  assert(strcmp(minimalCoreConfig.api_key, "test-key") == 0);
+  assert(minimalCoreConfig.endpoint_url == nullptr);
+  assert(strcmp(minimalCoreConfig.sdk_platform, "arduino-esp32") == 0);
+  assert(minimalCoreConfig.flush_interval_seconds == 0);
+  assert(minimalCoreConfig.flush_event_threshold == 0);
+  honch_arduino_release_core_config(&minimalCoreConfig);
+
   assert(!client.tick());
   assert(strcmp(client.lastError(), "not initialized") == 0);
 
