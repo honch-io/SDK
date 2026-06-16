@@ -1025,6 +1025,14 @@ static honch_status_t honch_emit_firmware_update_locked(
 #define HONCH_FAULT_BACKTRACE_MAX_BYTES 192u
 #define HONCH_FAULT_TASK_NAME_MAX_BYTES 32u
 
+#ifndef HONCH_DEFAULT_SDK_PLATFORM
+#if defined(ARDUINO)
+#define HONCH_DEFAULT_SDK_PLATFORM "arduino-esp32"
+#else
+#define HONCH_DEFAULT_SDK_PLATFORM "c-posix"
+#endif
+#endif
+
 static bool honch_fault_string_length(
     const char *value,
     size_t max_length,
@@ -1470,7 +1478,7 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     next->api_key = honch_strdup(config->api_key);
     next->endpoint_url = honch_strdup(honch_is_blank(config->endpoint_url) ? "https://i.honch.io" : config->endpoint_url);
     next->queue_directory = honch_strdup(honch_is_blank(config->queue_directory) ? "" : config->queue_directory);
-    next->sdk_platform = honch_strdup(honch_is_blank(config->sdk_platform) ? "c-posix" : config->sdk_platform);
+    next->sdk_platform = honch_strdup(honch_is_blank(config->sdk_platform) ? HONCH_DEFAULT_SDK_PLATFORM : config->sdk_platform);
     next->batch_size = config->batch_size == 0u ? HONCH_DEFAULT_BATCH_SIZE : config->batch_size;
     if (next->batch_size > HONCH_MAX_BATCH_SIZE) {
         next->batch_size = HONCH_MAX_BATCH_SIZE;
