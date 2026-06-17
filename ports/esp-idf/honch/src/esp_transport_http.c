@@ -22,6 +22,10 @@
 #include "esp_timer.h"
 
 #define HONCH_ESP_MAX_TRANSPORT_TIMEOUT_MS 10000u
+/* Floor: a value below this cannot complete a TLS handshake + chunk POST, so a
+ * misconfigured tiny timeout would fail every upload and silently age events out
+ * of the bounded queue. Clamp up to a workable minimum. */
+#define HONCH_ESP_MIN_TRANSPORT_TIMEOUT_MS 1000u
 
 static const char *TAG = "honch";
 
@@ -311,6 +315,9 @@ honch_status_t honch_esp_transport_ops_init(
     unsigned int effective_timeout_ms = transport_timeout_ms == 0u ?
         HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS :
         transport_timeout_ms;
+    if (effective_timeout_ms < HONCH_ESP_MIN_TRANSPORT_TIMEOUT_MS) {
+        effective_timeout_ms = HONCH_ESP_MIN_TRANSPORT_TIMEOUT_MS;
+    }
     if (effective_timeout_ms > HONCH_ESP_MAX_TRANSPORT_TIMEOUT_MS) {
         effective_timeout_ms = HONCH_ESP_MAX_TRANSPORT_TIMEOUT_MS;
     }

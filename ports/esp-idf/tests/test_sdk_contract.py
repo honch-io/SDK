@@ -479,13 +479,17 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("maximum of 10000 ms", readme)
         self.assertNotIn("disable_background_flush", compat + public_header + readme)
 
-    def test_esp_transport_timeout_is_hard_capped(self) -> None:
+    def test_esp_transport_timeout_is_bounded(self) -> None:
         transport = read("ports/esp-idf/honch/src/esp_transport_http.c")
         ops_init = c_function_body(transport, "honch_esp_transport_ops_init")
 
         self.assertIn("#define HONCH_ESP_MAX_TRANSPORT_TIMEOUT_MS 10000u", transport)
         self.assertIn("if (effective_timeout_ms > HONCH_ESP_MAX_TRANSPORT_TIMEOUT_MS)", ops_init)
         self.assertIn("effective_timeout_ms = HONCH_ESP_MAX_TRANSPORT_TIMEOUT_MS;", ops_init)
+        # A too-small timeout is floored so it cannot guarantee upload failure.
+        self.assertIn("#define HONCH_ESP_MIN_TRANSPORT_TIMEOUT_MS 1000u", transport)
+        self.assertIn("if (effective_timeout_ms < HONCH_ESP_MIN_TRANSPORT_TIMEOUT_MS)", ops_init)
+        self.assertIn("effective_timeout_ms = HONCH_ESP_MIN_TRANSPORT_TIMEOUT_MS;", ops_init)
         self.assertIn(".timeout_ms = timeout_ms", transport)
 
     def test_esp_static_config_string_limits_are_public_constants(self) -> None:
