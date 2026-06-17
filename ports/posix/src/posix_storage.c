@@ -633,6 +633,12 @@ static honch_status_t honch_queue_enqueue_with_sequence(
             return status;
         }
 
+        /*
+         * queued_event_count is an advisory cache, not the source of truth: the
+         * on-disk queue is. The `> 0` guards on decrement tolerate transient
+         * drift, and this eviction path resyncs the cache to the authoritative
+         * on-disk count (files.count) before deciding what to drop.
+         */
         client->queued_event_count = files.count;
         /*
          * Evict the lowest-sequence (true oldest) entries. The file list is

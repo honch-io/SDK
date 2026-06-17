@@ -1,5 +1,5 @@
 {
-  "name": "@raeedzz/react-native-relay",
+  "name": "@honch/react-native-relay",
   "version": "0.1.0",
   "type": "module",
   "main": "src/index.ts",

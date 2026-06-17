@@ -9,6 +9,12 @@
 #include <string.h>
 #include <unistd.h>
 
+/*
+ * Single global breadcrumb path: the POSIX crash-breadcrumb handler is
+ * process-global and therefore single-client. A process that runs more than one
+ * honch client concurrently would share this one path; key it per client if
+ * multi-client support is ever needed.
+ */
 static char s_error_breadcrumb_path[512];
 
 static const char *honch_posix_signal_code(int signum)

@@ -439,6 +439,9 @@ static uint32_t honch_hex_u32_prefix(const char hex[33])
         } else if (c >= 'a' && c <= 'f') {
             nibble = (uint32_t)(c - 'a' + 10);
         } else if (c >= 'A' && c <= 'F') {
+            /* Defensive only: honch_client_random_hex formats with a lowercase
+             * table, so the seed string is always lowercase in practice. This
+             * arm just keeps the parser total over any hex input. */
             nibble = (uint32_t)(c - 'A' + 10);
         }
         value = (value << 4u) | nibble;
@@ -769,6 +772,8 @@ static void honch_grow_retry_delay(honch_client_t *client)
     unsigned int next = client->current_retry_delay_ms == 0u ?
         client->flush_retry_initial_ms :
         client->current_retry_delay_ms * 2u;
+    /* `next < current` catches the unsigned wrap when doubling overflows; either
+     * that or exceeding the configured ceiling clamps to flush_retry_max_ms. */
     if (next < client->current_retry_delay_ms || next > client->flush_retry_max_ms) {
         next = client->flush_retry_max_ms;
     }
