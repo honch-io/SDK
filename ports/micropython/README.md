@@ -4,7 +4,7 @@ Stable MicroPython wrapper for the canonical Honch C core. The Python package ke
 
 ## Status
 
-Stable `0.2.0`. The SDK is not standalone pure Python; firmware must be built with the `_honch_core` user C module.
+Stable `0.2.1`. The SDK is not standalone pure Python; firmware must be built with the `_honch_core` user C module.
 
 This port targets MicroPython. CircuitPython is not covered by the current user C module build flow.
 

@@ -1,0 +1,38 @@
+name: Version consistency
+
+on:
+  push:
+    paths:
+      - "core/src/honch_internal.h"
+      - "ports/**"
+      - "idf_component.yml"
+      - "tools/generate_wire_v2_fixtures.py"
+      - "tools/test_version_consistency.py"
+      - "README.md"
+      - ".github/workflows/version-consistency.yml"
+  pull_request:
+    paths:
+      - "core/src/honch_internal.h"
+      - "ports/**"
+      - "idf_component.yml"
+      - "tools/generate_wire_v2_fixtures.py"
+      - "tools/test_version_consistency.py"
+      - "README.md"
+      - ".github/workflows/version-consistency.yml"
+
+jobs:
+  check:
+    name: SDK version single-source-of-truth
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Verify every version declaration matches HONCH_SDK_VERSION
+        run: python3 -m unittest tools.test_version_consistency

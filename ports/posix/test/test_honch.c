@@ -1683,7 +1683,7 @@ static void test_queue_record_omits_promoted_context_properties(void)
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$device_model\":\"X3-Pro\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$firmware_version\":\"3.4.1\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$sdk_platform\":\"c-posix\"");
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"$sdk_version\":\"0.2.0\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$sdk_version\":\"0.2.1\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$environment\":\"production\"");
 
     test_battery_level = -1;

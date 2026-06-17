@@ -17,7 +17,7 @@ the host application records its own product events.
 | `$device_model` | string | From SDK config |
 | `$firmware_version` | string | From SDK config |
 | `$sdk_platform` | string | SDK platform identifier (e.g. `"esp-idf"`, `"ios"`, `"android"`) |
-| `$sdk_version` | string | SDK behavior version (e.g. `"0.2.0"`) |
+| `$sdk_version` | string | SDK behavior version (e.g. `"0.2.1"`) |
 | `$environment` | string | From SDK config, defaults to `"production"` |
 
 ## Conditional

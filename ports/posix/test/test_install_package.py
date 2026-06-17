@@ -35,8 +35,8 @@ class PosixInstallPackageTests(unittest.TestCase):
         cmake = read("ports/posix/CMakeLists.txt")
         root_readme = read("README.md")
 
-        self.assertIn("project(honch_posix_sdk VERSION 0.2.0 LANGUAGES C)", cmake)
-        self.assertIn("| C/POSIX | Stable | `0.2.0` | [`ports/posix/`](ports/posix/) |", root_readme)
+        self.assertIn("project(honch_posix_sdk VERSION 0.2.1 LANGUAGES C)", cmake)
+        self.assertIn("| C/POSIX | Stable | `0.2.1` | [`ports/posix/`](ports/posix/) |", root_readme)
 
 
 if __name__ == "__main__":
