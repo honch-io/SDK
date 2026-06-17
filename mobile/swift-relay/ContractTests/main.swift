@@ -12,6 +12,7 @@ struct ContractTests {
         try testRejectsRelayFrameReservedByte()
         try testRejectsRelayFramePayloadLengthMismatch()
         try testRejectsRelayFrameCrcMismatch()
+        try testRejectsRelayFrameFirstFlagOffsetMismatch()
         try testBuildsAckWithVersionAndBigEndianSequence()
         try testRejectsAckSequenceOutsideUInt64()
         try await testSingleCompleteFrameCreatesPendingMessage()
@@ -30,6 +31,7 @@ struct ContractTests {
         try testRetryPolicyParsesNumericRetryAfter()
         try await testUploaderPostsCaptureRequestAndConsumes204()
         try await testUploaderDropsPermanentRejections()
+        try await testUploaderDropsControlCharacterHeaderValues()
         try await testUploaderRetriesRecoverableStatuses()
         try await testWireV2BuildFramesReassemblesOversizedBody()
         try await testUploaderSequencesMultiFrameUpload()
@@ -139,6 +141,17 @@ private func testRejectsRelayFrameCrcMismatch() throws {
     bytes[19] = 0
     try expectThrows(RelayError.crcMismatch, "crc mismatch") {
         _ = try RelayFrameDecoder.decode(bytes)
+    }
+}
+
+private func testRejectsRelayFrameFirstFlagOffsetMismatch() throws {
+    let firstOnNonZero = makeRelayFrame(first: true, final: true, offset: 4, payload: Data([1]))
+    try expectThrows(RelayError.firstFlagOffsetMismatch, "first flag set on non-zero offset") {
+        _ = try RelayFrameDecoder.decode(firstOnNonZero)
+    }
+    let missingFirstAtZero = makeRelayFrame(first: false, final: false, offset: 0, payload: Data([1]))
+    try expectThrows(RelayError.firstFlagOffsetMismatch, "first flag clear at offset 0") {
+        _ = try RelayFrameDecoder.decode(missingFirstAtZero)
     }
 }
 
@@ -356,6 +369,34 @@ private func testUploaderDropsPermanentRejections() async throws {
 
         try expectEqual(outcome, .drop(status: status), "\(status) drops upload")
     }
+}
+
+private func testUploaderDropsControlCharacterHeaderValues() async throws {
+    let message = StoredRelayMessage(deviceId: "device-a", sourceType: 1, sequence: "7", body: Data([1]))
+    let session = makeStubbedURLSession { _ in (204, [:], Data()) }
+    let uploader = URLSessionRelayUploader(session: session)
+
+    let crlfKey = HonchRelayConfig(
+        endpointURL: URL(string: "https://capture.example.test")!,
+        projectKey: "key\r\nX-Injected: 1",
+        relayId: "relay-1",
+        relaySdkVersion: "0.1.0",
+        streamId: { "relay-\($0.deviceId)" },
+        messageId: { UInt64($0.sequence) ?? 0 }
+    )
+    let keyOutcome = await uploader.upload(config: crlfKey, message: message)
+    try expectEqual(keyOutcome, .drop(status: nil), "control chars in project key drop")
+
+    let crlfStream = HonchRelayConfig(
+        endpointURL: URL(string: "https://capture.example.test")!,
+        projectKey: "project-key",
+        relayId: "relay-1",
+        relaySdkVersion: "0.1.0",
+        streamId: { _ in "relay\r\nevil" },
+        messageId: { UInt64($0.sequence) ?? 0 }
+    )
+    let streamOutcome = await uploader.upload(config: crlfStream, message: message)
+    try expectEqual(streamOutcome, .drop(status: nil), "control chars in stream id drop")
 }
 
 private func testUploaderRetriesRecoverableStatuses() async throws {

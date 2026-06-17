@@ -40,13 +40,21 @@ public enum RelayFrameDecoder {
             throw RelayError.crcMismatch
         }
 
+        let first = flags & 0x01 != 0
+        let offset = readUInt32BE(bytes, at: 12)
+        // bit 0 marks the first chunk (spec relay-chunks.md), i.e. the frame at
+        // offset 0. Validate the flag rather than decoding it into a field
+        // nothing checks: it must be set exactly when offset is zero.
+        if first != (offset == 0) {
+            throw RelayError.firstFlagOffsetMismatch
+        }
         return RelayFrame(
             version: version,
             sourceType: sourceType,
-            first: flags & 0x01 != 0,
+            first: first,
             final: flags & 0x02 != 0,
             sequence: readUInt64BE(bytes, at: 4),
-            offset: readUInt32BE(bytes, at: 12),
+            offset: offset,
             payload: Data(bytes.dropFirst(headerSize))
         )
     }

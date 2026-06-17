@@ -2,7 +2,7 @@ import Foundation
 
 public enum RelayUploadOutcome: Equatable, Sendable {
     case consume(status: Int)
-    case drop(status: Int)
+    case drop(status: Int?)
     case retry(status: Int?, retryAfterMs: Int64?)
 }
 
@@ -28,6 +28,15 @@ public struct URLSessionRelayUploader: RelayUploading {
         // send next) and the final frame returns 204 (complete). Any error
         // mid-sequence ends the attempt and the whole message is retried from the
         // first frame (also satisfying 409 "retry from offset 0").
+
+        // Header values flow straight into the request. Reject control characters
+        // (CR/LF/NUL) in the project key and the stream id (derived from the
+        // device id) so a crafted value cannot inject headers; drop rather than
+        // retry, since the value can never become valid on its own.
+        guard isSafeHeaderValue(config.projectKey), isSafeHeaderValue(config.streamId(message)) else {
+            return .drop(status: nil)
+        }
+
         let frames: [Data]
         do {
             frames = try WireV2FrameBuilder.buildFrames(
@@ -35,7 +44,9 @@ public struct URLSessionRelayUploader: RelayUploading {
                 payload: message.body
             )
         } catch {
-            return .retry(status: nil, retryAfterMs: nil)
+            // An un-encodable message id can never succeed on retry; drop this one
+            // message instead of wedging it (and the drain) in an endless retry.
+            return .drop(status: nil)
         }
 
         let url = captureURL(endpointURL: config.endpointURL)
@@ -63,6 +74,12 @@ public struct URLSessionRelayUploader: RelayUploading {
 
         // Unreachable: the final frame always yields a terminal outcome.
         return .retry(status: nil, retryAfterMs: nil)
+    }
+
+    private func isSafeHeaderValue(_ value: String) -> Bool {
+        // HTTP header values must not carry control characters; CR/LF in
+        // particular would allow header injection.
+        return value.unicodeScalars.allSatisfy { $0.value >= 0x20 && $0.value != 0x7f }
     }
 
     private func makeRequest(config: HonchRelayConfig, message: StoredRelayMessage, url: URL, frame: Data) -> URLRequest {

@@ -14,6 +14,7 @@ public enum RelayError: Error, Equatable, Sendable {
     case finalChunkLengthMismatch
     case ackSequenceOutOfRange
     case invalidWireV2MessageId
+    case firstFlagOffsetMismatch
 }
 
 public struct DurableRelayChunk: Equatable, Sendable {
