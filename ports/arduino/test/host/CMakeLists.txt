@@ -26,3 +26,21 @@ target_compile_features(honch_arduino_wrapper_test PRIVATE cxx_std_20)
 target_compile_options(honch_arduino_wrapper_test PRIVATE
     $<$<CXX_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
 )
+
+add_executable(honch_tiered_queue_test
+    test_tiered_queue.cpp
+    ../../src/honch_tiered_queue.c
+)
+
+target_include_directories(honch_tiered_queue_test PRIVATE
+    ../../src
+)
+
+target_link_libraries(honch_tiered_queue_test PRIVATE honch_core)
+
+target_compile_features(honch_tiered_queue_test PRIVATE cxx_std_20)
+
+target_compile_options(honch_tiered_queue_test PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -Wpedantic -Werror>
+    $<$<COMPILE_LANGUAGE:C>:-Wall -Wextra -Wpedantic -Werror>
+)

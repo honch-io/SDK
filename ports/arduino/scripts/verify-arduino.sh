@@ -32,6 +32,7 @@ fi
 cmake -S "$ROOT_DIR/ports/arduino/test/host" -B "$ROOT_DIR/build/arduino-host"
 cmake --build "$ROOT_DIR/build/arduino-host"
 "$ROOT_DIR/build/arduino-host/honch_arduino_wrapper_test"
+"$ROOT_DIR/build/arduino-host/honch_tiered_queue_test"
 
 if command -v arduino-cli >/dev/null 2>&1; then
   if ! arduino-cli core list | grep -q '^esp32:esp32 '; then
