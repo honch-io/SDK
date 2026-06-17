@@ -25,6 +25,8 @@ struct ContractTests {
         try await testFileStoreCompletesMessageAcrossRestart()
         try await testFileStorePersistsRetryMetadataAcrossRestart()
         try await testFileStoreDeleteRemovesMessageAndChunks()
+        try await testMemoryStoreDropsOldestCompleteMessageBeyondCap()
+        try await testFileStoreBoundsCompleteMessagesByCap()
         try testRelayConfigDefaultsToSecureIngestEndpoint()
         try testBuildsSingleWireV2UploadFrame()
         try testEncodesMultiByteWireV2MessageId()
@@ -279,6 +281,30 @@ private func testFileStoreCompletesMessageAcrossRestart() async throws {
     try expectEqual(finalReceipt.complete, true, "file store final completes after restart")
     try expectEqual(finalReceipt.message?.body, Data([1, 2, 3, 4]), "file store reassembled body")
     try expectEqual(pending.map(\.sequence), ["21"], "file store pending after restart")
+}
+
+private func testMemoryStoreDropsOldestCompleteMessageBeyondCap() async throws {
+    let store = MemoryRelayStore(maxChunkGroups: 4096, maxCompleteMessages: 1)
+    try await store.putCompleteMessage(
+        StoredRelayMessage(deviceId: "device-a", sourceType: 1, sequence: "1", body: Data([1]))
+    )
+    try await store.putCompleteMessage(
+        StoredRelayMessage(deviceId: "device-a", sourceType: 1, sequence: "2", body: Data([2]))
+    )
+    let pending = try await store.completeMessages()
+    try expectEqual(pending.map(\.sequence), ["2"], "memory store drops oldest message beyond cap")
+}
+
+private func testFileStoreBoundsCompleteMessagesByCap() async throws {
+    let root = try temporaryDirectory()
+    let store = FileRelayStore(rootDirectory: root, maxCompleteMessages: 2)
+    for sequence in ["1", "2", "3"] {
+        try await store.putCompleteMessage(
+            StoredRelayMessage(deviceId: "device-a", sourceType: 1, sequence: sequence, body: Data([1]))
+        )
+    }
+    let pending = try await store.completeMessages()
+    try expectEqual(pending.count, 2, "file store bounds completed messages to the cap")
 }
 
 private func testFileStorePersistsRetryMetadataAcrossRestart() async throws {

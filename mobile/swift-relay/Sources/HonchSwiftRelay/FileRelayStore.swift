@@ -2,11 +2,13 @@ import Foundation
 
 public actor FileRelayStore: RelayDurableStore {
     private let rootDirectory: URL
+    private let maxCompleteMessages: Int
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    public init(rootDirectory: URL) {
+    public init(rootDirectory: URL, maxCompleteMessages: Int = 1024) {
         self.rootDirectory = rootDirectory
+        self.maxCompleteMessages = maxCompleteMessages
     }
 
     public func putChunk(_ chunk: DurableRelayChunk) async throws {
@@ -44,6 +46,53 @@ public actor FileRelayStore: RelayDurableStore {
     public func putCompleteMessage(_ message: StoredRelayMessage) async throws {
         let url = messageURL(deviceId: message.deviceId, sequence: message.sequence)
         try write(MessageRecord(message), to: url)
+        try enforceMessageLimit()
+    }
+
+    // Bound the on-disk store: when more than maxCompleteMessages pending uploads
+    // are stored, drop the oldest (by file creation time) along with its chunk
+    // directory. Drop-oldest, no time TTL -- matching the other relay stores.
+    private func enforceMessageLimit() throws {
+        let directory = messagesDirectory()
+        guard FileManager.default.fileExists(atPath: directory.path) else {
+            return
+        }
+        var files: [(url: URL, created: Date)] = []
+        let deviceDirectories = try FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.creationDateKey]
+        )
+        for deviceDirectory in deviceDirectories {
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: deviceDirectory.path, isDirectory: &isDirectory),
+                  isDirectory.boolValue else {
+                continue
+            }
+            let urls = try FileManager.default.contentsOfDirectory(
+                at: deviceDirectory,
+                includingPropertiesForKeys: [.creationDateKey]
+            )
+            for url in urls where url.pathExtension == "json" {
+                let created = (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? Date.distantPast
+                files.append((url, created))
+            }
+        }
+        guard files.count > maxCompleteMessages else {
+            return
+        }
+        let oldest = files.sorted { $0.created < $1.created }.prefix(files.count - maxCompleteMessages)
+        for entry in oldest {
+            // The message lives at messages/<deviceB64>/<seqB64>.json and its
+            // chunks at chunks/<deviceB64>/<seqB64>/; remove both.
+            let seqComponent = entry.url.deletingPathExtension().lastPathComponent
+            let deviceComponent = entry.url.deletingLastPathComponent().lastPathComponent
+            let chunkDirectory = rootDirectory
+                .appendingPathComponent("chunks", isDirectory: true)
+                .appendingPathComponent(deviceComponent, isDirectory: true)
+                .appendingPathComponent(seqComponent, isDirectory: true)
+            try? FileManager.default.removeItem(at: chunkDirectory)
+            try? FileManager.default.removeItem(at: entry.url)
+        }
     }
 
     public func completeMessages() async throws -> [StoredRelayMessage] {
