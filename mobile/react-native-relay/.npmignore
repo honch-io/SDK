@@ -4,3 +4,12 @@ e2e/
 scripts/
 bun.lock
 PRODUCTION_READINESS.md
+
+# Build output and tool caches — never publish (these leaked into the tarball)
+build/
+.gradle/
+local.properties
+*.tgz
+
+# Local-only / internal, not for consumers
+AGENTS.md
