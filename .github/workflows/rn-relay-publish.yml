@@ -1,0 +1,46 @@
+name: Publish react-native relay
+
+# Publishes the companion relay to npm as @honch/react-native-relay.
+# Trigger by pushing a tag like `rn-relay-vX.Y.Z`; the tag version must match
+# `version` in mobile/react-native-relay/package.json. The relay is versioned
+# independently of the SDK ports (npm versions are immutable -- bump, never reuse).
+#
+# CONFIRM BEFORE FIRST PUBLISH: set the NPM_TOKEN secret to an automation token
+# with publish rights to the @honch scope.
+on:
+  push:
+    tags:
+      - "rn-relay-v*"
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile/react-native-relay
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Tag version matches package.json
+        run: |
+          tag="${GITHUB_REF_NAME#rn-relay-v}"
+          ver=$(node -p "require('./package.json').version")
+          echo "tag=$tag package.json=$ver"
+          [ "$tag" = "$ver" ] || { echo "::error::tag $tag != package.json $ver"; exit 1; }
+
+      - name: Install + typecheck
+        run: |
+          npm ci || npm install
+          npm run typecheck
+
+      - name: Publish
+        # Scoped package: --access public is required for the first publish.
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

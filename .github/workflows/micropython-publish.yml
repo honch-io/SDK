@@ -1,0 +1,45 @@
+name: Publish MicroPython package
+
+# Publishes the MicroPython Python wrapper to PyPI as honch-micropython.
+# Trigger by pushing a tag like `micropython-v0.2.3`; the tag version must match
+# `version` in ports/micropython/pyproject.toml (registry versions are immutable).
+#
+# CONFIRM BEFORE FIRST PUBLISH: either configure PyPI OIDC trusted publishing for
+# this repo/workflow (preferred, no secret), or set the PYPI_API_TOKEN secret and
+# switch the publish step to use it.
+on:
+  push:
+    tags:
+      - "micropython-v*"
+
+jobs:
+  publish:
+    name: Build + upload to PyPI
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # PyPI trusted publishing (OIDC)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Tag version matches manifest + single-source guard
+        run: |
+          tag="${GITHUB_REF_NAME#micropython-v}"
+          manifest=$(grep -oE '^version = "[^"]+"' ports/micropython/pyproject.toml | grep -oE '[0-9][^"]+')
+          echo "tag=$tag manifest=$manifest"
+          [ "$tag" = "$manifest" ] || { echo "::error::tag $tag != manifest $manifest"; exit 1; }
+          python3 -m unittest tools.test_version_consistency
+
+      - name: Build distributions
+        run: |
+          python -m pip install --upgrade build
+          python -m build ports/micropython
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ports/micropython/dist
+          # For token auth instead of OIDC, add: password: ${{ secrets.PYPI_API_TOKEN }}

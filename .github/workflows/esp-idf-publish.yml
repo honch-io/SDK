@@ -1,0 +1,42 @@
+name: Publish ESP-IDF component
+
+# Publishes the ESP-IDF component to the Espressif Component Registry as
+# honch-io/honch. Trigger by pushing a tag like `esp-idf-v0.2.3`; the tag
+# version must match `version` in ports/esp-idf/honch/idf_component.yml
+# (registry versions are immutable -- bump, never reuse).
+#
+# CONFIRM BEFORE FIRST PUBLISH:
+#   - the publishable component directory (this assumes ports/esp-idf/honch and
+#     that the core sources it needs are included when packed), and
+#   - that the IDF_COMPONENT_API_TOKEN secret exists with rights to honch-io.
+on:
+  push:
+    tags:
+      - "esp-idf-v*"
+
+jobs:
+  publish:
+    name: Upload to Espressif Component Registry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Tag version matches manifest + single-source guard
+        run: |
+          tag="${GITHUB_REF_NAME#esp-idf-v}"
+          manifest=$(grep -oE '^version:[[:space:]]*"[^"]+"' ports/esp-idf/honch/idf_component.yml | grep -oE '[0-9][^"]+')
+          echo "tag=$tag manifest=$manifest"
+          [ "$tag" = "$manifest" ] || { echo "::error::tag $tag != manifest $manifest"; exit 1; }
+          python3 -m unittest tools.test_version_consistency
+
+      - name: Upload component
+        uses: espressif/upload-components-ci-action@v2
+        with:
+          name: honch
+          namespace: honch-io
+          directories: ports/esp-idf/honch
+          api_token: ${{ secrets.IDF_COMPONENT_API_TOKEN }}
