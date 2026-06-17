@@ -165,9 +165,6 @@ class ClientWrapperTests(unittest.TestCase):
                         "message": "runtime failed",
                         "severity": "error",
                         "type": "RuntimeError",
-                        "component": None,
-                        "code": None,
-                        "backtrace": None,
                     },
                     {"handled": False},
                 ),
@@ -398,6 +395,20 @@ class ClientWrapperTests(unittest.TestCase):
             self.assertEqual(original_calls, ["original"])
         finally:
             sys.excepthook = saved
+
+    def test_report_error_omits_unset_optional_fields(self):
+        honch = importlib.import_module("honch")
+        client = self._make_client(honch)
+
+        client.report_error("disk full", severity="warning", code="E_DISK")
+
+        report = client._core.calls[0][1]
+        # Unset optionals are omitted, not sent as None slots; the C module treats
+        # a missing key the same as None, so this stays on-device-equivalent.
+        self.assertEqual(
+            report,
+            {"message": "disk full", "severity": "warning", "code": "E_DISK"},
+        )
 
     def test_validation_rules_for_text_fields(self):
         honch = importlib.import_module("honch")

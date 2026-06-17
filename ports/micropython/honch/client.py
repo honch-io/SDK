@@ -67,14 +67,22 @@ class Honch:
     ):
         require_severity(severity)
         require_text(message, "error message")
+        # Only include fields that are set. The C module treats a missing key and
+        # a None value identically (honch_mp_map_get_str falls back for both), so
+        # this is behavior-equivalent on-device while avoiding the allocation of
+        # None slots on the error path -- worst exactly when reporting an OOM.
         report = {
             "message": message,
             "severity": severity,
-            "type": error_type,
-            "component": component,
-            "code": code,
-            "backtrace": backtrace,
         }
+        if error_type is not None:
+            report["type"] = error_type
+        if component is not None:
+            report["component"] = component
+        if code is not None:
+            report["code"] = code
+        if backtrace is not None:
+            report["backtrace"] = backtrace
         self._call("report_error", report, require_properties(properties))
 
     def run_with_error_tracking(self, fn, *args, **kwargs):
@@ -166,6 +174,10 @@ class Honch:
         self.connectivity_changed(False)
 
     def flush(self):
+        # The C core is never given the Python connectivity *poll* callback (only
+        # connectivity_changed events are forwarded), so it cannot gate on it
+        # itself. Uphold the cross-port flush contract here: flushing while the
+        # callback reports offline raises OfflineError before core is consulted.
         if not self._connectivity_available():
             raise OfflineError("offline")
         self._call("flush")
