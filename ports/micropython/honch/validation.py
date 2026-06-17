@@ -4,18 +4,6 @@ from .errors import InvalidArgumentError
 MAX_EVENT_NAME = 128
 MAX_DISTINCT_ID = 256
 
-RESERVED_PROPERTIES = {
-    "$battery_level",
-    "$device_id",
-    "$device_model",
-    "$environment",
-    "$firmware_version",
-    "$sdk_platform",
-    "$sdk_version",
-    "$session_id",
-    "$wifi_rssi",
-}
-
 
 def require_event_name(event):
     if not isinstance(event, str) or event.strip() == "" or len(event) > MAX_EVENT_NAME:
