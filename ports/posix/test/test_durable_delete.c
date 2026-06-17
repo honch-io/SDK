@@ -177,12 +177,57 @@ static void test_consume_no_fsync_os_buffered(void)
     printf("  T3 consume issues no fsync in OS_BUFFERED OK\n");
 }
 
+// H5: drop-oldest must evict the lowest-sequence event, not the lexically-first
+// filename. Filenames are <timestamp>-<sequence>-<id>, and the sequence field is
+// not fixed-width, so once sequences pass the padded width (or the clock skews)
+// lexical filename order diverges from true sequence order.
+static void test_drop_oldest_evicts_lowest_sequence(void)
+{
+    honch_client_t c;
+    honch_event_queue_ops_t q;
+    init_client(&c, &q, HONCH_DURABILITY_OS_BUFFERED);
+    c.max_queued_events = 3u;
+    c.queued_event_count = 3u;
+
+    // Same timestamp prefix; sequences straddle the 6-digit boundary, so lexical
+    // order ("1000000" < "999998" < "999999") inverts true sequence order.
+    const char *names[3] = {
+        "00000000000000000001-999998-a.hqe",   // true oldest (min sequence)
+        "00000000000000000001-999999-b.hqe",
+        "00000000000000000001-1000000-c.hqe",  // sorts first lexically, but newest
+    };
+    for (int i = 0; i < 3; i++) {
+        char path[512];
+        snprintf(path, sizeof path, "%s/%s", g_pending, names[i]);
+        FILE *f = fopen(path, "wb");
+        assert(f != NULL);
+        fputc('x', f);
+        fclose(f);
+    }
+
+    // Enqueue a 4th event -> over capacity -> exactly one eviction.
+    const uint8_t ev[8] = {0};
+    assert(q.queue_push(&c, ev, sizeof ev, 1000001u) == HONCH_OK);
+
+    char p998[512], p999[512], p1m[512];
+    snprintf(p998, sizeof p998, "%s/%s", g_pending, names[0]);
+    snprintf(p999, sizeof p999, "%s/%s", g_pending, names[1]);
+    snprintf(p1m, sizeof p1m, "%s/%s", g_pending, names[2]);
+
+    assert(access(p998, F_OK) != 0);  // sequence 999998: true oldest -> evicted
+    assert(access(p999, F_OK) == 0);  // kept
+    assert(access(p1m, F_OK) == 0);   // kept (newer, despite sorting first lexically)
+    assert(count_files(g_pending) == 3);
+    printf("  H5 drop-oldest evicts lowest sequence OK\n");
+}
+
 int main(void)
 {
     make_dirs();
     test_consume_fsyncs_dir_sync_always();
     test_dead_letter_fsyncs_dir_sync_always();
     test_consume_no_fsync_os_buffered();
+    test_drop_oldest_evicts_lowest_sequence();
     printf("ALL DURABLE DELETE TESTS PASSED\n");
     return 0;
 }

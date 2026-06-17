@@ -627,12 +627,43 @@ static honch_status_t honch_queue_enqueue_with_sequence(
         }
 
         client->queued_event_count = files.count;
-        for (size_t i = 0u; client->queued_event_count >= client->max_queued_events && i < files.count; i++) {
-            status = honch_unlink_if_exists(files.items[i].path);
+        /*
+         * Evict the lowest-sequence (true oldest) entries. The file list is
+         * sorted lexically by name, but filenames are <timestamp>-<sequence>-...
+         * and the sequence field is not fixed-width, so lexical order diverges
+         * from sequence order once sequences exceed the padded width or the clock
+         * is non-monotonic. Selecting the minimum parsed sequence each round
+         * ensures drop-oldest never discards a newer event while an older one
+         * remains. An unparseable name is treated as oldest so the queue still
+         * makes progress.
+         */
+        while (client->queued_event_count >= client->max_queued_events) {
+            size_t victim = files.count;
+            uint64_t victim_sequence = UINT64_MAX;
+            for (size_t i = 0u; i < files.count; i++) {
+                if (files.items[i].path == NULL) {
+                    continue; /* already evicted this round */
+                }
+                uint64_t sequence = 0u;
+                if (!honch_queue_sequence_from_name(files.items[i].name, &sequence)) {
+                    victim = i;
+                    break;
+                }
+                if (victim == files.count || sequence < victim_sequence) {
+                    victim = i;
+                    victim_sequence = sequence;
+                }
+            }
+            if (victim == files.count) {
+                break; /* nothing left to evict */
+            }
+            status = honch_unlink_if_exists(files.items[victim].path);
             if (status != HONCH_OK) {
                 honch_file_list_free(&files);
                 return status;
             }
+            free(files.items[victim].path);
+            files.items[victim].path = NULL; /* mark evicted */
             client->queued_event_count--;
         }
         honch_file_list_free(&files);
