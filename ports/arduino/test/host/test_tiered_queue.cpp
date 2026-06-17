@@ -18,6 +18,7 @@ extern "C" {
 struct FakeNv {
   std::vector<std::vector<uint8_t>> blobs;  // index 0 == oldest
   bool on = true;
+  bool fail_append = false;  // simulate an NV tier that is full / erroring
   uint64_t dropped = 0;
 };
 
@@ -46,6 +47,7 @@ static honch_status_t fake_read_at(void *ctx, size_t index, uint32_t offset, uin
 
 static honch_status_t fake_append(void *ctx, honch_nv_read_cb reader, void *reader_ctx, size_t total_size) {
   FakeNv *nv = (FakeNv *)ctx;
+  if (nv->fail_append) return HONCH_ERROR_IO;
   std::vector<uint8_t> blob(total_size);
   // Pull in two chunks to exercise the reader's offset handling.
   size_t half = total_size / 2;
@@ -98,7 +100,7 @@ static void harness_init(Harness *h, const honch_nv_queue_ops_t *nv,
 }
 
 static honch_status_t push(Harness *h, uint64_t seq, uint8_t tag, size_t len) {
-  uint8_t ev[256];
+  uint8_t ev[1024];
   assert(len <= sizeof(ev));
   memset(ev, tag, len);
   return h->ops.queue_push(h->ops.ctx, ev, len, seq);
@@ -278,6 +280,58 @@ static void test_disabled_adapter_ram_only() {
   printf("  T6b disabled adapter stays RAM-only OK\n");
 }
 
+// T7: persist must surface a real error when the NV tier fails an append,
+// rather than reporting success while events are left unpersisted. A graceful-
+// shutdown flush that returns HONCH_OK is taken to mean "events are durable";
+// swallowing the failure silently loses them at power-off.
+static void test_persist_propagates_nv_error() {
+  FakeNv nv;
+  nv.fail_append = true;  // NV enabled but every append errors (e.g. flash full)
+  Harness h;
+  honch_tiered_queue_config_t cfg = {0, 0};
+  honch_nv_queue_ops_t ops = fake_ops(&nv);
+  harness_init(&h, &ops, &cfg);
+
+  assert(push(&h, 1, 0x11, 8) == HONCH_OK);
+  assert(push(&h, 2, 0x22, 8) == HONCH_OK);
+
+  honch_status_t status = honch_tiered_queue_persist(&h.tq, 0);
+  assert(status != HONCH_OK);   // must NOT claim success
+  assert(nv.blobs.size() == 0);  // nothing actually persisted
+  printf("  T7 persist propagates NV error OK\n");
+}
+
+// T8: under RAM pressure with an NV tier available, the oldest events must spill
+// to durable NV instead of being silently dropped from RAM -- even with auto-
+// spill disabled (the default config). This is the core durability/ordering
+// contract: nothing is lost while a tier still has room.
+static void test_push_spills_instead_of_dropping() {
+  FakeNv nv;
+  Harness h;
+  honch_tiered_queue_config_t cfg = {0, 0};  // default: auto-spill OFF
+  honch_nv_queue_ops_t ops = fake_ops(&nv);
+  harness_init(&h, &ops, &cfg);
+
+  // RAM buffer is 4096B; 512B events => 8 fit. Push 12 to force back-pressure.
+  const uint64_t kCount = 12;
+  for (uint64_t i = 1; i <= kCount; i++) assert(push(&h, i, (uint8_t)i, 512) == HONCH_OK);
+
+  honch_queue_stats_t st = {};
+  assert(h.ram_ops.queue_get_stats(h.ram_ops.ctx, &st) == HONCH_OK);
+  assert(st.capacity_dropped_events == 0);  // nothing dropped from RAM
+  assert(nv.blobs.size() > 0);              // overflow went to durable NV
+  assert(depth(&h) == kCount);              // every event retained
+
+  // Drain order must still be oldest-first across tiers (NV holds the oldest).
+  honch_storage_event_t ev[16] = {};
+  size_t n = 0;
+  assert(h.ops.queue_read_batch(h.ops.ctx, ev, 16, 4096, &n) == HONCH_OK);
+  assert(n > 0);
+  assert(ev[0].sequence == 1);  // oldest event survived, first out
+  printf("  T8 push spills to NV instead of dropping OK (nv=%zu, depth=%zu)\n",
+         nv.blobs.size(), depth(&h));
+}
+
 int main() {
   test_ram_only_passthrough();
   test_persist_roundtrip();
@@ -286,6 +340,8 @@ int main() {
   test_boot_recovery_peek();
   test_torn_record_dropped();
   test_disabled_adapter_ram_only();
+  test_persist_propagates_nv_error();
+  test_push_spills_instead_of_dropping();
   printf("ALL TIERED QUEUE TESTS PASSED\n");
   return 0;
 }

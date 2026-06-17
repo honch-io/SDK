@@ -85,34 +85,47 @@ static honch_status_t tq_spill_reader(void *cb_ctx, uint32_t offset, uint8_t *bu
     return HONCH_OK;
 }
 
+/* Move the single oldest RAM event into the NV tier. Returns HONCH_OK on a
+ * successful spill, HONCH_ERROR_NOT_INITIALIZED when RAM is empty (nothing to
+ * spill), or the underlying error if reading RAM / appending NV / consuming RAM
+ * fails. The RAM event is consumed only after the NV append succeeds, so a
+ * failed append leaves the event safely in RAM rather than losing it. */
+static honch_status_t tq_spill_one(honch_tiered_queue_t *tq) {
+    honch_storage_event_t ev[1] = {{0}};
+    size_t n = 0;
+    honch_status_t status = tq->ram_ops.queue_read_batch(tq->ram_ops.ctx, ev, 1u, (size_t)-1, &n);
+    if (status != HONCH_OK) return status;
+    if (n == 0u) return HONCH_ERROR_NOT_INITIALIZED;
+
+    tq_spill_src_t src;
+    put_u64le(src.header, ev[0].sequence);
+    put_u32le(src.header + 8, (uint32_t)ev[0].length);
+    src.payload = ev[0].data;
+    src.payload_len = ev[0].length;
+    uint16_t crc = crc16_update(0xFFFFu, src.header, HONCH_NV_REC_HEADER);
+    crc = crc16_update(crc, src.payload, src.payload_len);
+    src.footer[0] = (uint8_t)(crc & 0xFFu);
+    src.footer[1] = (uint8_t)((crc >> 8) & 0xFFu);
+
+    size_t total = HONCH_NV_REC_HEADER + src.payload_len + HONCH_NV_REC_FOOTER;
+    status = tq->nv_ops->append(tq->nv_ops->ctx, tq_spill_reader, &src, total);
+    if (status != HONCH_OK) return status;
+    return tq->ram_ops.queue_consume(tq->ram_ops.ctx, ev[0].sequence);
+}
+
 honch_status_t honch_tiered_queue_persist(honch_tiered_queue_t *tq, size_t target_bytes) {
     if (tq == NULL) return HONCH_ERROR_INVALID_ARGUMENT;
     if (!tq_nv_active(tq) || tq->nv_ops->append == NULL) return HONCH_OK;
 
     for (;;) {
         honch_queue_stats_t st;
-        if (tq->ram_ops.queue_get_stats(tq->ram_ops.ctx, &st) != HONCH_OK) break;
+        honch_status_t status = tq->ram_ops.queue_get_stats(tq->ram_ops.ctx, &st);
+        if (status != HONCH_OK) return status;
         if (st.queued_events == 0u || st.queued_bytes <= target_bytes) break;
 
-        honch_storage_event_t ev[1] = {{0}};
-        size_t n = 0;
-        if (tq->ram_ops.queue_read_batch(tq->ram_ops.ctx, ev, 1u, (size_t)-1, &n) != HONCH_OK || n == 0u) {
-            break;
-        }
-
-        tq_spill_src_t src;
-        put_u64le(src.header, ev[0].sequence);
-        put_u32le(src.header + 8, (uint32_t)ev[0].length);
-        src.payload = ev[0].data;
-        src.payload_len = ev[0].length;
-        uint16_t crc = crc16_update(0xFFFFu, src.header, HONCH_NV_REC_HEADER);
-        crc = crc16_update(crc, src.payload, src.payload_len);
-        src.footer[0] = (uint8_t)(crc & 0xFFu);
-        src.footer[1] = (uint8_t)((crc >> 8) & 0xFFu);
-
-        size_t total = HONCH_NV_REC_HEADER + src.payload_len + HONCH_NV_REC_FOOTER;
-        if (tq->nv_ops->append(tq->nv_ops->ctx, tq_spill_reader, &src, total) != HONCH_OK) break;
-        if (tq->ram_ops.queue_consume(tq->ram_ops.ctx, ev[0].sequence) != HONCH_OK) break;
+        status = tq_spill_one(tq);
+        if (status == HONCH_ERROR_NOT_INITIALIZED) break; /* RAM drained */
+        if (status != HONCH_OK) return status;            /* surface NV failure */
     }
     return HONCH_OK;
 }
@@ -121,8 +134,31 @@ honch_status_t honch_tiered_queue_persist(honch_tiered_queue_t *tq, size_t targe
 
 static honch_status_t tq_push(void *ctx, const uint8_t *event, size_t event_size, uint64_t sequence) {
     honch_tiered_queue_t *tq = (honch_tiered_queue_t *)ctx;
+
+    /* Back-pressure: if the RAM tier cannot fit the incoming event and an NV
+     * tier is available, spill the oldest RAM events to durable NV *before* the
+     * RAM push, so overflow evicts to storage rather than silently dropping the
+     * oldest RAM event (honch_ram_queue_push drop-oldests on a full buffer).
+     * Bounded: spills only while the event does not fit RAM's free bytes and RAM
+     * is non-empty. If NV is unavailable or itself errors, we stop and fall back
+     * to the RAM queue's own drop-oldest policy. Events too large for the buffer
+     * are left for the RAM queue to reject (oversized), not spilled-around. */
+    if (tq_nv_active(tq) && tq->nv_ops->append != NULL) {
+        honch_queue_stats_t st;
+        if (tq->ram_ops.queue_get_stats(tq->ram_ops.ctx, &st) == HONCH_OK &&
+            event_size <= st.buffer_bytes) {
+            while (event_size > st.buffer_bytes - st.queued_bytes) {
+                if (tq_spill_one(tq) != HONCH_OK) break;
+                if (tq->ram_ops.queue_get_stats(tq->ram_ops.ctx, &st) != HONCH_OK) break;
+            }
+        }
+    }
+
     honch_status_t status = tq->ram_ops.queue_push(tq->ram_ops.ctx, event, event_size, sequence);
     if (status != HONCH_OK) return status;
+
+    /* Opt-in memory-pressure spill: drain RAM toward low-water once it crosses
+     * high-water, batching NV writes instead of spilling on every push. */
     if (tq->config.spill_high_water_bytes > 0u && tq_nv_active(tq)) {
         honch_queue_stats_t st;
         if (tq->ram_ops.queue_get_stats(tq->ram_ops.ctx, &st) == HONCH_OK &&
