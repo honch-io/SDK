@@ -167,6 +167,11 @@ if(HONCH_BUILD_TESTS)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_sdk_contract.py
     )
 
+    add_test(
+        NAME honch_posix_tls_config_tests
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_tls_config.py
+    )
+
     if(HONCH_BUILD_E2E)
         add_executable(honch_posix_e2e
             test/test_e2e_capture.c

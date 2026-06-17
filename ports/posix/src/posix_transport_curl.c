@@ -267,7 +267,26 @@ honch_status_t honch_posix_transport_post_chunk(
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, honch_discard_response);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, (long)client->transport_timeout_ms);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, (long)client->transport_timeout_ms);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+
+    /* Pin TLS verification explicitly so it can never be silently weakened by a
+     * build/libcurl default change: verify the peer certificate chain and that
+     * the certificate matches the host. The endpoint defaults to https; an
+     * integrator may still configure a plaintext (e.g. loopback) endpoint, in
+     * which case these options are inert because no TLS handshake occurs. */
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+
+    /* Only ever speak HTTP(S): a malformed or hostile endpoint string must not
+     * be able to make libcurl use file://, scp://, gopher://, etc. Redirects
+     * are not followed (CURLOPT_FOLLOWLOCATION is left off), so the project-key
+     * header cannot be redirected to another host or scheme. */
+#if defined(CURLOPT_PROTOCOLS_STR) && LIBCURL_VERSION_NUM >= 0x075500
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "http,https");
+#else
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS, (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS));
+#endif
 
     CURLcode code = curl_easy_perform(curl);
     long response_code = 0L;
