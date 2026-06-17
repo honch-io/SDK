@@ -1,5 +1,5 @@
 import type { StoredRelayMessage } from "./relayQueue";
-import { buildSingleWireV2Frame } from "./wireV2";
+import { buildSingleWireV2Frame, buildWireV2Frames, MAX_WIRE_V2_FRAME_SIZE } from "./wireV2";
 
 export type RelayUploaderConfig = {
   endpointUrl: string;
@@ -9,6 +9,8 @@ export type RelayUploaderConfig = {
   relaySdkVersion: string;
   streamId(message: StoredRelayMessage): string;
   messageId(message: StoredRelayMessage): number;
+  // Max wire-v2 frame size for re-chunking; defaults to MAX_WIRE_V2_FRAME_SIZE.
+  maxFrameSize?: number;
 };
 
 export type RelayUploadOutcome =
@@ -47,35 +49,60 @@ export async function uploadRelayMessageOutcome(
   config: RelayUploaderConfig,
   message: StoredRelayMessage
 ): Promise<RelayUploadOutcome> {
-  const body = buildRelayUploadBuffer(config, message);
+  // Re-chunk the (possibly oversized) reassembled body into wire-v2 frames and
+  // POST them in order: every non-final frame must return 202 (stored, send
+  // next), and the final frame returns 204 (complete). Any error mid-sequence
+  // ends the attempt; the whole message is retried from the first frame (which
+  // also satisfies 409 "retry from offset 0").
+  const frames = buildWireV2Frames(
+    config.messageId(message),
+    message.body,
+    config.maxFrameSize ?? MAX_WIRE_V2_FRAME_SIZE
+  );
+  const url = `${config.endpointUrl.replace(/\/$/, "")}/capture`;
+  const headers = {
+    "Content-Type": "application/vnd.honch.chunk",
+    "X-Honch-Project-Key": config.projectKey,
+    "X-Honch-Stream-Id": config.streamId(message),
+    "X-Honch-Relay-Id": config.relayId,
+    "X-Honch-Relay-SDK-Platform": config.relaySdkPlatform,
+    "X-Honch-Relay-SDK-Version": config.relaySdkVersion
+  };
 
-  let response: Response;
-  try {
-    response = await fetch(`${config.endpointUrl.replace(/\/$/, "")}/capture`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/vnd.honch.chunk",
-        "X-Honch-Project-Key": config.projectKey,
-        "X-Honch-Stream-Id": config.streamId(message),
-        "X-Honch-Relay-Id": config.relayId,
-        "X-Honch-Relay-SDK-Platform": config.relaySdkPlatform,
-        "X-Honch-Relay-SDK-Version": config.relaySdkVersion
-      },
-      body
-    });
-  } catch (error) {
-    return { action: "retry", error };
+  for (let index = 0; index < frames.length; index += 1) {
+    const isFinal = index === frames.length - 1;
+    const body = new ArrayBuffer(frames[index].byteLength);
+    new Uint8Array(body).set(frames[index]);
+
+    let response: Response;
+    try {
+      response = await fetch(url, { method: "POST", headers, body });
+    } catch (error) {
+      return { action: "retry", error };
+    }
+
+    const outcome = classifyFrameResponse(response, isFinal);
+    if (outcome !== "continue") {
+      return outcome;
+    }
   }
 
-  if (response.status === 204) {
-    return { action: "consume", status: response.status };
+  // Unreachable: the final frame always yields a terminal outcome.
+  return { action: "retry" };
+}
+
+function classifyFrameResponse(response: Response, isFinal: boolean): RelayUploadOutcome | "continue" {
+  if (isFinal) {
+    if (response.status === 204) {
+      return { action: "consume", status: response.status };
+    }
+  } else if (response.status === 202) {
+    return "continue";
   }
-  // Permanent rejections (spec Response Codes): malformed (400), bad key (401),
-  // not found (404), unsupported content type (415), semantic validation
-  // failure (422). Dropping these (rather than retrying forever) matches the C
-  // SDKs' status mapping. 413 (too large) is intentionally NOT dropped here: for
-  // a relay it is recoverable by re-chunking, which lands with multi-frame
-  // support (H3); until then it falls through to retry.
+  // Permanent rejections (matching the C SDK status mapping): malformed (400),
+  // bad key (401), not found (404), unsupported content type (415), semantic
+  // validation failure (422). 413 (too large) is intentionally NOT here -- it is
+  // recoverable now that the relay re-chunks, so it falls through to retry.
   if (
     response.status === 400 ||
     response.status === 401 ||
@@ -85,6 +112,8 @@ export async function uploadRelayMessageOutcome(
   ) {
     return { action: "drop", status: response.status };
   }
+  // Everything else -- 409 (retry from offset 0), 413, 429, 5xx, and any
+  // out-of-sequence 202/204 -- retries the whole message.
   return {
     action: "retry",
     status: response.status,

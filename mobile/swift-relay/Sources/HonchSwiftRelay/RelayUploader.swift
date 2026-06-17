@@ -17,10 +17,20 @@ public struct URLSessionRelayUploader: RelayUploading {
         self.session = session
     }
 
+    private enum FrameOutcome {
+        case terminal(RelayUploadOutcome)
+        case continueSequence
+    }
+
     public func upload(config: HonchRelayConfig, message: StoredRelayMessage) async -> RelayUploadOutcome {
-        let body: Data
+        // Re-chunk the (possibly oversized) reassembled body into wire-v2 frames
+        // and POST them in order: every non-final frame must return 202 (stored,
+        // send next) and the final frame returns 204 (complete). Any error
+        // mid-sequence ends the attempt and the whole message is retried from the
+        // first frame (also satisfying 409 "retry from offset 0").
+        let frames: [Data]
         do {
-            body = try WireV2FrameBuilder.buildSingleFrame(
+            frames = try WireV2FrameBuilder.buildFrames(
                 messageId: config.messageId(message),
                 payload: message.body
             )
@@ -28,42 +38,66 @@ public struct URLSessionRelayUploader: RelayUploading {
             return .retry(status: nil, retryAfterMs: nil)
         }
 
-        var request = URLRequest(url: captureURL(endpointURL: config.endpointURL))
+        let url = captureURL(endpointURL: config.endpointURL)
+        for (index, frame) in frames.enumerated() {
+            let isFinal = index == frames.count - 1
+            let request = makeRequest(config: config, message: message, url: url, frame: frame)
+
+            let response: URLResponse
+            do {
+                (_, response) = try await session.data(for: request)
+            } catch {
+                return .retry(status: nil, retryAfterMs: nil)
+            }
+            guard let httpResponse = response as? HTTPURLResponse else {
+                return .retry(status: nil, retryAfterMs: nil)
+            }
+
+            switch classify(httpResponse, isFinal: isFinal) {
+            case .terminal(let outcome):
+                return outcome
+            case .continueSequence:
+                continue
+            }
+        }
+
+        // Unreachable: the final frame always yields a terminal outcome.
+        return .retry(status: nil, retryAfterMs: nil)
+    }
+
+    private func makeRequest(config: HonchRelayConfig, message: StoredRelayMessage, url: URL, frame: Data) -> URLRequest {
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.httpBody = body
+        request.httpBody = frame
         request.setValue("application/vnd.honch.chunk", forHTTPHeaderField: "Content-Type")
         request.setValue(config.projectKey, forHTTPHeaderField: "X-Honch-Project-Key")
         request.setValue(config.streamId(message), forHTTPHeaderField: "X-Honch-Stream-Id")
         request.setValue(config.relayId, forHTTPHeaderField: "X-Honch-Relay-Id")
         request.setValue(config.relaySdkPlatform, forHTTPHeaderField: "X-Honch-Relay-SDK-Platform")
         request.setValue(config.relaySdkVersion, forHTTPHeaderField: "X-Honch-Relay-SDK-Version")
+        return request
+    }
 
-        let response: URLResponse
-        do {
-            (_, response) = try await session.data(for: request)
-        } catch {
-            return .retry(status: nil, retryAfterMs: nil)
+    private func classify(_ response: HTTPURLResponse, isFinal: Bool) -> FrameOutcome {
+        if isFinal {
+            if response.statusCode == 204 {
+                return .terminal(.consume(status: response.statusCode))
+            }
+        } else if response.statusCode == 202 {
+            return .continueSequence
         }
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            return .retry(status: nil, retryAfterMs: nil)
-        }
-
-        switch httpResponse.statusCode {
-        case 204:
-            return .consume(status: httpResponse.statusCode)
-        // Permanent rejections: malformed (400), bad key (401), not found (404),
-        // unsupported content type (415), semantic validation failure (422).
-        // Dropping these matches the C SDKs' status mapping. 413 (too large) is
-        // recoverable for a relay via re-chunking (H3), so it is left to retry
-        // until multi-frame support lands.
+        // Permanent rejections (matching the C SDK status mapping): 400/401/404/
+        // 415/422. 413 (too large) is recoverable now the relay re-chunks, so it
+        // falls through to retry along with 409/429/5xx and any out-of-sequence
+        // 202/204.
+        switch response.statusCode {
         case 400, 401, 404, 415, 422:
-            return .drop(status: httpResponse.statusCode)
+            return .terminal(.drop(status: response.statusCode))
         default:
-            return .retry(
-                status: httpResponse.statusCode,
-                retryAfterMs: RetryPolicy.parseRetryAfterMs(httpResponse.value(forHTTPHeaderField: "Retry-After"))
-            )
+            return .terminal(.retry(
+                status: response.statusCode,
+                retryAfterMs: RetryPolicy.parseRetryAfterMs(response.value(forHTTPHeaderField: "Retry-After"))
+            ))
         }
     }
 

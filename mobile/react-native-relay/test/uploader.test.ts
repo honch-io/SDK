@@ -174,4 +174,39 @@ describe("uploadRelayMessage", () => {
     expect(nextBackoffDelayMs(2, () => 1)).toBe(5000);
     expect(nextBackoffDelayMs(20, () => 0.5)).toBe(300000);
   });
+
+  it("re-chunks an oversized body into a multi-frame sequence (202s then 204)", async () => {
+    const bigMessage = { ...message, body: new Uint8Array(20_000).fill(0xab) };
+    // Respond per the wire protocol: non-final frames (MORE bit set) -> 202,
+    // final frame -> 204. The relay must send several POSTs and finish on 204.
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      const header = new Uint8Array(init.body as ArrayBuffer)[0];
+      const more = (header & 0x40) !== 0;
+      return new Response(null, { status: more ? 202 : 204 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(uploadRelayMessageOutcome(config, bigMessage)).resolves.toMatchObject({
+      action: "consume",
+      status: 204
+    });
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it("stops the frame sequence and retries the whole message on a mid-sequence error", async () => {
+    const bigMessage = { ...message, body: new Uint8Array(20_000).fill(0xcd) };
+    let call = 0;
+    const fetchMock = vi.fn(async () => {
+      call += 1;
+      return new Response(null, { status: call === 1 ? 202 : 500 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(uploadRelayMessageOutcome(config, bigMessage)).resolves.toMatchObject({
+      action: "retry",
+      status: 500
+    });
+    // Stopped at the failing frame; did not keep POSTing the rest.
+    expect(fetchMock.mock.calls.length).toBe(2);
+  });
 });

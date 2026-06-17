@@ -31,6 +31,8 @@ struct ContractTests {
         try await testUploaderPostsCaptureRequestAndConsumes204()
         try await testUploaderDropsPermanentRejections()
         try await testUploaderRetriesRecoverableStatuses()
+        try await testWireV2BuildFramesReassemblesOversizedBody()
+        try await testUploaderSequencesMultiFrameUpload()
         try await testUploaderRetriesServerErrorsWithRetryAfter()
         try await testUploaderRetriesNetworkErrors()
         try await testDrainConsumesUploadedMessages()
@@ -367,6 +369,70 @@ private func testUploaderRetriesRecoverableStatuses() async throws {
 
         try expectEqual(outcome, .retry(status: status, retryAfterMs: nil), "\(status) retries upload")
     }
+}
+
+private func testWireV2BuildFramesReassemblesOversizedBody() async throws {
+    let maxFrameSize = 256
+    var payload = Data(count: 5000)
+    for i in 0..<payload.count { payload[i] = UInt8((i * 31 + 7) & 0xff) }
+
+    let frames = try WireV2FrameBuilder.buildFrames(messageId: 70_000, payload: payload, maxFrameSize: maxFrameSize)
+    try expectEqual(frames.count > 1, true, "oversized body splits into multiple frames")
+
+    var reassembled = Data()
+    var expectedOffset = 0
+    for (index, frame) in frames.enumerated() {
+        try expectEqual(frame.count <= maxFrameSize, true, "frame within max size")
+        let isFinal = index == frames.count - 1
+        var p = frame.startIndex
+        let header = frame[p]; p += 1
+        try expectEqual(Int(header & 0x03), 2, "frame version")
+        let continuation = (header & 0x20) != 0
+        let more = (header & 0x40) != 0
+        try expectEqual(more, !isFinal, "more flag matches non-final")
+        try expectEqual(continuation, index != 0, "continuation flag matches non-first")
+
+        var messageId: UInt64 = 0
+        var midShift: UInt64 = 0
+        while true { let b = frame[p]; p += 1; messageId |= UInt64(b & 0x7f) << midShift; if b & 0x80 == 0 { break }; midShift += 7 }
+        try expectEqual(messageId, 70_000, "message id")
+
+        if continuation {
+            var off = 0; var s = 0
+            while true { let b = frame[p]; p += 1; off |= Int(b & 0x7f) << s; if b & 0x80 == 0 { break }; s += 7 }
+            try expectEqual(off, expectedOffset, "contiguous offset")
+        } else if more {
+            var tot = 0; var s = 0
+            while true { let b = frame[p]; p += 1; tot |= Int(b & 0x7f) << s; if b & 0x80 == 0 { break }; s += 7 }
+            try expectEqual(tot, payload.count, "total message length")
+        }
+
+        let payloadEnd = more ? frame.endIndex : frame.index(frame.endIndex, offsetBy: -2)
+        reassembled.append(contentsOf: frame[p..<payloadEnd])
+        expectedOffset = reassembled.count
+
+        if !more {
+            let lo = frame[frame.index(frame.endIndex, offsetBy: -2)]
+            let hi = frame[frame.index(frame.endIndex, offsetBy: -1)]
+            let crc = UInt16(lo) | (UInt16(hi) << 8)
+            try expectEqual(crc, RelayFrameDecoder.crc16CcittFalse(reassembled), "final crc over whole message")
+        }
+    }
+    try expectEqual(reassembled, payload, "frames reassemble to the original body")
+}
+
+private func testUploaderSequencesMultiFrameUpload() async throws {
+    let big = StoredRelayMessage(deviceId: "device-a", sourceType: 1, sequence: "7", body: Data(repeating: 0xab, count: 20_000))
+    // Per the wire protocol: non-final frames (MORE bit set) -> 202, final -> 204.
+    let session = makeStubbedURLSession { request in
+        let body = try requestBody(request)
+        let header = body?.first ?? 0
+        let more = (header & 0x40) != 0
+        return (more ? 202 : 204, [:], Data())
+    }
+    let uploader = URLSessionRelayUploader(session: session)
+    let outcome = await uploader.upload(config: makeConfig(), message: big)
+    try expectEqual(outcome, .consume(status: 204), "multi-frame upload completes on the final 204")
 }
 
 private func testUploaderRetriesServerErrorsWithRetryAfter() async throws {
