@@ -105,7 +105,7 @@ typedef struct honch_event_record {
     const char *distinct_id;
     const char *session_id;
     uint64_t timestamp_ms;
-    honch_wire_v2_property_t properties[64];
+    honch_wire_v2_property_t properties[HONCH_MAX_EVENT_PROPERTIES];
     size_t property_count;
 } honch_event_record_t;
 

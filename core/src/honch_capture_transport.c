@@ -93,14 +93,15 @@ honch_status_t honch_capture_parse_endpoint(const char *endpoint_url, honch_capt
     }
 
     if (path_len == 0u) {
-        return honch_copy_segment(out->path, sizeof(out->path), "/capture", 8u);
+        return honch_copy_segment(out->path, sizeof(out->path), "/capture", sizeof("/capture") - 1u);
     }
 
-    if (path_len + 8u >= sizeof(out->path)) {
+    /* path_len + strlen("/capture") must leave room for the trailing NUL. */
+    if (path_len + (sizeof("/capture") - 1u) >= sizeof(out->path)) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
     memcpy(out->path, path_begin, path_len);
-    memcpy(out->path + path_len, "/capture", 9u);
+    memcpy(out->path + path_len, "/capture", sizeof("/capture"));
     return HONCH_OK;
 }
 

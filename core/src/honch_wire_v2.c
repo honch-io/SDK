@@ -112,7 +112,6 @@ static honch_status_t honch_wire_v2_append_key_value(
 
 static honch_status_t honch_wire_v2_append_byte(uint8_t value, uint8_t *out, size_t out_size, size_t *offset)
 {
-    (void)value;
     if (*offset >= out_size) {
         return HONCH_ERROR_OUT_OF_MEMORY;
     }
