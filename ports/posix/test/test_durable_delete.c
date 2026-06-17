@@ -221,6 +221,42 @@ static void test_drop_oldest_evicts_lowest_sequence(void)
     printf("  H5 drop-oldest evicts lowest sequence OK\n");
 }
 
+// M11: a state value containing an embedded NUL must be rejected, not silently
+// truncated (which would persist a corrupted device_id / distinct_id).
+static void test_state_get_rejects_embedded_nul(void)
+{
+    honch_client_t c;
+    honch_event_queue_ops_t q;
+    init_client(&c, &q, HONCH_DURABILITY_OS_BUFFERED);
+
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t throwaway_q;
+    honch_posix_storage_t storage_ctx;
+    assert(honch_posix_storage_ops_init(&state_ops, &throwaway_q, &storage_ctx, g_pending) == HONCH_OK);
+
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s", g_state, "device_id");
+
+    // A clean value round-trips.
+    FILE *f = fopen(path, "wb");
+    assert(f != NULL);
+    fwrite("abcd", 1, 4, f);
+    fclose(f);
+    uint8_t buf[64];
+    size_t sz = sizeof buf;
+    assert(state_ops.state_get(&c, "device_id", buf, &sz) == HONCH_OK);
+    assert(sz == 4);
+
+    // An embedded NUL must be rejected, not truncated to "ab".
+    f = fopen(path, "wb");
+    assert(f != NULL);
+    fwrite("ab\0cd", 1, 5, f);
+    fclose(f);
+    sz = sizeof buf;
+    assert(state_ops.state_get(&c, "device_id", buf, &sz) != HONCH_OK);
+    printf("  M11 state_get rejects embedded NUL OK\n");
+}
+
 int main(void)
 {
     make_dirs();
@@ -228,6 +264,7 @@ int main(void)
     test_dead_letter_fsyncs_dir_sync_always();
     test_consume_no_fsync_os_buffered();
     test_drop_oldest_evicts_lowest_sequence();
+    test_state_get_rejects_embedded_nul();
     printf("ALL DURABLE DELETE TESTS PASSED\n");
     return 0;
 }

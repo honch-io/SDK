@@ -68,6 +68,13 @@ static honch_status_t honch_posix_state_get(void *ctx, const char *key, uint8_t 
     }
 
     size_t content_size = strlen(content);
+    if (info.st_size < 0 || (size_t)info.st_size != content_size) {
+        /* The NUL-terminated length differs from the on-disk byte count: the
+         * file holds an embedded NUL (corruption / torn legacy write) or changed
+         * under us. Refuse rather than silently persist a truncated identity. */
+        free(content);
+        return HONCH_ERROR_IO;
+    }
     if (buffer == NULL || *buffer_size < content_size) {
         *buffer_size = content_size;
         free(content);
