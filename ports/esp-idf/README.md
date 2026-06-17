@@ -198,7 +198,7 @@ dependency.
 | `flush_event_threshold`  | No       | 20             | Flush when this many events are queued     |
 | `flush_max_batches`      | No       | 1              | Max batches sent by one `honch_flush()`    |
 | `shutdown_flush_max_batches` | No   | 1              | Max batches sent during `honch_shutdown()` |
-| `transport_timeout_ms`   | No       | 2500           | Per HTTP request timeout, max 10000 ms     |
+| `transport_timeout_ms`   | No       | 2500           | Per HTTP request timeout, clamped to 1000–10000 ms |
 | `battery_callback`       | No       | NULL           | Function returning 0-100 or -1             |
 | `battery_low_threshold`  | No       | 15             | Battery level that triggers `$battery_low` |
 | `enable_error_tracking`  | No       | false          | Emit automatic `$error` after abnormal reset |
@@ -214,8 +214,10 @@ Do not call `honch_tick()` or `honch_flush()` from an ISR, control loop, UI
 loop, high-priority task, ISR-adjacent callback, watchdog-sensitive section, or
 other customer-critical path. Keep `honch_track()` on product paths and run
 delivery from a background task that your firmware can afford to block for up to
-`transport_timeout_ms`; configured values above the hard maximum of 10000 ms are
-clamped.
+`transport_timeout_ms`; configured values are clamped to the 1000–10000 ms range,
+so a sub-second value is raised to the 1000 ms floor (a tiny timeout would fail
+every upload and silently age events out of the queue) and a value above 10000 ms
+is lowered to the maximum.
 
 Do not call `honch_tick()` while connectivity is unavailable or the radio is
 intentionally off. If that is hard to guarantee, provide
