@@ -182,23 +182,30 @@ class EspIdfChunkWireTest(unittest.TestCase):
 
     def test_esp_transport_honors_retry_after_on_429(self) -> None:
         transport = read("ports/esp-idf/honch/src/esp_transport_http.c")
+        retry_after = read("ports/esp-idf/honch/src/esp_retry_after.c")
         adapter = read("ports/esp-idf/honch/src/esp_core_adapter.h")
         core_transport = read("core/include/honch/core/transport.h")
         event_handler = c_function_body(transport, "honch_esp_http_event_handler")
-        parse_seconds = c_function_body(transport, "honch_esp_parse_retry_after_seconds")
-        parse_date = c_function_body(transport, "honch_esp_parse_retry_after_http_date")
+        # The Retry-After parser is a pure unit (esp_retry_after.c) with behavioral
+        # coverage in ports/esp-idf/tests/host/test_retry_after.c.
+        parse_seconds = c_function_body(retry_after, "honch_esp_parse_retry_after_seconds")
+        parse_date = c_function_body(retry_after, "honch_esp_parse_retry_after_http_date")
         post_chunk = c_function_body(transport, "honch_esp_post_chunk")
         ops_init = c_function_body(transport, "honch_esp_transport_ops_init")
 
         self.assertIn("uint64_t (*retry_after_ms)(void *ctx)", core_transport)
         self.assertIn("uint64_t retry_after_ms", adapter)
-        self.assertIn("honch_esp_parse_retry_after_seconds", transport)
-        self.assertIn("honch_esp_parse_retry_after_http_date", transport)
+        self.assertIn("honch_esp_parse_retry_after_seconds", retry_after)
+        self.assertIn("honch_esp_parse_retry_after_http_date", retry_after)
         self.assertIn("*delay_ms = seconds", parse_seconds)
         self.assertIn("* 1000u", parse_seconds)
         self.assertIn("%3[A-Za-z], %d %3[A-Za-z] %d %d:%d:%d %3[A-Za-z]%n", parse_date)
         self.assertIn("strcasecmp(gmt, \"GMT\")", parse_date)
         self.assertIn("target_ms - now_ms", parse_date)
+        # H8: a valid HTTP-date received before the clock is set must still back
+        # off (fallback) instead of being silently ignored.
+        self.assertIn("HONCH_ESP_RETRY_AFTER_NO_CLOCK_FALLBACK_MS", parse_date)
+        self.assertIn("honch_esp_parse_retry_after(", event_handler)
         self.assertIn("HTTP_EVENT_ON_HEADER", event_handler)
         self.assertIn('"Retry-After"', event_handler)
         self.assertIn("honch_esp_parse_retry_after", event_handler)
