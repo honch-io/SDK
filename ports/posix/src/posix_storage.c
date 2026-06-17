@@ -61,7 +61,7 @@ static honch_status_t honch_posix_state_get(void *ctx, const char *key, uint8_t 
     }
 
     char *content = NULL;
-    status = honch_read_file(path, &content);
+    status = honch_read_file_limited(path, HONCH_POSIX_STATE_FILE_MAX_BYTES, &content);
     free(path);
     if (status != HONCH_OK) {
         return status;

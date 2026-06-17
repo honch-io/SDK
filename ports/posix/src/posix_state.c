@@ -1,4 +1,5 @@
 #include "honch_internal.h"
+#include "honch/posix/honch.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -83,7 +84,7 @@ static honch_status_t honch_read_optional_state_file(
         return HONCH_ERROR_IO;
     }
 
-    status = honch_read_file(path, out);
+    status = honch_read_file_limited(path, HONCH_POSIX_STATE_FILE_MAX_BYTES, out);
     free(path);
     if (status == HONCH_OK && *out != NULL) {
         honch_trim_trailing_ws(*out);

@@ -221,17 +221,23 @@ static honch_status_t honch_read_file_impl(
         return HONCH_ERROR_IO;
     }
 
-    if (fseek(file, 0, SEEK_END) != 0) {
+    /* Size via fstat rather than fseek/ftell: ftell returns a signed long that
+     * truncates files larger than 2 GiB on platforms with a 32-bit long, and
+     * fstat also lets us reject non-regular files before allocating. */
+    struct stat st;
+    if (fstat(fileno(file), &st) != 0) {
         fclose(file);
         return HONCH_ERROR_IO;
     }
-
-    long size = ftell(file);
-    if (size < 0) {
+    if (!S_ISREG(st.st_mode) || st.st_size < 0) {
         fclose(file);
         return HONCH_ERROR_IO;
     }
-    size_t data_size = (size_t)size;
+    if ((uintmax_t)st.st_size > (uintmax_t)SIZE_MAX) {
+        fclose(file);
+        return HONCH_ERROR_OUT_OF_MEMORY;
+    }
+    size_t data_size = (size_t)st.st_size;
     if (enforce_limit && data_size > max_bytes) {
         fclose(file);
         return HONCH_ERROR_INVALID_ARGUMENT;
@@ -240,11 +246,6 @@ static honch_status_t honch_read_file_impl(
     if (honch_size_add(data_size, 1u, &alloc_size) != HONCH_OK) {
         fclose(file);
         return HONCH_ERROR_OUT_OF_MEMORY;
-    }
-
-    if (fseek(file, 0, SEEK_SET) != 0) {
-        fclose(file);
-        return HONCH_ERROR_IO;
     }
 
     unsigned char *data = (unsigned char *)malloc(alloc_size);

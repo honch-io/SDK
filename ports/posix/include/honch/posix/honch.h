@@ -6,6 +6,14 @@
 #include "honch/core/storage.h"
 #include "honch/core/transport.h"
 
+/*
+ * Upper bound for reading a state file into memory. State values (device
+ * identity, SDK version, sequence, crash breadcrumbs) are far smaller than
+ * this; the cap exists only so a corrupt or runaway state file cannot drive an
+ * unbounded allocation.
+ */
+#define HONCH_POSIX_STATE_FILE_MAX_BYTES 65536u
+
 typedef struct honch_posix_platform {
     void *reserved;
 } honch_posix_platform_t;
