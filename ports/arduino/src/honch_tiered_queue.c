@@ -176,6 +176,10 @@ static void tq_drop_corrupt_head(honch_tiered_queue_t *tq) {
         if (tq_nv_count(tq, &cnt) != HONCH_OK || cnt == 0u) return;
         size_t rec_len = 0;
         if (tq->nv_ops->length_at(tq->nv_ops->ctx, 0u, &rec_len) != HONCH_OK) return;
+        /* rec_len > read_scratch_size means read_scratch was under-sized (it must
+         * hold max_event_bytes + HONCH_NV_REC_OVERHEAD, see honch_tiered_queue.h):
+         * such a record can never be read back, so it is dropped here. This is a
+         * sizing-contract violation, not on-media corruption. */
         if (rec_len < HONCH_NV_REC_OVERHEAD || rec_len > tq->read_scratch_size) {
             tq->nv_ops->consume_front(tq->nv_ops->ctx, 1u);
             continue;
@@ -337,16 +341,24 @@ static honch_status_t tq_peek(void *ctx, honch_storage_reader_t *reader) {
     if (reader == NULL) return HONCH_ERROR_INVALID_ARGUMENT;
     if (tq_nv_active(tq)) {
         size_t cnt = 0;
-        if (tq_nv_count(tq, &cnt) == HONCH_OK && tq->peek_cursor < cnt) {
-            uint8_t hdr[HONCH_NV_REC_HEADER];
-            if (tq->nv_ops->read_at(tq->nv_ops->ctx, tq->peek_cursor, 0u, hdr, sizeof(hdr)) == HONCH_OK) {
+        if (tq_nv_count(tq, &cnt) == HONCH_OK) {
+            /* Advance over NV records, skipping any that fail validation, so a
+             * torn record cannot feed a garbage sequence into startup recovery.
+             * Validate the whole record (CRC) instead of trusting a header-only
+             * read of the seq/len fields. */
+            while (tq->peek_cursor < cnt) {
+                size_t idx = tq->peek_cursor++;
+                size_t rec_len = 0;
+                if (tq->nv_ops->length_at(tq->nv_ops->ctx, idx, &rec_len) != HONCH_OK) continue;
+                if (rec_len < HONCH_NV_REC_OVERHEAD || rec_len > tq->read_scratch_size) continue;
+                if (tq->nv_ops->read_at(tq->nv_ops->ctx, idx, 0u, tq->read_scratch, rec_len) != HONCH_OK) continue;
+                if (!record_valid(tq->read_scratch, rec_len)) continue;
                 *reader = (honch_storage_reader_t){
                     .ctx = NULL,
                     .read = NULL,
-                    .total_size = get_u32le(hdr + 8),
-                    .sequence = get_u64le(hdr),
+                    .total_size = get_u32le(tq->read_scratch + 8),
+                    .sequence = get_u64le(tq->read_scratch),
                 };
-                tq->peek_cursor++;
                 return HONCH_OK;
             }
         }

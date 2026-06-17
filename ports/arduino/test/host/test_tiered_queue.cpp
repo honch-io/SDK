@@ -264,6 +264,43 @@ static void test_torn_record_dropped() {
   printf("  T6a torn record dropped OK\n");
 }
 
+// T6c: a corrupt record carrying a garbage (huge) sequence is skipped by peek,
+// so startup recovery never adopts the bad sequence -- peek validates the whole
+// record's CRC, not just the header it reads the seq from.
+static void test_peek_skips_corrupt_sequence() {
+  FakeNv nv;
+  {
+    Harness h;
+    honch_tiered_queue_config_t cfg = {0, 0};
+    honch_nv_queue_ops_t ops = fake_ops(&nv);
+    harness_init(&h, &ops, &cfg);
+    assert(push(&h, 10, 0xA0, 8) == HONCH_OK);
+    assert(push(&h, 11, 0xA1, 8) == HONCH_OK);
+    assert(push(&h, 12, 0xA2, 8) == HONCH_OK);
+    assert(honch_tiered_queue_persist(&h.tq, 0) == HONCH_OK);
+    assert(nv.blobs.size() == 3);
+  }
+  // Corrupt the middle record's sequence field to UINT64_MAX: rewrites the seq
+  // the header carries and breaks the record's CRC (a torn record with a garbage
+  // sequence).
+  for (int i = 0; i < 8; i++) nv.blobs[1][i] = 0xFF;
+
+  Harness h2;
+  honch_tiered_queue_config_t cfg = {0, 0};
+  honch_nv_queue_ops_t ops = fake_ops(&nv);
+  harness_init(&h2, &ops, &cfg);
+
+  uint64_t max_seq = 0;
+  for (int i = 0; i < 8; i++) {
+    honch_storage_reader_t r = {};
+    if (h2.ops.queue_peek(h2.ops.ctx, &r) != HONCH_OK) break;
+    if (r.sequence > max_seq) max_seq = r.sequence;
+  }
+  // The corrupt record's UINT64_MAX seq must NOT be adopted; max stays 12.
+  assert(max_seq == 12);
+  printf("  T6c peek skips corrupt sequence OK (max_seq=%llu)\n", (unsigned long long)max_seq);
+}
+
 // T6b: when the adapter reports disabled, the queue stays RAM-only.
 static void test_disabled_adapter_ram_only() {
   FakeNv nv;
@@ -339,6 +376,7 @@ int main() {
   test_drain_order_and_consume();
   test_boot_recovery_peek();
   test_torn_record_dropped();
+  test_peek_skips_corrupt_sequence();
   test_disabled_adapter_ram_only();
   test_persist_propagates_nv_error();
   test_push_spills_instead_of_dropping();

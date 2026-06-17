@@ -45,8 +45,11 @@ typedef struct honch_tiered_queue {
 /* Initialise over an existing RAM queue's ops.
  *   nv_ops    may be NULL (RAM-only; config/scratch then ignored).
  *   config    may be NULL (no auto-spill).
- *   read_scratch must be large enough to hold at least one decoded NV event;
- *              larger scratch lets more NV events drain per batch. */
+ *   read_scratch MUST hold at least one whole framed NV record, i.e.
+ *              max_event_bytes + HONCH_NV_REC_OVERHEAD (14) bytes. A record
+ *              larger than read_scratch_size cannot be read back and is dropped
+ *              during recovery, so under-sizing this silently loses oversized
+ *              events. Larger scratch also lets more NV events drain per batch. */
 honch_status_t honch_tiered_queue_init(
     honch_tiered_queue_t *tq,
     const honch_event_queue_ops_t *ram_ops,

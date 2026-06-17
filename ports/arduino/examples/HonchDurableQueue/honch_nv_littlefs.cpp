@@ -2,6 +2,8 @@
 
 #include <LittleFS.h>
 
+#include <string.h>
+
 namespace {
 constexpr size_t kIdDigits = 10;   // zero-padded record id width
 constexpr size_t kIoChunk = 256;   // append copy chunk size
@@ -35,16 +37,21 @@ bool HonchNvLittleFs::begin() {
   size_t bytes = 0;
   for (File f = root.openNextFile(); f; f = root.openNextFile()) {
     const char *name = f.name();
-    // Names are the bare zero-padded id; ignore anything else (e.g. "tmp").
-    bool numeric = name[0] != '\0';
-    for (const char *p = name; *p; p++) {
+    // f.name() is the bare id on arduino-esp32 3.x but a full path
+    // (e.g. "/honch_q/0000000042") on 2.x; strip any leading directory so
+    // recovery works on both. The basename is the zero-padded id; ignore
+    // anything else (e.g. "tmp").
+    const char *base = strrchr(name, '/');
+    base = base ? base + 1 : name;
+    bool numeric = base[0] != '\0';
+    for (const char *p = base; *p; p++) {
       if (*p < '0' || *p > '9') { numeric = false; break; }
     }
     if (!numeric) {
       f.close();
       continue;
     }
-    uint64_t id = strtoull(name, nullptr, 10);
+    uint64_t id = strtoull(base, nullptr, 10);
     if (id < min_id) min_id = id;
     if (id > max_id) max_id = id;
     count++;
