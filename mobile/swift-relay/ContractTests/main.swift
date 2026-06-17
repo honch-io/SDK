@@ -343,10 +343,10 @@ private func testUploaderPostsCaptureRequestAndConsumes204() async throws {
 }
 
 private func testUploaderDropsPermanentRejections() async throws {
-    // 415/422 are permanent rejections (matching the C SDK status mapping); 413
-    // (too large) is intentionally excluded -- it is retryable for a relay until
-    // multi-frame re-chunking (H3) lands.
-    for status in [400, 401, 404, 415, 422] {
+    // Permanent rejections matching the C SDK status mapping. 413 (too large) is
+    // permanent: the relay re-chunks to a fixed frame size, so retrying the same
+    // bytes can never clear it.
+    for status in [400, 401, 404, 413, 415, 422] {
         let session = makeStubbedURLSession { _ in (status, [:], Data()) }
         let uploader = URLSessionRelayUploader(session: session)
         let outcome = await uploader.upload(
@@ -359,7 +359,7 @@ private func testUploaderDropsPermanentRejections() async throws {
 }
 
 private func testUploaderRetriesRecoverableStatuses() async throws {
-    for status in [409, 413, 429] {
+    for status in [409, 429] {
         let session = makeStubbedURLSession { _ in (status, [:], Data()) }
         let uploader = URLSessionRelayUploader(session: session)
         let outcome = await uploader.upload(

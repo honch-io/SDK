@@ -87,11 +87,11 @@ public struct URLSessionRelayUploader: RelayUploading {
             return .continueSequence
         }
         // Permanent rejections (matching the C SDK status mapping): 400/401/404/
-        // 415/422. 413 (too large) is recoverable now the relay re-chunks, so it
-        // falls through to retry along with 409/429/5xx and any out-of-sequence
-        // 202/204.
+        // 413/415/422. 413 (too large) is permanent: the relay already re-chunks
+        // to a fixed frame size, so retrying the identical bytes can never clear
+        // it. 409/429/5xx and any out-of-sequence 202/204 fall through to retry.
         switch response.statusCode {
-        case 400, 401, 404, 415, 422:
+        case 400, 401, 404, 413, 415, 422:
             return .terminal(.drop(status: response.statusCode))
         default:
             return .terminal(.retry(

@@ -113,10 +113,9 @@ describe("uploadRelayMessage", () => {
       { status: 400, action: "drop" },
       { status: 401, action: "drop" },
       { status: 404, action: "drop" },
+      { status: 413, action: "drop" },
       { status: 415, action: "drop" },
       { status: 422, action: "drop" },
-      // 413 (too large) stays retryable until the relay can re-chunk (H3).
-      { status: 413, action: "retry" },
       { status: 409, action: "retry" },
       { status: 429, action: "retry" },
       { status: 500, action: "retry" },

@@ -441,6 +441,7 @@ configuration, but must never be lower than the SDK defaults for official SDKs.
 | 204 | Complete message accepted | Confirm/remove queued message |
 | 400 | Malformed frame or message | Drop message and log |
 | 401 | Invalid project key | Drop message, stop retrying until config changes |
+| 404 | Unknown endpoint or stream | Drop message and log |
 | 409 | Offset, duplicate, or message collision | Abort and retry from offset 0 |
 | 413 | Frame or message too large | Drop message and log |
 | 415 | Unsupported content type | Drop message and log |

@@ -100,19 +100,21 @@ function classifyFrameResponse(response: Response, isFinal: boolean): RelayUploa
     return "continue";
   }
   // Permanent rejections (matching the C SDK status mapping): malformed (400),
-  // bad key (401), not found (404), unsupported content type (415), semantic
-  // validation failure (422). 413 (too large) is intentionally NOT here -- it is
-  // recoverable now that the relay re-chunks, so it falls through to retry.
+  // bad key (401), not found (404), payload too large (413), unsupported content
+  // type (415), semantic validation failure (422). 413 is permanent: the relay
+  // already re-chunks to a fixed frame size, so retrying the identical bytes can
+  // never clear it -- an oversized payload is dropped and logged like the C SDK.
   if (
     response.status === 400 ||
     response.status === 401 ||
     response.status === 404 ||
+    response.status === 413 ||
     response.status === 415 ||
     response.status === 422
   ) {
     return { action: "drop", status: response.status };
   }
-  // Everything else -- 409 (retry from offset 0), 413, 429, 5xx, and any
+  // Everything else -- 409 (retry from offset 0), 429, 5xx, and any
   // out-of-sequence 202/204 -- retries the whole message.
   return {
     action: "retry",

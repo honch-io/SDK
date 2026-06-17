@@ -6,6 +6,7 @@
     { "status": 401, "result": "auth_error", "queue": "drop_or_dead_letter" },
     { "status": 400, "result": "rejected", "queue": "drop_or_dead_letter" },
     { "status": 404, "result": "rejected", "queue": "drop_or_dead_letter" },
+    { "status": 413, "result": "rejected", "queue": "drop_or_dead_letter" },
     { "status": 415, "result": "rejected", "queue": "drop_or_dead_letter" },
     { "status": 422, "result": "rejected", "queue": "drop_or_dead_letter" },
     { "status": 409, "result": "retry", "queue": "preserve" },
