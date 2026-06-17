@@ -15,7 +15,7 @@ export type RelayUploaderConfig = {
 
 export type RelayUploadOutcome =
   | { action: "consume"; status: number }
-  | { action: "drop"; status: number }
+  | { action: "drop"; status?: number; error?: unknown }
   | { action: "retry"; status?: number; retryAfterMs?: number; error?: unknown };
 
 export function buildRelayUploadBuffer(
@@ -49,21 +49,38 @@ export async function uploadRelayMessageOutcome(
   config: RelayUploaderConfig,
   message: StoredRelayMessage
 ): Promise<RelayUploadOutcome> {
+  // Header values flow straight into the HTTP request. Reject control characters
+  // (CR/LF/NUL) in the project key and the stream id (derived from the device
+  // id) so a crafted value cannot inject headers -- and so an illegal value
+  // can't make fetch throw and wedge the message in an endless retry loop.
+  const streamId = config.streamId(message);
+  if (!isSafeHeaderValue(config.projectKey) || !isSafeHeaderValue(streamId)) {
+    return { action: "drop", error: new Error("relay header value contains control characters") };
+  }
+
   // Re-chunk the (possibly oversized) reassembled body into wire-v2 frames and
   // POST them in order: every non-final frame must return 202 (stored, send
   // next), and the final frame returns 204 (complete). Any error mid-sequence
   // ends the attempt; the whole message is retried from the first frame (which
   // also satisfies 409 "retry from offset 0").
-  const frames = buildWireV2Frames(
-    config.messageId(message),
-    message.body,
-    config.maxFrameSize ?? MAX_WIRE_V2_FRAME_SIZE
-  );
+  let frames: Uint8Array[];
+  try {
+    frames = buildWireV2Frames(
+      config.messageId(message),
+      message.body,
+      config.maxFrameSize ?? MAX_WIRE_V2_FRAME_SIZE
+    );
+  } catch (error) {
+    // An un-encodable message id (e.g. beyond the wire-v2 safe-integer range)
+    // can never succeed on retry, so drop this one message instead of letting
+    // the throw propagate and stall the entire drain.
+    return { action: "drop", error };
+  }
   const url = `${config.endpointUrl.replace(/\/$/, "")}/capture`;
   const headers = {
     "Content-Type": "application/vnd.honch.chunk",
     "X-Honch-Project-Key": config.projectKey,
-    "X-Honch-Stream-Id": config.streamId(message),
+    "X-Honch-Stream-Id": streamId,
     "X-Honch-Relay-Id": config.relayId,
     "X-Honch-Relay-SDK-Platform": config.relaySdkPlatform,
     "X-Honch-Relay-SDK-Version": config.relaySdkVersion
@@ -121,6 +138,12 @@ function classifyFrameResponse(response: Response, isFinal: boolean): RelayUploa
     status: response.status,
     retryAfterMs: parseRetryAfterMs(response.headers.get("Retry-After"))
   };
+}
+
+function isSafeHeaderValue(value: string): boolean {
+  // HTTP header values must not carry control characters; CR/LF in particular
+  // would allow header injection, and most fetch implementations throw on them.
+  return typeof value === "string" && !/[\x00-\x1f\x7f]/.test(value);
 }
 
 function parseRetryAfterMs(value: string | null): number | undefined {

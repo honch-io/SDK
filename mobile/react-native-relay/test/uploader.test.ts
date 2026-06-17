@@ -208,4 +208,29 @@ describe("uploadRelayMessage", () => {
     // Stopped at the failing frame; did not keep POSTing the rest.
     expect(fetchMock.mock.calls.length).toBe(2);
   });
+
+  it("drops a message whose id exceeds the wire-v2 safe-integer range instead of throwing", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const overflowConfig = { ...config, messageId: () => Number.MAX_SAFE_INTEGER + 2 };
+
+    // Must resolve to a drop (not reject) so a single bad id cannot stall the drain.
+    await expect(uploadRelayMessageOutcome(overflowConfig, message)).resolves.toMatchObject({
+      action: "drop"
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("drops a message with control characters in a header value (injection guard)", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const crlfStream = { ...config, streamId: () => "relay\r\nX-Injected: 1" };
+    await expect(uploadRelayMessageOutcome(crlfStream, message)).resolves.toMatchObject({ action: "drop" });
+
+    const crlfKey = { ...config, projectKey: "key\nevil" };
+    await expect(uploadRelayMessageOutcome(crlfKey, message)).resolves.toMatchObject({ action: "drop" });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

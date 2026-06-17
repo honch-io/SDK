@@ -98,6 +98,28 @@ runRelayDurableStoreConformance("JSON file relay durable store", async () => {
   return () => createJsonFileRelayStore(tempFile);
 });
 
+describe("JSON file relay durable store retention", () => {
+  it("bounds completed messages by dropping the oldest pending upload", async () => {
+    const tempFile = await tempStorePath();
+    const store = createJsonFileRelayStore(tempFile, { maxCompleteMessages: 1 });
+
+    await store.putCompleteMessage({
+      deviceId: "device-a",
+      sourceType: 1,
+      sequence: "1",
+      body: new Uint8Array([1])
+    });
+    await store.putCompleteMessage({
+      deviceId: "device-a",
+      sourceType: 1,
+      sequence: "2",
+      body: new Uint8Array([2])
+    });
+
+    expect((await store.completeMessages()).map((message) => message.sequence)).toEqual(["2"]);
+  });
+});
+
 function fakeMmkv() {
   const values = new Map<string, string>();
   const setKeys: string[] = [];

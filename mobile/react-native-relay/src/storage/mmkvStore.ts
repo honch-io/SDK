@@ -94,7 +94,12 @@ const LEGACY_RELAY_STORE_KEY = "honch.relay.queue.v1";
 const DEFAULT_KEY_PREFIX = "honch.relay";
 const DEFAULT_MAX_CHUNKS = 4096;
 const DEFAULT_MAX_COMPLETE_MESSAGES = 1024;
-const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// No time-based expiry by default: retention is bounded by the count caps with
+// drop-oldest, consistent with the other relay stores and the core SDK's queue
+// policy (which never time-expires queued data). Callers can still opt into a
+// finite ttlMs. Infinity makes (now - ttlMs) always in the past, so the prune
+// step keeps every entry on time and only the count caps shed data.
+const DEFAULT_TTL_MS = Number.POSITIVE_INFINITY;
 
 export function createMmkvRelayStore(
   storage: RelayMmkvStorage,

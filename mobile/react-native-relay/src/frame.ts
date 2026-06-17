@@ -50,10 +50,17 @@ export function decodeRelayFrame(bytes: Uint8Array): RelayFrame {
   }
 
   const offset = ((bytes[12] << 24) | (bytes[13] << 16) | (bytes[14] << 8) | bytes[15]) >>> 0;
+  const first = (bytes[2] & 1) !== 0;
+  // bit 0 marks the first chunk (spec relay-chunks.md), which is the frame at
+  // offset 0. Validate the flag instead of decoding it into a field nothing
+  // checks: it must be set exactly when offset is zero.
+  if (first !== (offset === 0)) {
+    throw new Error("relay frame first flag must be set iff offset is zero");
+  }
   return {
     version,
     sourceType: bytes[1],
-    first: (bytes[2] & 1) !== 0,
+    first,
     final: (bytes[2] & 2) !== 0,
     sequence,
     offset,

@@ -20,7 +20,21 @@ export interface RelayDurableStore {
   deleteMessage(deviceId: string, sequence: string): Promise<void>;
 }
 
-export function createMemoryDurableStore(): RelayDurableStore {
+export type MemoryDurableStoreOptions = {
+  // Upper bounds on retained complete messages and partial-reassembly chunks.
+  // When exceeded, the oldest entries are evicted (drop-oldest), matching the
+  // core SDK's bounded RAM-queue policy so the in-memory store cannot grow
+  // without bound when uploads stall. Defaults match the MMKV store.
+  maxCompleteMessages?: number;
+  maxChunks?: number;
+};
+
+const DEFAULT_MAX_CHUNKS = 4096;
+const DEFAULT_MAX_COMPLETE_MESSAGES = 1024;
+
+export function createMemoryDurableStore(options?: MemoryDurableStoreOptions): RelayDurableStore {
+  const maxMessages = options?.maxCompleteMessages ?? DEFAULT_MAX_COMPLETE_MESSAGES;
+  const maxChunks = options?.maxChunks ?? DEFAULT_MAX_CHUNKS;
   const chunks: DurableRelayChunk[] = [];
   const messages: StoredRelayMessage[] = [];
 
@@ -37,6 +51,9 @@ export function createMemoryDurableStore(): RelayDurableStore {
         return;
       }
       chunks.push(cloneChunk(chunk));
+      while (chunks.length > maxChunks) {
+        chunks.shift();
+      }
     },
 
     async chunks(deviceId, sequence) {
@@ -55,6 +72,9 @@ export function createMemoryDurableStore(): RelayDurableStore {
         return;
       }
       messages.push(cloneMessage(message));
+      while (messages.length > maxMessages) {
+        messages.shift();
+      }
     },
 
     async completeMessages() {

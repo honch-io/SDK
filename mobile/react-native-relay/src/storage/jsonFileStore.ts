@@ -34,12 +34,34 @@ const EMPTY_STATE: JsonRelayStoreState = {
   messages: []
 };
 
-export function createJsonFileRelayStore(filePath: string): RelayDurableStore {
-  return new JsonFileRelayStore(filePath);
+// Defaults match the MMKV store so retention is consistent across relay stores.
+const DEFAULT_MAX_CHUNKS = 4096;
+const DEFAULT_MAX_COMPLETE_MESSAGES = 1024;
+
+export type JsonFileRelayStoreOptions = {
+  // Bound the on-disk store so it cannot grow without limit when uploads stall;
+  // when exceeded, the oldest entries are dropped (drop-oldest). No time TTL.
+  maxChunks?: number;
+  maxCompleteMessages?: number;
+};
+
+export function createJsonFileRelayStore(
+  filePath: string,
+  options: JsonFileRelayStoreOptions = {}
+): RelayDurableStore {
+  return new JsonFileRelayStore(
+    filePath,
+    options.maxChunks ?? DEFAULT_MAX_CHUNKS,
+    options.maxCompleteMessages ?? DEFAULT_MAX_COMPLETE_MESSAGES
+  );
 }
 
 class JsonFileRelayStore implements RelayDurableStore {
-  constructor(private readonly filePath: string) {}
+  constructor(
+    private readonly filePath: string,
+    private readonly maxChunks: number,
+    private readonly maxCompleteMessages: number
+  ) {}
 
   async putChunk(chunk: DurableRelayChunk): Promise<void> {
     const state = await this.readState();
@@ -54,6 +76,9 @@ class JsonFileRelayStore implements RelayDurableStore {
       state.chunks[index] = serialized;
     } else {
       state.chunks.push(serialized);
+      while (state.chunks.length > this.maxChunks) {
+        state.chunks.shift();
+      }
     }
     await this.writeState(state);
   }
@@ -75,6 +100,9 @@ class JsonFileRelayStore implements RelayDurableStore {
       state.messages[index] = serialized;
     } else {
       state.messages.push(serialized);
+      while (state.messages.length > this.maxCompleteMessages) {
+        state.messages.shift();
+      }
     }
     await this.writeState(state);
   }

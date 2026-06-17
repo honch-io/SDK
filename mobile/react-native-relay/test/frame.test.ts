@@ -85,9 +85,18 @@ describe("decodeRelayFrame", () => {
   });
 
   it("decodes large offsets as unsigned uint32 values", () => {
-    const bytes = frame({ first: true, final: true, offset: 0x80000000, payload: [1] });
+    // Non-zero offset, so first must be clear (first is set iff offset is zero).
+    const bytes = frame({ first: false, final: true, offset: 0x80000000, payload: [1] });
 
     expect(decodeRelayFrame(bytes).offset).toBe(0x80000000);
+  });
+
+  it("rejects a frame whose first flag disagrees with its offset", () => {
+    const firstOnNonZero = frame({ first: true, final: true, offset: 4, payload: [1] });
+    expect(() => decodeRelayFrame(firstOnNonZero)).toThrow("first flag must be set iff offset is zero");
+
+    const missingFirstAtZero = frame({ first: false, final: false, offset: 0, payload: [1] });
+    expect(() => decodeRelayFrame(missingFirstAtZero)).toThrow("first flag must be set iff offset is zero");
   });
 
   it("rejects frames with a mismatched crc", () => {
