@@ -4,6 +4,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* The wire decoder bounds an untrusted property_count at
+ * HONCH_MAX_EVENT_PROPERTIES and then writes record->properties[i] in a loop
+ * (honch_event_record_decode). Pin the array capacity to that same bound so a
+ * future resize of honch_event_record_t.properties cannot silently turn the
+ * decode loop into a buffer overflow. */
+_Static_assert(sizeof(((honch_event_record_t *)0)->properties) /
+                       sizeof(((honch_event_record_t *)0)->properties[0]) >=
+                   HONCH_MAX_EVENT_PROPERTIES,
+               "honch_event_record_t.properties must hold HONCH_MAX_EVENT_PROPERTIES entries");
+
 #define HONCH_EVENT_RECORD_MAX_DEPTH 8u
 
 enum {
