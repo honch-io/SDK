@@ -130,7 +130,9 @@ static honch_status_t honch_wire_v2_append_bytes(
     size_t out_size,
     size_t *offset)
 {
-    if (value_size > out_size - *offset) {
+    /* Underflow-safe: out_size - *offset would wrap if a caller ever advanced
+     * *offset past out_size, turning the bound check into an out-of-bounds write. */
+    if (*offset > out_size || value_size > out_size - *offset) {
         return HONCH_ERROR_OUT_OF_MEMORY;
     }
     if (value_size == 0u) {

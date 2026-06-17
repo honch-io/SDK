@@ -1746,6 +1746,8 @@ honch_status_t honch_core_identify(
 
     if (honch_validate_distinct_id(distinct_id) != HONCH_OK ||
         (trait_count > 0u && traits == NULL) ||
+        /* `>=` (not `>` as in track/build): identify appends $anon_distinct_id as
+         * a trait, so it must leave room for one beyond the caller's traits. */
         trait_count >= HONCH_MAX_EVENT_PROPERTIES) {
         honch_client_leave(client);
         return HONCH_ERROR_INVALID_ARGUMENT;
