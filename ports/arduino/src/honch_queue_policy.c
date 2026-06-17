@@ -38,6 +38,9 @@ static void honch_flush_timing_log(honch_client_t *client, const char *message)
 }
 #endif
 
+/* Test-only instrumentation: the max encode-attempt counter and its accessors
+ * exist solely for the retry tests and must not ship in production builds. */
+#ifdef HONCH_TESTING
 static size_t s_honch_test_max_wire_v2_encode_attempts = 0u;
 
 void honch_test_reset_wire_v2_encode_attempts(void)
@@ -49,6 +52,7 @@ size_t honch_test_max_wire_v2_encode_attempts(void)
 {
     return s_honch_test_max_wire_v2_encode_attempts;
 }
+#endif
 
 void honch_core_wire_v2_context_from_client(
     honch_client_t *client,
@@ -694,9 +698,13 @@ static honch_status_t honch_core_build_wire_v2_message(
     } else if (status == HONCH_ERROR_OUT_OF_MEMORY) {
         status = HONCH_ERROR_INVALID_ARGUMENT;
     }
+#ifdef HONCH_TESTING
     if (encode_attempts > s_honch_test_max_wire_v2_encode_attempts) {
         s_honch_test_max_wire_v2_encode_attempts = encode_attempts;
     }
+#else
+    (void)encode_attempts;
+#endif
     honch_flush_wire_provider_clear(&provider_ctx);
     free(batch_distinct_id);
     free(batch_session_id);

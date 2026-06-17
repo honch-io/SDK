@@ -99,7 +99,24 @@ add_library(honch_posix ${HONCH_POSIX_SOURCES})
 honch_configure_posix_target(honch_posix)
 
 if(HONCH_BUILD_TESTS)
-    add_library(honch_posix_test ${HONCH_POSIX_SOURCES})
+    # Build a second copy of the core objects with HONCH_TESTING so the test-only
+    # instrumentation (e.g. the encode-attempt counter) is available to the test
+    # binaries while never being compiled into the production honch_posix lib.
+    if(NOT TARGET honch_core_test_objects)
+        honch_configure_core_objects(honch_core_test_objects)
+        target_compile_definitions(honch_core_test_objects PRIVATE HONCH_TESTING)
+    endif()
+
+    set(HONCH_POSIX_TEST_SOURCES
+        src/posix_compat.c
+        src/posix_platform.c
+        src/posix_storage.c
+        src/posix_state.c
+        src/posix_transport_curl.c
+        $<TARGET_OBJECTS:honch_core_test_objects>
+    )
+
+    add_library(honch_posix_test ${HONCH_POSIX_TEST_SOURCES})
     honch_configure_posix_target(honch_posix_test)
     target_compile_definitions(honch_posix_test PRIVATE
         HONCH_TESTING
