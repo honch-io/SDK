@@ -29,7 +29,10 @@ class ArduinoCIWorkflowTests(unittest.TestCase):
         self.assertIn("core/src/honch_internal.h", script)
         self.assertIn("core/include/honch/core/*.h", script)
         self.assertIn("cmp -s", script)
-        self.assertIn("Arduino vendored core drift", script)
+        self.assertIn("differs from", script)
+        # Bidirectional: also detects a stale vendored copy with no core source.
+        self.assertIn("orphan vendored", script)
+        self.assertIn("ports/arduino/src/honch_*.c", script)
 
     def test_verify_script_compiles_supported_esp32_families(self) -> None:
         script = read("ports/arduino/scripts/verify-arduino.sh")
