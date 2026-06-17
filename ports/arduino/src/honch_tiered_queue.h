@@ -65,7 +65,12 @@ honch_status_t honch_tiered_queue_ops_init(
 
 /* Spill oldest RAM events into NV until RAM queued_bytes <= target_bytes (or RAM
  * is empty / NV unavailable). target_bytes == 0 drains all of RAM to NV. Used
- * for graceful-shutdown flush and internally for memory-pressure spill. */
+ * for graceful-shutdown flush and internally for memory-pressure spill.
+ *
+ * CONCURRENCY: this is lock-free and drives the RAM queue (consume + compaction)
+ * directly. Call it with the same mutual exclusion as honch_track()/honch_tick():
+ * never while another task is touching the queue. Calling it from one task while
+ * the core is driven from another corrupts the shared RAM buffer. */
 honch_status_t honch_tiered_queue_persist(honch_tiered_queue_t *tq, size_t target_bytes);
 
 #ifdef __cplusplus

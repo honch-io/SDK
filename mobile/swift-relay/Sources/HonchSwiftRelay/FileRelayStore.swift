@@ -52,6 +52,9 @@ public actor FileRelayStore: RelayDurableStore {
     // Bound the on-disk store: when more than maxCompleteMessages pending uploads
     // are stored, drop the oldest (by file creation time) along with its chunk
     // directory. Drop-oldest, no time TTL -- matching the other relay stores.
+    // Eviction order is Apple-FS-specific: creationDate is reliably populated on
+    // Apple platforms; where it's nil the order falls back to arbitrary (the cap
+    // is still enforced). The per-write rescan is O(files), bounded by the cap.
     private func enforceMessageLimit() throws {
         let directory = messagesDirectory()
         guard FileManager.default.fileExists(atPath: directory.path) else {

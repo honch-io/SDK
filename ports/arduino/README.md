@@ -155,6 +155,16 @@ memmove per consumed event to keep the caller-provided buffer contiguous. This
 is acceptable at default sizes, but larger buffers and queue limits should be
 measured on the target board.
 
+`maxQueuedEvents` is a soft ceiling, not a guarantee: real capacity is bounded by
+the RAM buffer (and, if supplied, the durable tier), which may be well below it.
+The core treats it as an upper bound on the queued count; drop-oldest still
+applies once the tiers actually fill.
+
+If you wire a durable queue and call `honch_tiered_queue_persist()` yourself (for
+example to flush to flash on shutdown), call it with the same mutual exclusion as
+`track()`/`tick()`: it drives the RAM queue lock-free, so it must never run while
+another task is touching the queue, or the shared RAM buffer is corrupted.
+
 ## Security
 
 Use HTTPS in production. Configure `rootCaPem` for the Capture endpoint. `insecureSkipTlsVerify` exists only for intentional local testing and should remain `false` in production.
