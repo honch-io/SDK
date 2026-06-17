@@ -136,7 +136,10 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn('"Content-Type", "application/vnd.honch.chunk"', transport)
         self.assertIn('"X-Honch-Project-Key"', transport)
         self.assertIn('"X-Honch-Stream-Id"', transport)
-        self.assertIn("HONCH_TRANSPORT_CHUNK_STORED", transport)
+        # Response classification is the pure esp_http_status unit; post_chunk calls it.
+        http_status = read("ports/esp-idf/honch/src/esp_http_status.c")
+        self.assertIn("honch_esp_classify_http_response(", post_chunk)
+        self.assertIn("HONCH_TRANSPORT_CHUNK_STORED", http_status)
         self.assertIn("HONCH_HTTP_TIMING", transport)
         self.assertIn("reused_client", transport)
         self.assertIn("client_reset", transport)
@@ -210,7 +213,12 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn('"Retry-After"', event_handler)
         self.assertIn("honch_esp_parse_retry_after", event_handler)
         self.assertIn("transport->retry_after_ms = 0u", post_chunk)
-        self.assertIn("status == 429", post_chunk)
+        # The status->result mapping is the pure esp_http_status unit (host-tested
+        # in ports/esp-idf/tests/host/test_http_status.c); post_chunk calls it.
+        http_status = read("ports/esp-idf/honch/src/esp_http_status.c")
+        self.assertIn("honch_esp_classify_http_response(", post_chunk)
+        self.assertIn("status == 429", http_status)
+        self.assertIn("HONCH_STATUS_ERROR_RATE_LIMITED", http_status)
         self.assertIn(".retry_after_ms = honch_esp_retry_after_ms", ops_init)
 
     def test_esp_compat_layer_delegates_public_api_to_core(self) -> None:

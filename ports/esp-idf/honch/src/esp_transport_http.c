@@ -4,6 +4,7 @@
 #include "honch_internal.h"
 
 #include "esp_core_adapter.h"
+#include "esp_http_status.h"
 #include "esp_retry_after.h"
 
 #include <limits.h>
@@ -254,34 +255,7 @@ static honch_status_t honch_esp_post_chunk(
     int64_t cleanup_us = 0;
 #endif
 
-    honch_status_t return_status = HONCH_STATUS_OK;
-    if (err != ESP_OK) {
-        *result = HONCH_TRANSPORT_RETRY;
-        return_status = HONCH_STATUS_ERROR_TRANSPORT;
-    } else if (status == 0) {
-        *result = HONCH_TRANSPORT_RETRY;
-        return_status = HONCH_STATUS_ERROR_TRANSPORT;
-    } else if (status == 202) {
-        *result = HONCH_TRANSPORT_CHUNK_STORED;
-    } else if (status == 204) {
-        *result = HONCH_TRANSPORT_ACCEPTED;
-    } else if (status == 401) {
-        *result = HONCH_TRANSPORT_AUTH_ERROR;
-    } else if (status == 429) {
-        *result = HONCH_TRANSPORT_RETRY;
-        return_status = HONCH_STATUS_ERROR_RATE_LIMITED;
-    } else if (status == 408) {
-        *result = HONCH_TRANSPORT_RETRY;
-        return_status = HONCH_STATUS_ERROR_TIMEOUT;
-    } else if (status == 409) {
-        *result = HONCH_TRANSPORT_RETRY;
-        return_status = HONCH_STATUS_ERROR_TRANSPORT;
-    } else if (status >= 400 && status < 500) {
-        *result = HONCH_TRANSPORT_REJECTED;
-    } else {
-        *result = HONCH_TRANSPORT_RETRY;
-        return_status = HONCH_STATUS_ERROR_SERVER;
-    }
+    honch_status_t return_status = honch_esp_classify_http_response(err == ESP_OK, status, result);
 
     if (err != ESP_OK || status == 0 || status == 408 || status == 409) {
 #ifdef HONCH_FLUSH_TIMING

@@ -4,6 +4,7 @@ set(HONCH_SDK_ROOT "${HONCH_ESP_COMPONENT_DIR}/../../..")
 set(HONCH_ESP_PORT_SOURCES
     "src/esp_compat.c"
     "src/esp_core_shims.c"
+    "src/esp_http_status.c"
     "src/esp_platform.c"
     "src/esp_retry_after.c"
     "src/esp_storage.c"

@@ -34,6 +34,12 @@ cmake --build "$ROOT_DIR/build/arduino-host"
 "$ROOT_DIR/build/arduino-host/honch_arduino_wrapper_test"
 "$ROOT_DIR/build/arduino-host/honch_tiered_queue_test"
 
+# Python contract tests (TLS posture, CI-workflow shape, version consistency).
+for honch_py_test in "$ROOT_DIR"/ports/arduino/test/test_*.py; do
+  echo "Running $(basename "$honch_py_test")"
+  python3 "$honch_py_test"
+done
+
 if command -v arduino-cli >/dev/null 2>&1; then
   if ! arduino-cli core list | grep -q '^esp32:esp32 '; then
     if [[ "$HONCH_REQUIRE_ARDUINO_CLI" -eq 1 ]]; then
