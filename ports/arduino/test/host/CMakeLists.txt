@@ -21,6 +21,10 @@ target_include_directories(honch_arduino_wrapper_test PRIVATE
 
 target_link_libraries(honch_arduino_wrapper_test PRIVATE honch_core)
 
+# Opt in to the deterministic host stubs (e.g. the non-random RNG) for host
+# tests only; shipping firmware compiles with ARDUINO defined.
+target_compile_definitions(honch_arduino_wrapper_test PRIVATE HONCH_ARDUINO_HOST_TEST)
+
 target_compile_features(honch_arduino_wrapper_test PRIVATE cxx_std_20)
 
 target_compile_options(honch_arduino_wrapper_test PRIVATE

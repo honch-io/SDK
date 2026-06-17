@@ -19,6 +19,15 @@
 #include <new>
 #endif
 
+// The off-Arduino path uses deterministic host stubs -- in particular a
+// NON-random RNG (honch_arduino_random_bytes below) that would make device IDs
+// and idempotency keys predictable. That path exists only for host unit tests
+// and must never be compiled into shipping firmware, so require an explicit
+// opt-in when ARDUINO is not defined.
+#if !defined(ARDUINO) && !defined(HONCH_ARDUINO_HOST_TEST)
+#error "honch_arduino_platform.cpp compiled without ARDUINO: define HONCH_ARDUINO_HOST_TEST for host tests only; do not ship the deterministic host stubs."
+#endif
+
 #define HONCH_ARDUINO_MUTEX_LOCK_TIMEOUT_MS 10u
 
 #ifndef ARDUINO
