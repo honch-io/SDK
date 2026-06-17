@@ -285,7 +285,7 @@ honch_status_t honch_read_file_limited_bytes(const char *path, size_t max_bytes,
     return honch_read_file_impl(path, max_bytes, true, &out->data, &out->length);
 }
 
-static honch_status_t honch_fsync_directory(const char *directory)
+honch_status_t honch_fsync_directory(const char *directory)
 {
     int fd = open(directory, O_RDONLY);
     if (fd < 0) {

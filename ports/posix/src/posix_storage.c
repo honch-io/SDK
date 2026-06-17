@@ -14,6 +14,19 @@ static honch_status_t honch_posix_storage_missing_client(void)
     return HONCH_ERROR_NOT_INITIALIZED;
 }
 
+/* Make a prior directory-entry change (unlink/rename) durable when the client
+ * is configured for synchronous durability. Enqueue already fsyncs the pending
+ * directory after writing; the removal side must do the same so an event that
+ * Capture has accepted (and we unlinked) or dead-lettered cannot reappear after
+ * a crash. A no-op in OS_BUFFERED mode. */
+static honch_status_t honch_sync_dir_if_durable(const honch_client_t *client, const char *directory)
+{
+    if (client->durability_mode != HONCH_DURABILITY_SYNC_ALWAYS) {
+        return HONCH_OK;
+    }
+    return honch_fsync_directory(directory);
+}
+
 static honch_status_t honch_posix_state_path(honch_client_t *client, const char *key, char **out)
 {
     return honch_join_path(out, client->state_directory, key);
@@ -344,6 +357,9 @@ static honch_status_t honch_posix_queue_consume(void *ctx, uint64_t sequence)
     if (status == HONCH_OK && client->queued_event_count > 0u) {
         client->queued_event_count--;
     }
+    if (status == HONCH_OK) {
+        status = honch_sync_dir_if_durable(client, client->pending_directory);
+    }
     honch_file_entry_free(&entry);
     return status;
 }
@@ -374,6 +390,9 @@ static honch_status_t honch_posix_queue_consume_batch(
             client->queued_event_count--;
         }
     }
+    if (status == HONCH_OK) {
+        status = honch_sync_dir_if_durable(client, client->pending_directory);
+    }
     honch_file_list_free(&files);
     return status;
 }
@@ -392,6 +411,13 @@ static honch_status_t honch_posix_queue_dead_letter(void *ctx, uint64_t sequence
     }
     if (status == HONCH_OK && client->queued_event_count > 0u) {
         client->queued_event_count--;
+    }
+    /* The rename changed both directory entries: make both durable. */
+    if (status == HONCH_OK) {
+        status = honch_sync_dir_if_durable(client, client->dead_directory);
+    }
+    if (status == HONCH_OK) {
+        status = honch_sync_dir_if_durable(client, client->pending_directory);
     }
     honch_file_entry_free(&entry);
     return status;
@@ -422,6 +448,12 @@ static honch_status_t honch_posix_queue_dead_letter_batch(
         if (status == HONCH_OK && client->queued_event_count > 0u) {
             client->queued_event_count--;
         }
+    }
+    if (status == HONCH_OK) {
+        status = honch_sync_dir_if_durable(client, client->dead_directory);
+    }
+    if (status == HONCH_OK) {
+        status = honch_sync_dir_if_durable(client, client->pending_directory);
     }
     honch_file_list_free(&files);
     return status;
