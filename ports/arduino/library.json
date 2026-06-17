@@ -26,6 +26,16 @@
     "srcDir": "src",
     "includeDir": "src"
   },
+  "export": {
+    "exclude": [
+      "test",
+      "scripts",
+      "AGENTS.md",
+      "**/.DS_Store",
+      "**/.pio",
+      "**/build"
+    ]
+  },
   "examples": [
     {
       "name": "HonchBasic",

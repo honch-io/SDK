@@ -1,0 +1,35 @@
+name: Publish Arduino library
+
+# Publishes ports/arduino to the PlatformIO Registry as honch/Honch.
+# Trigger by pushing a tag like `arduino-v0.1.0`. The tag version should match
+# the `version` field in ports/arduino/library.json (registry versions are
+# immutable — a name+version can never be reused, even after unpublishing).
+on:
+  push:
+    tags:
+      - "arduino-v*"
+
+jobs:
+  publish:
+    name: Publish to PlatformIO Registry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade platformio
+
+      - name: Check vendored core is in sync
+        run: bash ports/arduino/scripts/check-core-sync.sh
+
+      - name: Preview package contents
+        run: pio pkg pack ports/arduino --output "$RUNNER_TEMP/honch-arduino.tar.gz"
+
+      - name: Publish
+        env:
+          PLATFORMIO_AUTH_TOKEN: ${{ secrets.PLATFORMIO_AUTH_TOKEN }}
+        run: pio pkg publish ports/arduino --owner honch --no-interactive
