@@ -231,7 +231,7 @@ static honch_status_t honch_esp_post_chunk(
     int64_t perform_us = 0;
 #endif
     if (err == ESP_OK) {
-        ESP_LOGI(
+        ESP_LOGD(
             TAG,
             "HONCH_HTTP_PAYLOAD format=chunk bytes=%u url=%s stream_id=%s",
             (unsigned)body_size,
