@@ -77,6 +77,11 @@ class ClientWrapperTests(unittest.TestCase):
         fake.ERROR_QUEUE_FULL = 10
         fake.ERROR_TIMEOUT = 11
         fake.ERROR_OFFLINE = 15
+        fake.ERROR_OUT_OF_MEMORY = 2
+        fake.ERROR_ALREADY_INITIALIZED = 9
+        fake.ERROR_NOT_SUPPORTED = 12
+        fake.ERROR_INTERNAL = 13
+        fake.ERROR_BUSY = 14
         sys.modules["_honch_core"] = fake
 
     def tearDown(self):
@@ -84,6 +89,39 @@ class ClientWrapperTests(unittest.TestCase):
             if name == "_honch_core" or name == "honch" or name.startswith("honch."):
                 del sys.modules[name]
         sys.modules.update(self.saved)
+
+    def test_status_messages_map_to_honch_error_subclasses(self):
+        # On real hardware the _honch_core module raises a bare RuntimeError whose
+        # message is honch_status_string(status) and which has no .status
+        # attribute, so the message path is what actually runs. Every error string
+        # honch_status_string() can return must map to a HonchError subclass --
+        # never leak as a bare RuntimeError -- and to the right subtype.
+        importlib.import_module("honch")
+        client_mod = importlib.import_module("honch.client")
+        errors = importlib.import_module("honch.errors")
+
+        cases = {
+            "invalid argument": errors.InvalidArgumentError,
+            "out of memory": errors.HonchError,
+            "io error": errors.StorageError,
+            "transport error": errors.TransportError,
+            "rate limited": errors.RateLimitedError,
+            "server error": errors.ServerError,
+            "rejected": errors.RejectedError,
+            "not initialized": errors.NotInitializedError,
+            "already initialized": errors.HonchError,
+            "queue full": errors.StorageError,
+            "timeout": errors.TransportError,
+            "internal error": errors.HonchError,
+            "busy": errors.HonchError,
+            "not supported": errors.HonchError,
+            "offline": errors.OfflineError,
+            "unknown": errors.HonchError,
+        }
+        for message, expected in cases.items():
+            with self.assertRaises(errors.HonchError) as ctx:
+                client_mod._raise_mapped(RuntimeError(message))
+            self.assertIsInstance(ctx.exception, expected, message)
 
     def test_client_delegates_public_methods_to_c_core_client(self):
         honch = importlib.import_module("honch")

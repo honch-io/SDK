@@ -195,7 +195,10 @@ def _raise_mapped(exc):
         message = str(exc)
         status = _STATUS_BY_MESSAGE.get(message)
         if status is None:
-            raise exc
+            # Unknown/unmapped status string (wording drift, or a status with no
+            # table entry): wrap as HonchError so callers can always catch it,
+            # rather than leaking a bare RuntimeError from the C module.
+            raise HonchError(str(exc))
 
     if status == getattr(_honch_core, "ERROR_INVALID_ARGUMENT", None):
         raise InvalidArgumentError(str(exc))
@@ -235,4 +238,7 @@ _STATUS_BY_MESSAGE = {
     "busy": getattr(_honch_core, "ERROR_BUSY", None),
     "not supported": getattr(_honch_core, "ERROR_NOT_SUPPORTED", None),
     "offline": getattr(_honch_core, "ERROR_OFFLINE", None),
+    "out of memory": getattr(_honch_core, "ERROR_OUT_OF_MEMORY", None),
+    "already initialized": getattr(_honch_core, "ERROR_ALREADY_INITIALIZED", None),
+    "internal error": getattr(_honch_core, "ERROR_INTERNAL", None),
 } if _honch_core is not None else {}
