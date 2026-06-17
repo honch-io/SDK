@@ -7,15 +7,16 @@ Status: release candidate. Do not treat the package as production-ready for a cu
 - TypeScript package tests and type checks are expected release gates.
 - Native bridge syntax/library checks are useful preflights, but they do not replace host-app archive/build and device validation.
 - Offline relay harness coverage proves relay assembly and retry behavior at package level.
+- All durable stores (MMKV, JSON file, in-memory) are bounded by count caps with drop-oldest; time-based TTL expiry is opt-in (MMKV `ttlMs`) and off by default.
 - MMKV package tests cover per-record storage, per-sequence chunk indexes, legacy queue migration, TTL expiry, completed-message caps, persisted retry metadata, and retry scheduling with `Retry-After`.
 
-Latest local package evidence from June 7, 2026:
+Latest local package evidence from June 17, 2026:
 
-- `bun run test`: 14 files, 86 tests passed.
+- `bun run test`: 12 files, 90 tests passed.
 - `bun run typecheck`: passed.
-- `DEVELOPER_DIR="/Volumes/X9 Pro/Applications/Xcode.app/Contents/Developer" bun run verify:ios:native`: passed Objective-C syntax preflight against Xcode 26.5 / iPhoneOS 26.5 SDK.
+- `bun run verify:ios:native`: passed the Objective-C syntax preflight against the active Xcode / iPhoneOS SDK.
 - `bun run verify:android:native`: passed Android library `assembleDebug` when Gradle was allowed to use its normal user cache.
-- `bun run e2e:capture`: blocked at preflight because `http://127.0.0.1:8001/health` was not reachable in this environment.
+- `bun run e2e:capture`: blocked locally (no Capture service reachable at `http://127.0.0.1:8001`). The relay upload path itself was validated separately by a live Capture→ClickHouse end-to-end run on Citadel: a re-chunked relay message drained to empty and its event reached ingest.
 
 ## Required Host-App Validation
 
@@ -29,7 +30,7 @@ Latest local package evidence from June 7, 2026:
 - Verify retryable Capture failures preserve MMKV queue state across app restart.
 - Verify retry attempt metadata and next-attempt timestamps survive app restart and do not reset backoff.
 - Verify `Retry-After` schedules the next drain at the server-requested delay.
-- Verify MMKV retention bounds and TTL match the host app's offline budget.
+- Verify the store's count caps (and optional MMKV TTL) match the host app's offline budget.
 - Verify Android `HonchRelayUpload` headless JS task runs from WorkManager in foreground, background, and cold-start conditions.
 - Verify accepted Capture responses remove queue state exactly once.
 - Run live Capture validation and confirm relay metadata reaches ingest.
