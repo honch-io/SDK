@@ -54,7 +54,7 @@ The relay store only requires an MMKV-compatible object with `getString`,
 `set`, and `remove`, so host apps on `react-native-mmkv` v2, v3, or v4 can use
 their existing MMKV installation.
 
-MMKV relay storage uses per-chunk and per-message records with a small index, so receipt does not rewrite a full queue blob for every chunk. Binary frame, payload, and message bodies are stored as base64 strings instead of JSON number arrays. By default it retains up to 4,096 chunks and 1,024 completed messages for seven days, then drops the oldest or expired entries to bound offline growth. Override these limits when the host app has a smaller storage budget:
+MMKV relay storage uses per-chunk and per-message records with a small index, so receipt does not rewrite a full queue blob for every chunk. Binary frame, payload, and message bodies are stored as base64 strings instead of JSON number arrays. By default it retains up to 4,096 chunks and 1,024 completed messages with no time-based expiry, dropping the oldest entries once a cap is reached to bound offline growth. Time-based expiry is opt-in via `ttlMs`. Override these limits when the host app has a smaller storage budget:
 
 ```ts
 const relayStore = createMmkvRelayStore(createMMKV({ id: "honch-relay" }), {
@@ -67,6 +67,12 @@ const relayStore = createMmkvRelayStore(createMMKV({ id: "honch-relay" }), {
 
 Use `keyPrefix` when sharing an MMKV instance with host app data. The default
 prefix is `honch.relay`.
+
+All bundled stores share the same retention model: count caps on chunks and
+completed messages with drop-oldest eviction and no time-based expiry by default.
+`createMemoryDurableStore` and `createJsonFileRelayStore` accept `maxChunks` and
+`maxCompleteMessages` (defaults 4,096 / 1,024); `createMmkvRelayStore` adds the
+optional `ttlMs`.
 
 Completed messages and incomplete assemblies remain pending across app restarts until Capture accepts or permanently rejects them, unless they age out or the configured queue bounds require dropping oldest state. Retry attempts and next-attempt timestamps are stored with completed messages, so app restarts do not reset relay backoff or hammer Capture while a message is still inside its retry delay.
 

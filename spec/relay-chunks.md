@@ -40,6 +40,8 @@ ACK Write Characteristic UUID: 484f4e43-482d-5245-4c41-592d41434b31
 
 - Reject unsupported versions.
 - Reject nonzero reserved bytes.
+- Reject frames whose first-chunk flag disagrees with the offset: bit 0 (first)
+  is set exactly on the offset-0 frame and clear on every other frame.
 - Reassemble by source device ID and sequence.
 - Accept duplicate chunks when offset and payload bytes match already stored bytes.
 - Acknowledge only after the complete message is durably stored or forwarded

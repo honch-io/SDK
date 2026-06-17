@@ -172,6 +172,10 @@ relay may re-chunk for HTTP, but it must not rewrite the compact message body.
 - Retry a failed message from offset `0`.
 - Use the smallest MTU-safe frame size for the active transport.
 - Include CRC16 only on the final frame.
+- Expect `202` on each non-final frame (stored, send next) and `204` on the final
+  frame (message accepted). Handle any other status per the Response Codes table:
+  `409` retries from offset `0`; `413` (too large) is a permanent drop, not
+  retryable; `429`/`5xx`/network errors retain and retry with backoff.
 
 ### Receiver Rules
 
