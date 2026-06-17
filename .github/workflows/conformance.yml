@@ -1,0 +1,41 @@
+name: Conformance
+
+on:
+  push:
+    paths:
+      - "core/**"
+      - "spec/**"
+      - "tools/generate_wire_v2_fixtures.py"
+      - ".github/workflows/conformance.yml"
+  pull_request:
+    paths:
+      - "core/**"
+      - "spec/**"
+      - "tools/generate_wire_v2_fixtures.py"
+      - ".github/workflows/conformance.yml"
+
+jobs:
+  conformance:
+    name: Cross-SDK conformance + fixture drift
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Run conformance suite
+        run: |
+          python3 -m unittest \
+            spec.conformance.test_wire_v2_fixtures \
+            spec.conformance.test_fixtures_valid
+
+      - name: Wire-v2 fixtures match the generator (no drift)
+        run: |
+          python3 tools/generate_wire_v2_fixtures.py
+          git diff --exit-code -- spec/conformance/wire-v2/ \
+            || { echo "::error::wire-v2 fixtures are stale; run tools/generate_wire_v2_fixtures.py and commit"; exit 1; }
