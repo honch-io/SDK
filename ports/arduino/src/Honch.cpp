@@ -58,6 +58,10 @@ honch_core_config_t honch_arduino_make_core_config(const HonchConfig &config) {
   coreConfig.sdk_platform = "arduino-esp32";
   coreConfig.queue_directory = "";
   coreConfig.batch_size = config.flushEventThreshold;
+  // Soft ceiling only: the tiered RAM+NV queue's real capacity is bounded by the
+  // event buffer and the NV tier, which may be well below this. The core treats
+  // it as an upper bound on the queued count, not a guarantee the storage tier
+  // can hold that many; drop-oldest still kicks in when the tiers actually fill.
   coreConfig.max_queued_events = 1000;
   coreConfig.max_event_bytes = config.eventBufferSize;
   coreConfig.transport_timeout_ms = config.transportTimeoutMs;

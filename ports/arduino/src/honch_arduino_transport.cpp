@@ -93,8 +93,8 @@ honch_status_t arduino_post_chunk(
     size_t bodySize,
     honch_transport_result_t *result) {
   honch_arduino_transport_t *transport = static_cast<honch_arduino_transport_t *>(ctx);
-  (void)transport;
-  if (endpointUrl == nullptr || apiKey == nullptr || body == nullptr || bodySize == 0 || result == nullptr) {
+  if (transport == nullptr || endpointUrl == nullptr || apiKey == nullptr || body == nullptr ||
+      bodySize == 0 || result == nullptr) {
     return HONCH_ERROR_INVALID_ARGUMENT;
   }
 
@@ -110,9 +110,10 @@ honch_status_t arduino_post_chunk(
       *result = HONCH_TRANSPORT_RETRY;
       return HONCH_ERROR_OUT_OF_MEMORY;
     }
-    if (transport != nullptr && transport->rootCaPem != nullptr && transport->rootCaPem[0] != '\0') {
+    if (transport->rootCaPem != nullptr && transport->rootCaPem[0] != '\0') {
       secureClient->setCACert(transport->rootCaPem);
-    } else if (transport != nullptr && transport->insecureSkipTlsVerify) {
+    } else if (transport->insecureSkipTlsVerify) {
+      log_w("Honch: TLS certificate verification disabled (insecureSkipTlsVerify); not for production use");
       secureClient->setInsecure();
     }
     if (!http.begin(*secureClient, url.c_str())) {
