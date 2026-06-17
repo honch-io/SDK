@@ -7,10 +7,10 @@
     "esp32",
     "telemetry"
   ],
-  "homepage": "https://github.com/honch-io/honch",
+  "homepage": "https://github.com/honch-io/SDK",
   "repository": {
     "type": "git",
-    "url": "https://github.com/honch-io/honch.git"
+    "url": "https://github.com/honch-io/SDK.git"
   },
   "authors": [
     {

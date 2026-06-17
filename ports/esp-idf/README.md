@@ -31,7 +31,7 @@ idf.py add-dependency "honch-io/honch^0.2.0"
 **Option B: Git submodule**
 
 ```bash
-git submodule add https://github.com/honch-io/honch.git components/honch
+git submodule add https://github.com/honch-io/SDK.git components/honch
 ```
 
 The ESP-IDF component package uses the repository root so the shared `core/`
