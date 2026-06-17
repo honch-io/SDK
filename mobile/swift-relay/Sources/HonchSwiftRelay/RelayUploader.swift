@@ -52,7 +52,12 @@ public struct URLSessionRelayUploader: RelayUploading {
         switch httpResponse.statusCode {
         case 204:
             return .consume(status: httpResponse.statusCode)
-        case 400, 401, 404:
+        // Permanent rejections: malformed (400), bad key (401), not found (404),
+        // unsupported content type (415), semantic validation failure (422).
+        // Dropping these matches the C SDKs' status mapping. 413 (too large) is
+        // recoverable for a relay via re-chunking (H3), so it is left to retry
+        // until multi-frame support lands.
+        case 400, 401, 404, 415, 422:
             return .drop(status: httpResponse.statusCode)
         default:
             return .retry(

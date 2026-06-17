@@ -70,7 +70,19 @@ export async function uploadRelayMessageOutcome(
   if (response.status === 204) {
     return { action: "consume", status: response.status };
   }
-  if (response.status === 400 || response.status === 401 || response.status === 404) {
+  // Permanent rejections (spec Response Codes): malformed (400), bad key (401),
+  // not found (404), unsupported content type (415), semantic validation
+  // failure (422). Dropping these (rather than retrying forever) matches the C
+  // SDKs' status mapping. 413 (too large) is intentionally NOT dropped here: for
+  // a relay it is recoverable by re-chunking, which lands with multi-frame
+  // support (H3); until then it falls through to retry.
+  if (
+    response.status === 400 ||
+    response.status === 401 ||
+    response.status === 404 ||
+    response.status === 415 ||
+    response.status === 422
+  ) {
     return { action: "drop", status: response.status };
   }
   return {

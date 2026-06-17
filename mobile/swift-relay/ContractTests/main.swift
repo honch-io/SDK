@@ -30,6 +30,7 @@ struct ContractTests {
         try testRetryPolicyParsesNumericRetryAfter()
         try await testUploaderPostsCaptureRequestAndConsumes204()
         try await testUploaderDropsPermanentRejections()
+        try await testUploaderRetriesRecoverableStatuses()
         try await testUploaderRetriesServerErrorsWithRetryAfter()
         try await testUploaderRetriesNetworkErrors()
         try await testDrainConsumesUploadedMessages()
@@ -340,7 +341,10 @@ private func testUploaderPostsCaptureRequestAndConsumes204() async throws {
 }
 
 private func testUploaderDropsPermanentRejections() async throws {
-    for status in [400, 401, 404] {
+    // 415/422 are permanent rejections (matching the C SDK status mapping); 413
+    // (too large) is intentionally excluded -- it is retryable for a relay until
+    // multi-frame re-chunking (H3) lands.
+    for status in [400, 401, 404, 415, 422] {
         let session = makeStubbedURLSession { _ in (status, [:], Data()) }
         let uploader = URLSessionRelayUploader(session: session)
         let outcome = await uploader.upload(
@@ -349,6 +353,19 @@ private func testUploaderDropsPermanentRejections() async throws {
         )
 
         try expectEqual(outcome, .drop(status: status), "\(status) drops upload")
+    }
+}
+
+private func testUploaderRetriesRecoverableStatuses() async throws {
+    for status in [409, 413, 429] {
+        let session = makeStubbedURLSession { _ in (status, [:], Data()) }
+        let uploader = URLSessionRelayUploader(session: session)
+        let outcome = await uploader.upload(
+            config: makeConfig(),
+            message: StoredRelayMessage(deviceId: "device-a", sourceType: 1, sequence: "7", body: Data([1]))
+        )
+
+        try expectEqual(outcome, .retry(status: status, retryAfterMs: nil), "\(status) retries upload")
     }
 }
 
