@@ -55,7 +55,7 @@ static TickType_t honch_esp_lock_ticks(uint32_t timeout_ms)
     return ticks == 0 ? 1 : ticks;
 }
 
-static honch_err_t honch_esp_client_lock(void)
+static bool honch_esp_ensure_mutex(void)
 {
     if (s_client_mutex == NULL) {
         portENTER_CRITICAL(&s_client_mutex_init_lock);
@@ -64,13 +64,39 @@ static honch_err_t honch_esp_client_lock(void)
         }
         portEXIT_CRITICAL(&s_client_mutex_init_lock);
     }
-    if (s_client_mutex == NULL) {
+    return s_client_mutex != NULL;
+}
+
+static honch_err_t honch_esp_client_lock(void)
+{
+    if (!honch_esp_ensure_mutex()) {
         return HONCH_ERR_INTERNAL;
     }
     if (xSemaphoreTake(s_client_mutex, honch_esp_lock_ticks(HONCH_ESP_CLIENT_LOCK_TIMEOUT_MS)) != pdTRUE) {
         return HONCH_ERR_BUSY;
     }
     return HONCH_OK;
+}
+
+/*
+ * Acquire the client lock for a state-transition finalizer (init_finish,
+ * shutdown_finish, shutdown_restore). Unlike honch_esp_client_lock() -- a short
+ * cooperative try-lock that fails open so a busy telemetry task never blocks a
+ * hot-path API call -- this blocks until the lock is held.
+ *
+ * These finalizers MUST complete the transition they began: they only flip the
+ * ownership flags (no I/O is performed while the lock is held), so the wait is
+ * bounded by a few flag writes / a core enter-leave on the other side. Failing
+ * open here would strand s_client_initializing or s_client_shutting_down set,
+ * after which every later init attempt returns ALREADY_INITIALIZED for the rest
+ * of the boot -- the SDK would be bricked.
+ */
+static void honch_esp_client_lock_blocking(void)
+{
+    if (!honch_esp_ensure_mutex()) {
+        return;
+    }
+    (void)xSemaphoreTake(s_client_mutex, portMAX_DELAY);
 }
 
 static void honch_esp_client_unlock(void)
@@ -157,10 +183,8 @@ static honch_err_t honch_esp_init_begin(void)
 
 static honch_err_t honch_esp_init_finish(honch_client_t *client)
 {
-    honch_err_t err = honch_esp_client_lock();
-    if (err != HONCH_OK) {
-        return err;
-    }
+    /* Must complete: blocking lock so s_client_initializing is always cleared. */
+    honch_esp_client_lock_blocking();
     s_client = client;
     s_client_initializing = false;
     honch_esp_client_unlock();
@@ -169,18 +193,16 @@ static honch_err_t honch_esp_init_finish(honch_client_t *client)
 
 static void honch_esp_shutdown_finish(void)
 {
-    if (honch_esp_client_lock() != HONCH_OK) {
-        return;
-    }
+    /* Must complete: blocking lock so s_client_shutting_down is always cleared. */
+    honch_esp_client_lock_blocking();
     s_client_shutting_down = false;
     honch_esp_client_unlock();
 }
 
 static void honch_esp_shutdown_restore(honch_client_t *client)
 {
-    if (honch_esp_client_lock() != HONCH_OK) {
-        return;
-    }
+    /* Must complete: blocking lock so a failed shutdown fully rolls back. */
+    honch_esp_client_lock_blocking();
     s_client = client;
     s_client_shutting_down = false;
     honch_esp_client_unlock();

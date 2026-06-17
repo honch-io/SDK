@@ -577,9 +577,15 @@ class EspIdfChunkWireTest(unittest.TestCase):
         platform = read("ports/esp-idf/honch/src/esp_platform.c")
         compat = read("ports/esp-idf/honch/src/esp_compat.c")
         component_cmake = read("ports/esp-idf/honch/CMakeLists.txt")
-        combined = platform + compat + component_cmake
 
-        self.assertNotIn("portMAX_DELAY", combined)
+        # Hot-path locks must stay bounded and fail open: a blocking wait here
+        # could let a busy telemetry task stall a caller. Only the state-
+        # transition finalizers may block (see
+        # test_state_transition_finalizers_cannot_fail_open) so that they always
+        # complete and never strand the init/shutdown flags.
+        self.assertNotIn("portMAX_DELAY", c_function_body(compat, "honch_esp_client_lock"))
+        self.assertNotIn("portMAX_DELAY", c_function_body(platform, "honch_esp_mutex_lock"))
+        self.assertNotIn("portMAX_DELAY", component_cmake)
 
         platform_lock = c_function_body(platform, "honch_esp_mutex_lock")
         self.assertIn("HONCH_ESP_MUTEX_LOCK_TIMEOUT_MS", platform)

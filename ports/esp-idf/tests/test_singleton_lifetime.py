@@ -117,6 +117,27 @@ class EspIdfSingletonLifetimeTests(unittest.TestCase):
         self.assertGreaterEqual(core_shutdown_index, 0)
         self.assertGreater(finish_index, core_shutdown_index)
 
+    def test_state_transition_finalizers_cannot_fail_open(self) -> None:
+        # A try-lock timeout in a finalizer must not strand s_client_initializing
+        # / s_client_shutting_down set (which would brick honch_init for the rest
+        # of the boot). The finalizers use a blocking lock that always completes.
+        compat = read("ports/esp-idf/honch/src/esp_compat.c")
+
+        lock_blocking = c_function_body(compat, "honch_esp_client_lock_blocking")
+        self.assertIn("portMAX_DELAY", lock_blocking)
+
+        for name in (
+            "honch_esp_init_finish",
+            "honch_esp_shutdown_finish",
+            "honch_esp_shutdown_restore",
+        ):
+            body = c_function_body(compat, name)
+            self.assertIn("honch_esp_client_lock_blocking()", body)
+            # No cooperative try-lock and no fail-open early return in a finalizer.
+            self.assertNotIn("honch_esp_client_lock()", body)
+            self.assertNotRegex(body, r"!=\s*HONCH_OK")
+            self.assertNotIn("return err;", body)
+
     def test_state_reset_restores_distinct_id_to_device_id(self) -> None:
         shims = read("ports/esp-idf/honch/src/esp_core_shims.c")
         reset = c_function_body(shims, "honch_state_reset")
