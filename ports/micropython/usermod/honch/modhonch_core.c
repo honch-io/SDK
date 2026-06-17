@@ -1,4 +1,5 @@
 #include "honch_micropython.h"
+#include "honch_internal.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -301,8 +302,16 @@ static mp_obj_t honch_client_make_new(
         status = honch_mp_map_get_writable_buffer(args[0], MP_QSTR_event_buffer, &event_buffer, &event_buffer_size);
     }
     if (status == HONCH_STATUS_OK) {
+        /* Size the queue's entry metadata to the same cap the core enforces
+         * (max_queued_events, defaulting to HONCH_DEFAULT_MAX_QUEUED_EVENTS)
+         * rather than buffer_size/16, which can be many times larger. */
+        size_t storage_max_events = honch_mp_map_get_size(args[0], MP_QSTR_max_queued_events, 0);
+        if (storage_max_events == 0u) {
+            storage_max_events = HONCH_DEFAULT_MAX_QUEUED_EVENTS;
+        }
         HONCH_MP_DEBUG_INIT("storage_ops_begin");
-        status = honch_micropython_storage_ops_init(&event_queue_ops, &self->storage_ctx, event_buffer, event_buffer_size);
+        status = honch_micropython_storage_ops_init(
+            &event_queue_ops, &self->storage_ctx, event_buffer, event_buffer_size, storage_max_events);
         HONCH_MP_DEBUG_INIT("storage_ops_done");
     }
     if (status == HONCH_STATUS_OK) {

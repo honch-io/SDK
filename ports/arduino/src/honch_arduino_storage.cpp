@@ -102,7 +102,11 @@ honch_status_t honch_arduino_storage_ops_init(
   if (ops == nullptr || ctx == nullptr || config.eventBuffer == nullptr || config.eventBufferSize == 0) {
     return HONCH_ERROR_INVALID_ARGUMENT;
   }
-  honch_status_t status = honch_ram_queue_init(&ctx->ramQueue, config.eventBuffer, config.eventBufferSize);
+  // Size the entry metadata to the queue depth cap the core enforces
+  // (coreConfig.max_queued_events in Honch.cpp), not buffer_size/16, which can be
+  // many times larger and would dwarf the caller buffer it tracks.
+  honch_status_t status = honch_ram_queue_init_capped(
+      &ctx->ramQueue, config.eventBuffer, config.eventBufferSize, HONCH_DEFAULT_MAX_QUEUED_EVENTS);
   if (status != HONCH_OK) {
     return status;
   }

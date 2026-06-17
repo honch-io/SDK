@@ -40,7 +40,8 @@ honch_status_t honch_micropython_storage_ops_init(
     honch_event_queue_ops_t *ops,
     honch_micropython_storage_t *ctx,
     uint8_t *buffer,
-    size_t buffer_size);
+    size_t buffer_size,
+    size_t max_events);
 
 void honch_micropython_storage_ops_deinit(honch_micropython_storage_t *ctx);
 

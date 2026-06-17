@@ -103,6 +103,15 @@ static honch_status_t honch_auto_property_sink(
         return HONCH_OK;
     }
 
+    /* The auto-property buffer holds at most HONCH_MAX_AUTO_PROPERTIES entries
+     * (<= HONCH_MAX_EVENT_PROPERTIES). Stop before the append guard so a tuned-down
+     * auto cap can never overflow the scratch; extra auto props are dropped, not
+     * an error, matching the allow-list skip above. */
+    if (sink_context->property_count != NULL &&
+        *sink_context->property_count >= HONCH_MAX_AUTO_PROPERTIES) {
+        return HONCH_OK;
+    }
+
     return honch_append_typed_property(
         sink_context->properties,
         sink_context->property_count,

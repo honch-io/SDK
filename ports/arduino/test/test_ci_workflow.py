@@ -67,7 +67,8 @@ class ArduinoCIWorkflowTests(unittest.TestCase):
         storage = read("ports/arduino/src/honch_arduino_storage.cpp")
         config = read("ports/arduino/src/honch/core/config.h")
 
-        self.assertIn("honch_ram_queue_init(&ctx->ramQueue", storage)
+        self.assertIn("honch_ram_queue_init_capped(", storage)
+        self.assertIn("&ctx->ramQueue", storage)
         self.assertIn("honch_ram_queue_ops_init(ops, &ctx->ramQueue)", storage)
         self.assertNotIn("Preferences", storage)
         self.assertNotIn("nvs_", storage.lower())

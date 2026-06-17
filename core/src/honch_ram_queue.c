@@ -260,7 +260,8 @@ static honch_status_t honch_ram_queue_get_stats(void *ctx, honch_queue_stats_t *
     return HONCH_OK;
 }
 
-honch_status_t honch_ram_queue_init(honch_ram_queue_t *queue, uint8_t *buffer, size_t buffer_size)
+honch_status_t honch_ram_queue_init_capped(
+    honch_ram_queue_t *queue, uint8_t *buffer, size_t buffer_size, size_t max_events)
 {
     if (queue == NULL || buffer == NULL || buffer_size == 0u) {
         return HONCH_ERROR_INVALID_ARGUMENT;
@@ -268,7 +269,15 @@ honch_status_t honch_ram_queue_init(honch_ram_queue_t *queue, uint8_t *buffer, s
     memset(queue, 0, sizeof(*queue));
     queue->buffer = buffer;
     queue->buffer_size = buffer_size;
+    /* Worst case is one entry per smallest (16-byte) event, but the client caps
+     * the live queue at max_events, so metadata beyond that is never reachable.
+     * Provision the smaller of the two so the entry array does not dwarf the
+     * caller buffer it tracks. max_events == 0 keeps the legacy buffer-derived
+     * bound for callers that do not plumb the cap. */
     queue->entry_capacity = buffer_size / 16u;
+    if (max_events != 0u && max_events < queue->entry_capacity) {
+        queue->entry_capacity = max_events;
+    }
     if (queue->entry_capacity == 0u) {
         queue->entry_capacity = 1u;
     }
@@ -279,6 +288,11 @@ honch_status_t honch_ram_queue_init(honch_ram_queue_t *queue, uint8_t *buffer, s
     }
     honch_ram_queue_refresh_stats(queue);
     return HONCH_OK;
+}
+
+honch_status_t honch_ram_queue_init(honch_ram_queue_t *queue, uint8_t *buffer, size_t buffer_size)
+{
+    return honch_ram_queue_init_capped(queue, buffer, buffer_size, 0u);
 }
 
 void honch_ram_queue_deinit(honch_ram_queue_t *queue)

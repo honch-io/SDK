@@ -340,11 +340,15 @@ honch_err_t honch_init(const honch_config_t *config)
     if (config->event_queue_ops != NULL) {
         event_queue_ops = *config->event_queue_ops;
     } else {
+        /* The ESP public config does not expose the queue depth cap, so the core
+         * uses HONCH_DEFAULT_MAX_QUEUED_EVENTS. Size the entry metadata to that
+         * same cap rather than buffer_size/16, which can be many times larger. */
         status = honch_esp_event_queue_ops_init(
             &event_queue_ops,
             &s_storage_ctx,
             config->event_buffer,
-            config->event_buffer_size);
+            config->event_buffer_size,
+            HONCH_DEFAULT_MAX_QUEUED_EVENTS);
         if (status != HONCH_STATUS_OK) {
             honch_esp_platform_ops_deinit(&s_platform_ctx);
             honch_esp_clear_config_state();

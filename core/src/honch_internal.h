@@ -28,7 +28,16 @@
 #define HONCH_MIN_UNIX_TIME_MS 1577836800000ULL
 #define HONCH_MAX_EVENT_NAME 128u
 #define HONCH_MAX_DISTINCT_ID 256u
+#ifndef HONCH_MAX_EVENT_PROPERTIES
 #define HONCH_MAX_EVENT_PROPERTIES 64u
+#endif
+/* Auto (global) properties come from the user-registered auto_properties_callback
+ * and are capped here; tuning this down shrinks the client's auto-property scratch
+ * independently of the per-event property cap. Defaults to the event cap so the
+ * default build is unchanged. */
+#ifndef HONCH_MAX_AUTO_PROPERTIES
+#define HONCH_MAX_AUTO_PROPERTIES HONCH_MAX_EVENT_PROPERTIES
+#endif
 #ifndef HONCH_AUTO_PROPERTY_BUFFER_COUNT
 #define HONCH_AUTO_PROPERTY_BUFFER_COUNT 2u
 #endif
@@ -151,7 +160,7 @@ struct honch_client {
     char *distinct_id;
     char *session_id;
     honch_wire_v2_property_t build_properties[HONCH_MAX_EVENT_PROPERTIES];
-    honch_wire_v2_property_t auto_property_buffers[HONCH_AUTO_PROPERTY_BUFFER_COUNT][HONCH_MAX_EVENT_PROPERTIES];
+    honch_wire_v2_property_t auto_property_buffers[HONCH_AUTO_PROPERTY_BUFFER_COUNT][HONCH_MAX_AUTO_PROPERTIES];
     honch_atomic_bool_t auto_property_buffer_in_use[HONCH_AUTO_PROPERTY_BUFFER_COUNT];
     honch_payload_t flush_events[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
     bool flush_event_borrowed[HONCH_FLUSH_SCRATCH_MAX_EVENTS];
