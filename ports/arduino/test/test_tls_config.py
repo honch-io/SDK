@@ -184,11 +184,11 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         internal = read("ports/arduino/src/honch_internal.h")
         normalized = " ".join(readme.split())
 
-        self.assertIn("version=0.2.1", library)
-        self.assertIn('#define HONCH_SDK_VERSION "0.2.1"', internal)
+        self.assertIn("version=0.2.2", library)
+        self.assertIn('#define HONCH_SDK_VERSION "0.2.2"', internal)
         # wrapper, vendored core, and package metadata now share one version.
         self.assertIn("HONCH_SDK_VERSION", normalized)
-        self.assertIn("0.2.1", normalized)
+        self.assertIn("0.2.2", normalized)
         self.assertNotIn("0.1.0", normalized)
         self.assertNotIn("0.2.0", normalized)
 

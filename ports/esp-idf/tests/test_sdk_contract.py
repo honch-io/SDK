@@ -476,7 +476,7 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("application-owned FreeRTOS task", readme)
         self.assertIn("transport_timeout_ms", readme)
         self.assertIn("2500", readme)
-        self.assertIn("maximum of 10000 ms", readme)
+        self.assertIn("raised to the 1000 ms floor", readme)
         self.assertNotIn("disable_background_flush", compat + public_header + readme)
 
     def test_esp_transport_timeout_is_bounded(self) -> None:
@@ -689,10 +689,10 @@ class EspIdfChunkWireTest(unittest.TestCase):
         component_manifest = read("ports/esp-idf/honch/idf_component.yml")
         readme = read("ports/esp-idf/README.md")
 
-        self.assertIn('#define HONCH_SDK_VERSION "0.2.1"', internal)
-        self.assertIn('version: "0.2.1"', root_manifest)
-        self.assertIn('version: "0.2.1"', component_manifest)
-        self.assertIn('idf.py add-dependency "honch-io/honch^0.2.1"', readme)
+        self.assertIn('#define HONCH_SDK_VERSION "0.2.2"', internal)
+        self.assertIn('version: "0.2.2"', root_manifest)
+        self.assertIn('version: "0.2.2"', component_manifest)
+        self.assertIn('idf.py add-dependency "honch-io/honch^0.2.2"', readme)
 
     def test_esp_component_dependencies_match_port_sources(self) -> None:
         cmake = read("ports/esp-idf/honch/CMakeLists.txt")

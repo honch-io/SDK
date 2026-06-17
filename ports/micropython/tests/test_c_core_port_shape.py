@@ -173,7 +173,7 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
 
         self.assertIsNotNone(init_match)
         self.assertIsNotNone(pyproject_match)
-        self.assertEqual("0.2.1", init_match.group(1))
+        self.assertEqual("0.2.2", init_match.group(1))
         self.assertEqual(init_match.group(1), package_json["version"])
         self.assertEqual(init_match.group(1), pyproject_match.group(1))
 

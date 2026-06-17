@@ -9,7 +9,7 @@ integrator supplies durable queue storage through `event_queue_ops`.
 
 ## Status
 
-Stable `0.2.1`.
+Stable `0.2.2`.
 
 ## Requirements
 
@@ -25,7 +25,7 @@ Stable `0.2.1`.
 **Option A: ESP Component Manager**
 
 ```
-idf.py add-dependency "honch-io/honch^0.2.1"
+idf.py add-dependency "honch-io/honch^0.2.2"
 ```
 
 **Option B: Git submodule**
@@ -128,7 +128,7 @@ values for one app build.
 - `$device_model` — from your config
 - `$firmware_version` — from your config
 - `$sdk_platform` — `"esp-idf"`
-- `$sdk_version` — `"0.2.1"`
+- `$sdk_version` — `"0.2.2"`
 - `$environment` — from your config (defaults to `"production"`)
 - `$session_id` — only when a session is active
 - `$battery_level` — only if you provide a `battery_callback`
