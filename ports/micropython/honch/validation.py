@@ -3,16 +3,28 @@ from .errors import InvalidArgumentError
 
 MAX_EVENT_NAME = 128
 MAX_DISTINCT_ID = 256
+SEVERITIES = ("info", "warning", "error", "fatal")
+
+
+def require_text(value, label, max_len=None):
+    # Single source of truth for the layer's "non-blank string, optional max
+    # length" rule. Core is still the final gate (and counts UTF-8 bytes, not
+    # code points), so these checks exist for early, well-attributed errors.
+    if not isinstance(value, str) or value.strip() == "" or (max_len is not None and len(value) > max_len):
+        raise InvalidArgumentError("invalid " + label)
+
+
+def require_severity(severity):
+    if severity not in SEVERITIES:
+        raise InvalidArgumentError("invalid error severity")
 
 
 def require_event_name(event):
-    if not isinstance(event, str) or event.strip() == "" or len(event) > MAX_EVENT_NAME:
-        raise InvalidArgumentError("invalid event name")
+    require_text(event, "event name", MAX_EVENT_NAME)
 
 
 def require_distinct_id(distinct_id):
-    if not isinstance(distinct_id, str) or distinct_id.strip() == "" or len(distinct_id) > MAX_DISTINCT_ID:
-        raise InvalidArgumentError("invalid distinct_id")
+    require_text(distinct_id, "distinct_id", MAX_DISTINCT_ID)
 
 
 def require_properties(properties):

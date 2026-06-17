@@ -15,7 +15,14 @@ from .errors import (
     StorageError,
     TransportError,
 )
-from .validation import require_distinct_id, require_event_name, require_properties, require_value
+from .validation import (
+    require_distinct_id,
+    require_event_name,
+    require_properties,
+    require_severity,
+    require_text,
+    require_value,
+)
 
 
 class Honch:
@@ -34,6 +41,8 @@ class Honch:
         self.config = HonchConfig(**kwargs)
         self._core = _honch_core.Client(_config_to_dict(self.config))
         self._connectivity_connected = None
+        self._honch_excepthook = None
+        self._previous_excepthook = None
 
     def get_device_id(self):
         return self._call("get_device_id")
@@ -56,10 +65,8 @@ class Honch:
         backtrace=None,
         properties=None,
     ):
-        if severity not in ("info", "warning", "error", "fatal"):
-            raise InvalidArgumentError("invalid error severity")
-        if not isinstance(message, str) or message.strip() == "":
-            raise InvalidArgumentError("invalid error message")
+        require_severity(severity)
+        require_text(message, "error message")
         report = {
             "message": message,
             "severity": severity,
@@ -86,6 +93,10 @@ class Honch:
             import sys
         except ImportError:
             return False
+        # Installing twice would stack our wrapper on top of itself and report
+        # every exception once per layer, so a repeat call is a no-op.
+        if self._honch_excepthook is not None:
+            return True
         previous_hook = getattr(sys, "excepthook", None)
         if previous_hook is None:
             return False
@@ -97,10 +108,31 @@ class Honch:
                     severity="fatal",
                     error_type=getattr(exc_type, "__name__", "Exception"),
                 )
+            except Exception:
+                # An excepthook must never raise: a reporting failure must not
+                # replace delivery of the original exception to the next hook.
+                pass
             finally:
                 previous_hook(exc_type, exc, tb)
 
+        self._previous_excepthook = previous_hook
+        self._honch_excepthook = honch_excepthook
         sys.excepthook = honch_excepthook
+        return True
+
+    def uninstall_error_hook(self):
+        try:
+            import sys
+        except ImportError:
+            return False
+        if self._honch_excepthook is None:
+            return False
+        # Only restore if our hook is still the active one; if something was
+        # installed on top of us we cannot safely splice ourselves out.
+        if getattr(sys, "excepthook", None) is self._honch_excepthook:
+            sys.excepthook = self._previous_excepthook
+        self._honch_excepthook = None
+        self._previous_excepthook = None
         return True
 
     def identify(self, distinct_id, traits=None):
@@ -108,8 +140,7 @@ class Honch:
         self._call("identify", distinct_id, require_properties(traits))
 
     def set_property(self, key, value=None):
-        if not isinstance(key, str) or key.strip() == "":
-            raise InvalidArgumentError("invalid property key")
+        require_text(key, "property key")
         self._call("set_property", key, require_value(value))
 
     def session_start(self, session_name=None):

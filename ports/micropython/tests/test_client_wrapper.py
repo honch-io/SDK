@@ -318,5 +318,106 @@ class ClientWrapperTests(unittest.TestCase):
         self.assertIn("transport_timeout_ms` (finite positive milliseconds, clamped to 10000)", normalized)
 
 
+    def _make_client(self, honch, **overrides):
+        config = {
+            "api_key": "key",
+            "endpoint_url": "http://collector.local",
+            "device_id": "device-1",
+            "device_model": "model",
+            "firmware_version": "1.0",
+            "event_buffer": bytearray(8192),
+        }
+        config.update(overrides)
+        return honch.Honch(**config)
+
+    def test_install_error_hook_is_idempotent_and_reports_once(self):
+        honch = importlib.import_module("honch")
+        client = self._make_client(honch)
+
+        import sys
+
+        saved = sys.excepthook
+        original_calls = []
+        sys.excepthook = lambda *a: original_calls.append("original")
+        try:
+            self.assertTrue(client.install_error_hook())
+            # A second install must be a no-op, not a second wrapping layer
+            # (which would report the same exception twice).
+            self.assertTrue(client.install_error_hook())
+
+            try:
+                raise ValueError("boom")
+            except ValueError as exc:
+                sys.excepthook(type(exc), exc, None)
+
+            reports = [c for c in client._core.calls if c[0] == "report_error"]
+            self.assertEqual(len(reports), 1)
+            self.assertEqual(original_calls, ["original"])
+        finally:
+            sys.excepthook = saved
+
+    def test_uninstall_error_hook_restores_previous(self):
+        honch = importlib.import_module("honch")
+        client = self._make_client(honch)
+
+        import sys
+
+        saved = sys.excepthook
+        sentinel = lambda *a: None
+        sys.excepthook = sentinel
+        try:
+            self.assertTrue(client.install_error_hook())
+            self.assertIsNot(sys.excepthook, sentinel)
+            self.assertTrue(client.uninstall_error_hook())
+            self.assertIs(sys.excepthook, sentinel)
+            # Uninstalling when nothing is installed is a no-op.
+            self.assertFalse(client.uninstall_error_hook())
+        finally:
+            sys.excepthook = saved
+
+    def test_excepthook_swallows_report_failure_and_still_chains(self):
+        honch = importlib.import_module("honch")
+        client = self._make_client(honch)
+
+        import sys
+
+        saved = sys.excepthook
+        original_calls = []
+        sys.excepthook = lambda *a: original_calls.append("original")
+        try:
+            self.assertTrue(client.install_error_hook())
+            client._core.report_error = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("io error"))
+
+            try:
+                raise ValueError("boom")
+            except ValueError as exc:
+                # The excepthook must never raise, and must still deliver the
+                # original exception to the previous hook even if reporting fails.
+                sys.excepthook(type(exc), exc, None)
+
+            self.assertEqual(original_calls, ["original"])
+        finally:
+            sys.excepthook = saved
+
+    def test_validation_rules_for_text_fields(self):
+        honch = importlib.import_module("honch")
+        client = self._make_client(honch)
+
+        with self.assertRaises(honch.InvalidArgumentError):
+            client.track("   ")
+        with self.assertRaises(honch.InvalidArgumentError):
+            client.track("e" * 129)
+        with self.assertRaises(honch.InvalidArgumentError):
+            client.identify("  ")
+        with self.assertRaises(honch.InvalidArgumentError):
+            client.identify("d" * 257)
+        with self.assertRaises(honch.InvalidArgumentError):
+            client.set_property("  ", "x")
+        with self.assertRaises(honch.InvalidArgumentError):
+            client.report_error("  ")
+        with self.assertRaises(honch.InvalidArgumentError):
+            client.report_error("ok", severity="loud")
+
+
 if __name__ == "__main__":
     unittest.main()
