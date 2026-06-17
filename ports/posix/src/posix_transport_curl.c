@@ -282,7 +282,11 @@ honch_status_t honch_posix_transport_post_chunk(
      * be able to make libcurl use file://, scp://, gopher://, etc. Redirects
      * are not followed (CURLOPT_FOLLOWLOCATION is left off), so the project-key
      * header cannot be redirected to another host or scheme. */
-#if defined(CURLOPT_PROTOCOLS_STR) && LIBCURL_VERSION_NUM >= 0x075500
+    /* CURLOPT_PROTOCOLS_STR is an enum constant, not a macro, so it cannot be
+     * probed with defined(): gate on the libcurl version. The string form was
+     * added in 7.85.0, which is also where the legacy CURLOPT_PROTOCOLS became
+     * deprecated (a -Werror=deprecated-declarations failure on newer curl). */
+#if LIBCURL_VERSION_NUM >= 0x075500
     curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "http,https");
 #else
     curl_easy_setopt(curl, CURLOPT_PROTOCOLS, (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS));
