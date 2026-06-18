@@ -1,0 +1,15 @@
+{
+  "name": "honch-http-json-reference-ts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Reference (read-and-port) TypeScript client for the Honch JSON ingestion API, modeling a companion-app relay. Not a published package.",
+  "scripts": {
+    "test": "node --test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^5.6"
+  }
+}
