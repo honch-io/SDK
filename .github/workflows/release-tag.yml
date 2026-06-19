@@ -25,6 +25,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+          fetch-depth: 0      # full history + tags for the changelog
           token: ${{ secrets.RELEASE_PAT || github.token }}
 
       - name: Push channel tags for the merged version
@@ -58,3 +59,22 @@ jobs:
             | gh api repos/honch-io/platform/dispatches --method POST --input - \
             && echo "dispatched sdk-released ($VERSION) to honch-io/platform" \
             || echo "::warning::failed to dispatch to platform — sync its conformance mirror manually"
+
+      - name: Publish GitHub Release with changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="arduino-v${VERSION}"
+          # previous release tag (highest arduino-v* before this one)
+          prev=$(git tag -l 'arduino-v*' --sort=-version:refname | grep -vx "$tag" | head -1)
+          echo "previous release tag: ${prev:-<none>}"
+          if [ -n "$prev" ]; then range="${prev}..HEAD"; else range="HEAD"; fi
+          changelog=$(git log --pretty=format:'- %s (%h)' "$range" | grep -vE '^- (release: bump|Merge pull request|Merge branch)' || true)
+          {
+            echo "## SDK ${VERSION}"
+            echo
+            echo "${changelog:-- (no changes recorded)}"
+          } > "$RUNNER_TEMP/notes.md"
+          gh release create "$tag" --title "SDK ${VERSION}" --notes-file "$RUNNER_TEMP/notes.md" \
+            && echo "created GitHub Release SDK ${VERSION}" \
+            || gh release edit "$tag" --notes-file "$RUNNER_TEMP/notes.md"
