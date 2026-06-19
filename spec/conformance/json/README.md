@@ -4,11 +4,12 @@ These fixtures define the behavior of the **JSON ingestion path** (`POST /captur
 with `Content-Type: application/json`). They are the contract for third parties who
 build their own client against the HTTP API instead of using an official SDK.
 
-Each fixture is a self-contained request plus its expected result. The valid
-fixtures reuse the **same expanded events** as the equivalent `wire-v2/` binary
-fixtures — proving that the JSON path and the binary path expand to identical
-canonical events. (`single-required-context` and `custom-properties` mirror the
-wire-v2 fixtures of the same name byte-for-result.)
+Each fixture is a self-contained request plus its expected result. Where a
+`wire-v2/` binary fixture covers the same scenario, the JSON fixture reuses its
+**exact expanded events** — proving the JSON path and the binary path expand to
+identical canonical events. (`single-required-context` mirrors the wire-v2
+fixture of the same name, and `custom-properties` mirrors wire-v2's
+`single-custom-properties`, byte-for-result.)
 
 ## How these stay honest
 

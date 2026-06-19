@@ -62,7 +62,8 @@
  */
 
 // Reported as $sdk_version by default; override via the constructor when you fork.
-export const SDK_VERSION = "0.2.0";
+// Tracks the SDK behavior version (matches core's HONCH_SDK_VERSION).
+export const SDK_VERSION = "0.2.2";
 // Default $sdk_platform. A real relay should set this to its platform, e.g.
 // "react-native", "ios", or "android".
 export const SDK_PLATFORM = "honch-ts-ref";
@@ -138,8 +139,10 @@ export interface ValidateResponse {
  * which is why the conformance fixtures round-trip through buildBatch unchanged.
  */
 export function buildBatch(context: Context, events: HonchEvent[]): Batch {
-  // Shallow copies so callers can keep mutating their own objects/arrays
-  // without affecting an in-flight batch.
+  // Shallow copies so adding/removing entries on the caller's own context or
+  // events list won't disturb an in-flight batch. (Nested objects — e.g. an
+  // event's `properties` — are shared by reference, so don't mutate those in
+  // place after enqueueing; track() already snapshots properties on its own.)
   return { context: { ...context }, events: [...events] };
 }
 
