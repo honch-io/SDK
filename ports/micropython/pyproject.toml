@@ -1,8 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "honch-micropython"
 version = "0.2.4"
 description = "Honch analytics SDK for MicroPython"
+readme = "README.md"
 requires-python = ">=3.8"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Honch", email = "support@honch.io" }]
+
+[project.urls]
+Homepage = "https://github.com/honch-io/SDK"
+
+# Ship only the Python wrapper package. usermod/ (the C user module compiled into
+# firmware), tests/, examples/, and scripts/ are not part of the pip distribution,
+# so disable setuptools flat-layout auto-discovery and name the package explicitly.
+[tool.setuptools]
+packages = ["honch"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
