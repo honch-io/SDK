@@ -1,14 +1,14 @@
 name: Publish ESP-IDF component
 
 # Publishes the ESP-IDF component to the Espressif Component Registry as
-# honch-io/honch. Trigger by pushing a tag like `esp-idf-v0.2.3`; the tag
+# honch/honch. Trigger by pushing a tag like `esp-idf-v0.2.3`; the tag
 # version must match `version` in ports/esp-idf/honch/idf_component.yml
 # (registry versions are immutable -- bump, never reuse).
 #
 # CONFIRM BEFORE FIRST PUBLISH:
 #   - the publishable component directory (this assumes ports/esp-idf/honch and
 #     that the core sources it needs are included when packed), and
-#   - that the IDF_COMPONENT_API_TOKEN secret exists with rights to honch-io.
+#   - that the IDF_COMPONENT_API_TOKEN secret exists with rights to honch.
 on:
   push:
     tags:
@@ -41,11 +41,26 @@ jobs:
         if: steps.cred.outputs.present != 'true'
         run: echo "::warning::IDF_COMPONENT_API_TOKEN not set — skipping esp-idf publish (release stays green)"
 
+      - name: Vendor core sources into component (self-contained pack)
+        if: steps.cred.outputs.present == 'true'
+        run: |
+          # The registry archive is rooted at ports/esp-idf/honch and cannot
+          # reach the monorepo core/ via ../../.. once a consumer installs it.
+          # Copy the core in so the published component is self-contained;
+          # CMakeLists prefers this local core/ when present.
+          rm -f ports/esp-idf/honch/.DS_Store
+          rm -rf ports/esp-idf/honch/core
+          mkdir -p ports/esp-idf/honch/core
+          cp -R core/include ports/esp-idf/honch/core/include
+          cp -R core/src     ports/esp-idf/honch/core/src
+          echo "Vendored core into component:"
+          find ports/esp-idf/honch/core -type f | sort
+
       - name: Upload component
         if: steps.cred.outputs.present == 'true'
         uses: espressif/upload-components-ci-action@v2
         with:
           name: honch
-          namespace: honch-io
+          namespace: honch
           directories: ports/esp-idf/honch
           api_token: ${{ secrets.IDF_COMPONENT_API_TOKEN }}

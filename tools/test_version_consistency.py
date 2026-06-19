@@ -35,7 +35,7 @@ DECLARATIONS = [
     ("arduino library.json", "ports/arduino/library.json", r'"version":\s*"([^"]+)"'),
     ("esp-idf root manifest", "idf_component.yml", r'^version:\s*"([^"]+)"'),
     ("esp-idf component manifest", "ports/esp-idf/honch/idf_component.yml", r'^version:\s*"([^"]+)"'),
-    ("esp-idf README add-dependency", "ports/esp-idf/README.md", r'honch-io/honch\^([0-9][^"\s]+)'),
+    ("esp-idf README add-dependency", "ports/esp-idf/README.md", r'honch/honch\^([0-9][^"\s]+)'),
     ("micropython __init__", "ports/micropython/honch/__init__.py", r'__version__ = "([^"]+)"'),
     ("micropython config SDK_VERSION", "ports/micropython/honch/config.py", r'SDK_VERSION = "([^"]+)"'),
     ("micropython package.json", "ports/micropython/package.json", r'"version":\s*"([^"]+)"'),

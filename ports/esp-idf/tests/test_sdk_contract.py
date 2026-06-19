@@ -700,7 +700,7 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn(f'#define HONCH_SDK_VERSION "{version}"', internal)
         self.assertIn(f'version: "{version}"', root_manifest)
         self.assertIn(f'version: "{version}"', component_manifest)
-        self.assertIn(f'idf.py add-dependency "honch-io/honch^{version}"', readme)
+        self.assertIn(f'idf.py add-dependency "honch/honch^{version}"', readme)
 
     def test_esp_component_dependencies_match_port_sources(self) -> None:
         cmake = read("ports/esp-idf/honch/CMakeLists.txt")

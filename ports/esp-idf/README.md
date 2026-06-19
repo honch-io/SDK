@@ -25,7 +25,7 @@ Stable `0.2.4`.
 **Option A: ESP Component Manager**
 
 ```
-idf.py add-dependency "honch-io/honch^0.2.4"
+idf.py add-dependency "honch/honch^0.2.4"
 ```
 
 **Option B: Git submodule**
@@ -34,9 +34,10 @@ idf.py add-dependency "honch-io/honch^0.2.4"
 git submodule add https://github.com/honch-io/SDK.git components/honch
 ```
 
-The ESP-IDF component package uses the repository root so the shared `core/`
-sources are included. If vendoring manually, copy or submodule the whole SDK
-repository as `components/honch`.
+The published ESP-IDF component bundles the shared `core/` sources, so it is
+self-contained — nothing else from the repository is required. If vendoring
+manually instead, copy or submodule the whole SDK repository as
+`components/honch`.
 
 ## Minimal init code
 
