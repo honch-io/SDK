@@ -242,6 +242,28 @@ class ClientWrapperTests(unittest.TestCase):
                 event_buffer=bytearray(8192),
             )
 
+    def test_endpoint_url_defaults_to_hosted_capture(self):
+        honch = importlib.import_module("honch")
+
+        client = honch.Honch(
+            api_key="key",
+            device_id="device-1",
+            device_model="model",
+            firmware_version="1.0",
+            event_buffer=bytearray(8192),
+        )
+        self.assertEqual(client.config.endpoint_url, "https://i.honch.io")
+
+        explicit = honch.Honch(
+            api_key="key",
+            endpoint_url="http://collector.local",
+            device_id="device-1",
+            device_model="model",
+            firmware_version="1.0",
+            event_buffer=bytearray(8192),
+        )
+        self.assertEqual(explicit.config.endpoint_url, "http://collector.local")
+
     def test_rejects_explicit_zero_or_negative_transport_timeout(self):
         honch = importlib.import_module("honch")
 
