@@ -45,10 +45,14 @@ jobs:
           echo "VERSION=$version" >> "$GITHUB_ENV"
 
       - name: Notify platform to re-sync the conformance mirror
-        if: ${{ secrets.RELEASE_PAT != '' }}
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PAT }}
         run: |
+          # secrets can't be used in step-level `if:`, so gate inside the step.
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::RELEASE_PAT not set — skipping platform dispatch (sync its mirror manually)"
+            exit 0
+          fi
           # client_payload.version is the repo-derived semver (not untrusted input).
           printf '{"event_type":"sdk-released","client_payload":{"version":"%s"}}' "$VERSION" \
             | gh api repos/honch-io/platform/dispatches --method POST --input - \
