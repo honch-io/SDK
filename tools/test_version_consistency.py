@@ -16,6 +16,7 @@ Run from the repo root:
     python3 -m unittest tools.test_version_consistency
 """
 
+import glob
 import json
 import os
 import re
@@ -41,7 +42,18 @@ DECLARATIONS = [
     ("micropython pyproject", "ports/micropython/pyproject.toml", r'^version = "([^"]+)"'),
     ("posix CMake project", "ports/posix/CMakeLists.txt", r"project\(honch_posix_sdk VERSION ([0-9][^\s]+) LANGUAGES C\)"),
     ("wire-fixture generator input", "tools/generate_wire_v2_fixtures.py", r'"\$sdk_version": "([^"]+)"'),
+    ("http-json reference client", "examples/http-json/typescript/honchClient.ts", r'SDK_VERSION = "([^"]+)"'),
 ]
+
+# The JSON conformance fixtures are hand-authored (not generated like wire-v2),
+# so each carries $sdk_version as a literal, sometimes more than once per file.
+# They must track canonical too: the valid ones expand to the same canonical
+# events as the wire-v2 fixtures, which only holds if $sdk_version matches.
+# Checked by glob rather than a single DECLARATIONS regex because of the many
+# occurrences. (tools/release.py mirrors this in bump_json_fixtures -- keep the
+# two in lock-step.)
+JSON_FIXTURE_GLOB = "spec/conformance/json/*.json"
+JSON_SDK_VERSION_RE = r'"\$sdk_version":\s*"([^"]+)"'
 
 # README port-matrix rows that advertise a port version.
 README_ROW_RE = r"\| {label} \|[^|]+\| `([^`]+)` \|"
@@ -74,6 +86,22 @@ class VersionConsistencyTest(unittest.TestCase):
                     % (label, rel_path, match.group(1), self.canonical)
                 )
         self.assertEqual([], mismatches, "version drift:\n" + "\n".join(mismatches))
+
+    def test_json_conformance_fixtures_match_canonical(self):
+        paths = sorted(glob.glob(os.path.join(REPO_ROOT, JSON_FIXTURE_GLOB)))
+        self.assertTrue(paths, "no JSON conformance fixtures found at " + JSON_FIXTURE_GLOB)
+        mismatches = []
+        occurrences = 0
+        for path in paths:
+            rel = os.path.relpath(path, REPO_ROOT)
+            for match in re.finditer(JSON_SDK_VERSION_RE, read(rel)):
+                occurrences += 1
+                if match.group(1) != self.canonical:
+                    mismatches.append(
+                        "%s: %r != canonical %r" % (rel, match.group(1), self.canonical)
+                    )
+        self.assertGreater(occurrences, 0, "no $sdk_version found in JSON fixtures")
+        self.assertEqual([], mismatches, "JSON fixture version drift:\n" + "\n".join(mismatches))
 
     def test_readme_port_matrix_matches_canonical(self):
         readme = read("README.md")
