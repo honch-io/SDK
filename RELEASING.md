@@ -8,7 +8,7 @@ from a laptop.
 
 | Artifact | Version source | Published to | Release trigger |
 | --- | --- | --- | --- |
-| ESP-IDF port | `HONCH_SDK_VERSION` (shared) | Espressif registry `honch-io/honch` | tag `esp-idf-vX.Y.Z` |
+| ESP-IDF port | `HONCH_SDK_VERSION` (shared) | Espressif registry `honch/honch` | tag `esp-idf-vX.Y.Z` |
 | Arduino port | `HONCH_SDK_VERSION` (shared) | PlatformIO `honch/Honch` | tag `arduino-vX.Y.Z` |
 | MicroPython port | `HONCH_SDK_VERSION` (shared) | PyPI `honch-micropython` | tag `micropython-vX.Y.Z` |
 | C/POSIX port | `HONCH_SDK_VERSION` (shared) | source only (no registry) | the version bump itself |

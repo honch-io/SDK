@@ -43,7 +43,7 @@ DECLARATIONS = [
     ("arduino library.json", "ports/arduino/library.json", r'"version":\s*"([^"]+)"'),
     ("esp-idf root manifest", "idf_component.yml", r'^version:\s*"([^"]+)"'),
     ("esp-idf component manifest", "ports/esp-idf/honch/idf_component.yml", r'^version:\s*"([^"]+)"'),
-    ("esp-idf README dependency", "ports/esp-idf/README.md", r'honch-io/honch\^([0-9][^"\s]+)'),
+    ("esp-idf README dependency", "ports/esp-idf/README.md", r'honch/honch\^([0-9][^"\s]+)'),
     ("micropython __init__", "ports/micropython/honch/__init__.py", r'__version__ = "([^"]+)"'),
     ("micropython config", "ports/micropython/honch/config.py", r'SDK_VERSION = "([^"]+)"'),
     ("micropython package.json", "ports/micropython/package.json", r'"version":\s*"([^"]+)"'),
@@ -76,7 +76,7 @@ VENDORED_HEADER = "ports/arduino/src/honch_internal.h"
 # Tag prefix per publish channel -> the workflow it triggers.
 CHANNELS = {
     "arduino": "arduino-v",      # -> arduino-publish.yml (PlatformIO honch/Honch)
-    "esp-idf": "esp-idf-v",      # -> esp-idf-publish.yml (Espressif registry honch-io/honch)
+    "esp-idf": "esp-idf-v",      # -> esp-idf-publish.yml (Espressif registry honch/honch)
     "micropython": "micropython-v",  # -> micropython-publish.yml (PyPI)
 }
 

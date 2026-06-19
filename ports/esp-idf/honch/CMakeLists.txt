@@ -1,6 +1,17 @@
 set(HONCH_ESP_COMPONENT_DIR "${CMAKE_CURRENT_LIST_DIR}")
 set(HONCH_SDK_ROOT "${HONCH_ESP_COMPONENT_DIR}/../../..")
 
+# Core sources live at <SDK_ROOT>/core in the monorepo. When this component is
+# packed for the Espressif Component Registry, the registry archive is rooted at
+# this directory and cannot reach outside it, so the publish step vendors a copy
+# to <component>/core. Prefer that local copy when present; fall back to the
+# monorepo layout for in-tree (Citadel / examples) builds.
+if(EXISTS "${HONCH_ESP_COMPONENT_DIR}/core/src/honch_core.c")
+    set(HONCH_CORE_ROOT "${HONCH_ESP_COMPONENT_DIR}")
+else()
+    set(HONCH_CORE_ROOT "${HONCH_SDK_ROOT}")
+endif()
+
 set(HONCH_ESP_PORT_SOURCES
     "src/esp_compat.c"
     "src/esp_core_shims.c"
@@ -22,7 +33,7 @@ set(HONCH_CORE_SOURCES
     "core/src/honch_support.c"
     "core/src/honch_wire_v2.c"
 )
-list(TRANSFORM HONCH_CORE_SOURCES PREPEND "${HONCH_SDK_ROOT}/")
+list(TRANSFORM HONCH_CORE_SOURCES PREPEND "${HONCH_CORE_ROOT}/")
 
 set(HONCH_ESP_REQUIRES
     esp_app_format
@@ -43,10 +54,10 @@ idf_component_register(
         ${HONCH_CORE_SOURCES}
     INCLUDE_DIRS
         "${HONCH_ESP_COMPONENT_DIR}/include"
-        "${HONCH_SDK_ROOT}/core/include"
+        "${HONCH_CORE_ROOT}/core/include"
     PRIV_INCLUDE_DIRS
         "${HONCH_ESP_COMPONENT_DIR}/src"
-        "${HONCH_SDK_ROOT}/core/src"
+        "${HONCH_CORE_ROOT}/core/src"
     REQUIRES
         ${HONCH_ESP_REQUIRES}
 )
