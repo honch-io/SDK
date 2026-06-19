@@ -42,3 +42,15 @@ jobs:
             git tag "$tag"
             git push origin "$tag" && echo "pushed $tag" || echo "::warning::failed to push $tag"
           done
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Notify platform to re-sync the conformance mirror
+        if: ${{ secrets.RELEASE_PAT != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        run: |
+          # client_payload.version is the repo-derived semver (not untrusted input).
+          printf '{"event_type":"sdk-released","client_payload":{"version":"%s"}}' "$VERSION" \
+            | gh api repos/honch-io/platform/dispatches --method POST --input - \
+            && echo "dispatched sdk-released ($VERSION) to honch-io/platform" \
+            || echo "::warning::failed to dispatch to platform — sync its conformance mirror manually"
