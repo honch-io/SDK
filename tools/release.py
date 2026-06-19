@@ -50,7 +50,14 @@ DECLARATIONS = [
     ("micropython pyproject", "ports/micropython/pyproject.toml", r'^version = "([^"]+)"'),
     ("posix CMake project", "ports/posix/CMakeLists.txt", r"project\(honch_posix_sdk VERSION ([0-9][^\s]+) LANGUAGES C\)"),
     ("wire-fixture generator", "tools/generate_wire_v2_fixtures.py", r'"\$sdk_version": "([^"]+)"'),
+    ("http-json reference client", "examples/http-json/typescript/honchClient.ts", r'SDK_VERSION = "([^"]+)"'),
 ]
+
+# Hand-authored JSON conformance fixtures carry $sdk_version as a literal (often
+# more than once per file), so they need a glob rewrite rather than a single
+# splice. Mirrors test_json_conformance_fixtures_match_canonical in the guard.
+JSON_FIXTURE_DIR = "spec/conformance/json"
+JSON_SDK_VERSION_RE = r'("\$sdk_version":\s*")([^"]+)(")'
 
 # README port-matrix rows that advertise a version in a `backtick` cell.
 README_FILE = "README.md"
@@ -146,6 +153,19 @@ def bump_declarations(new: str) -> list[str]:
             die(f"README row not found for {label}")
     readme.write_text(rtext, encoding="utf-8")
     changed.append(f"README rows ({', '.join(README_LABELS)})")
+    return changed
+
+
+def bump_json_fixtures(new: str) -> list[str]:
+    changed = []
+    for p in sorted((ROOT / JSON_FIXTURE_DIR).glob("*.json")):
+        text = p.read_text(encoding="utf-8")
+        updated, n = re.subn(
+            JSON_SDK_VERSION_RE, lambda mm: mm.group(1) + new + mm.group(3), text
+        )
+        if n and updated != text:
+            p.write_text(updated, encoding="utf-8")
+            changed.append(f"json fixture {p.name} ({n}x)")
     return changed
 
 
@@ -248,6 +268,7 @@ def main() -> int:
 
     info(f"bumping {current} -> {c(new, '1')}")
     changed = bump_declarations(new)
+    changed += bump_json_fixtures(new)
     sync_vendored_header()
     for label in changed:
         ok(f"updated {label}")
