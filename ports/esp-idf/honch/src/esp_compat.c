@@ -283,9 +283,12 @@ static honch_err_t honch_esp_copy_config(const honch_config_t *config)
     const char *environment = config->environment != NULL && config->environment[0] != '\0'
         ? config->environment
         : "production";
+    const char *host = config->host != NULL && config->host[0] != '\0'
+        ? config->host
+        : "https://i.honch.io";
     honch_err_t err = honch_esp_copy_static_config_string(s_api_key, sizeof(s_api_key), config->api_key);
     if (err == HONCH_OK) {
-        err = honch_esp_copy_static_config_string(s_endpoint_url, sizeof(s_endpoint_url), config->host);
+        err = honch_esp_copy_static_config_string(s_endpoint_url, sizeof(s_endpoint_url), host);
     }
     if (err == HONCH_OK) {
         err = honch_esp_copy_static_config_string(s_device_model, sizeof(s_device_model), config->device_model);
@@ -314,7 +317,7 @@ honch_err_t honch_init(const honch_config_t *config)
         return err;
     }
 
-    if (config == NULL || config->api_key == NULL || config->host == NULL ||
+    if (config == NULL || config->api_key == NULL ||
         config->device_model == NULL || config->firmware_version == NULL ||
         (config->event_queue_ops == NULL && (config->event_buffer == NULL || config->event_buffer_size == 0u))) {
         honch_esp_init_finish(NULL);

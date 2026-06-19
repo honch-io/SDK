@@ -188,7 +188,7 @@ dependency.
 | Field                    | Required | Default        | Description                                |
 | ------------------------ | -------- | -------------- | ------------------------------------------ |
 | `api_key`                | Yes      | —              | Your Honch project API key                 |
-| `host`                   | Yes      | —              | Capture endpoint URL                       |
+| `host`                   | No       | `"https://i.honch.io"` | Capture endpoint URL                |
 | `device_model`           | Yes      | —              | Hardware model identifier                  |
 | `firmware_version`       | Yes      | —              | Current firmware version string            |
 | `environment`            | No       | `"production"` | Environment tag                            |

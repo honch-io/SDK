@@ -62,13 +62,13 @@ client.shutdown()
 Required:
 
 - `api_key`
-- `endpoint_url`
 - `device_id`
 - `device_model`
 - `firmware_version`
 - `event_buffer`
 
 Optional:
+- `endpoint_url` (default `https://i.honch.io`)
 - `environment`
 - `batch_size`
 - `max_queued_events`

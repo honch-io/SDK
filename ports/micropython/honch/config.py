@@ -3,6 +3,7 @@ from .errors import InvalidArgumentError
 
 SDK_VERSION = "0.2.4"
 SDK_PLATFORM = "micropython"
+DEFAULT_ENDPOINT_URL = "https://i.honch.io"
 
 DEFAULT_BATCH_SIZE = 20
 MAX_BATCH_SIZE = 50
@@ -25,13 +26,14 @@ def is_blank(value):
 
 class HonchConfig:
     def __init__(self, **kwargs):
-        required = ("api_key", "endpoint_url", "device_id", "device_model", "firmware_version", "event_buffer")
+        required = ("api_key", "device_id", "device_model", "firmware_version", "event_buffer")
         for key in required:
             if is_blank(kwargs.get(key)):
                 raise InvalidArgumentError("missing required config: " + key)
 
         self.api_key = str(kwargs["api_key"])
-        self.endpoint_url = str(kwargs["endpoint_url"])
+        endpoint_url = kwargs.get("endpoint_url")
+        self.endpoint_url = DEFAULT_ENDPOINT_URL if is_blank(endpoint_url) else str(endpoint_url)
         self.device_id = kwargs.get("device_id")
         self.device_model = str(kwargs["device_model"])
         self.firmware_version = str(kwargs["firmware_version"])
