@@ -13,6 +13,13 @@ def read(relative_path: str) -> str:
     return (ROOT / relative_path).read_text()
 
 
+def canonical_version() -> str:
+    """The single source of truth: HONCH_SDK_VERSION in the canonical header."""
+    match = re.search(r'#define HONCH_SDK_VERSION "([^"]+)"', read("core/src/honch_internal.h"))
+    assert match, "HONCH_SDK_VERSION not found in core/src/honch_internal.h"
+    return match.group(1)
+
+
 def c_function_body(source: str, name: str) -> str:
     marker = f"{name}("
     signature_start = source.find(marker)
@@ -689,10 +696,11 @@ class EspIdfChunkWireTest(unittest.TestCase):
         component_manifest = read("ports/esp-idf/honch/idf_component.yml")
         readme = read("ports/esp-idf/README.md")
 
-        self.assertIn('#define HONCH_SDK_VERSION "0.2.3"', internal)
-        self.assertIn('version: "0.2.3"', root_manifest)
-        self.assertIn('version: "0.2.3"', component_manifest)
-        self.assertIn('idf.py add-dependency "honch-io/honch^0.2.3"', readme)
+        version = canonical_version()
+        self.assertIn(f'#define HONCH_SDK_VERSION "{version}"', internal)
+        self.assertIn(f'version: "{version}"', root_manifest)
+        self.assertIn(f'version: "{version}"', component_manifest)
+        self.assertIn(f'idf.py add-dependency "honch-io/honch^{version}"', readme)
 
     def test_esp_component_dependencies_match_port_sources(self) -> None:
         cmake = read("ports/esp-idf/honch/CMakeLists.txt")

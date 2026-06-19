@@ -10,6 +10,13 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def canonical_version() -> str:
+    """The single source of truth: HONCH_SDK_VERSION in the canonical header."""
+    match = re.search(r'#define HONCH_SDK_VERSION "([^"]+)"', read("core/src/honch_internal.h"))
+    assert match, "HONCH_SDK_VERSION not found in core/src/honch_internal.h"
+    return match.group(1)
+
+
 SHARED_ESP_RESET_REASONS = (
     "ESP_RST_POWERON",
     "ESP_RST_SW",
@@ -184,13 +191,13 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         internal = read("ports/arduino/src/honch_internal.h")
         normalized = " ".join(readme.split())
 
-        self.assertIn("version=0.2.3", library)
-        self.assertIn('#define HONCH_SDK_VERSION "0.2.3"', internal)
+        version = canonical_version()
+        self.assertIn(f"version={version}", library)
+        self.assertIn(f'#define HONCH_SDK_VERSION "{version}"', internal)
         # wrapper, vendored core, and package metadata now share one version.
         self.assertIn("HONCH_SDK_VERSION", normalized)
-        self.assertIn("0.2.3", normalized)
+        self.assertIn(version, normalized)
         self.assertNotIn("0.1.0", normalized)
-        self.assertNotIn("0.2.0", normalized)
 
     def test_tick_contract_warns_about_blocking_and_shows_dedicated_task(self) -> None:
         readme = read("ports/arduino/README.md")
