@@ -60,7 +60,8 @@ jobs:
         if: steps.cred.outputs.present == 'true'
         uses: espressif/upload-components-ci-action@v2
         with:
-          name: honch
           namespace: honch
-          directories: ports/esp-idf/honch
+          # New combined input (replaces the deprecated name+directories pair,
+          # which the action now rejects together): "<component_name>:<directory>".
+          components: "honch:ports/esp-idf/honch"
           api_token: ${{ secrets.IDF_COMPONENT_API_TOKEN }}
