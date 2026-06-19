@@ -13,7 +13,7 @@ The shared cross-SDK contract lives in [`../../spec/`](../../spec/). C/POSIX sen
 
 ## Status
 
-Stable `0.2.3`.
+Stable `0.2.4`.
 
 ## Current Capabilities
 

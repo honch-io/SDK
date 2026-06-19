@@ -7,7 +7,7 @@
       "$environment": "production",
       "$firmware_version": "1.0.0",
       "$sdk_platform": "posix",
-      "$sdk_version": "0.2.3",
+      "$sdk_version": "0.2.4",
       "distinct_id": "user-1"
     },
     "events": [
@@ -473,7 +473,7 @@
       "model-x",
       "1.0.0",
       "posix",
-      "0.2.3",
+      "0.2.4",
       "production",
       "sample",
       "count"
@@ -490,7 +490,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 0
       },
       "timestamp": 1700000006000
@@ -504,7 +504,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 1
       },
       "timestamp": 1700000006001
@@ -518,7 +518,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 2
       },
       "timestamp": 1700000006002
@@ -532,7 +532,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 3
       },
       "timestamp": 1700000006003
@@ -546,7 +546,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 4
       },
       "timestamp": 1700000006004
@@ -560,7 +560,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 5
       },
       "timestamp": 1700000006005
@@ -574,7 +574,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 6
       },
       "timestamp": 1700000006006
@@ -588,7 +588,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 7
       },
       "timestamp": 1700000006007
@@ -602,7 +602,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 8
       },
       "timestamp": 1700000006008
@@ -616,7 +616,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 9
       },
       "timestamp": 1700000006009
@@ -630,7 +630,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 10
       },
       "timestamp": 1700000006010
@@ -644,7 +644,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 11
       },
       "timestamp": 1700000006011
@@ -658,7 +658,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 12
       },
       "timestamp": 1700000006012
@@ -672,7 +672,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 13
       },
       "timestamp": 1700000006013
@@ -686,7 +686,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 14
       },
       "timestamp": 1700000006014
@@ -700,7 +700,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 15
       },
       "timestamp": 1700000006015
@@ -714,7 +714,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 16
       },
       "timestamp": 1700000006016
@@ -728,7 +728,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 17
       },
       "timestamp": 1700000006017
@@ -742,7 +742,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 18
       },
       "timestamp": 1700000006018
@@ -756,7 +756,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 19
       },
       "timestamp": 1700000006019
@@ -770,7 +770,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 20
       },
       "timestamp": 1700000006020
@@ -784,7 +784,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 21
       },
       "timestamp": 1700000006021
@@ -798,7 +798,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 22
       },
       "timestamp": 1700000006022
@@ -812,7 +812,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 23
       },
       "timestamp": 1700000006023
@@ -826,7 +826,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 24
       },
       "timestamp": 1700000006024
@@ -840,7 +840,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 25
       },
       "timestamp": 1700000006025
@@ -854,7 +854,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 26
       },
       "timestamp": 1700000006026
@@ -868,7 +868,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 27
       },
       "timestamp": 1700000006027
@@ -882,7 +882,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 28
       },
       "timestamp": 1700000006028
@@ -896,7 +896,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 29
       },
       "timestamp": 1700000006029
@@ -910,7 +910,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 30
       },
       "timestamp": 1700000006030
@@ -924,7 +924,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 31
       },
       "timestamp": 1700000006031
@@ -938,7 +938,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 32
       },
       "timestamp": 1700000006032
@@ -952,7 +952,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 33
       },
       "timestamp": 1700000006033
@@ -966,7 +966,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 34
       },
       "timestamp": 1700000006034
@@ -980,7 +980,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 35
       },
       "timestamp": 1700000006035
@@ -994,7 +994,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 36
       },
       "timestamp": 1700000006036
@@ -1008,7 +1008,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 37
       },
       "timestamp": 1700000006037
@@ -1022,7 +1022,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 38
       },
       "timestamp": 1700000006038
@@ -1036,7 +1036,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 39
       },
       "timestamp": 1700000006039
@@ -1050,7 +1050,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 40
       },
       "timestamp": 1700000006040
@@ -1064,7 +1064,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 41
       },
       "timestamp": 1700000006041
@@ -1078,7 +1078,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 42
       },
       "timestamp": 1700000006042
@@ -1092,7 +1092,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 43
       },
       "timestamp": 1700000006043
@@ -1106,7 +1106,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 44
       },
       "timestamp": 1700000006044
@@ -1120,7 +1120,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 45
       },
       "timestamp": 1700000006045
@@ -1134,7 +1134,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 46
       },
       "timestamp": 1700000006046
@@ -1148,7 +1148,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 47
       },
       "timestamp": 1700000006047
@@ -1162,7 +1162,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 48
       },
       "timestamp": 1700000006048
@@ -1176,7 +1176,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "count": 49
       },
       "timestamp": 1700000006049
@@ -1185,7 +1185,7 @@
   "expected_capture_response_code": 204,
   "frames": [
     {
-      "hex": "0207020101f0fe95ffbc310906757365722d31086465766963652d31076d6f64656c2d7805312e302e3005706f73697805302e322e330a70726f64756374696f6e0673616d706c6505636f756e740701070002070103070204070305070406070507070632070001110300070201110301070401110302070601110303070801110304070a01110305070c01110306070e0111030707100111030807120111030907140111030a07160111030b07180111030c071a0111030d071c0111030e071e0111030f072001110310072201110311072401110312072601110313072801110314072a01110315072c01110316072e0111031707300111031807320111031907340111031a07360111031b07380111031c073a0111031d073c0111031e073e0111031f074001110320074201110321074401110322074601110323074801110324074a01110325074c01110326074e0111032707500111032807520111032907540111032a07560111032b07580111032c075a0111032d075c0111032e075e0111032f0760011103300762011103312519",
+      "hex": "0207020101f0fe95ffbc310906757365722d31086465766963652d31076d6f64656c2d7805312e302e3005706f73697805302e322e340a70726f64756374696f6e0673616d706c6505636f756e740701070002070103070204070305070406070507070632070001110300070201110301070401110302070601110303070801110304070a01110305070c01110306070e0111030707100111030807120111030907140111030a07160111030b07180111030c071a0111030d071c0111030e071e0111030f072001110310072201110311072401110312072601110313072801110314072a01110315072c01110316072e0111031707300111031807320111031907340111031a07360111031b07380111031c073a0111031d073c0111031e073e0111031f074001110320074201110321074401110322074601110323074801110324074a01110325074c01110326074e0111032707500111032807520111032907540111032a07560111032b07580111032c075a0111032d075c0111032e075e0111032f07600111033007620111033147ad",
       "kind": "single"
     }
   ],

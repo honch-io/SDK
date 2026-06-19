@@ -63,7 +63,7 @@
 
 // Reported as $sdk_version by default; override via the constructor when you fork.
 // Tracks the SDK behavior version (matches core's HONCH_SDK_VERSION).
-export const SDK_VERSION = "0.2.3";
+export const SDK_VERSION = "0.2.4";
 // Default $sdk_platform. A real relay should set this to its platform, e.g.
 // "react-native", "ios", or "android".
 export const SDK_PLATFORM = "honch-ts-ref";
