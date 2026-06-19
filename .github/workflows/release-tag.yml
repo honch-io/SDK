@@ -1,0 +1,56 @@
+name: Release tag
+
+# When a release PR (label "release") is merged, push the per-channel tags for
+# the current version. Each tag fires its publish workflow (arduino-publish.yml,
+# esp-idf-publish.yml, micropython-publish.yml).
+#
+# NOTE: tags pushed with the default GITHUB_TOKEN do NOT trigger the tag-based
+# publish workflows. Set RELEASE_PAT (contents:write) so the publishes fire.
+# Without it the tags are still created; the publish workflows can be re-run from
+# the tag manually.
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  tag:
+    if: >-
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'release')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.RELEASE_PAT || github.token }}
+
+      - name: Push channel tags for the merged version
+        run: |
+          version=$(grep -oE '#define HONCH_SDK_VERSION "[^"]+"' core/src/honch_internal.h | grep -oE '[0-9][^"]+')
+          echo "releasing version=$version"
+          git config user.name "honch-release-bot"
+          git config user.email "release@honch.io"
+          for ch in arduino esp-idf micropython; do
+            tag="${ch}-v${version}"
+            if git rev-parse "$tag" >/dev/null 2>&1; then
+              echo "::warning::tag $tag already exists — skipping (registry versions are immutable)"
+              continue
+            fi
+            git tag "$tag"
+            git push origin "$tag" && echo "pushed $tag" || echo "::warning::failed to push $tag"
+          done
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Notify platform to re-sync the conformance mirror
+        if: ${{ secrets.RELEASE_PAT != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        run: |
+          # client_payload.version is the repo-derived semver (not untrusted input).
+          printf '{"event_type":"sdk-released","client_payload":{"version":"%s"}}' "$VERSION" \
+            | gh api repos/honch-io/platform/dispatches --method POST --input - \
+            && echo "dispatched sdk-released ($VERSION) to honch-io/platform" \
+            || echo "::warning::failed to dispatch to platform — sync its conformance mirror manually"

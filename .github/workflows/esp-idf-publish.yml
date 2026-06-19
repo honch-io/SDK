@@ -33,7 +33,16 @@ jobs:
           [ "$tag" = "$manifest" ] || { echo "::error::tag $tag != manifest $manifest"; exit 1; }
           python3 -m unittest tools.test_version_consistency
 
+      - name: Check publish credential
+        id: cred
+        run: echo "present=${{ secrets.IDF_COMPONENT_API_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Skip notice (no credential)
+        if: steps.cred.outputs.present != 'true'
+        run: echo "::warning::IDF_COMPONENT_API_TOKEN not set — skipping esp-idf publish (release stays green)"
+
       - name: Upload component
+        if: steps.cred.outputs.present == 'true'
         uses: espressif/upload-components-ci-action@v2
         with:
           name: honch

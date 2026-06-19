@@ -127,6 +127,11 @@ if(HONCH_BUILD_TESTS)
     )
 
     target_link_libraries(honch_posix_tests PRIVATE honch_posix_test)
+    # core/src so the test can assert the wire $sdk_version against the canonical
+    # HONCH_SDK_VERSION macro instead of a hardcoded literal.
+    target_include_directories(honch_posix_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../core/src
+    )
     target_compile_definitions(honch_posix_tests PRIVATE
         HONCH_ENABLE_ERROR_TRACKING=$<BOOL:${HONCH_ENABLE_ERROR_TRACKING}>
         HONCH_TESTING

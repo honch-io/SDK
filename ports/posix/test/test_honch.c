@@ -1,6 +1,7 @@
 #include "honch/honch.h"
 #include "honch/core/packetizer.h"
 #include "honch/posix/honch.h"
+#include "honch_internal.h"  /* HONCH_SDK_VERSION — canonical version for wire assertions */
 
 #include <dirent.h>
 #include <pthread.h>
@@ -1683,7 +1684,7 @@ static void test_queue_record_omits_promoted_context_properties(void)
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$device_model\":\"X3-Pro\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$firmware_version\":\"3.4.1\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$sdk_platform\":\"c-posix\"");
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"$sdk_version\":\"0.2.3\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"$sdk_version\":\"" HONCH_SDK_VERSION "\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"$environment\":\"production\"");
 
     test_battery_level = -1;

@@ -9,6 +9,14 @@ MICROPYTHON = ROOT / "ports" / "micropython"
 USERMOD = MICROPYTHON / "usermod" / "honch"
 
 
+def canonical_version():
+    """The single source of truth: HONCH_SDK_VERSION in the canonical header."""
+    text = (ROOT / "core" / "src" / "honch_internal.h").read_text(encoding="utf-8")
+    match = re.search(r'#define HONCH_SDK_VERSION "([^"]+)"', text)
+    assert match, "HONCH_SDK_VERSION not found in core/src/honch_internal.h"
+    return match.group(1)
+
+
 class MicroPythonCCorePortShapeTests(unittest.TestCase):
     def read(self, relative):
         return (ROOT / relative).read_text(encoding="utf-8")
@@ -173,7 +181,7 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
 
         self.assertIsNotNone(init_match)
         self.assertIsNotNone(pyproject_match)
-        self.assertEqual("0.2.3", init_match.group(1))
+        self.assertEqual(canonical_version(), init_match.group(1))
         self.assertEqual(init_match.group(1), package_json["version"])
         self.assertEqual(init_match.group(1), pyproject_match.group(1))
 

@@ -43,6 +43,11 @@ DECLARATIONS = [
     ("posix CMake project", "ports/posix/CMakeLists.txt", r"project\(honch_posix_sdk VERSION ([0-9][^\s]+) LANGUAGES C\)"),
     ("wire-fixture generator input", "tools/generate_wire_v2_fixtures.py", r'"\$sdk_version": "([^"]+)"'),
     ("http-json reference client", "examples/http-json/typescript/honchClient.ts", r'SDK_VERSION = "([^"]+)"'),
+    # Per-port README "Status" lines (the advertised version for each port).
+    ("arduino README status", "ports/arduino/README.md", r'Preview `([0-9][^`]*)`'),
+    ("posix README status", "ports/posix/README.md", r'Stable `([0-9][^`]*)`'),
+    ("esp-idf README status", "ports/esp-idf/README.md", r'Stable `([0-9][^`]*)`'),
+    ("micropython README status", "ports/micropython/README.md", r'Stable `([0-9][^`]*)`'),
 ]
 
 # The JSON conformance fixtures are hand-authored (not generated like wire-v2),

@@ -23,6 +23,14 @@ jobs:
       - name: Install PlatformIO
         run: python -m pip install --upgrade platformio
 
+      - name: Tag version matches manifest + single-source guard
+        run: |
+          tag="${GITHUB_REF_NAME#arduino-v}"
+          manifest=$(grep -oE '"version":[[:space:]]*"[^"]+"' ports/arduino/library.json | grep -oE '[0-9][^"]+')
+          echo "tag=$tag manifest=$manifest"
+          [ "$tag" = "$manifest" ] || { echo "::error::tag $tag != manifest $manifest"; exit 1; }
+          python3 -m unittest tools.test_version_consistency
+
       - name: Check vendored core is in sync
         run: bash ports/arduino/scripts/check-core-sync.sh
 
@@ -32,4 +40,9 @@ jobs:
       - name: Publish
         env:
           PLATFORMIO_AUTH_TOKEN: ${{ secrets.PLATFORMIO_AUTH_TOKEN }}
-        run: pio pkg publish ports/arduino --owner honch --no-interactive
+        run: |
+          if [ -z "$PLATFORMIO_AUTH_TOKEN" ]; then
+            echo "::warning::PLATFORMIO_AUTH_TOKEN not set — skipping arduino publish"
+            exit 0
+          fi
+          pio pkg publish ports/arduino --owner honch --no-interactive

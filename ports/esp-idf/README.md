@@ -128,7 +128,7 @@ values for one app build.
 - `$device_model` — from your config
 - `$firmware_version` — from your config
 - `$sdk_platform` — `"esp-idf"`
-- `$sdk_version` — `"0.2.3"`
+- `$sdk_version` — the running SDK version (see Status above)
 - `$environment` — from your config (defaults to `"production"`)
 - `$session_id` — only when a session is active
 - `$battery_level` — only if you provide a `battery_callback`

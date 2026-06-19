@@ -38,7 +38,15 @@ jobs:
           python -m pip install --upgrade build
           python -m build ports/micropython
 
+      # PyPI uses OIDC trusted publishing (no secret to probe), so publishing is
+      # gated on an explicit opt-in repo variable. Set vars.MICROPYTHON_PUBLISH_ENABLED
+      # to "true" once OIDC trusted publishing is configured for this repo/workflow.
+      - name: Skip notice (publishing not enabled)
+        if: vars.MICROPYTHON_PUBLISH_ENABLED != 'true'
+        run: echo "::warning::MICROPYTHON_PUBLISH_ENABLED not set — skipping PyPI publish (release stays green)"
+
       - name: Publish to PyPI
+        if: vars.MICROPYTHON_PUBLISH_ENABLED == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: ports/micropython/dist

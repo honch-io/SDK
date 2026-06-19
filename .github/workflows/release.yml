@@ -1,0 +1,93 @@
+name: Release
+
+# One-button release. Run this workflow (Actions tab → Release → Run workflow),
+# enter the new version, and it will:
+#   1. validate the version, 2. bump every declaration via tools/release.py,
+#   3. deeply verify all ports, 4. open a release PR (branch release/<version>,
+#      label "release"). Merging that PR triggers release-tag.yml, which pushes
+#      the channel tags that fire the per-channel publish workflows.
+#
+# NOTE: a PR opened with the default GITHUB_TOKEN does NOT trigger the per-port
+# check workflows. Set a repo secret RELEASE_PAT (a fine-grained PAT / app token
+# with contents+pull-requests write) so the checks run on the release PR. Without
+# it the PR still opens; re-run its checks manually or push an empty commit.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "New version (x.y.z)"
+        required: true
+
+# The dispatch input is passed via env (never interpolated into run: directly)
+# and validated as strict semver before any other step uses it.
+env:
+  VERSION: ${{ inputs.version }}
+
+jobs:
+  prepare:
+    name: Bump, verify, open release PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.RELEASE_PAT || github.token }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Validate version
+        run: |
+          echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::version is not semver x.y.z"; exit 1; }
+          cur=$(grep -oE '#define HONCH_SDK_VERSION "[^"]+"' core/src/honch_internal.h | grep -oE '[0-9][^"]+')
+          echo "current=$cur new=$VERSION"
+          [ "$VERSION" != "$cur" ] || { echo "::error::version equals current ($cur) — bump it"; exit 1; }
+
+      - name: Bump (release.py --bump-only)
+        run: python3 tools/release.py "$VERSION" --bump-only
+
+      - name: Deep verify — every port host suite + guards
+        run: |
+          set -e
+          echo "::group::version single-source"
+          python3 -m unittest tools.test_version_consistency
+          echo "::endgroup::"
+          echo "::group::arduino vendored-core sync"
+          bash ports/arduino/scripts/check-core-sync.sh
+          echo "::endgroup::"
+          echo "::group::wire-v2 conformance"
+          python3 -m unittest spec.conformance.test_wire_v2_fixtures
+          echo "::endgroup::"
+          echo "::group::posix ctest"
+          cmake -S ports/posix -B ports/posix/build -DHONCH_BUILD_TESTS=ON
+          cmake --build ports/posix/build
+          ctest --test-dir ports/posix/build --output-on-failure
+          echo "::endgroup::"
+          echo "::group::arduino host tests"
+          bash ports/arduino/scripts/verify-arduino.sh
+          echo "::endgroup::"
+          echo "::group::esp-idf source contract"
+          python3 ports/esp-idf/tests/test_sdk_contract.py
+          echo "::endgroup::"
+          echo "::group::micropython"
+          PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=ports/micropython python3 -m unittest discover -s ports/micropython/tests -t .
+          echo "::endgroup::"
+
+      - name: Open release PR
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+        run: |
+          branch="release/$VERSION"
+          git config user.name "honch-release-bot"
+          git config user.email "release@honch.io"
+          git checkout -b "$branch"
+          git commit -am "release: bump SDK version to $VERSION"
+          git push origin "$branch"
+          gh label create release --color 0e8a16 --description "Release bump; merging publishes" 2>/dev/null || true
+          gh pr create --base main --head "$branch" --label release \
+            --title "release: $VERSION" \
+            --body "Automated release bump (deep-verified in CI). Merging this PR pushes the channel tags and publishes the wired channels. Review the version diff; the per-port checks gate the merge."
