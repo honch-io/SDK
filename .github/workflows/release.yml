@@ -34,6 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0      # full history + tags for the changelog
           token: ${{ secrets.RELEASE_PAT || github.token }}
 
       - uses: actions/setup-python@v5
@@ -89,10 +90,19 @@ jobs:
           branch="release/$VERSION"
           git config user.name "honch-release-bot"
           git config user.email "release@honch.io"
+          # Changelog: commits since the previous release tag.
+          prev=$(git tag -l 'arduino-v*' --sort=-version:refname | head -1)
+          if [ -n "$prev" ]; then range="${prev}..HEAD"; else range="HEAD"; fi
+          changelog=$(git log --pretty=format:'- %s (%h)' "$range" | grep -vE '^- (release: bump|Merge pull request|Merge branch)' || true)
           git checkout -b "$branch"
           git commit -am "release: bump SDK version to $VERSION"
           git push origin "$branch"
           gh label create release --color 0e8a16 --description "Release bump; merging publishes" 2>/dev/null || true
+          {
+            echo "Automated release bump to **$VERSION** (deep-verified in CI). **Merging publishes** the wired channels and tags a GitHub Release with these notes."
+            echo
+            echo "## Changes since ${prev:-the start}"
+            echo "${changelog:-- (no changes recorded)}"
+          } > "$RUNNER_TEMP/pr-body.md"
           gh pr create --base main --head "$branch" --label release \
-            --title "release: $VERSION" \
-            --body "Automated release bump (deep-verified in CI). Merging this PR pushes the channel tags and publishes the wired channels. Review the version diff; the per-port checks gate the merge."
+            --title "release: $VERSION" --body-file "$RUNNER_TEMP/pr-body.md"

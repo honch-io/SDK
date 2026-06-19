@@ -33,7 +33,10 @@ jobs:
           [ "$tag" = "$manifest" ] || { echo "::error::tag $tag != manifest $manifest"; exit 1; }
           python3 -m unittest tools.test_version_consistency
 
+      # Only build when publishing is actually enabled — otherwise an unconfigured
+      # channel's build can fail and red a release for no reason.
       - name: Build distributions
+        if: vars.MICROPYTHON_PUBLISH_ENABLED == 'true'
         run: |
           python -m pip install --upgrade build
           python -m build ports/micropython
