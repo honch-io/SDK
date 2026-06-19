@@ -12,6 +12,12 @@ The compact wire format is a strict binary upload contract. The goals are:
 
 This wire format is the SDK and gateway ingest contract.
 
+> **JSON ingestion:** the device and SDK path is binary-only, as above.
+> Companion-app relays and third parties that integrate directly against the HTTP
+> API may instead post events as JSON to `POST /capture`
+> (`Content-Type: application/json`); that path expands to the identical canonical
+> events. See the fixtures and contract in `spec/conformance/json/`.
+
 ## Endpoint
 
 ```text
