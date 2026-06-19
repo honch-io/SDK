@@ -16,7 +16,7 @@
         "$device_model": "model-x",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "$environment": "production",
         "$session_id": "session-1"
       },
@@ -45,7 +45,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "$session_id": "session-1",
         "session_name": "recording"
       },
@@ -60,7 +60,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.2.3",
+        "$sdk_version": "0.2.4",
         "$session_id": "session-1",
         "index": 1
       },

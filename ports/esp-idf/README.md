@@ -9,7 +9,7 @@ integrator supplies durable queue storage through `event_queue_ops`.
 
 ## Status
 
-Stable `0.2.3`.
+Stable `0.2.4`.
 
 ## Requirements
 
@@ -25,7 +25,7 @@ Stable `0.2.3`.
 **Option A: ESP Component Manager**
 
 ```
-idf.py add-dependency "honch-io/honch^0.2.3"
+idf.py add-dependency "honch-io/honch^0.2.4"
 ```
 
 **Option B: Git submodule**
