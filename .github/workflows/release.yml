@@ -40,6 +40,11 @@ jobs:
         with:
           python-version: "3.x"
 
+      - name: Install system dependencies (posix build needs libcurl)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake libcurl4-openssl-dev zlib1g-dev
+
       - name: Validate version
         run: |
           echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::version is not semver x.y.z"; exit 1; }
