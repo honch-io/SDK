@@ -1,0 +1,53 @@
+{
+  "name": "identify",
+  "description": "A $identify event that ties the anonymous device person (distinct_id == $device_id) to a user. context.distinct_id is the user id; $anon_distinct_id names the previous device id, and $set carries person properties. Capture accepts and expands the event as shown; the person MERGE itself happens downstream in the worker (see byo-integration docs).",
+  "wire_format": "honch-json-v1",
+  "request": {
+    "method": "POST",
+    "path": "/capture",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Honch-Project-Key": "<project_api_key>"
+    },
+    "body": {
+      "context": {
+        "distinct_id": "user-98234",
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.2"
+      },
+      "events": [
+        {
+          "event": "$identify",
+          "timestamp": 1700000000000,
+          "properties": {
+            "$anon_distinct_id": "device-1",
+            "$set": { "email": "sam@example.com", "plan": "pro" },
+            "$set_once": { "signup_source": "app" }
+          }
+        }
+      ]
+    }
+  },
+  "expected_ingest_status": 200,
+  "expected_expanded_events": [
+    {
+      "distinct_id": "user-98234",
+      "event": "$identify",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.2",
+        "$anon_distinct_id": "device-1",
+        "$set": { "email": "sam@example.com", "plan": "pro" },
+        "$set_once": { "signup_source": "app" }
+      },
+      "timestamp": 1700000000000
+    }
+  ]
+}

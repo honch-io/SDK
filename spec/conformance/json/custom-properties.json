@@ -1,0 +1,56 @@
+{
+  "name": "custom-properties",
+  "description": "Custom properties of mixed types (string, int, array). Expands to the same canonical event as the wire-v2 fixture of the same name.",
+  "wire_format": "honch-json-v1",
+  "request": {
+    "method": "POST",
+    "path": "/capture",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Honch-Project-Key": "<project_api_key>"
+    },
+    "body": {
+      "context": {
+        "distinct_id": "user-1",
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.2",
+        "$environment": "production"
+      },
+      "events": [
+        {
+          "event": "sample",
+          "timestamp": 1700000001025,
+          "properties": {
+            "mode": "auto",
+            "previous_mode": "auto",
+            "samples": 3,
+            "tags": ["auto", "hdr"]
+          }
+        }
+      ]
+    }
+  },
+  "expected_ingest_status": 200,
+  "expected_expanded_events": [
+    {
+      "distinct_id": "user-1",
+      "event": "sample",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.2",
+        "mode": "auto",
+        "previous_mode": "auto",
+        "samples": 3,
+        "tags": ["auto", "hdr"]
+      },
+      "timestamp": 1700000001025
+    }
+  ]
+}

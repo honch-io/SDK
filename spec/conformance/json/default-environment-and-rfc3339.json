@@ -1,0 +1,42 @@
+{
+  "name": "default-environment-and-rfc3339",
+  "description": "$environment omitted (defaults to \"production\") and an RFC3339 string timestamp instead of epoch milliseconds.",
+  "wire_format": "honch-json-v1",
+  "request": {
+    "method": "POST",
+    "path": "/capture",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Honch-Project-Key": "<project_api_key>"
+    },
+    "body": {
+      "context": {
+        "distinct_id": "user-1",
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.2"
+      },
+      "events": [
+        { "event": "boot", "timestamp": "2023-11-14T22:13:20Z" }
+      ]
+    }
+  },
+  "expected_ingest_status": 200,
+  "expected_expanded_events": [
+    {
+      "distinct_id": "user-1",
+      "event": "boot",
+      "properties": {
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$environment": "production",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.2"
+      },
+      "timestamp": 1700000000000
+    }
+  ]
+}

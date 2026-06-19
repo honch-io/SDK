@@ -2,13 +2,14 @@
 
 The cross-SDK conformance fixtures under spec/conformance/ are the contract each
 SDK validates against. Only the wire-v2 fixtures have a Python runner
-(test_wire_v2_fixtures.py); the events/, http/, and relay/ fixtures are consumed
-by per-language SDK conformance runners and otherwise have no CI coverage here.
+(test_wire_v2_fixtures.py); the events/, http/, json/, and relay/ fixtures are
+consumed by per-language SDK / capture-service conformance runners and otherwise
+have no CI coverage here.
 
 This test does not assert semantics -- it guards against the cheap failure modes
 that would silently rot the contract: a fixture that stops being valid JSON, an
 empty fixture, or a whole fixture directory disappearing (e.g. a bad glob or
-merge). Semantic validation of events/http/relay belongs in their own runners.
+merge). Semantic validation of events/http/json/relay belongs in their own runners.
 
 Run from the repo root:
     python3 -m unittest spec.conformance.test_fixtures_valid
@@ -20,7 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 # Every subdirectory that must always contain at least one fixture.
-FIXTURE_DIRS = ["events", "http", "relay", "wire-v2"]
+FIXTURE_DIRS = ["events", "http", "json", "relay", "wire-v2"]
 
 
 class FixturesValidTest(unittest.TestCase):

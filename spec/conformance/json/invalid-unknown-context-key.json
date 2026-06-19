@@ -1,0 +1,29 @@
+{
+  "name": "invalid-unknown-context-key",
+  "description": "Context contains a key that capture does not promote ($os_version). Other dimensions belong in per-event properties.",
+  "wire_format": "honch-json-v1",
+  "request": {
+    "method": "POST",
+    "path": "/capture",
+    "headers": {
+      "Content-Type": "application/json",
+      "X-Honch-Project-Key": "<project_api_key>"
+    },
+    "body": {
+      "context": {
+        "distinct_id": "user-1",
+        "$device_id": "device-1",
+        "$device_model": "model-x",
+        "$firmware_version": "1.0.0",
+        "$sdk_platform": "posix",
+        "$sdk_version": "0.2.2",
+        "$os_version": "17.0"
+      },
+      "events": [
+        { "event": "boot", "timestamp": 1700000000000 }
+      ]
+    }
+  },
+  "expected_ingest_status": 422,
+  "expected_error_codes": ["unknown_context_key"]
+}
