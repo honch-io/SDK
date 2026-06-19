@@ -1,7 +1,7 @@
 from .errors import InvalidArgumentError
 
 
-SDK_VERSION = "0.2.2"
+SDK_VERSION = "0.2.3"
 SDK_PLATFORM = "micropython"
 
 DEFAULT_BATCH_SIZE = 20

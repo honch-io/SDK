@@ -25,7 +25,7 @@ Stable `0.2.2`.
 **Option A: ESP Component Manager**
 
 ```
-idf.py add-dependency "honch-io/honch^0.2.2"
+idf.py add-dependency "honch-io/honch^0.2.3"
 ```
 
 **Option B: Git submodule**

@@ -7,7 +7,7 @@
       "$environment": "production",
       "$firmware_version": "1.0.0",
       "$sdk_platform": "posix",
-      "$sdk_version": "0.2.2",
+      "$sdk_version": "0.2.3",
       "distinct_id": "user-1"
     },
     "events": [
@@ -32,7 +32,7 @@
       "model-x",
       "1.0.0",
       "posix",
-      "0.2.2",
+      "0.2.3",
       "production",
       "capture",
       "mode",
@@ -49,12 +49,12 @@
       "offset": 0
     },
     {
-      "hex": "620425302e3005706f73697805302e322e320a70726f64756374696f6e0763617074757265046d6f",
+      "hex": "620425302e3005706f73697805302e322e330a70726f64756374696f6e0763617074757265046d6f",
       "kind": "continuation",
       "offset": 37
     },
     {
-      "hex": "620425302e3005706f73697805302e322e320a70726f64756374696f6e0763617074757265046d6f",
+      "hex": "620425302e3005706f73697805302e322e330a70726f64756374696f6e0763617074757265046d6f",
       "kind": "duplicate",
       "offset": 37
     }
