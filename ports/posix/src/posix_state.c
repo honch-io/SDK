@@ -258,7 +258,9 @@ honch_status_t honch_state_check_firmware_version(honch_client_t *client, bool *
     }
 
     char *stored_version = NULL;
-    honch_status_t status = honch_read_optional_state_file(client, "firmware_version", &stored_version);
+    /* "fw_version", not "firmware_version": NVS-backed ports cap state keys at
+     * 15 chars (NVS_KEY_NAME_MAX_SIZE). Keep all ports on the same short key. */
+    honch_status_t status = honch_read_optional_state_file(client, "fw_version", &stored_version);
     if (status != HONCH_OK) {
         return status;
     }
@@ -279,7 +281,7 @@ honch_status_t honch_state_save_firmware_version(honch_client_t *client)
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    return honch_write_state_file(client, "firmware_version", client->firmware_version);
+    return honch_write_state_file(client, "fw_version", client->firmware_version);
 }
 
 honch_status_t honch_state_reset(honch_client_t *client)

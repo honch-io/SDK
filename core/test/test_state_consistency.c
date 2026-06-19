@@ -107,13 +107,17 @@ static void assert_record_string_property(
 
 static char *fake_state_value(fake_state_storage_t *storage, const char *key)
 {
+    /* NVS — a primary state-storage backend on ESP32 — caps keys at 15 chars
+     * (NVS_KEY_NAME_MAX_SIZE = 16 incl. the NUL). The SDK must not use a longer
+     * state key on any port, or persistence silently fails (KEY_TOO_LONG). */
+    assert(strlen(key) <= 15u && "state-storage key exceeds NVS 15-char limit");
     if (strcmp(key, "device_id") == 0) {
         return storage->device_id;
     }
     if (strcmp(key, "distinct_id") == 0) {
         return storage->distinct_id;
     }
-    if (strcmp(key, "firmware_version") == 0) {
+    if (strcmp(key, "fw_version") == 0) {
         return storage->firmware_version;
     }
     return NULL;

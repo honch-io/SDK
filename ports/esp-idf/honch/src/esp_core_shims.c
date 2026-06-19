@@ -205,7 +205,8 @@ honch_status_t honch_state_check_firmware_version(
     }
 
     char *stored_version = NULL;
-    honch_status_t status = honch_esp_state_get_string(client, "firmware_version", &stored_version);
+    /* "fw_version", not "firmware_version": NVS caps state keys at 15 chars. */
+    honch_status_t status = honch_esp_state_get_string(client, "fw_version", &stored_version);
     if (status != HONCH_STATUS_OK) {
         return status;
     }
@@ -229,7 +230,7 @@ honch_status_t honch_state_save_firmware_version(honch_client_t *client)
         return HONCH_STATUS_OK;
     }
 
-    return honch_esp_write_state_string(client, "firmware_version", client->firmware_version);
+    return honch_esp_write_state_string(client, "fw_version", client->firmware_version);
 }
 
 honch_status_t honch_state_reset(honch_client_t *client)

@@ -198,7 +198,8 @@ honch_status_t honch_state_check_firmware_version(
     return HONCH_OK;
   }
   char *storedVersion = nullptr;
-  honch_status_t status = arduino_state_get_string(client, "firmware_version", &storedVersion);
+  // "fw_version", not "firmware_version": NVS caps state keys at 15 chars.
+  honch_status_t status = arduino_state_get_string(client, "fw_version", &storedVersion);
   if (status != HONCH_OK) {
     return status;
   }
@@ -215,7 +216,7 @@ honch_status_t honch_state_save_firmware_version(honch_client_t *client) {
   if (client == nullptr || arduino_is_blank(client->firmware_version)) {
     return HONCH_ERROR_INVALID_ARGUMENT;
   }
-  return arduino_write_state_string(client, "firmware_version", client->firmware_version);
+  return arduino_write_state_string(client, "fw_version", client->firmware_version);
 }
 
 honch_status_t honch_state_reset(honch_client_t *client) {
