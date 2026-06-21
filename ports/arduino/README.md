@@ -81,9 +81,9 @@ send source code/source paths, or replace ESP32 crash forensics tooling.
 Define `HONCH_ENABLE_ERROR_TRACKING=0` in the Arduino build flags to compile
 out the wrapper reset-snapshot path entirely.
 
-Call `honch::defaultClient().reportError(report, properties, propertyCount)`
-from normal runtime error paths to queue `$error` with `source="runtime"`.
-Delivery follows the same cooperative `tick()`/`flush()` policy as `track()`.
+Crash reporting is automatic — there is no manual error method. When
+`enableErrorTracking` is set, the wrapper maps the ESP32 reset reason into a
+one-time `$crash` event emitted during `begin()` after an abnormal reset.
 
 All `HonchClass` methods serialize access to the wrapper-owned client pointer.
 Concurrent calls from multiple FreeRTOS tasks are allowed, but only one wrapper

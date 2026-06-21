@@ -26,8 +26,11 @@ class FakeCoreClient:
     def set_property(self, key, value):
         self.calls.append(("set_property", key, value))
 
-    def report_error(self, report, properties):
-        self.calls.append(("report_error", report, properties))
+    def report_crash(self, report):
+        self.calls.append(("report_crash", report))
+
+    def report_log_error(self, component, message):
+        self.calls.append(("report_log_error", component, message))
 
     def session_start(self, session_name):
         self.calls.append(("session_start", session_name))
@@ -144,7 +147,7 @@ class ClientWrapperTests(unittest.TestCase):
         self.assertNotIn("enable_wire_v2", client._core.config)
 
         client.track("pressed", {"button": "power"})
-        client.report_error("runtime failed", severity="error", error_type="RuntimeError", properties={"handled": False})
+        client.report_log_error("runtime failed", component="camera")
         client.identify("user-1", {"plan": "beta"})
         client.set_property("mode", "hdr")
         client.session_start("recording")
@@ -159,15 +162,7 @@ class ClientWrapperTests(unittest.TestCase):
             client._core.calls,
             [
                 ("track", "pressed", {"button": "power"}),
-                (
-                    "report_error",
-                    {
-                        "message": "runtime failed",
-                        "severity": "error",
-                        "type": "RuntimeError",
-                    },
-                    {"handled": False},
-                ),
+                ("report_log_error", "camera", "runtime failed"),
                 ("identify", "user-1", {"plan": "beta"}),
                 ("set_property", "mode", "hdr"),
                 ("session_start", "recording"),
@@ -369,8 +364,9 @@ class ClientWrapperTests(unittest.TestCase):
             except ValueError as exc:
                 sys.excepthook(type(exc), exc, None)
 
-            reports = [c for c in client._core.calls if c[0] == "report_error"]
+            reports = [c for c in client._core.calls if c[0] == "report_crash"]
             self.assertEqual(len(reports), 1)
+            self.assertEqual(reports[0][1]["type"], "ValueError")
             self.assertEqual(original_calls, ["original"])
         finally:
             sys.excepthook = saved
@@ -405,7 +401,7 @@ class ClientWrapperTests(unittest.TestCase):
         sys.excepthook = lambda *a: original_calls.append("original")
         try:
             self.assertTrue(client.install_error_hook())
-            client._core.report_error = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("io error"))
+            client._core.report_crash = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("io error"))
 
             try:
                 raise ValueError("boom")
@@ -418,18 +414,15 @@ class ClientWrapperTests(unittest.TestCase):
         finally:
             sys.excepthook = saved
 
-    def test_report_error_omits_unset_optional_fields(self):
+    def test_report_log_error_forwards_component_and_message(self):
         honch = importlib.import_module("honch")
         client = self._make_client(honch)
 
-        client.report_error("disk full", severity="warning", code="E_DISK")
+        client.report_log_error("disk full", component="storage")
 
-        report = client._core.calls[0][1]
-        # Unset optionals are omitted, not sent as None slots; the C module treats
-        # a missing key the same as None, so this stays on-device-equivalent.
         self.assertEqual(
-            report,
-            {"message": "disk full", "severity": "warning", "code": "E_DISK"},
+            client._core.calls[0],
+            ("report_log_error", "storage", "disk full"),
         )
 
     def test_validation_rules_for_text_fields(self):
@@ -447,9 +440,7 @@ class ClientWrapperTests(unittest.TestCase):
         with self.assertRaises(honch.InvalidArgumentError):
             client.set_property("  ", "x")
         with self.assertRaises(honch.InvalidArgumentError):
-            client.report_error("  ")
-        with self.assertRaises(honch.InvalidArgumentError):
-            client.report_error("ok", severity="loud")
+            client.report_log_error("  ")
 
 
 if __name__ == "__main__":

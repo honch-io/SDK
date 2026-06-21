@@ -14,22 +14,6 @@ typedef honch_wire_v2_value_t honch_value_t;
 typedef honch_wire_v2_property_t honch_property_t;
 typedef honch_wire_v2_map_pair_t honch_map_pair_t;
 
-typedef enum honch_error_severity {
-    HONCH_ERROR_SEVERITY_INFO = 0,
-    HONCH_ERROR_SEVERITY_WARNING = 1,
-    HONCH_ERROR_SEVERITY_ERROR = 2,
-    HONCH_ERROR_SEVERITY_FATAL = 3
-} honch_error_severity_t;
-
-typedef struct honch_error_report {
-    honch_error_severity_t severity;
-    const char *message;
-    const char *type;
-    const char *component;
-    const char *code;
-    const char *backtrace;
-} honch_error_report_t;
-
 honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_t *config);
 honch_status_t honch_core_track(
     honch_client_t *client,
@@ -41,11 +25,21 @@ honch_status_t honch_core_identify(
     const char *distinct_id,
     const honch_property_t *traits,
     size_t trait_count);
-honch_status_t honch_core_report_error(
+/* Port-facing, not application-facing. A port calls this during its own
+ * init/boot sequence after detecting a crash recovered from the previous boot;
+ * the core emits one reserved $crash event. Returns HONCH_OK once enqueued (or
+ * if a crash was already reported this client lifetime), HONCH_ERROR_NOT_SUPPORTED
+ * when crash capture is compiled out, HONCH_ERROR_INVALID_ARGUMENT on bad input. */
+honch_status_t honch_core_report_crash(
     honch_client_t *client,
-    const honch_error_report_t *report,
-    const honch_property_t *properties,
-    size_t property_count);
+    const honch_crash_report_t *report);
+/* Port-facing. A port's error-log hook calls this for each error-level log line;
+ * the core emits a bounded, rate-limited, coalesced reserved $error event.
+ * Returns HONCH_ERROR_NOT_SUPPORTED when log capture is compiled out. */
+honch_status_t honch_core_report_log_error(
+    honch_client_t *client,
+    const char *component,
+    const char *message);
 honch_status_t honch_core_set_property(honch_client_t *client, const char *key, honch_value_t value);
 honch_status_t honch_core_session_start(honch_client_t *client, const char *session_name);
 honch_status_t honch_core_session_end(honch_client_t *client);

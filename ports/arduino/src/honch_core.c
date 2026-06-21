@@ -808,6 +808,16 @@ static void honch_scheduler_record_flush_result(
         client->next_retry_flush_ms = 0u;
         if (outbound_upload_attempted) {
             honch_scheduler_record_outbound_attempt(client, now);
+#if HONCH_ENABLE_CRASH_CAPTURE
+            /* A reported $crash has now reached Capture; let the port clear the
+             * on-device crash source so it is not re-reported on the next boot. */
+            if (client->crash_pending_ack) {
+                client->crash_pending_ack = false;
+                if (client->crash_uploaded_callback != NULL) {
+                    client->crash_uploaded_callback(client->crash_uploaded_userdata);
+                }
+            }
+#endif
         }
     } else if (honch_status_is_retryable(status)) {
         uint64_t wait_ms = honch_next_retry_delay_ms(client);
@@ -1074,132 +1084,80 @@ static bool honch_fault_string_length(
     return false;
 }
 
-static honch_wire_v2_value_t honch_boot_reset_reason_value(const honch_fault_snapshot_t *fault_snapshot)
+static honch_wire_v2_value_t honch_boot_reset_reason_value(const honch_crash_report_t *crash_report)
 {
     size_t length = 0u;
-    if (fault_snapshot != NULL &&
+    if (crash_report != NULL &&
         honch_fault_string_length(
-            fault_snapshot->reset_reason,
+            crash_report->reset_reason,
             HONCH_FAULT_RESET_REASON_MAX_BYTES,
             &length)) {
-        return honch_strn(fault_snapshot->reset_reason, length);
+        return honch_strn(crash_report->reset_reason, length);
     }
     return honch_str("unknown");
 }
 
-#if HONCH_ENABLE_ERROR_TRACKING
-static const char *honch_fault_kind_source(honch_fault_kind_t kind)
+#if HONCH_ENABLE_CRASH_CAPTURE
+static const char *honch_crash_kind_source(honch_crash_kind_t kind)
 {
     switch (kind) {
-    case HONCH_FAULT_KIND_NONE:
+    case HONCH_CRASH_KIND_NONE:
         return "none";
-    case HONCH_FAULT_KIND_PANIC:
+    case HONCH_CRASH_KIND_PANIC:
         return "panic";
-    case HONCH_FAULT_KIND_WATCHDOG:
+    case HONCH_CRASH_KIND_WATCHDOG:
         return "watchdog";
-    case HONCH_FAULT_KIND_ASSERT:
+    case HONCH_CRASH_KIND_ASSERT:
         return "assert";
-    case HONCH_FAULT_KIND_BROWNOUT:
+    case HONCH_CRASH_KIND_BROWNOUT:
         return "brownout";
-    case HONCH_FAULT_KIND_STACK_OVERFLOW:
+    case HONCH_CRASH_KIND_STACK_OVERFLOW:
         return "stack_overflow";
-    case HONCH_FAULT_KIND_UNKNOWN:
+    case HONCH_CRASH_KIND_HARDFAULT:
+        return "hardfault";
+    case HONCH_CRASH_KIND_LOCKUP:
+        return "lockup";
+    case HONCH_CRASH_KIND_EXCEPTION:
+        return "exception";
+    case HONCH_CRASH_KIND_SIGNAL:
+        return "signal";
+    case HONCH_CRASH_KIND_UNKNOWN:
     default:
         return "unknown";
     }
 }
 
-static const char *honch_fault_severity_string(honch_fault_severity_t severity)
+static const char *honch_crash_severity_string(honch_crash_severity_t severity)
 {
     switch (severity) {
-    case HONCH_FAULT_SEVERITY_INFO:
+    case HONCH_CRASH_SEVERITY_INFO:
         return "info";
-    case HONCH_FAULT_SEVERITY_WARNING:
+    case HONCH_CRASH_SEVERITY_WARNING:
         return "warning";
-    case HONCH_FAULT_SEVERITY_FATAL:
+    case HONCH_CRASH_SEVERITY_FATAL:
         return "fatal";
     default:
         return "fatal";
     }
 }
 
-static bool honch_fault_snapshot_is_abnormal(const honch_fault_snapshot_t *fault_snapshot)
+static bool honch_crash_report_is_abnormal(const honch_crash_report_t *crash_report)
 {
-    return fault_snapshot != NULL && fault_snapshot->kind != HONCH_FAULT_KIND_NONE;
+    return crash_report != NULL && crash_report->kind != HONCH_CRASH_KIND_NONE;
 }
 
-static const char *honch_error_severity_string(honch_error_severity_t severity)
-{
-    switch (severity) {
-    case HONCH_ERROR_SEVERITY_INFO:
-        return "info";
-    case HONCH_ERROR_SEVERITY_WARNING:
-        return "warning";
-    case HONCH_ERROR_SEVERITY_ERROR:
-        return "error";
-    case HONCH_ERROR_SEVERITY_FATAL:
-        return "fatal";
-    default:
-        return NULL;
-    }
-}
-
-static bool honch_error_property_key_is_owned(const char *key)
-{
-    static const char *owned_keys[] = {
-        "source",
-        "severity",
-        "message",
-        "type",
-        "component",
-        "code",
-        "backtrace",
-        "reset_reason",
-        "fault_pc",
-        "exception_cause",
-        "firmware_build_id",
-        "task_name",
-        "crash_summary_version"
-    };
-    if (key == NULL) {
-        return false;
-    }
-    for (size_t i = 0u; i < sizeof(owned_keys) / sizeof(owned_keys[0]); i++) {
-        if (strcmp(key, owned_keys[i]) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static honch_status_t honch_validate_error_extra_properties(
-    const honch_wire_v2_property_t *properties,
-    size_t property_count)
-{
-    if ((property_count > 0u && properties == NULL) ||
-        property_count > HONCH_MAX_EVENT_PROPERTIES) {
-        return HONCH_ERROR_INVALID_ARGUMENT;
-    }
-    for (size_t i = 0u; i < property_count; i++) {
-        if (honch_validate_user_property_key(properties[i].key) != HONCH_OK ||
-            honch_error_property_key_is_owned(properties[i].key)) {
-            return HONCH_ERROR_INVALID_ARGUMENT;
-        }
-    }
-    return HONCH_OK;
-}
-
-static honch_status_t honch_append_runtime_error_string(
+/* Append an optional crash string property: skipped silently when the value is
+ * absent, blank, or longer than max_length (crash fields are all best-effort). */
+static honch_status_t honch_append_crash_string(
     honch_wire_v2_property_t *properties,
     size_t *property_count,
     const char *key,
     const char *value,
-    size_t max_length,
-    bool required)
+    size_t max_length)
 {
     size_t length = 0u;
     if (!honch_fault_string_length(value, max_length, &length)) {
-        return required || value != NULL ? HONCH_ERROR_INVALID_ARGUMENT : HONCH_OK;
+        return HONCH_OK;
     }
     return honch_append_typed_property(
         properties,
@@ -1209,214 +1167,87 @@ static honch_status_t honch_append_runtime_error_string(
         true);
 }
 
-static honch_status_t honch_build_runtime_error_properties(
-    const honch_error_report_t *report,
+/* Build the property set for a $crash event from a port-supplied report. All
+ * keys are SDK-owned; the API takes no user properties, so owned-key protection
+ * is structural — nothing the caller passes can shadow these. */
+static honch_status_t honch_build_crash_properties(
+    const honch_crash_report_t *report,
     honch_wire_v2_property_t *properties,
     size_t *property_count)
 {
-    if (report == NULL || properties == NULL || property_count == NULL) {
-        return HONCH_ERROR_INVALID_ARGUMENT;
-    }
-    const char *severity = honch_error_severity_string(report->severity);
-    if (severity == NULL) {
-        return HONCH_ERROR_INVALID_ARGUMENT;
-    }
-
     *property_count = 0u;
     honch_status_t status = honch_append_typed_property(
-        properties,
-        property_count,
-        "source",
-        honch_str("runtime"),
-        true);
+        properties, property_count, "source",
+        honch_str(honch_crash_kind_source(report->kind)), true);
     if (status == HONCH_OK) {
         status = honch_append_typed_property(
-            properties,
-            property_count,
-            "severity",
-            honch_str(severity),
-            true);
+            properties, property_count, "severity",
+            honch_str(honch_crash_severity_string(report->severity)), true);
     }
     if (status == HONCH_OK) {
-        status = honch_append_runtime_error_string(
-            properties,
-            property_count,
-            "message",
-            report->message,
-            HONCH_FAULT_MESSAGE_MAX_BYTES,
-            true);
+        status = honch_append_typed_property(
+            properties, property_count, "reset_reason",
+            honch_boot_reset_reason_value(report), true);
+    }
+    if (status == HONCH_OK && report->summary_version > 0u) {
+        status = honch_append_typed_property(
+            properties, property_count, "summary_version",
+            honch_u64((uint64_t)report->summary_version), true);
     }
     if (status == HONCH_OK) {
-        status = honch_append_runtime_error_string(
-            properties,
-            property_count,
-            "type",
-            report->type,
-            HONCH_ERROR_TYPE_MAX_BYTES,
-            false);
+        status = honch_append_crash_string(properties, property_count,
+            "message", report->message, HONCH_FAULT_MESSAGE_MAX_BYTES);
     }
     if (status == HONCH_OK) {
-        status = honch_append_runtime_error_string(
-            properties,
-            property_count,
-            "component",
-            report->component,
-            HONCH_FAULT_COMPONENT_MAX_BYTES,
-            false);
+        status = honch_append_crash_string(properties, property_count,
+            "component", report->component, HONCH_FAULT_COMPONENT_MAX_BYTES);
     }
     if (status == HONCH_OK) {
-        status = honch_append_runtime_error_string(
-            properties,
-            property_count,
-            "code",
-            report->code,
-            HONCH_ERROR_CODE_MAX_BYTES,
-            false);
+        status = honch_append_crash_string(properties, property_count,
+            "firmware_build_id", report->firmware_build_id, HONCH_FAULT_BUILD_ID_MAX_BYTES);
     }
     if (status == HONCH_OK) {
-        status = honch_append_runtime_error_string(
-            properties,
-            property_count,
-            "backtrace",
-            report->backtrace,
-            HONCH_FAULT_BACKTRACE_MAX_BYTES,
-            false);
+        status = honch_append_crash_string(properties, property_count,
+            "exception_cause", report->exception_cause, HONCH_FAULT_EXCEPTION_CAUSE_MAX_BYTES);
+    }
+    if (status == HONCH_OK) {
+        status = honch_append_crash_string(properties, property_count,
+            "fault_pc", report->fault_pc, HONCH_FAULT_PC_MAX_BYTES);
+    }
+    if (status == HONCH_OK) {
+        status = honch_append_crash_string(properties, property_count,
+            "fault_addr", report->fault_addr, HONCH_FAULT_PC_MAX_BYTES);
+    }
+    if (status == HONCH_OK) {
+        status = honch_append_crash_string(properties, property_count,
+            "backtrace", report->backtrace, HONCH_FAULT_BACKTRACE_MAX_BYTES);
+    }
+    if (status == HONCH_OK) {
+        status = honch_append_crash_string(properties, property_count,
+            "task_name", report->task_name, HONCH_FAULT_TASK_NAME_MAX_BYTES);
+    }
+    if (status == HONCH_OK && report->coredump_available) {
+        status = honch_append_typed_property(
+            properties, property_count, "coredump_available", honch_bool(true), true);
     }
     return status;
 }
 
-static honch_status_t honch_emit_fault_locked(
+/* Emit the reserved $crash event for a recovered crash. Used by the init path
+ * (lifecycle_tracker set, runs single-threaded during construction) — it
+ * prepares its own event context. Once-only across the client lifetime. */
+static honch_status_t honch_emit_crash_locked(
     honch_client_t *client,
-    const honch_fault_snapshot_t *fault_snapshot,
+    const honch_crash_report_t *crash_report,
     honch_lifecycle_queue_tracker_t *lifecycle_tracker)
 {
-    if (!honch_fault_snapshot_is_abnormal(fault_snapshot)) {
+    if (!honch_crash_report_is_abnormal(crash_report) || client->crash_reported) {
         return HONCH_OK;
     }
 
-    honch_wire_v2_property_t properties[11];
+    honch_wire_v2_property_t properties[14];
     size_t property_count = 0u;
-    honch_status_t status = honch_append_typed_property(
-        properties,
-        &property_count,
-        "source",
-        honch_str(honch_fault_kind_source(fault_snapshot->kind)),
-        true);
-    if (status == HONCH_OK) {
-        status = honch_append_typed_property(
-            properties,
-            &property_count,
-            "severity",
-            honch_str(honch_fault_severity_string(fault_snapshot->severity)),
-            true);
-    }
-    if (status == HONCH_OK) {
-        status = honch_append_typed_property(
-            properties,
-            &property_count,
-            "reset_reason",
-            honch_boot_reset_reason_value(fault_snapshot),
-            true);
-    }
-    if (status == HONCH_OK && fault_snapshot->crash_summary_version > 0u) {
-        status = honch_append_typed_property(
-            properties,
-            &property_count,
-            "crash_summary_version",
-            honch_u64((uint64_t)fault_snapshot->crash_summary_version),
-            true);
-    }
-    size_t message_length = 0u;
-    if (status == HONCH_OK &&
-        honch_fault_string_length(
-            fault_snapshot->message,
-            HONCH_FAULT_MESSAGE_MAX_BYTES,
-            &message_length)) {
-        status = honch_append_typed_property(
-            properties,
-            &property_count,
-            "message",
-            honch_strn(fault_snapshot->message, message_length),
-            true);
-    }
-    size_t component_length = 0u;
-    if (status == HONCH_OK &&
-        honch_fault_string_length(
-            fault_snapshot->component,
-            HONCH_FAULT_COMPONENT_MAX_BYTES,
-            &component_length)) {
-        status = honch_append_typed_property(
-            properties,
-            &property_count,
-            "component",
-            honch_strn(fault_snapshot->component, component_length),
-            true);
-    }
-    size_t build_id_length = 0u;
-    if (status == HONCH_OK &&
-        honch_fault_string_length(
-            fault_snapshot->firmware_build_id,
-            HONCH_FAULT_BUILD_ID_MAX_BYTES,
-            &build_id_length)) {
-        status = honch_append_typed_property(
-            properties,
-            &property_count,
-            "firmware_build_id",
-            honch_strn(fault_snapshot->firmware_build_id, build_id_length),
-            true);
-    }
-    size_t exception_cause_length = 0u;
-    if (status == HONCH_OK &&
-        honch_fault_string_length(
-            fault_snapshot->exception_cause,
-            HONCH_FAULT_EXCEPTION_CAUSE_MAX_BYTES,
-            &exception_cause_length)) {
-        status = honch_append_typed_property(
-            properties,
-            &property_count,
-            "exception_cause",
-            honch_strn(fault_snapshot->exception_cause, exception_cause_length),
-            true);
-    }
-    size_t fault_pc_length = 0u;
-    if (status == HONCH_OK &&
-        honch_fault_string_length(
-            fault_snapshot->fault_pc,
-            HONCH_FAULT_PC_MAX_BYTES,
-            &fault_pc_length)) {
-        status = honch_append_typed_property(
-            properties,
-            &property_count,
-            "fault_pc",
-            honch_strn(fault_snapshot->fault_pc, fault_pc_length),
-            true);
-    }
-    size_t backtrace_length = 0u;
-    if (status == HONCH_OK &&
-        honch_fault_string_length(
-            fault_snapshot->backtrace,
-            HONCH_FAULT_BACKTRACE_MAX_BYTES,
-            &backtrace_length)) {
-        status = honch_append_typed_property(
-            properties,
-            &property_count,
-            "backtrace",
-            honch_strn(fault_snapshot->backtrace, backtrace_length),
-            true);
-    }
-    size_t task_name_length = 0u;
-    if (status == HONCH_OK &&
-        honch_fault_string_length(
-            fault_snapshot->task_name,
-            HONCH_FAULT_TASK_NAME_MAX_BYTES,
-            &task_name_length)) {
-        status = honch_append_typed_property(
-            properties,
-            &property_count,
-            "task_name",
-            honch_strn(fault_snapshot->task_name, task_name_length),
-            true);
-    }
+    honch_status_t status = honch_build_crash_properties(crash_report, properties, &property_count);
     if (status != HONCH_OK) {
         return HONCH_OK;
     }
@@ -1426,7 +1257,7 @@ static honch_status_t honch_emit_fault_locked(
     if (status == HONCH_OK) {
         status = honch_track_locked_internal(
             client,
-            "$error",
+            "$crash",
             properties,
             property_count,
             NULL,
@@ -1437,11 +1268,15 @@ static honch_status_t honch_emit_fault_locked(
             lifecycle_tracker);
     }
     honch_event_context_free(&event_context);
+    if (status == HONCH_OK) {
+        client->crash_reported = true;
+        client->crash_pending_ack = true;
+    }
     return status == HONCH_ERROR_INVALID_ARGUMENT || status == HONCH_ERROR_REJECTED ?
         HONCH_OK :
         status;
 }
-#endif
+#endif /* HONCH_ENABLE_CRASH_CAPTURE */
 
 honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_t *config)
 {
@@ -1536,6 +1371,8 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     next->auto_properties_userdata = config->auto_properties_userdata;
     next->connectivity_callback = config->connectivity_callback;
     next->connectivity_userdata = config->connectivity_userdata;
+    next->crash_uploaded_callback = config->crash_uploaded_callback;
+    next->crash_uploaded_userdata = config->crash_uploaded_userdata;
 
     honch_status_t status = HONCH_OK;
     bool lifetime_mutex_initialized = false;
@@ -1578,7 +1415,7 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
         status = honch_prepare_event_context(next, &event_context);
         if (status == HONCH_OK) {
             const honch_wire_v2_property_t boot_properties[] = {
-                honch_prop("reset_reason", honch_boot_reset_reason_value(config->fault_snapshot))
+                honch_prop("reset_reason", honch_boot_reset_reason_value(config->crash_report))
             };
             status = honch_track_locked_internal(
                 next,
@@ -1594,9 +1431,9 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
         }
         honch_event_context_free(&event_context);
     }
-    if (status == HONCH_OK && config->enable_error_tracking) {
-#if HONCH_ENABLE_ERROR_TRACKING
-        status = honch_emit_fault_locked(next, config->fault_snapshot, &lifecycle_tracker);
+    if (status == HONCH_OK && config->crash_report != NULL) {
+#if HONCH_ENABLE_CRASH_CAPTURE
+        status = honch_emit_crash_locked(next, config->crash_report, &lifecycle_tracker);
 #else
         (void)lifecycle_tracker;
 #endif
@@ -1679,16 +1516,12 @@ honch_status_t honch_core_track(
     return status;
 }
 
-honch_status_t honch_core_report_error(
+honch_status_t honch_core_report_crash(
     honch_client_t *client,
-    const honch_error_report_t *report,
-    const honch_wire_v2_property_t *properties,
-    size_t property_count)
+    const honch_crash_report_t *report)
 {
-#if !HONCH_ENABLE_ERROR_TRACKING
+#if !HONCH_ENABLE_CRASH_CAPTURE
     (void)report;
-    (void)properties;
-    (void)property_count;
     honch_status_t disabled_status = honch_client_enter(client);
     if (disabled_status != HONCH_OK) {
         return disabled_status;
@@ -1700,16 +1533,19 @@ honch_status_t honch_core_report_error(
     if (status != HONCH_OK) {
         return status;
     }
-
-    status = honch_validate_error_extra_properties(properties, property_count);
-    honch_wire_v2_property_t trusted_properties[7];
-    size_t trusted_property_count = 0u;
-    if (status == HONCH_OK) {
-        status = honch_build_runtime_error_properties(
-            report,
-            trusted_properties,
-            &trusted_property_count);
+    if (report == NULL) {
+        honch_client_leave(client);
+        return HONCH_ERROR_INVALID_ARGUMENT;
     }
+    /* Nothing to report, or a crash was already reported this lifetime. */
+    if (!honch_crash_report_is_abnormal(report) || client->crash_reported) {
+        honch_client_leave(client);
+        return HONCH_OK;
+    }
+
+    honch_wire_v2_property_t properties[14];
+    size_t property_count = 0u;
+    status = honch_build_crash_properties(report, properties, &property_count);
     if (status != HONCH_OK) {
         honch_client_leave(client);
         return status;
@@ -1731,19 +1567,174 @@ honch_status_t honch_core_report_error(
 
     status = honch_track_locked_internal(
         client,
-        "$error",
+        "$crash",
         properties,
         property_count,
-        trusted_properties,
-        trusted_property_count,
+        NULL,
+        0u,
         event_context.battery_level,
         true,
         &event_context.auto_properties,
         NULL);
+    if (status == HONCH_OK) {
+        client->crash_reported = true;
+        client->crash_pending_ack = true;
+    }
     honch_client_unlock(client);
     honch_event_context_free(&event_context);
     honch_client_leave(client);
     return status;
+#endif
+}
+
+#if HONCH_ENABLE_LOG_CAPTURE
+/* SDK-internal log tag, so the log hook never reports the SDK's own logs as
+ * $error events (recursion guard). */
+#define HONCH_LOG_SELF_TAG "honch"
+
+static void honch_copy_bounded(char *dst, size_t dst_size, const char *src)
+{
+    size_t i = 0u;
+    if (src != NULL) {
+        for (; i + 1u < dst_size && src[i] != '\0'; i++) {
+            dst[i] = src[i];
+        }
+    }
+    dst[i] = '\0';
+}
+
+static uint32_t honch_log_hash(const char *component, const char *message)
+{
+    uint32_t hash = 2166136261u;
+    for (const char *p = component; p != NULL && *p != '\0'; p++) {
+        hash = (hash ^ (uint8_t)*p) * 16777619u;
+    }
+    hash = (hash ^ 0xffu) * 16777619u; /* component/message separator */
+    for (const char *p = message; p != NULL && *p != '\0'; p++) {
+        hash = (hash ^ (uint8_t)*p) * 16777619u;
+    }
+    return hash;
+}
+
+static void honch_log_accumulate_locked(
+    honch_client_t *client,
+    const char *component,
+    const char *message)
+{
+    char component_buffer[HONCH_LOG_COMPONENT_STORE_BYTES + 1u];
+    char message_buffer[HONCH_LOG_MESSAGE_STORE_BYTES + 1u];
+    honch_copy_bounded(component_buffer, sizeof(component_buffer), component);
+    honch_copy_bounded(message_buffer, sizeof(message_buffer), message);
+    uint32_t hash = honch_log_hash(component_buffer, message_buffer);
+
+    honch_log_error_slot_t *free_slot = NULL;
+    for (size_t i = 0u; i < HONCH_LOG_DEDUP_SLOTS; i++) {
+        honch_log_error_slot_t *slot = &client->log_error_slots[i];
+        if (!slot->active) {
+            if (free_slot == NULL) {
+                free_slot = slot;
+            }
+            continue;
+        }
+        if (slot->hash == hash &&
+            strcmp(slot->component, component_buffer) == 0 &&
+            strcmp(slot->message, message_buffer) == 0) {
+            if (slot->count < UINT32_MAX) {
+                slot->count++;
+            }
+            return;
+        }
+    }
+
+    if (free_slot == NULL) {
+        if (client->log_errors_dropped < UINT32_MAX) {
+            client->log_errors_dropped++;
+        }
+        return;
+    }
+
+    free_slot->active = true;
+    free_slot->hash = hash;
+    free_slot->count = 1u;
+    honch_copy_bounded(free_slot->component, sizeof(free_slot->component), component_buffer);
+    honch_copy_bounded(free_slot->message, sizeof(free_slot->message), message_buffer);
+}
+
+/* Drain the coalesced log-error table into the queue as $error events. Called
+ * under the client lock at the start of flush/tick. Uses a minimal event
+ * context (no per-event auto properties, no battery read) so it never invokes
+ * the battery callback while the lock is held. */
+static void honch_drain_log_errors_locked(honch_client_t *client)
+{
+    for (size_t i = 0u; i < HONCH_LOG_DEDUP_SLOTS; i++) {
+        honch_log_error_slot_t *slot = &client->log_error_slots[i];
+        if (!slot->active) {
+            continue;
+        }
+
+        honch_wire_v2_property_t properties[4];
+        size_t property_count = 0u;
+        honch_status_t status = honch_append_typed_property(
+            properties, &property_count, "level", honch_str("error"), true);
+        if (status == HONCH_OK && slot->component[0] != '\0') {
+            status = honch_append_typed_property(
+                properties, &property_count, "component", honch_str(slot->component), true);
+        }
+        if (status == HONCH_OK) {
+            status = honch_append_typed_property(
+                properties, &property_count, "message", honch_str(slot->message), true);
+        }
+        if (status == HONCH_OK) {
+            status = honch_append_typed_property(
+                properties, &property_count, "count", honch_u64((uint64_t)slot->count), true);
+        }
+        if (status == HONCH_OK) {
+            (void)honch_track_locked_internal(
+                client, "$error", properties, property_count, NULL, 0u, -1, false, NULL, NULL);
+        }
+        *slot = (honch_log_error_slot_t){0};
+    }
+}
+#endif /* HONCH_ENABLE_LOG_CAPTURE */
+
+honch_status_t honch_core_report_log_error(
+    honch_client_t *client,
+    const char *component,
+    const char *message)
+{
+#if !HONCH_ENABLE_LOG_CAPTURE
+    (void)component;
+    (void)message;
+    honch_status_t disabled_status = honch_client_enter(client);
+    if (disabled_status != HONCH_OK) {
+        return disabled_status;
+    }
+    honch_client_leave(client);
+    return HONCH_ERROR_NOT_SUPPORTED;
+#else
+    honch_status_t status = honch_client_enter(client);
+    if (status != HONCH_OK) {
+        return status;
+    }
+    if (honch_is_blank(message)) {
+        honch_client_leave(client);
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    /* Recursion guard: never turn the SDK's own error logs into $error events. */
+    if (component != NULL && strcmp(component, HONCH_LOG_SELF_TAG) == 0) {
+        honch_client_leave(client);
+        return HONCH_OK;
+    }
+
+    status = honch_client_lock(client);
+    if (status != HONCH_OK) {
+        honch_client_leave(client);
+        return status;
+    }
+    honch_log_accumulate_locked(client, component, message);
+    honch_client_unlock(client);
+    honch_client_leave(client);
+    return HONCH_OK;
 #endif
 }
 
@@ -2045,6 +2036,9 @@ honch_status_t honch_core_tick(honch_client_t *client)
         return status;
     }
 
+#if HONCH_ENABLE_LOG_CAPTURE
+    honch_drain_log_errors_locked(client);
+#endif
     uint64_t now = honch_client_now_millis(client);
     if (!honch_scheduler_due_locked(client, now)) {
         honch_client_unlock(client);
@@ -2108,6 +2102,11 @@ honch_status_t honch_core_flush(honch_client_t *client)
         honch_client_leave(client);
         return HONCH_ERROR_BUSY;
     }
+#if HONCH_ENABLE_LOG_CAPTURE
+    /* Enqueue any coalesced log errors before uploading; this is a local queue
+     * write and must happen even when offline so nothing is lost. */
+    honch_drain_log_errors_locked(client);
+#endif
     bool offline = false;
     status = honch_scheduler_check_connectivity_locked(client, &offline);
     if (status != HONCH_OK || offline) {

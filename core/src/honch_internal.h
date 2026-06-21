@@ -55,9 +55,23 @@
 #error "HONCH_FLUSH_SCRATCH_MAX_EVENTS cannot exceed HONCH_MAX_BATCH_SIZE"
 #endif
 
+/* Automatic $error log capture coalesces identical error lines in a small,
+ * fixed, RAM-bounded table that is drained (enqueued) on flush/tick. */
+#define HONCH_LOG_DEDUP_SLOTS 4u
+#define HONCH_LOG_COMPONENT_STORE_BYTES 32u
+#define HONCH_LOG_MESSAGE_STORE_BYTES 128u
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef struct honch_log_error_slot {
+    bool active;
+    uint32_t hash;
+    uint32_t count;
+    char component[HONCH_LOG_COMPONENT_STORE_BYTES + 1u];
+    char message[HONCH_LOG_MESSAGE_STORE_BYTES + 1u];
+} honch_log_error_slot_t;
 
 typedef struct honch_atomic_bool {
     bool value;
@@ -210,6 +224,13 @@ struct honch_client {
     bool battery_low_emitted;
     uint64_t sequence;
     size_t queued_event_count;
+    /* Automatic error/crash reporting state. */
+    void (*crash_uploaded_callback)(void *userdata);
+    void *crash_uploaded_userdata;
+    bool crash_reported;      /* a $crash has been emitted this client lifetime (once-only) */
+    bool crash_pending_ack;   /* a reported $crash is awaiting delivery confirmation */
+    honch_log_error_slot_t log_error_slots[HONCH_LOG_DEDUP_SLOTS];
+    uint32_t log_errors_dropped;
 };
 
 bool honch_is_blank(const char *value);

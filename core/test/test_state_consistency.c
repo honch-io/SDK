@@ -17,7 +17,7 @@ typedef struct fake_state_storage {
     int force_now_ms;
     honch_status_t queue_push_status;
     uint64_t queued_sequences[8];
-    uint8_t last_queued_data[256];
+    uint8_t last_queued_data[512];
     uint8_t last_queued_prefix[4];
     size_t last_queued_size;
     const uint8_t *read_batch_data;
@@ -316,7 +316,7 @@ static void test_core_applies_embedded_defaults_when_tuning_is_omitted(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
-static void test_normal_reset_does_not_queue_error_event(void)
+static void test_normal_reset_emits_only_device_boot(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
     honch_platform_ops_t platform;
@@ -324,15 +324,16 @@ static void test_normal_reset_does_not_queue_error_event(void)
     honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
     honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
-    honch_fault_snapshot_t fault = {
-        .kind = HONCH_FAULT_KIND_NONE,
-        .severity = HONCH_FAULT_SEVERITY_INFO,
+    honch_crash_report_t crash = {
+        .kind = HONCH_CRASH_KIND_NONE,
+        .severity = HONCH_CRASH_SEVERITY_INFO,
         .reset_reason = "power_on"
     };
-    config.fault_snapshot = &fault;
+    config.crash_report = &crash;
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(storage.queue_push_calls == 1);
 
     honch_event_record_t record;
     assert(honch_event_record_parse(storage.last_queued_data, storage.last_queued_size, &record) == HONCH_OK);
@@ -343,38 +344,16 @@ static void test_normal_reset_does_not_queue_error_event(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
-static void test_abnormal_reset_does_not_queue_error_event_when_disabled(void)
+#if HONCH_ENABLE_CRASH_CAPTURE
+static int g_crash_uploaded_calls = 0;
+
+static void count_crash_uploaded(void *userdata)
 {
-    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
-    honch_platform_ops_t platform;
-    honch_state_storage_ops_t state_ops;
-    honch_event_queue_ops_t queue_ops;
-    honch_transport_ops_t transport;
-    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
-    honch_fault_snapshot_t fault = {
-        .kind = HONCH_FAULT_KIND_PANIC,
-        .severity = HONCH_FAULT_SEVERITY_FATAL,
-        .reset_reason = "panic",
-        .message = "abort",
-        .component = "app"
-    };
-    config.fault_snapshot = &fault;
-
-    honch_client_t *client = NULL;
-    assert(honch_core_init(&client, &config) == HONCH_OK);
-    assert(storage.queue_push_calls == 1);
-
-    honch_event_record_t record;
-    assert(honch_event_record_parse(storage.last_queued_data, storage.last_queued_size, &record) == HONCH_OK);
-    assert(strcmp(record.event_name, "$device_boot") == 0);
-    assert_record_string_property(&record, "reset_reason", "panic");
-    honch_event_record_free(&record);
-
-    assert(honch_core_shutdown(client) == HONCH_OK);
+    (void)userdata;
+    g_crash_uploaded_calls++;
 }
 
-#if HONCH_ENABLE_ERROR_TRACKING
-static void test_abnormal_reset_queues_error_event_when_enabled(void)
+static void test_abnormal_reset_emits_crash_event(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
     honch_platform_ops_t platform;
@@ -382,15 +361,20 @@ static void test_abnormal_reset_queues_error_event_when_enabled(void)
     honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
     honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
-    honch_fault_snapshot_t fault = {
-        .kind = HONCH_FAULT_KIND_PANIC,
-        .severity = HONCH_FAULT_SEVERITY_FATAL,
+    honch_crash_report_t crash = {
+        .kind = HONCH_CRASH_KIND_PANIC,
+        .severity = HONCH_CRASH_SEVERITY_FATAL,
         .reset_reason = "panic",
         .message = "abort",
-        .component = "app"
+        .component = "app",
+        .exception_cause = "StoreProhibited",
+        .fault_pc = "0x400d1a2c",
+        .backtrace = "0x400d1a2c,0x40081234",
+        .firmware_build_id = "abc123",
+        .summary_version = 1u,
+        .coredump_available = 1
     };
-    config.fault_snapshot = &fault;
-    config.enable_error_tracking = true;
+    config.crash_report = &crash;
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
@@ -398,18 +382,30 @@ static void test_abnormal_reset_queues_error_event_when_enabled(void)
 
     honch_event_record_t record;
     assert(honch_event_record_parse(storage.last_queued_data, storage.last_queued_size, &record) == HONCH_OK);
-    assert(strcmp(record.event_name, "$error") == 0);
+    assert(strcmp(record.event_name, "$crash") == 0);
     assert_record_string_property(&record, "source", "panic");
     assert_record_string_property(&record, "severity", "fatal");
     assert_record_string_property(&record, "reset_reason", "panic");
     assert_record_string_property(&record, "message", "abort");
     assert_record_string_property(&record, "component", "app");
+    assert_record_string_property(&record, "exception_cause", "StoreProhibited");
+    assert_record_string_property(&record, "fault_pc", "0x400d1a2c");
+    assert_record_string_property(&record, "backtrace", "0x400d1a2c,0x40081234");
+    assert_record_string_property(&record, "firmware_build_id", "abc123");
+    const honch_wire_v2_property_t *summary_version = find_record_property(&record, "summary_version");
+    assert(summary_version != NULL);
+    assert(summary_version->value.type == HONCH_WIRE_V2_VALUE_TYPE_UINT);
+    assert(summary_version->value.uint_value == 1u);
+    const honch_wire_v2_property_t *coredump = find_record_property(&record, "coredump_available");
+    assert(coredump != NULL);
+    assert(coredump->value.type == HONCH_WIRE_V2_VALUE_TYPE_BOOL);
+    assert(coredump->value.bool_value);
     honch_event_record_free(&record);
 
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
-static void test_oversized_fault_event_is_skipped_without_failing_init(void)
+static void test_oversized_crash_event_is_skipped_without_failing_init(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
     honch_platform_ops_t platform;
@@ -417,13 +413,12 @@ static void test_oversized_fault_event_is_skipped_without_failing_init(void)
     honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
     honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
-    honch_fault_snapshot_t fault = {
-        .kind = HONCH_FAULT_KIND_WATCHDOG,
-        .severity = HONCH_FAULT_SEVERITY_FATAL,
+    honch_crash_report_t crash = {
+        .kind = HONCH_CRASH_KIND_WATCHDOG,
+        .severity = HONCH_CRASH_SEVERITY_FATAL,
         .reset_reason = "task_wdt"
     };
-    config.fault_snapshot = &fault;
-    config.enable_error_tracking = true;
+    config.crash_report = &crash;
     config.max_event_bytes = 100u;
 
     honch_client_t *client = NULL;
@@ -438,7 +433,7 @@ static void test_oversized_fault_event_is_skipped_without_failing_init(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
-static void test_overlong_fault_fields_are_omitted_without_large_allocation(void)
+static void test_overlong_crash_fields_are_omitted_without_large_allocation(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
     honch_platform_ops_t platform;
@@ -449,15 +444,14 @@ static void test_overlong_fault_fields_are_omitted_without_large_allocation(void
     char long_message[900];
     memset(long_message, 'x', sizeof(long_message) - 1u);
     long_message[sizeof(long_message) - 1u] = '\0';
-    honch_fault_snapshot_t fault = {
-        .kind = HONCH_FAULT_KIND_WATCHDOG,
-        .severity = HONCH_FAULT_SEVERITY_FATAL,
+    honch_crash_report_t crash = {
+        .kind = HONCH_CRASH_KIND_WATCHDOG,
+        .severity = HONCH_CRASH_SEVERITY_FATAL,
         .reset_reason = "task_wdt",
         .message = long_message,
         .component = "rtos"
     };
-    config.fault_snapshot = &fault;
-    config.enable_error_tracking = true;
+    config.crash_report = &crash;
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
@@ -465,7 +459,7 @@ static void test_overlong_fault_fields_are_omitted_without_large_allocation(void
 
     honch_event_record_t record;
     assert(honch_event_record_parse(storage.last_queued_data, storage.last_queued_size, &record) == HONCH_OK);
-    assert(strcmp(record.event_name, "$error") == 0);
+    assert(strcmp(record.event_name, "$crash") == 0);
     assert_record_string_property(&record, "source", "watchdog");
     assert_record_string_property(&record, "reset_reason", "task_wdt");
     assert(find_record_property(&record, "message") == NULL);
@@ -474,9 +468,8 @@ static void test_overlong_fault_fields_are_omitted_without_large_allocation(void
 
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
-#endif
 
-static void test_runtime_error_report_queues_error_event(void)
+static void test_report_crash_emits_crash_event(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
     honch_platform_ops_t platform;
@@ -487,51 +480,124 @@ static void test_runtime_error_report_queues_error_event(void)
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
-    honch_error_report_t report = {
-        .severity = HONCH_ERROR_SEVERITY_ERROR,
-        .message = "camera worker failed",
-        .type = "RuntimeError",
-        .component = "camera",
-        .code = "E_CAMERA",
-        .backtrace = "capture_loop:42"
-    };
-    const honch_wire_v2_property_t properties[] = {
-        honch_prop("retryable", honch_bool(true))
-    };
+    int boot_pushes = storage.queue_push_calls;
 
-#if HONCH_ENABLE_ERROR_TRACKING
-    honch_status_t expected_status = HONCH_OK;
-#else
-    honch_status_t expected_status = HONCH_ERROR_NOT_SUPPORTED;
-#endif
-    assert(honch_core_report_error(client, &report, properties, 1u) == expected_status);
+    honch_crash_report_t crash = {
+        .kind = HONCH_CRASH_KIND_EXCEPTION,
+        .severity = HONCH_CRASH_SEVERITY_FATAL,
+        .reset_reason = "exception",
+        .message = "camera worker crashed",
+        .component = "camera"
+    };
+    assert(honch_core_report_crash(client, &crash) == HONCH_OK);
+    assert(storage.queue_push_calls == boot_pushes + 1);
 
-#if HONCH_ENABLE_ERROR_TRACKING
-    assert(storage.queue_push_calls == 2);
+    honch_event_record_t record;
+    assert(honch_event_record_parse(storage.last_queued_data, storage.last_queued_size, &record) == HONCH_OK);
+    assert(strcmp(record.event_name, "$crash") == 0);
+    assert_record_string_property(&record, "source", "exception");
+    assert_record_string_property(&record, "message", "camera worker crashed");
+    assert_record_string_property(&record, "component", "camera");
+    honch_event_record_free(&record);
+
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+static void test_report_crash_rejects_null(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(honch_core_report_crash(client, NULL) == HONCH_ERROR_INVALID_ARGUMENT);
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+static void test_report_crash_is_once_only(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    honch_crash_report_t crash = {
+        .kind = HONCH_CRASH_KIND_PANIC,
+        .severity = HONCH_CRASH_SEVERITY_FATAL,
+        .reset_reason = "panic"
+    };
+    assert(honch_core_report_crash(client, &crash) == HONCH_OK);
+    int pushes_after_first = storage.queue_push_calls;
+    assert(honch_core_report_crash(client, &crash) == HONCH_OK);
+    assert(storage.queue_push_calls == pushes_after_first);
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+static void test_crash_uploaded_callback_fires_after_delivery(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK, .track_queue_depth = 1};
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    g_crash_uploaded_calls = 0;
+    config.crash_uploaded_callback = count_crash_uploaded;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    honch_crash_report_t crash = {
+        .kind = HONCH_CRASH_KIND_PANIC,
+        .severity = HONCH_CRASH_SEVERITY_FATAL,
+        .reset_reason = "panic"
+    };
+    assert(honch_core_report_crash(client, &crash) == HONCH_OK);
+    assert(g_crash_uploaded_calls == 0);
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(g_crash_uploaded_calls == 1);
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(g_crash_uploaded_calls == 1);
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+#endif /* HONCH_ENABLE_CRASH_CAPTURE */
+
+#if HONCH_ENABLE_LOG_CAPTURE
+static void test_log_error_emits_error_event(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(honch_core_report_log_error(client, "wifi", "connect failed") == HONCH_OK);
+    int pushes_before_flush = storage.queue_push_calls;
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(storage.queue_push_calls == pushes_before_flush + 1);
+
     honch_event_record_t record;
     assert(honch_event_record_parse(storage.last_queued_data, storage.last_queued_size, &record) == HONCH_OK);
     assert(strcmp(record.event_name, "$error") == 0);
-    assert_record_string_property(&record, "source", "runtime");
-    assert_record_string_property(&record, "severity", "error");
-    assert_record_string_property(&record, "message", "camera worker failed");
-    assert_record_string_property(&record, "type", "RuntimeError");
-    assert_record_string_property(&record, "component", "camera");
-    assert_record_string_property(&record, "code", "E_CAMERA");
-    assert_record_string_property(&record, "backtrace", "capture_loop:42");
-    const honch_wire_v2_property_t *retryable = find_record_property(&record, "retryable");
-    assert(retryable != NULL);
-    assert(retryable->value.type == HONCH_WIRE_V2_VALUE_TYPE_BOOL);
-    assert(retryable->value.bool_value);
+    assert_record_string_property(&record, "level", "error");
+    assert_record_string_property(&record, "component", "wifi");
+    assert_record_string_property(&record, "message", "connect failed");
     honch_event_record_free(&record);
-#else
-    assert(storage.queue_push_calls == 1);
-#endif
 
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
-#if HONCH_ENABLE_ERROR_TRACKING
-static void test_runtime_error_report_rejects_sdk_owned_property(void)
+static void test_identical_log_errors_coalesce(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
     honch_platform_ops_t platform;
@@ -542,21 +608,43 @@ static void test_runtime_error_report_rejects_sdk_owned_property(void)
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
-    int queue_push_calls = storage.queue_push_calls;
-    honch_error_report_t report = {
-        .severity = HONCH_ERROR_SEVERITY_WARNING,
-        .message = "reserved key probe"
-    };
-    const honch_wire_v2_property_t properties[] = {
-        honch_prop("message", honch_str("spoofed"))
-    };
+    for (int i = 0; i < 20; i++) {
+        assert(honch_core_report_log_error(client, "wifi", "connect failed") == HONCH_OK);
+    }
+    int pushes_before_flush = storage.queue_push_calls;
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(storage.queue_push_calls == pushes_before_flush + 1);
 
-    assert(honch_core_report_error(client, &report, properties, 1u) ==
-        HONCH_ERROR_INVALID_ARGUMENT);
-    assert(storage.queue_push_calls == queue_push_calls);
+    honch_event_record_t record;
+    assert(honch_event_record_parse(storage.last_queued_data, storage.last_queued_size, &record) == HONCH_OK);
+    assert(strcmp(record.event_name, "$error") == 0);
+    const honch_wire_v2_property_t *count = find_record_property(&record, "count");
+    assert(count != NULL);
+    assert(count->value.type == HONCH_WIRE_V2_VALUE_TYPE_UINT);
+    assert(count->value.uint_value == 20u);
+    honch_event_record_free(&record);
+
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
-#endif
+
+static void test_sdk_self_logs_are_ignored(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    int pushes_before = storage.queue_push_calls;
+    assert(honch_core_report_log_error(client, "honch", "internal detail") == HONCH_OK);
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(storage.queue_push_calls == pushes_before);
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+#endif /* HONCH_ENABLE_LOG_CAPTURE */
 
 static honch_status_t fake_queue_consume(void *ctx, uint64_t sequence)
 {
@@ -920,8 +1008,8 @@ static void test_failed_init_rolls_back_queued_lifecycle_events(void)
     assert(strcmp(storage.firmware_version, "1.0.0") == 0);
 }
 
-#if HONCH_ENABLE_ERROR_TRACKING
-static void test_failed_error_capture_queue_rolls_back_lifecycle_events(void)
+#if HONCH_ENABLE_CRASH_CAPTURE
+static void test_failed_crash_capture_queue_rolls_back_lifecycle_events(void)
 {
     fake_state_storage_t storage = {
         .queue_push_status = HONCH_OK,
@@ -933,13 +1021,12 @@ static void test_failed_error_capture_queue_rolls_back_lifecycle_events(void)
     honch_event_queue_ops_t queue_ops;
     honch_transport_ops_t transport;
     honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
-    honch_fault_snapshot_t fault = {
-        .kind = HONCH_FAULT_KIND_PANIC,
-        .severity = HONCH_FAULT_SEVERITY_FATAL,
+    honch_crash_report_t crash = {
+        .kind = HONCH_CRASH_KIND_PANIC,
+        .severity = HONCH_CRASH_SEVERITY_FATAL,
         .reset_reason = "panic"
     };
-    config.fault_snapshot = &fault;
-    config.enable_error_tracking = true;
+    config.crash_report = &crash;
 
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_ERROR_IO);
@@ -1751,23 +1838,27 @@ int main(void)
     test_zero_platform_time_queues_parseable_event_record();
     test_pre_wall_clock_track_uses_uptime_timestamp();
     test_core_applies_embedded_defaults_when_tuning_is_omitted();
-    test_normal_reset_does_not_queue_error_event();
-    test_abnormal_reset_does_not_queue_error_event_when_disabled();
-#if HONCH_ENABLE_ERROR_TRACKING
-    test_abnormal_reset_queues_error_event_when_enabled();
-    test_oversized_fault_event_is_skipped_without_failing_init();
-    test_overlong_fault_fields_are_omitted_without_large_allocation();
+    test_normal_reset_emits_only_device_boot();
+#if HONCH_ENABLE_CRASH_CAPTURE
+    test_abnormal_reset_emits_crash_event();
+    test_oversized_crash_event_is_skipped_without_failing_init();
+    test_overlong_crash_fields_are_omitted_without_large_allocation();
+    test_report_crash_emits_crash_event();
+    test_report_crash_rejects_null();
+    test_report_crash_is_once_only();
+    test_crash_uploaded_callback_fires_after_delivery();
 #endif
-    test_runtime_error_report_queues_error_event();
-#if HONCH_ENABLE_ERROR_TRACKING
-    test_runtime_error_report_rejects_sdk_owned_property();
+#if HONCH_ENABLE_LOG_CAPTURE
+    test_log_error_emits_error_event();
+    test_identical_log_errors_coalesce();
+    test_sdk_self_logs_are_ignored();
 #endif
     test_core_state_lock_works_without_platform_lock_callbacks();
     test_init_rejects_mutex_required_platform_without_lock_callbacks();
     test_failed_firmware_update_queue_does_not_advance_persisted_version();
     test_failed_init_rolls_back_queued_lifecycle_events();
-#if HONCH_ENABLE_ERROR_TRACKING
-    test_failed_error_capture_queue_rolls_back_lifecycle_events();
+#if HONCH_ENABLE_CRASH_CAPTURE
+    test_failed_crash_capture_queue_rolls_back_lifecycle_events();
 #endif
     test_failed_reset_second_identity_write_preserves_persisted_identity();
     test_set_property_rejects_blank_key();

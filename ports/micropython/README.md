@@ -90,12 +90,15 @@ state from the supplied device/config values, and queues `$device_boot` before
 returning. It does not perform network I/O; delivery remains cooperative through
 `tick()` or explicit `flush()` calls.
 
-Use `client.report_error(...)` from runtime exception paths to queue `$error`.
-`client.run_with_error_tracking(fn, *args, **kwargs)` wraps a callable, reports
-raised exceptions, then re-raises them. `client.install_error_hook()` installs a
-best-effort `sys.excepthook` wrapper only on runtimes that expose that hook.
-The port still does not install panic hooks or board-specific reset-reason
-adapters; board reset telemetry belongs in the user module adapter.
+Crash reporting is automatic. `client.install_error_hook()` installs a
+best-effort `sys.excepthook` wrapper (on runtimes that expose that hook) that
+emits a one-time `$crash` event for an uncaught exception (`source="exception"`,
+with the exception type in `exception_cause`); the original exception is always
+delivered to the previous hook. `client.report_log_error(message,
+component=...)` emits a bounded, coalesced `$error` event and is intended to be
+driven automatically (e.g. from a `logging.Handler`), not sprinkled through
+application code. The port does not install panic hooks or board-specific
+reset-reason adapters; board reset telemetry belongs in the user module adapter.
 
 client.tick() and client.flush() may block for up to the configured transport
 timeout because urequests.post holds the MicroPython interpreter while the HTTP
@@ -116,9 +119,9 @@ be fast and read host-owned connectivity state.
 
 ```python
 client.track(event_name, properties=None)
-client.report_error(message, severity="error", error_type=None, component=None, code=None, backtrace=None, properties=None)
-client.run_with_error_tracking(fn, *args, **kwargs)
+client.report_log_error(message, component=None)
 client.install_error_hook()
+client.uninstall_error_hook()
 client.identify(distinct_id, traits=None)
 client.set_property(key, value=None)
 client.session_start(session_name=None)

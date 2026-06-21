@@ -189,6 +189,7 @@ typedef struct honch_esp_crash_summary {
     char fault_pc[HONCH_ESP_FAULT_PC_MAX_BYTES + 1u];
     char backtrace[HONCH_ESP_BACKTRACE_MAX_BYTES + 1u];
     char task_name[HONCH_ESP_TASK_NAME_MAX_BYTES + 1u];
+    char exception_cause[HONCH_ESP_EXCEPTION_CAUSE_MAX_BYTES + 1u];
 } honch_esp_crash_summary_t;
 
 static const char *honch_esp_firmware_build_id(void)
@@ -253,13 +254,19 @@ static bool honch_esp_crash_summary_fill(honch_esp_crash_summary_t *summary)
     if (core_summary.exc_task[0] != '\0') {
         (void)snprintf(summary->task_name, sizeof(summary->task_name), "%s", core_summary.exc_task);
     }
+    /* Human-readable panic reason (e.g. "StoreProhibited", abort message). */
+    char panic_reason[HONCH_ESP_EXCEPTION_CAUSE_MAX_BYTES + 1u] = {0};
+    if (esp_core_dump_get_panic_reason(panic_reason, sizeof(panic_reason)) == ESP_OK &&
+        panic_reason[0] != '\0') {
+        (void)snprintf(summary->exception_cause, sizeof(summary->exception_cause), "%s", panic_reason);
+    }
     return true;
 #endif
     return false;
 }
 
-static honch_fault_snapshot_t honch_esp_abnormal_fault_snapshot(
-    honch_fault_kind_t kind,
+static honch_crash_report_t honch_esp_abnormal_fault_snapshot(
+    honch_crash_kind_t kind,
     const char *reset_reason,
     bool include_symbolication_context)
 {
@@ -268,89 +275,96 @@ static honch_fault_snapshot_t honch_esp_abnormal_fault_snapshot(
     bool has_crash_summary = include_symbolication_context && honch_esp_crash_summary_fill(&summary);
     const char *build_id = has_crash_summary ? honch_esp_firmware_build_id() : NULL;
 
-    return (honch_fault_snapshot_t) {
+    return (honch_crash_report_t) {
         .kind = kind,
-        .severity = HONCH_FAULT_SEVERITY_FATAL,
+        .severity = HONCH_CRASH_SEVERITY_FATAL,
         .reset_reason = reset_reason,
-        .crash_summary_version = has_crash_summary ? 1u : 0u,
+        .summary_version = has_crash_summary ? 1u : 0u,
+        .coredump_available = has_crash_summary ? 1 : 0,
         .firmware_build_id = build_id,
         .fault_pc = summary.fault_pc[0] != '\0' ? summary.fault_pc : NULL,
         .backtrace = summary.backtrace[0] != '\0' ? summary.backtrace : NULL,
-        .task_name = summary.task_name[0] != '\0' ? summary.task_name : NULL
+        .task_name = summary.task_name[0] != '\0' ? summary.task_name : NULL,
+        .exception_cause = summary.exception_cause[0] != '\0' ? summary.exception_cause : NULL
     };
 }
 
-honch_fault_snapshot_t honch_esp_fault_snapshot(bool include_symbolication_context)
+honch_crash_report_t honch_esp_crash_report(bool include_symbolication_context)
 {
     switch (esp_reset_reason()) {
         case ESP_RST_POWERON:
-            return (honch_fault_snapshot_t) {
-                .kind = HONCH_FAULT_KIND_NONE,
-                .severity = HONCH_FAULT_SEVERITY_INFO,
+            return (honch_crash_report_t) {
+                .kind = HONCH_CRASH_KIND_NONE,
+                .severity = HONCH_CRASH_SEVERITY_INFO,
                 .reset_reason = "power_on"
             };
         case ESP_RST_SW:
-            return (honch_fault_snapshot_t) {
-                .kind = HONCH_FAULT_KIND_NONE,
-                .severity = HONCH_FAULT_SEVERITY_INFO,
+            return (honch_crash_report_t) {
+                .kind = HONCH_CRASH_KIND_NONE,
+                .severity = HONCH_CRASH_SEVERITY_INFO,
                 .reset_reason = "software"
             };
         case ESP_RST_DEEPSLEEP:
-            return (honch_fault_snapshot_t) {
-                .kind = HONCH_FAULT_KIND_NONE,
-                .severity = HONCH_FAULT_SEVERITY_INFO,
+            return (honch_crash_report_t) {
+                .kind = HONCH_CRASH_KIND_NONE,
+                .severity = HONCH_CRASH_SEVERITY_INFO,
                 .reset_reason = "deep_sleep"
             };
         case ESP_RST_PANIC:
-            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_PANIC, "panic", include_symbolication_context);
+            return honch_esp_abnormal_fault_snapshot(HONCH_CRASH_KIND_PANIC, "panic", include_symbolication_context);
         case ESP_RST_INT_WDT:
-            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, "interrupt_wdt", false);
+            return honch_esp_abnormal_fault_snapshot(HONCH_CRASH_KIND_WATCHDOG, "interrupt_wdt", false);
         case ESP_RST_TASK_WDT:
-            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, "task_wdt", false);
+            return honch_esp_abnormal_fault_snapshot(HONCH_CRASH_KIND_WATCHDOG, "task_wdt", false);
         case ESP_RST_WDT:
-            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, "watchdog", false);
+            return honch_esp_abnormal_fault_snapshot(HONCH_CRASH_KIND_WATCHDOG, "watchdog", false);
         case ESP_RST_BROWNOUT:
-            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_BROWNOUT, "brownout", false);
+            return honch_esp_abnormal_fault_snapshot(HONCH_CRASH_KIND_BROWNOUT, "brownout", false);
         case ESP_RST_SDIO:
-            return (honch_fault_snapshot_t) {
-                .kind = HONCH_FAULT_KIND_NONE,
-                .severity = HONCH_FAULT_SEVERITY_INFO,
+            return (honch_crash_report_t) {
+                .kind = HONCH_CRASH_KIND_NONE,
+                .severity = HONCH_CRASH_SEVERITY_INFO,
                 .reset_reason = "sdio"
             };
         case ESP_RST_EXT:
-            return (honch_fault_snapshot_t) {
-                .kind = HONCH_FAULT_KIND_NONE,
-                .severity = HONCH_FAULT_SEVERITY_INFO,
+            return (honch_crash_report_t) {
+                .kind = HONCH_CRASH_KIND_NONE,
+                .severity = HONCH_CRASH_SEVERITY_INFO,
                 .reset_reason = "external"
             };
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0)
         case ESP_RST_USB:
-            return (honch_fault_snapshot_t) {
-                .kind = HONCH_FAULT_KIND_NONE,
-                .severity = HONCH_FAULT_SEVERITY_INFO,
+            return (honch_crash_report_t) {
+                .kind = HONCH_CRASH_KIND_NONE,
+                .severity = HONCH_CRASH_SEVERITY_INFO,
                 .reset_reason = "usb"
             };
         case ESP_RST_JTAG:
-            return (honch_fault_snapshot_t) {
-                .kind = HONCH_FAULT_KIND_NONE,
-                .severity = HONCH_FAULT_SEVERITY_INFO,
+            return (honch_crash_report_t) {
+                .kind = HONCH_CRASH_KIND_NONE,
+                .severity = HONCH_CRASH_SEVERITY_INFO,
                 .reset_reason = "jtag"
             };
         case ESP_RST_EFUSE:
-            return (honch_fault_snapshot_t) {
-                .kind = HONCH_FAULT_KIND_NONE,
-                .severity = HONCH_FAULT_SEVERITY_INFO,
+            return (honch_crash_report_t) {
+                .kind = HONCH_CRASH_KIND_NONE,
+                .severity = HONCH_CRASH_SEVERITY_INFO,
                 .reset_reason = "efuse"
             };
         case ESP_RST_PWR_GLITCH:
             return honch_esp_abnormal_fault_snapshot(
-                HONCH_FAULT_KIND_BROWNOUT,
+                HONCH_CRASH_KIND_BROWNOUT,
                 "power_glitch",
                 false);
+        case ESP_RST_CPU_LOCKUP:
+            return honch_esp_abnormal_fault_snapshot(
+                HONCH_CRASH_KIND_LOCKUP,
+                "cpu_lockup",
+                include_symbolication_context);
 #endif
         case ESP_RST_UNKNOWN:
         default:
-            return honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_UNKNOWN, "unknown", false);
+            return honch_esp_abnormal_fault_snapshot(HONCH_CRASH_KIND_UNKNOWN, "unknown", false);
     }
 }
 #endif

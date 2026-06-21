@@ -54,16 +54,7 @@ int main() {
   const honch_property_t traits[] = {
       honch_prop("role", honch_str("tester"))
   };
-  honch_error_report_t report = {
-      .severity = HONCH_ERROR_SEVERITY_ERROR,
-      .message = "host wrapper runtime error",
-      .type = "RuntimeError",
-      .component = "host",
-      .code = NULL,
-      .backtrace = NULL
-  };
   assert(client.track("button_pressed", buttonProps, 1u));
-  assert(client.reportError(report, buttonProps, 1u));
   assert(client.identify("user-1", traits, 1u));
   assert(client.setProperty("mode", honch_str("host")));
   assert(client.sessionStart("demo"));

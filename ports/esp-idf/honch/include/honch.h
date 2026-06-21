@@ -66,7 +66,7 @@ typedef struct {
     bool (*connectivity_callback)(void); // optional, return false while offline/radio off
     const honch_state_storage_ops_t *state_storage_ops; // optional, enables durable identity/version state
     const honch_event_queue_ops_t *event_queue_ops;     // optional, replaces default RAM event queue
-    bool enable_error_tracking;          // optional, emits $error after abnormal reset
+    bool enable_error_tracking;          // optional, emits the recovered $crash after an abnormal reset
     bool enable_crash_symbolication;     // optional, adds build ID and raw crash addresses when ESP-IDF coredump summary is available
 } honch_config_t;
 
@@ -75,10 +75,6 @@ honch_err_t honch_shutdown(void);
 
 honch_err_t honch_track(const char *event, const honch_property_t *properties, size_t property_count);
 honch_err_t honch_identify(const char *distinct_id, const honch_property_t *properties, size_t property_count);
-honch_err_t honch_report_error(
-    const honch_error_report_t *report,
-    const honch_property_t *properties,
-    size_t property_count);
 honch_err_t honch_set_property(const char *key, honch_value_t value);
 
 honch_err_t honch_session_start(const char *session_name);

@@ -289,11 +289,15 @@ class PosixChunkWireTest(unittest.TestCase):
             ]
         )
 
-        self.assertIn("honch_error_report_t", public)
-        self.assertIn("honch_core_report_error", public)
-        self.assertIn("honch_report_error", public)
-        self.assertIn("reportError", public)
-        self.assertNotIn("capture_error", public)
+        # Automatic error/crash reporting: the core exposes the port-facing
+        # entry points; there is no manual application-level error API anymore.
+        self.assertIn("honch_core_report_crash", public)
+        self.assertIn("honch_core_report_log_error", public)
+        self.assertIn("honch_crash_report_t", public)
+        self.assertNotIn("honch_error_report_t", public)
+        self.assertNotIn("honch_core_report_error", public)
+        self.assertNotIn("honch_report_error", public)
+        self.assertNotIn("reportError", public)
 
     def test_docs_reference_chunk_wire_contract(self) -> None:
         readme = read("README.md")

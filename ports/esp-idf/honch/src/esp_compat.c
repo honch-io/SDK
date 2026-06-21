@@ -15,6 +15,7 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "esp_core_dump.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
@@ -32,6 +33,15 @@ static honch_esp_storage_t s_storage_ctx;
 static honch_esp_transport_t s_transport_ctx;
 #if HONCH_ENABLE_ERROR_TRACKING
 static bool s_fault_snapshot_consumed = false;
+
+/* Erase-after-ack: invoked once the recovered $crash has reached Capture, so the
+ * stored coredump is not re-reported on the next boot. esp_core_dump_image_erase
+ * is available regardless of the coredump menuconfig selection. */
+static void honch_esp_crash_uploaded(void *userdata)
+{
+    (void)userdata;
+    (void)esp_core_dump_image_erase();
+}
 #endif
 
 static char s_api_key[HONCH_ESP_API_KEY_MAX_LENGTH + 1u];
@@ -399,13 +409,12 @@ honch_err_t honch_init(const honch_config_t *config)
 #if HONCH_ENABLE_ERROR_TRACKING
     bool should_emit_fault_snapshot =
         config->enable_error_tracking && !s_fault_snapshot_consumed;
-    core_config.enable_error_tracking = should_emit_fault_snapshot;
-    honch_fault_snapshot_t fault_snapshot = honch_esp_fault_snapshot(
+    honch_crash_report_t crash_report = honch_esp_crash_report(
         should_emit_fault_snapshot && config->enable_crash_symbolication);
-    core_config.fault_snapshot = &fault_snapshot;
+    core_config.crash_report = should_emit_fault_snapshot ? &crash_report : NULL;
+    core_config.crash_uploaded_callback = honch_esp_crash_uploaded;
 #else
-    core_config.enable_error_tracking = 0;
-    core_config.fault_snapshot = NULL;
+    core_config.crash_report = NULL;
 #endif
 
     honch_client_t *next = NULL;
@@ -470,21 +479,6 @@ honch_err_t honch_identify(const char *distinct_id, const honch_property_t *prop
         return err;
     }
     honch_status_t status = honch_core_identify(client, distinct_id, properties, property_count);
-    honch_esp_client_release(client);
-    return honch_esp_status_to_err(status);
-}
-
-honch_err_t honch_report_error(
-    const honch_error_report_t *report,
-    const honch_property_t *properties,
-    size_t property_count)
-{
-    honch_client_t *client = NULL;
-    honch_err_t err = honch_esp_client_acquire(&client);
-    if (err != HONCH_OK) {
-        return err;
-    }
-    honch_status_t status = honch_core_report_error(client, report, properties, property_count);
     honch_esp_client_release(client);
     return honch_esp_status_to_err(status);
 }

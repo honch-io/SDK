@@ -48,42 +48,75 @@ These events are emitted automatically by the SDK:
 | Event | When | Extra Properties |
 |-------|------|-----------------|
 | `$device_boot` | End of `init()` | `reset_reason` (string) |
-| `$error` | End of `init()`, when enabled and a supported port reports an abnormal reset | `source`, `severity`, `reset_reason`, optional `message`, optional `component`, optional `crash_summary_version`, optional `firmware_build_id`, optional `exception_cause`, optional `fault_pc`, optional `backtrace`, optional `task_name` |
+| `$crash` | End of `init()`, when the SDK recovers a crash from the previous boot | `source` (crash kind), `severity`, `reset_reason`, optional `message`, optional `component`, optional `task_name`, optional `exception_cause`, optional `fault_pc`, optional `fault_addr`, optional `backtrace`, optional `firmware_build_id`, optional `summary_version`, optional `coredump_available` |
+| `$error` | When the firmware reports an error-level log/condition (automatic, no manual call) | `level`, optional `component`, `message`, `count` |
 | `$device_shutdown` | Start of `shutdown()` | — |
 | `$firmware_update` | Boot, if version changed | `previous_version`, `new_version` |
 | `$battery_low` | Battery drops below threshold | `level` (int) |
 | `$session_start` | `session_start()` called | `session_name` (string, optional) |
 | `$session_end` | `session_end()` called | — |
 
-`$error` is lightweight error telemetry. Runtime SDK `report_error` APIs queue
-`$error` events with `source="runtime"`, a severity, a message, and optional
-type/component/code/backtrace fields. These calls use the normal event queue and
-delivery policy; they do not force an immediate upload.
+Error and crash reporting is **automatic**: the host application makes no manual
+call. There is no public `report_error` API. Capture is on by default and is
+removed only at build time (see the build-strip note below).
 
-Automatic `$error` capture records bounded properties available during normal
-SDK init after a previous abnormal reset or supported crash breadcrumb. It is
-not a coredump, register dump, stack capture, minidump, symbolication pipeline,
-or crash forensics system.
+### `$crash`
 
-`$error` emission is best-effort. If the SDK cannot build or enqueue the
-automatic fault event during init because local queue/storage limits are tight,
-the SDK should still complete init and continue normal telemetry operation.
-This avoids making diagnostics failure a device startup failure; `$device_boot`
-and other lifecycle event failures may still follow the normal init error path.
+`$crash` is the SDK's record of the firmware having died — a panic, watchdog
+reset, brownout, stack overflow, failed assert, CPU lockup, unhandled exception
+(MicroPython), or fatal signal (POSIX). It is emitted **once** during the next
+`init()` after the crash, built by the port from whatever its platform's native
+fault machinery can provide (ESP-IDF coredump summary, an MCU fault record, a
+POSIX signal breadcrumb). `source` carries the crash kind (`panic`, `watchdog`,
+`assert`, `brownout`, `stack_overflow`, `hardfault`, `lockup`, `exception`,
+`signal`, `unknown`). Only `source`/`reset_reason` are guaranteed; richer fields
+appear when the platform can supply them, so fidelity is tiered by platform
+capability.
 
-Code-sensitive symbolication context is separately opt-in where a port exposes
-it. Ports may send `exception_cause`, `firmware_build_id`, `fault_pc`,
-`backtrace`, and `task_name` when automatic error tracking and crash
-symbolication context are both enabled and platform crash summary metadata is
-available. These fields are raw identifiers, reasons, and addresses for
-server-side symbolication; the SDK does not send source code, source paths,
-symbol files, RAM snapshots, or full coredumps.
+Because the crash is only detected on the recovery boot, the `$crash` event
+timestamp is the recovery-boot time, not the original crash time.
 
-Ports may make `$error` support build-strip modular. When
-`HONCH_ENABLE_ERROR_TRACKING=0` or an equivalent port build option is used, SDK
-fault snapshot collection and `$error` emission are compiled out. Runtime
-configuration fields may remain present for source compatibility but are inert
-in that build.
+`$crash` is **once-only** per client lifetime and **erase-after-ack**: the port
+clears the on-device crash source (e.g. erases the ESP-IDF coredump partition,
+unlinks the POSIX breadcrumb) only after the `$crash` event has been delivered to
+Capture, so a crash is neither lost nor re-reported on every subsequent boot.
+
+`$crash` is not a coredump, register dump, full stack capture, minidump,
+symbolication pipeline, or crash forensics system. Code-sensitive symbolication
+context is separately opt-in where a port exposes it: ports may send
+`exception_cause`, `firmware_build_id`, `fault_pc`, `fault_addr`, `backtrace`,
+`task_name`, `summary_version`, and `coredump_available` when crash
+symbolication context is enabled and platform crash-summary metadata is
+available. These are raw identifiers, reasons, and addresses for **server-side**
+symbolication; the SDK does not send source code, source paths, symbol files,
+RAM snapshots, or full coredumps. (`coredump_available` is a forward-compatible
+signal that a raw image remains on the device for a future, separately specified
+upload path.)
+
+`$crash` emission is best-effort: if the SDK cannot build or enqueue it during
+`init()` because local queue/storage limits are tight, the SDK still completes
+init and continues normal telemetry. Diagnostics failure must never become a
+device startup failure.
+
+### `$error`
+
+`$error` is automatic logged-error capture. A port hooks its platform's
+error-level logging path (e.g. `ESP_LOGE` via `esp_log_set_vprintf`) so an error
+the firmware logs becomes a bounded `$error` event with `level="error"`, the log
+`component`/tag, and a truncated `message` — with no application code change.
+Events are **rate-limited and coalesced**: identical `(component, message)`
+errors within a window collapse into one event carrying a `count`. The SDK's own
+internal logs are never re-reported as `$error` (recursion guard). `$error`
+events ride the normal queue and flush policy; they never force an immediate
+upload and are never emitted from an ISR.
+
+### Build-strip modularity
+
+Error/crash reporting is build-strip modular. `HONCH_ENABLE_ERROR_TRACKING` is
+the umbrella; `HONCH_ENABLE_CRASH_CAPTURE` and `HONCH_ENABLE_LOG_CAPTURE` are
+sub-toggles that default to it. When a toggle is `0` (or an equivalent port build
+option is used), the corresponding emission path is compiled out entirely with no
+flash/RAM cost. There is no runtime opt-in flag.
 
 `reset()` clears SDK identity, state, and queued events. It does not enqueue a
 `$device_reset` lifecycle event.

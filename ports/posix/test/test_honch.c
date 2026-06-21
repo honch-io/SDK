@@ -986,46 +986,7 @@ static void test_track_persists_event(void)
     honch_shutdown(client);
 }
 
-static void test_report_error_persists_runtime_error_event(void)
-{
-    char queue_dir[128];
-    make_temp_dir(queue_dir, sizeof(queue_dir));
-    honch_config_t config = test_config(queue_dir);
-
-    fake_transport_context_t transport = {.response_code = 204L};
-    honch_test_set_transport(fake_transport, &transport);
-
-    honch_client_t *client = NULL;
-    EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
-    honch_error_report_t report = {
-        .severity = HONCH_ERROR_SEVERITY_FATAL,
-        .message = "uncaught runtime exception",
-        .type = "RuntimeError",
-        .component = "camera",
-        .code = "E_RUNTIME",
-        .backtrace = "main:99"
-    };
-    const honch_property_t properties[] = {
-        honch_prop("handled", honch_bool(false))
-    };
-    EXPECT_EQ_INT(honch_report_error(client, &report, properties, 1u), HONCH_OK);
-    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
-
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$error\"");
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"source\":\"runtime\"");
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"severity\":\"fatal\"");
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"message\":\"uncaught runtime exception\"");
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"type\":\"RuntimeError\"");
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"component\":\"camera\"");
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"code\":\"E_RUNTIME\"");
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"backtrace\":\"main:99\"");
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"handled\":false");
-
-    honch_shutdown(client);
-    honch_test_set_transport(NULL, NULL);
-}
-
-static void test_signal_breadcrumb_import_reports_runtime_error(void)
+static void test_signal_breadcrumb_import_reports_crash(void)
 {
     char queue_dir[128];
     char breadcrumb_path[180];
@@ -1042,13 +1003,13 @@ static void test_signal_breadcrumb_import_reports_runtime_error(void)
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$error\"");
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"source\":\"runtime\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$crash\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"source\":\"signal\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"severity\":\"fatal\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"message\":\"process terminated by signal\"");
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"type\":\"Signal\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"reset_reason\":\"SIGSEGV\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"component\":\"process\"");
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"code\":\"SIGSEGV\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"exception_cause\":\"SIGSEGV\"");
     char deleted_probe[8];
     EXPECT_EQ_INT(read_text_file(breadcrumb_path, deleted_probe, sizeof(deleted_probe)), 0);
 
@@ -1779,13 +1740,13 @@ static void test_fault_snapshot_includes_bounded_crash_summary_fields(void)
         .ctx = &transport
     };
 
-    const honch_fault_snapshot_t fault = {
-        .kind = HONCH_FAULT_KIND_PANIC,
-        .severity = HONCH_FAULT_SEVERITY_FATAL,
+    const honch_crash_report_t crash = {
+        .kind = HONCH_CRASH_KIND_PANIC,
+        .severity = HONCH_CRASH_SEVERITY_FATAL,
         .reset_reason = "panic",
         .message = "automatic crash summary",
         .component = "esp-idf",
-        .crash_summary_version = 1u,
+        .summary_version = 1u,
         .firmware_build_id = "fw-build-abc123",
         .exception_cause = "LoadProhibited",
         .fault_pc = "0x400d1234",
@@ -1809,19 +1770,18 @@ static void test_fault_snapshot_includes_bounded_crash_summary_fields(void)
         .state_storage = &state_storage,
         .event_queue = &event_queue,
         .transport = &transport_ops,
-        .fault_snapshot = &fault,
-        .enable_error_tracking = true
+        .crash_report = &crash
     };
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_core_init(&client, &config), HONCH_OK);
     EXPECT_EQ_INT(honch_core_flush(client), HONCH_OK);
 
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$error\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$crash\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"source\":\"panic\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"severity\":\"fatal\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"reset_reason\":\"panic\"");
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"crash_summary_version\":1");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"summary_version\":1");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"firmware_build_id\":\"fw-build-abc123\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"exception_cause\":\"LoadProhibited\"");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"fault_pc\":\"0x400d1234\"");
@@ -1851,11 +1811,11 @@ static void test_fault_snapshot_omits_oversized_crash_summary_fields(void)
         .ctx = &transport
     };
 
-    const honch_fault_snapshot_t fault = {
-        .kind = HONCH_FAULT_KIND_PANIC,
-        .severity = HONCH_FAULT_SEVERITY_FATAL,
+    const honch_crash_report_t crash = {
+        .kind = HONCH_CRASH_KIND_PANIC,
+        .severity = HONCH_CRASH_SEVERITY_FATAL,
         .reset_reason = "panic",
-        .crash_summary_version = 1u,
+        .summary_version = 1u,
         .firmware_build_id = "build-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-0123456789-over",
         .exception_cause = "LoadProhibited",
         .fault_pc = "0x400d1234-extra-too-long",
@@ -1882,16 +1842,15 @@ static void test_fault_snapshot_omits_oversized_crash_summary_fields(void)
         .state_storage = &state_storage,
         .event_queue = &event_queue,
         .transport = &transport_ops,
-        .fault_snapshot = &fault,
-        .enable_error_tracking = true
+        .crash_report = &crash
     };
 
     honch_client_t *client = NULL;
     EXPECT_EQ_INT(honch_core_init(&client, &config), HONCH_OK);
     EXPECT_EQ_INT(honch_core_flush(client), HONCH_OK);
 
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$error\"");
-    EXPECT_STR_CONTAINS(transport.last_payload, "\"crash_summary_version\":1");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"event\":\"$crash\"");
+    EXPECT_STR_CONTAINS(transport.last_payload, "\"summary_version\":1");
     EXPECT_STR_CONTAINS(transport.last_payload, "\"exception_cause\":\"LoadProhibited\"");
     EXPECT_STR_NOT_CONTAINS(transport.last_payload, "firmware_build_id");
     EXPECT_STR_NOT_CONTAINS(transport.last_payload, "fault_pc");
@@ -3259,8 +3218,7 @@ int main(void)
     test_esp_idf_status_aliases();
     test_shutdown_reports_status();
     test_track_persists_event();
-    test_report_error_persists_runtime_error_event();
-    test_signal_breadcrumb_import_reports_runtime_error();
+    test_signal_breadcrumb_import_reports_crash();
     test_packetizer_reads_posix_storage_event();
     test_packetizer_sets_monotonic_time_source();
     test_os_buffered_durability_tracks_and_flushes_event();

@@ -247,11 +247,12 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("honch_core_init(&next", compat)
         self.assertIn("honch_esp_client_acquire(&client)", compat)
         self.assertIn("honch_core_track(client", compat)
-        self.assertIn("honch_core_report_error(client", compat)
         self.assertIn("honch_core_flush(client)", compat)
         self.assertNotIn("honch_core_track(s_client", compat)
-        self.assertNotIn("honch_core_report_error(s_client", compat)
         self.assertNotIn("honch_core_flush(s_client)", compat)
+        # The manual error API is gone; capture is automatic via crash_report.
+        self.assertNotIn("honch_core_report_error", compat)
+        self.assertNotIn("honch_report_error", compat)
         self.assertIn("honch_client_t", adapter)
         self.assertIn("honch_state_prepare", shims)
 
@@ -264,16 +265,16 @@ class EspIdfChunkWireTest(unittest.TestCase):
 
         self.assertIn("bool enable_error_tracking;", public)
         self.assertIn("bool enable_crash_symbolication;", public)
-        self.assertIn("honch_fault_snapshot_t honch_esp_fault_snapshot(bool include_symbolication_context);", adapter)
+        self.assertIn("honch_crash_report_t honch_esp_crash_report(bool include_symbolication_context);", adapter)
         self.assertIn("#include \"esp_system.h\"", platform)
         self.assertIn("esp_reset_reason()", platform)
         self.assertIn("ESP_RST_PANIC", platform)
         self.assertIn("ESP_RST_TASK_WDT", platform)
         self.assertIn("ESP_RST_INT_WDT", platform)
         self.assertIn("ESP_RST_BROWNOUT", platform)
-        self.assertIn("HONCH_FAULT_KIND_PANIC", platform)
-        self.assertIn("HONCH_FAULT_KIND_WATCHDOG", platform)
-        self.assertIn("HONCH_FAULT_KIND_BROWNOUT", platform)
+        self.assertIn("HONCH_CRASH_KIND_PANIC", platform)
+        self.assertIn("HONCH_CRASH_KIND_WATCHDOG", platform)
+        self.assertIn("HONCH_CRASH_KIND_BROWNOUT", platform)
         self.assertIn("honch_esp_firmware_build_id", platform)
         self.assertIn("esp_app_get_elf_sha256(build_id, sizeof(build_id))", platform)
         self.assertNotIn("app_elf_sha256[length]", platform)
@@ -281,15 +282,15 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("esp_core_dump_get_summary", platform)
         self.assertIn("CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH", platform)
         self.assertIn("CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF", platform)
-        self.assertIn("crash_summary_version = has_crash_summary ? 1u : 0u", platform)
+        self.assertIn("summary_version = has_crash_summary ? 1u : 0u", platform)
         self.assertIn("firmware_build_id", platform)
         self.assertIn("fault_pc", platform)
         self.assertIn("backtrace", platform)
         self.assertIn("espcoredump", cmake)
         self.assertNotIn("esp_panic_handler", platform)
-        self.assertIn("core_config.enable_error_tracking = should_emit_fault_snapshot;", compat)
         self.assertIn("should_emit_fault_snapshot && config->enable_crash_symbolication", compat)
-        self.assertIn("core_config.fault_snapshot = &fault_snapshot;", compat)
+        self.assertIn("core_config.crash_report = should_emit_fault_snapshot ? &crash_report : NULL;", compat)
+        self.assertIn("core_config.crash_uploaded_callback = honch_esp_crash_uploaded;", compat)
 
     def test_esp_public_config_appends_error_tracking_fields(self) -> None:
         public = read("ports/esp-idf/honch/include/honch.h")
@@ -314,13 +315,13 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("static bool s_fault_snapshot_consumed = false;", compat)
         self.assertIn("bool should_emit_fault_snapshot =", init_body)
         self.assertIn("config->enable_error_tracking && !s_fault_snapshot_consumed", init_body)
-        self.assertIn("core_config.enable_error_tracking = should_emit_fault_snapshot;", init_body)
+        self.assertIn("core_config.crash_report = should_emit_fault_snapshot ? &crash_report : NULL;", init_body)
         self.assertIn("should_emit_fault_snapshot && config->enable_crash_symbolication", init_body)
         self.assertIn("if (should_emit_fault_snapshot) {\n        s_fault_snapshot_consumed = true;\n    }", init_body)
 
     def test_esp_idf_maps_idf_5_1_reset_reasons_without_fatal_unknown(self) -> None:
         platform = read("ports/esp-idf/honch/src/esp_platform.c")
-        snapshot_body = c_function_body(platform, "honch_esp_fault_snapshot")
+        snapshot_body = c_function_body(platform, "honch_esp_crash_report")
 
         for reset_reason, reset_string in (
             ("ESP_RST_USB", '"usb"'),
@@ -332,15 +333,15 @@ class EspIdfChunkWireTest(unittest.TestCase):
 
         self.assertIn("ESP_RST_PWR_GLITCH", snapshot_body)
         self.assertIn('"power_glitch"', snapshot_body)
-        self.assertIn("HONCH_FAULT_KIND_BROWNOUT", snapshot_body)
+        self.assertIn("HONCH_CRASH_KIND_BROWNOUT", snapshot_body)
         self.assertIn("ESP_IDF_VERSION_VAL(5, 1, 0)", platform)
 
     def test_esp_idf_attaches_coredump_summary_only_for_panic_reset(self) -> None:
         platform = read("ports/esp-idf/honch/src/esp_platform.c")
-        snapshot_body = c_function_body(platform, "honch_esp_fault_snapshot")
+        snapshot_body = c_function_body(platform, "honch_esp_crash_report")
 
         self.assertIn(
-            'honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_PANIC, "panic", include_symbolication_context)',
+            'honch_esp_abnormal_fault_snapshot(HONCH_CRASH_KIND_PANIC, "panic", include_symbolication_context)',
             snapshot_body,
         )
         for reset_reason in (
@@ -352,12 +353,12 @@ class EspIdfChunkWireTest(unittest.TestCase):
         ):
             self.assertIn(reset_reason, snapshot_body)
             self.assertNotIn(f"{reset_reason}, include_symbolication_context", snapshot_body)
-        self.assertIn("honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, \"interrupt_wdt\", false)", snapshot_body)
-        self.assertIn("honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, \"task_wdt\", false)", snapshot_body)
-        self.assertIn("honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_WATCHDOG, \"watchdog\", false)", snapshot_body)
-        self.assertIn("honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_BROWNOUT, \"brownout\", false)", snapshot_body)
-        self.assertIn("HONCH_FAULT_KIND_BROWNOUT,\n                \"power_glitch\",\n                false", snapshot_body)
-        self.assertIn("honch_esp_abnormal_fault_snapshot(HONCH_FAULT_KIND_UNKNOWN, \"unknown\", false)", snapshot_body)
+        self.assertIn("honch_esp_abnormal_fault_snapshot(HONCH_CRASH_KIND_WATCHDOG, \"interrupt_wdt\", false)", snapshot_body)
+        self.assertIn("honch_esp_abnormal_fault_snapshot(HONCH_CRASH_KIND_WATCHDOG, \"task_wdt\", false)", snapshot_body)
+        self.assertIn("honch_esp_abnormal_fault_snapshot(HONCH_CRASH_KIND_WATCHDOG, \"watchdog\", false)", snapshot_body)
+        self.assertIn("honch_esp_abnormal_fault_snapshot(HONCH_CRASH_KIND_BROWNOUT, \"brownout\", false)", snapshot_body)
+        self.assertIn("HONCH_CRASH_KIND_BROWNOUT,\n                \"power_glitch\",\n                false", snapshot_body)
+        self.assertIn("honch_esp_abnormal_fault_snapshot(HONCH_CRASH_KIND_UNKNOWN, \"unknown\", false)", snapshot_body)
 
     def test_esp_idf_claims_crash_summary_only_when_summary_read_succeeds(self) -> None:
         platform = read("ports/esp-idf/honch/src/esp_platform.c")
@@ -372,7 +373,7 @@ class EspIdfChunkWireTest(unittest.TestCase):
             abnormal_body,
         )
         self.assertIn("build_id = has_crash_summary ? honch_esp_firmware_build_id() : NULL;", abnormal_body)
-        self.assertIn(".crash_summary_version = has_crash_summary ? 1u : 0u", abnormal_body)
+        self.assertIn(".summary_version = has_crash_summary ? 1u : 0u", abnormal_body)
 
     def test_esp_idf_omits_corrupted_xtensa_backtraces(self) -> None:
         platform = read("ports/esp-idf/honch/src/esp_platform.c")

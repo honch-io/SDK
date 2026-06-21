@@ -19,7 +19,6 @@ from .validation import (
     require_distinct_id,
     require_event_name,
     require_properties,
-    require_severity,
     require_text,
     require_value,
 )
@@ -54,47 +53,14 @@ class Honch:
         require_event_name(event_name)
         self._call("track", event_name, require_properties(properties))
 
-    def report_error(
-        self,
-        message,
-        *,
-        severity="error",
-        error_type=None,
-        component=None,
-        code=None,
-        backtrace=None,
-        properties=None,
-    ):
-        require_severity(severity)
-        require_text(message, "error message")
-        # Only include fields that are set. The C module treats a missing key and
-        # a None value identically (honch_mp_map_get_str falls back for both), so
-        # this is behavior-equivalent on-device while avoiding the allocation of
-        # None slots on the error path -- worst exactly when reporting an OOM.
-        report = {
-            "message": message,
-            "severity": severity,
-        }
-        if error_type is not None:
-            report["type"] = error_type
-        if component is not None:
-            report["component"] = component
-        if code is not None:
-            report["code"] = code
-        if backtrace is not None:
-            report["backtrace"] = backtrace
-        self._call("report_error", report, require_properties(properties))
+    def report_log_error(self, message, *, component=None):
+        """Capture a logged error as a bounded, coalesced $error event.
 
-    def run_with_error_tracking(self, fn, *args, **kwargs):
-        try:
-            return fn(*args, **kwargs)
-        except Exception as exc:
-            self.report_error(
-                str(exc) or repr(exc),
-                severity="fatal",
-                error_type=exc.__class__.__name__,
-            )
-            raise
+        Intended to be driven automatically (e.g. from a logging.Handler), not
+        sprinkled through application code.
+        """
+        require_text(message, "error message")
+        self._call("report_log_error", component, message)
 
     def install_error_hook(self):
         try:
@@ -111,11 +77,11 @@ class Honch:
 
         def honch_excepthook(exc_type, exc, tb):
             try:
-                self.report_error(
-                    str(exc) or repr(exc),
-                    severity="fatal",
-                    error_type=getattr(exc_type, "__name__", "Exception"),
-                )
+                report = {
+                    "message": str(exc) or repr(exc),
+                    "type": getattr(exc_type, "__name__", "Exception"),
+                }
+                self._call("report_crash", report)
             except Exception:
                 # An excepthook must never raise: a reporting failure must not
                 # replace delivery of the original exception to the next hook.

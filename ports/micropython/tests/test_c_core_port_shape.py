@@ -166,9 +166,13 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
             ]
         )
 
-        self.assertIn("def report_error", combined)
-        self.assertIn("MP_QSTR_report_error", combined)
-        self.assertIn("honch_core_report_error", combined)
+        # Automatic capture: uncaught exceptions -> $crash, logged errors -> $error.
+        self.assertIn("def report_log_error", combined)
+        self.assertIn("MP_QSTR_report_crash", combined)
+        self.assertIn("MP_QSTR_report_log_error", combined)
+        self.assertIn("honch_core_report_crash", combined)
+        self.assertIn("honch_core_report_log_error", combined)
+        self.assertNotIn("honch_core_report_error", combined)
         self.assertNotIn("capture_error", combined)
 
     def test_package_metadata_versions_match(self):

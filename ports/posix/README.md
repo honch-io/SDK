@@ -127,7 +127,6 @@ API:
 honch_status_t honch_init(honch_client_t **client, const honch_config_t *config);
 honch_status_t honch_track(honch_client_t *client, const char *event_name, const honch_property_t *properties, size_t property_count);
 honch_status_t honch_identify(honch_client_t *client, const char *distinct_id, const honch_property_t *traits, size_t trait_count);
-honch_status_t honch_report_error(honch_client_t *client, const honch_error_report_t *report, const honch_property_t *properties, size_t property_count);
 honch_status_t honch_install_error_handlers(const char *queue_directory);
 honch_status_t honch_set_property(honch_client_t *client, const char *key, honch_value_t value);
 honch_status_t honch_session_start(honch_client_t *client, const char *session_name);
@@ -188,10 +187,11 @@ firmware-version state, and queues `$device_boot` before returning. It does not
 perform network I/O; delivery remains cooperative through `honch_tick()` or
 explicit flush calls.
 
-Use `honch_report_error()` from normal runtime error paths to queue `$error`.
-Call `honch_install_error_handlers(queue_directory)` to opt into fatal POSIX
-signal breadcrumbs. The handler only writes a bounded breadcrumb with
-async-signal-safe syscalls; the next `honch_init()` imports it as `$error`.
+Crash reporting is automatic — there is no manual error API. Call
+`honch_install_error_handlers(queue_directory)` to opt into fatal POSIX signal
+capture. The handler only writes a bounded breadcrumb with async-signal-safe
+syscalls; the next `honch_init()` imports it as a one-time `$crash` event
+(`source="signal"`, with the signal name in `exception_cause`).
 `$device_boot` uses an `unknown` reset reason unless a platform adapter supplies
 one through the portable core config.
 

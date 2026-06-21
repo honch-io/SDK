@@ -80,14 +80,16 @@ static honch_status_t honch_posix_import_error_breadcrumb(honch_client_t *client
         return HONCH_OK;
     }
 
-    honch_error_report_t report = {
-        .severity = HONCH_ERROR_SEVERITY_FATAL,
+    const char *signal_name = honch_posix_signal_code(signum);
+    honch_crash_report_t report = {
+        .kind = HONCH_CRASH_KIND_SIGNAL,
+        .severity = HONCH_CRASH_SEVERITY_FATAL,
+        .reset_reason = signal_name,
         .message = "process terminated by signal",
-        .type = "Signal",
         .component = "process",
-        .code = honch_posix_signal_code(signum)
+        .exception_cause = signal_name
     };
-    return honch_core_report_error(client, &report, NULL, 0u);
+    return honch_core_report_crash(client, &report);
 }
 
 static honch_status_t honch_posix_install_signal_handler(int signum)
@@ -204,15 +206,6 @@ honch_status_t honch_identify(
     size_t trait_count)
 {
     return honch_core_identify(client, distinct_id, traits, trait_count);
-}
-
-honch_status_t honch_report_error(
-    honch_client_t *client,
-    const honch_error_report_t *report,
-    const honch_property_t *properties,
-    size_t property_count)
-{
-    return honch_core_report_error(client, report, properties, property_count);
 }
 
 honch_status_t honch_install_error_handlers(const char *queue_directory)
