@@ -9,13 +9,13 @@
 #include "esp_core_adapter.h"
 #include "honch_internal.h"
 
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "esp_log.h"
-#include "esp_core_dump.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
@@ -34,13 +34,92 @@ static honch_esp_transport_t s_transport_ctx;
 #if HONCH_ENABLE_ERROR_TRACKING
 static bool s_fault_snapshot_consumed = false;
 
+/* The erase-after-ack callback is only meaningful (and esp_core_dump.h is only
+ * on the include path) when a flash ELF coredump is actually configured — the
+ * same condition esp_platform.c uses to read the crash summary. */
+#if HONCH_ENABLE_CRASH_SYMBOLICATION && \
+    defined(CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH) && CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH && \
+    defined(CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF) && CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF
+#define HONCH_ESP_COMPAT_HAS_COREDUMP 1
+#include "esp_core_dump.h"
+
 /* Erase-after-ack: invoked once the recovered $crash has reached Capture, so the
- * stored coredump is not re-reported on the next boot. esp_core_dump_image_erase
- * is available regardless of the coredump menuconfig selection. */
+ * stored coredump is not re-reported on the next boot. */
 static void honch_esp_crash_uploaded(void *userdata)
 {
     (void)userdata;
     (void)esp_core_dump_image_erase();
+}
+#endif
+#endif
+
+#if HONCH_ENABLE_LOG_CAPTURE
+/* Chained ESP log hook: every error-level (ESP_LOGE) line becomes an automatic
+ * $error event, then is always forwarded to the original log handler so normal
+ * logging is untouched. The default ESP log line is "E (<ts>) <tag>: <msg>"
+ * (optionally wrapped in color escapes); we capture tag + message best-effort. */
+static vprintf_like_t s_prev_vprintf = NULL;
+
+static int honch_esp_log_vprintf(const char *fmt, va_list args)
+{
+    /* Per-task guard so our own reporting (and any logging it triggers) cannot
+     * recurse back into the hook. */
+    static __thread bool in_hook = false;
+
+    if (!in_hook && s_client != NULL && fmt != NULL) {
+        va_list copy;
+        va_copy(copy, args);
+        char line[200];
+        int written = vsnprintf(line, sizeof(line), fmt, copy);
+        va_end(copy);
+
+        if (written > 0) {
+            const char *p = line;
+            if (*p == '\033') { /* skip a leading CSI color sequence */
+                const char *m = strchr(p, 'm');
+                if (m != NULL) {
+                    p = m + 1;
+                }
+            }
+            if (*p == 'E') { /* error level only */
+                const char *after_ts = strstr(p, ") ");
+                if (after_ts != NULL) {
+                    const char *tag = after_ts + 2;
+                    const char *colon = strchr(tag, ':');
+                    if (colon != NULL && colon > tag) {
+                        char tag_buf[24];
+                        size_t tag_len = (size_t)(colon - tag);
+                        if (tag_len >= sizeof(tag_buf)) {
+                            tag_len = sizeof(tag_buf) - 1u;
+                        }
+                        memcpy(tag_buf, tag, tag_len);
+                        tag_buf[tag_len] = '\0';
+
+                        const char *msg = colon[1] == ' ' ? colon + 2 : colon + 1;
+                        char msg_buf[160];
+                        size_t j = 0u;
+                        for (const char *q = msg;
+                             *q != '\0' && *q != '\033' && *q != '\n' && j + 1u < sizeof(msg_buf);
+                             q++) {
+                            msg_buf[j++] = *q;
+                        }
+                        msg_buf[j] = '\0';
+
+                        if (j > 0u) {
+                            in_hook = true;
+                            (void)honch_core_report_log_error(s_client, tag_buf, msg_buf);
+                            in_hook = false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (s_prev_vprintf != NULL) {
+        return s_prev_vprintf(fmt, args);
+    }
+    return vprintf(fmt, args);
 }
 #endif
 
@@ -412,7 +491,9 @@ honch_err_t honch_init(const honch_config_t *config)
     honch_crash_report_t crash_report = honch_esp_crash_report(
         should_emit_fault_snapshot && config->enable_crash_symbolication);
     core_config.crash_report = should_emit_fault_snapshot ? &crash_report : NULL;
+#if HONCH_ESP_COMPAT_HAS_COREDUMP
     core_config.crash_uploaded_callback = honch_esp_crash_uploaded;
+#endif
 #else
     core_config.crash_report = NULL;
 #endif
@@ -435,6 +516,11 @@ honch_err_t honch_init(const honch_config_t *config)
         s_fault_snapshot_consumed = true;
     }
 #endif
+#if HONCH_ENABLE_LOG_CAPTURE
+    /* Install the chained log hook so ESP_LOGE lines become automatic $error
+     * events. esp_log_set_vprintf returns the previous handler to forward to. */
+    s_prev_vprintf = esp_log_set_vprintf(honch_esp_log_vprintf);
+#endif
     return HONCH_OK;
 }
 
@@ -451,6 +537,11 @@ honch_err_t honch_shutdown(void)
         honch_esp_shutdown_restore(client);
         return HONCH_ERR_BUSY;
     }
+#if HONCH_ENABLE_LOG_CAPTURE
+    /* Restore the previous log handler before the client is gone. */
+    (void)esp_log_set_vprintf(s_prev_vprintf != NULL ? s_prev_vprintf : &vprintf);
+    s_prev_vprintf = NULL;
+#endif
     honch_esp_transport_ops_deinit(&s_transport_ctx);
     honch_esp_event_queue_ops_deinit(&s_storage_ctx);
     honch_esp_platform_ops_deinit(&s_platform_ctx);

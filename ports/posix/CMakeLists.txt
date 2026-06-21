@@ -222,6 +222,7 @@ if(HONCH_BUILD_EXAMPLES)
     add_subdirectory(example/connected_camera)
     add_subdirectory(example/posix_gpio)
     add_subdirectory(example/identify_merge)
+    add_subdirectory(example/crash_demo)
 endif()
 
 if(HONCH_BUILD_BENCHMARKS)
