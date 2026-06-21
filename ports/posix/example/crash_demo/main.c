@@ -17,22 +17,31 @@
 #include "honch/honch.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+static const char *env_or(const char *name, const char *fallback)
+{
+    const char *value = getenv(name);
+    return value != NULL && value[0] != '\0' ? value : fallback;
+}
 
 static honch_config_t demo_config(void)
 {
+    /* Defaults target a local mock collector; override via env to point at a
+     * live capture endpoint (e.g. the sandbox at http://127.0.0.1:8001). */
     honch_config_t config = {
-        .api_key = "local-dev-key",
-        .endpoint_url = "http://127.0.0.1:8765",
-        .device_id = "crash-demo-device",
+        .api_key = env_or("HONCH_API_KEY", "local-dev-key"),
+        .endpoint_url = env_or("HONCH_ENDPOINT_URL", "http://127.0.0.1:8765"),
+        .device_id = env_or("HONCH_DEVICE_ID", "crash-demo-device"),
         .device_model = "Crash Demo Rig",
         .firmware_version = "1.0.0",
         .environment = "dev",
-        .queue_directory = ".honch-crash-demo",
+        .queue_directory = env_or("HONCH_QUEUE_DIR", ".honch-crash-demo"),
         .batch_size = 10u,
         .max_queued_events = 100u,
         .max_event_bytes = 8192u,
-        .transport_timeout_ms = 2000u
+        .transport_timeout_ms = 5000u
     };
     return config;
 }
