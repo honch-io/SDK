@@ -808,17 +808,10 @@ static void honch_scheduler_record_flush_result(
         client->next_retry_flush_ms = 0u;
         if (outbound_upload_attempted) {
             honch_scheduler_record_outbound_attempt(client, now);
-#if HONCH_ENABLE_CRASH_CAPTURE
-            /* A reported $crash has now reached Capture; let the port clear the
-             * on-device crash source so it is not re-reported on the next boot. */
-            if (client->crash_pending_ack) {
-                client->crash_pending_ack = false;
-                if (client->crash_uploaded_callback != NULL) {
-                    client->crash_uploaded_callback(client->crash_uploaded_userdata);
-                }
-            }
-#endif
         }
+        /* Erase-after-ack is signalled by honch_core_queue_consume_batch when the
+         * $crash event's own sequence is delivered; the port callback is fired
+         * from honch_core_flush/tick after the state lock is released. */
     } else if (honch_status_is_retryable(status)) {
         uint64_t wait_ms = honch_next_retry_delay_ms(client);
         uint64_t retry_after_ms = honch_transport_retry_after_ms(client);
@@ -1254,6 +1247,9 @@ static honch_status_t honch_emit_crash_locked(
 
     honch_event_context_t event_context = {.battery_level = -1};
     status = honch_prepare_event_context(client, &event_context);
+    /* The $crash is the first push in this call, so it is assigned the current
+     * sequence value; capture it for erase-after-ack delivery tracking. */
+    uint64_t crash_sequence = client->sequence;
     if (status == HONCH_OK) {
         status = honch_track_locked_internal(
             client,
@@ -1271,6 +1267,7 @@ static honch_status_t honch_emit_crash_locked(
     if (status == HONCH_OK) {
         client->crash_reported = true;
         client->crash_pending_ack = true;
+        client->crash_event_sequence = crash_sequence;
     }
     return status == HONCH_ERROR_INVALID_ARGUMENT || status == HONCH_ERROR_REJECTED ?
         HONCH_OK :
@@ -1565,6 +1562,18 @@ honch_status_t honch_core_report_crash(
         return status;
     }
 
+    /* Re-check once-only under the lock: two callers can pass the pre-lock check
+     * concurrently, so the authoritative guard must hold the state lock. */
+    if (client->crash_reported) {
+        honch_client_unlock(client);
+        honch_event_context_free(&event_context);
+        honch_client_leave(client);
+        return HONCH_OK;
+    }
+
+    /* The $crash is the first push under the lock, so it takes the current
+     * sequence; capture it for erase-after-ack delivery tracking. */
+    uint64_t crash_sequence = client->sequence;
     status = honch_track_locked_internal(
         client,
         "$crash",
@@ -1579,6 +1588,7 @@ honch_status_t honch_core_report_crash(
     if (status == HONCH_OK) {
         client->crash_reported = true;
         client->crash_pending_ack = true;
+        client->crash_event_sequence = crash_sequence;
     }
     honch_client_unlock(client);
     honch_event_context_free(&event_context);
@@ -1594,6 +1604,9 @@ honch_status_t honch_core_report_crash(
 
 static void honch_copy_bounded(char *dst, size_t dst_size, const char *src)
 {
+    if (dst_size == 0u) {
+        return;
+    }
     size_t i = 0u;
     if (src != NULL) {
         for (; i + 1u < dst_size && src[i] != '\0'; i++) {
@@ -1672,7 +1685,7 @@ static void honch_drain_log_errors_locked(honch_client_t *client)
             continue;
         }
 
-        honch_wire_v2_property_t properties[4];
+        honch_wire_v2_property_t properties[5];
         size_t property_count = 0u;
         honch_status_t status = honch_append_typed_property(
             properties, &property_count, "level", honch_str("error"), true);
@@ -1687,6 +1700,16 @@ static void honch_drain_log_errors_locked(honch_client_t *client)
         if (status == HONCH_OK) {
             status = honch_append_typed_property(
                 properties, &property_count, "count", honch_u64((uint64_t)slot->count), true);
+        }
+        /* Surface distinct errors that overflowed the dedup table (and were never
+         * captured) on the first drained $error, so silent drops are observable. */
+        if (status == HONCH_OK && client->log_errors_dropped > 0u) {
+            status = honch_append_typed_property(
+                properties, &property_count, "dropped",
+                honch_u64((uint64_t)client->log_errors_dropped), true);
+            if (status == HONCH_OK) {
+                client->log_errors_dropped = 0u;
+            }
         }
         if (status == HONCH_OK) {
             (void)honch_track_locked_internal(
@@ -2080,7 +2103,16 @@ honch_status_t honch_core_tick(honch_client_t *client)
         honch_scheduler_refresh_queue_request_locked(client);
     }
     client->flush_in_progress = false;
+#if HONCH_ENABLE_CRASH_CAPTURE
+    bool crash_ack_due = client->crash_ack_due;
+    client->crash_ack_due = false;
+#endif
     honch_client_unlock(client);
+#if HONCH_ENABLE_CRASH_CAPTURE
+    if (crash_ack_due && client->crash_uploaded_callback != NULL) {
+        client->crash_uploaded_callback(client->crash_uploaded_userdata);
+    }
+#endif
     honch_client_leave(client);
     return status;
 }
@@ -2130,7 +2162,16 @@ honch_status_t honch_core_flush(honch_client_t *client)
     honch_scheduler_record_flush_result(client, status, now, client->outbound_upload_attempted);
     client->outbound_upload_attempted = false;
     client->flush_in_progress = false;
+#if HONCH_ENABLE_CRASH_CAPTURE
+    bool crash_ack_due = client->crash_ack_due;
+    client->crash_ack_due = false;
+#endif
     honch_client_unlock(client);
+#if HONCH_ENABLE_CRASH_CAPTURE
+    if (crash_ack_due && client->crash_uploaded_callback != NULL) {
+        client->crash_uploaded_callback(client->crash_uploaded_userdata);
+    }
+#endif
     honch_client_leave(client);
     return status;
 }
@@ -2232,6 +2273,11 @@ honch_status_t honch_core_shutdown(honch_client_t *client)
         return status;
     }
 
+#if HONCH_ENABLE_LOG_CAPTURE
+    /* Flush any coalesced log errors accumulated since the last tick/flush so a
+     * clean shutdown does not silently drop them. */
+    honch_drain_log_errors_locked(client);
+#endif
     status = honch_track_locked_internal(
         client,
         "$device_shutdown",

@@ -104,11 +104,14 @@ device startup failure.
 error-level logging path (e.g. `ESP_LOGE` via `esp_log_set_vprintf`) so an error
 the firmware logs becomes a bounded `$error` event with `level="error"`, the log
 `component`/tag, and a truncated `message` — with no application code change.
-Events are **rate-limited and coalesced**: identical `(component, message)`
-errors within a window collapse into one event carrying a `count`. The SDK's own
-internal logs are never re-reported as `$error` (recursion guard). `$error`
-events ride the normal queue and flush policy; they never force an immediate
-upload and are never emitted from an ISR.
+Errors are **bounded and coalesced**: a small fixed dedup table (default 4 slots)
+collapses identical `(component, message)` errors into one event carrying a
+`count`, and is drained to the queue on each flush/tick/shutdown. Distinct errors
+that overflow the table while it is full are counted and surfaced as a `dropped`
+property on the next emitted `$error`, so loss is observable rather than silent.
+The SDK's own internal logs are never re-reported as `$error` (recursion guard).
+`$error` events ride the normal queue and flush policy; they never force an
+immediate upload and are never emitted from an ISR.
 
 ### Build-strip modularity
 

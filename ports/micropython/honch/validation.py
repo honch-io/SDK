@@ -3,7 +3,6 @@ from .errors import InvalidArgumentError
 
 MAX_EVENT_NAME = 128
 MAX_DISTINCT_ID = 256
-SEVERITIES = ("info", "warning", "error", "fatal")
 
 
 def require_text(value, label, max_len=None):
@@ -12,11 +11,6 @@ def require_text(value, label, max_len=None):
     # code points), so these checks exist for early, well-attributed errors.
     if not isinstance(value, str) or value.strip() == "" or (max_len is not None and len(value) > max_len):
         raise InvalidArgumentError("invalid " + label)
-
-
-def require_severity(severity):
-    if severity not in SEVERITIES:
-        raise InvalidArgumentError("invalid error severity")
 
 
 def require_event_name(event):

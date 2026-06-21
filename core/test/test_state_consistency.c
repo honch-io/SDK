@@ -567,6 +567,52 @@ static void test_crash_uploaded_callback_fires_after_delivery(void)
     assert(g_crash_uploaded_calls == 1);
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
+
+/* Regression for the erase-after-ack data-loss window: when the $crash sits
+ * behind other events and only one batch is delivered per flush, the callback
+ * must fire only on the flush that actually delivers the $crash, not on an
+ * earlier flush that uploaded something else. */
+static void test_crash_uploaded_callback_waits_for_crash_event_delivery(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK, .track_queue_depth = 1};
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    g_crash_uploaded_calls = 0;
+    config.crash_uploaded_callback = count_crash_uploaded;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    /* One event per batch, no outbound spacing, so the queued $device_boot is
+     * delivered first and $crash only on the second flush. */
+    client->batch_size = 1u;
+    client->flush_min_interval_ms = 0u;
+
+    honch_crash_report_t crash = {
+        .kind = HONCH_CRASH_KIND_PANIC,
+        .severity = HONCH_CRASH_SEVERITY_FATAL,
+        .reset_reason = "panic"
+    };
+    assert(honch_core_report_crash(client, &crash) == HONCH_OK);
+    assert(storage.queued_sequence_count == 2u); /* $device_boot + $crash */
+
+    /* Flush 1 delivers $device_boot only — the coredump must NOT be erased yet. */
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(storage.queued_sequence_count == 1u);
+    assert(g_crash_uploaded_calls == 0);
+
+    /* Flush 2 delivers $crash — now the callback fires exactly once. */
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(storage.queued_sequence_count == 0u);
+    assert(g_crash_uploaded_calls == 1);
+
+    storage.track_queue_depth = 0;
+    storage.queue_depth = 0u;
+    client->queued_event_count = 0u;
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
 #endif /* HONCH_ENABLE_CRASH_CAPTURE */
 
 #if HONCH_ENABLE_LOG_CAPTURE
@@ -643,6 +689,27 @@ static void test_sdk_self_logs_are_ignored(void)
     assert(honch_core_flush(client) == HONCH_OK);
     assert(storage.queue_push_calls == pushes_before);
     assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+/* A clean shutdown must drain coalesced log errors that accumulated since the
+ * last flush/tick, not silently drop them. */
+static void test_shutdown_drains_pending_log_errors(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(honch_core_report_log_error(client, "sensor", "read timeout") == HONCH_OK);
+    int pushes_before_shutdown = storage.queue_push_calls;
+    assert(honch_core_shutdown(client) == HONCH_OK);
+    /* Shutdown must enqueue both the drained $error and $device_shutdown (+2),
+     * not just $device_shutdown (+1). */
+    assert(storage.queue_push_calls == pushes_before_shutdown + 2);
 }
 #endif /* HONCH_ENABLE_LOG_CAPTURE */
 
@@ -1847,11 +1914,13 @@ int main(void)
     test_report_crash_rejects_null();
     test_report_crash_is_once_only();
     test_crash_uploaded_callback_fires_after_delivery();
+    test_crash_uploaded_callback_waits_for_crash_event_delivery();
 #endif
 #if HONCH_ENABLE_LOG_CAPTURE
     test_log_error_emits_error_event();
     test_identical_log_errors_coalesce();
     test_sdk_self_logs_are_ignored();
+    test_shutdown_drains_pending_log_errors();
 #endif
     test_core_state_lock_works_without_platform_lock_callbacks();
     test_init_rejects_mutex_required_platform_without_lock_callbacks();

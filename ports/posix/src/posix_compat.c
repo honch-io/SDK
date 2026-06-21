@@ -75,11 +75,15 @@ static honch_status_t honch_posix_import_error_breadcrumb(honch_client_t *client
     int signum = 0;
     int matched = fscanf(file, "signal:%d", &signum);
     (void)fclose(file);
-    (void)unlink(s_error_breadcrumb_path);
     if (matched != 1 || signum <= 0) {
+        /* Useless breadcrumb: drop it now so it is not re-read forever. */
+        (void)unlink(s_error_breadcrumb_path);
         return HONCH_OK;
     }
 
+    /* Do NOT unlink here: the breadcrumb is the crash source and is cleared only
+     * after the $crash is delivered, via honch_posix_crash_uploaded (erase-after
+     * -ack). If delivery never happens this run, the next run re-reports it. */
     const char *signal_name = honch_posix_signal_code(signum);
     honch_crash_report_t report = {
         .kind = HONCH_CRASH_KIND_SIGNAL,
@@ -90,6 +94,17 @@ static honch_status_t honch_posix_import_error_breadcrumb(honch_client_t *client
         .exception_cause = signal_name
     };
     return honch_core_report_crash(client, &report);
+}
+
+/* Erase-after-ack: clear the signal breadcrumb once its $crash has reached the
+ * collector, so a crash is neither lost (if the process dies before delivery)
+ * nor re-reported on every subsequent run. */
+static void honch_posix_crash_uploaded(void *userdata)
+{
+    (void)userdata;
+    if (s_error_breadcrumb_path[0] != '\0') {
+        (void)unlink(s_error_breadcrumb_path);
+    }
 }
 
 static honch_status_t honch_posix_install_signal_handler(int signum)
@@ -179,6 +194,7 @@ honch_status_t honch_init(honch_client_t **client, const honch_config_t *config)
     core_config.state_storage = &state_ops;
     core_config.event_queue = &queue_ops;
     core_config.transport = &transport_ops;
+    core_config.crash_uploaded_callback = honch_posix_crash_uploaded;
     status = honch_core_init(client, &core_config);
     if (status == HONCH_OK) {
         transport_ctx->client = *client;

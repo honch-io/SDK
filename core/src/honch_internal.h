@@ -227,8 +227,10 @@ struct honch_client {
     /* Automatic error/crash reporting state. */
     void (*crash_uploaded_callback)(void *userdata);
     void *crash_uploaded_userdata;
-    bool crash_reported;      /* a $crash has been emitted this client lifetime (once-only) */
-    bool crash_pending_ack;   /* a reported $crash is awaiting delivery confirmation */
+    bool crash_reported;        /* a $crash has been emitted this client lifetime (once-only) */
+    bool crash_pending_ack;     /* a reported $crash is enqueued, awaiting delivery */
+    bool crash_ack_due;         /* the $crash was delivered; fire the callback once, outside the lock */
+    uint64_t crash_event_sequence; /* queue sequence of the enqueued $crash, for erase-after-ack */
     honch_log_error_slot_t log_error_slots[HONCH_LOG_DEDUP_SLOTS];
     uint32_t log_errors_dropped;
 };

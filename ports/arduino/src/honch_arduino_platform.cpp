@@ -186,6 +186,11 @@ honch_crash_report_t honch_arduino_crash_report() {
           HONCH_CRASH_KIND_BROWNOUT,
           HONCH_CRASH_SEVERITY_FATAL,
           "power_glitch");
+    case ESP_RST_CPU_LOCKUP:
+      return honch_arduino_reset_report(
+          HONCH_CRASH_KIND_LOCKUP,
+          HONCH_CRASH_SEVERITY_FATAL,
+          "cpu_lockup");
 #endif
     case ESP_RST_UNKNOWN:
     default:
