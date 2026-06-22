@@ -37,6 +37,9 @@ jobs:
       - name: Install + typecheck
         run: |
           npm ci || npm install
+          # react-native-mmkv is an optional peer (not auto-installed); typecheck
+          # needs its types for the type-only import in src/storage/mmkvStore.ts.
+          npm install --no-save react-native-mmkv
           npm run typecheck
 
       - name: Publish
