@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 
+#include "honch/core/coredump.h"
 #include "honch/core/platform.h"
 #include "honch/core/status.h"
 #include "honch/core/storage.h"
@@ -127,6 +128,11 @@ typedef struct honch_core_config {
      * port can clear the on-device crash source (erase-after-ack). Optional. */
     void (*crash_uploaded_callback)(void *userdata);
     void *crash_uploaded_userdata;
+    /* Optional: a view over the device's raw coredump image (e.g. the ESP-IDF
+     * coredump flash partition). When set and non-empty, the SDK streams the
+     * image to Capture as a `coredump` source after a crash, then clears it via
+     * the source's clear() on full delivery. NULL = no raw coredump upload. */
+    const honch_coredump_source_t *coredump_source;
 } honch_core_config_t;
 
 #ifdef __cplusplus

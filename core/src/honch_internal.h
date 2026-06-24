@@ -62,6 +62,12 @@
 #define HONCH_LOG_COMPONENT_STORE_BYTES 32u
 #define HONCH_LOG_MESSAGE_STORE_BYTES 128u
 
+/* Coredump upload reads the flash image one bounded chunk at a time; this caps
+ * the per-step RAM cost (one chunk + its encoded frame), independent of image
+ * size. The encoded frame adds a small header/varint/CRC overhead. */
+#define HONCH_COREDUMP_CHUNK_BYTES 512u
+#define HONCH_COREDUMP_FRAME_BYTES (HONCH_COREDUMP_CHUNK_BYTES + 32u)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -235,6 +241,18 @@ struct honch_client {
     char coredump_crash_id[33]; /* links the $crash summary to its uploaded coredump blob */
     honch_log_error_slot_t log_error_slots[HONCH_LOG_DEDUP_SLOTS];
     uint32_t log_errors_dropped;
+#if HONCH_ENABLE_CRASH_CAPTURE
+    /* Raw coredump upload (streamed from flash, never buffered whole). */
+    const honch_coredump_source_t *coredump_source;
+    bool coredump_upload_active;  /* an upload is in progress */
+    bool coredump_clear_due;      /* erase the source, fired outside the lock after final ack */
+    size_t coredump_total;        /* image size captured at upload start */
+    size_t coredump_offset;       /* next byte to send (advances only on ack) */
+    uint16_t coredump_committed_crc; /* CRC of bytes [0, coredump_offset), advances only on ack */
+    uint32_t coredump_message_id; /* wire message id for this upload */
+    uint8_t coredump_chunk[HONCH_COREDUMP_CHUNK_BYTES];
+    uint8_t coredump_frame[HONCH_COREDUMP_FRAME_BYTES];
+#endif
 };
 
 bool honch_is_blank(const char *value);
@@ -340,6 +358,9 @@ honch_status_t honch_coredump_chunk(
     uint8_t *buffer,
     size_t buffer_size,
     size_t *out_size);
+#if HONCH_ENABLE_CRASH_CAPTURE
+honch_status_t honch_coredump_upload_step_locked(honch_client_t *client, bool *progressed);
+#endif
 
 honch_status_t honch_client_enter(honch_client_t *client);
 void honch_client_leave(honch_client_t *client);

@@ -45,6 +45,12 @@ typedef struct fake_state_storage {
     int force_connectivity;
     int connectivity_available;
     int connectivity_calls;
+    uint8_t coredump_blob[1300];
+    size_t coredump_blob_size;
+    int coredump_clear_calls;
+    int coredump_frame_count;
+    int coredump_final_frames;
+    int coredump_read_fail_at;
 } fake_state_storage_t;
 
 static honch_core_config_t fake_config(
@@ -618,6 +624,83 @@ static void test_crash_uploaded_callback_waits_for_crash_event_delivery(void)
     client->queued_event_count = 0u;
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
+
+static size_t fake_coredump_size(void *ctx)
+{
+    fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
+    return storage->coredump_blob_size;
+}
+
+static int fake_coredump_read(void *ctx, size_t offset, uint8_t *out, size_t len)
+{
+    fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
+    if (offset + len > storage->coredump_blob_size) {
+        return -1;
+    }
+    memcpy(out, storage->coredump_blob + offset, len);
+    return (int)len;
+}
+
+static void fake_coredump_clear(void *ctx)
+{
+    fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
+    storage->coredump_clear_calls++;
+    storage->coredump_blob_size = 0u; /* simulate the flash erase: size() is now 0 */
+}
+
+static void test_coredump_streams_and_erases_after_full_delivery(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK, .track_queue_depth = 1};
+    storage.coredump_blob_size = sizeof(storage.coredump_blob); /* 1300 bytes */
+    for (size_t i = 0u; i < sizeof(storage.coredump_blob); i++) {
+        storage.coredump_blob[i] = (uint8_t)(i * 7u + 3u);
+    }
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    honch_crash_report_t crash = {
+        .kind = HONCH_CRASH_KIND_PANIC,
+        .severity = HONCH_CRASH_SEVERITY_FATAL,
+        .reset_reason = "panic",
+        .coredump_available = 1
+    };
+    config.crash_report = &crash;
+    honch_coredump_source_t source = {
+        .size = fake_coredump_size,
+        .read = fake_coredump_read,
+        .clear = fake_coredump_clear,
+        .ctx = &storage
+    };
+    config.coredump_source = &source;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    client->flush_min_interval_ms = 0u; /* disable outbound spacing for back-to-back flushes */
+
+    /* 1300 bytes / 512-byte chunks = 3 frames (512, 512, 276); the 3rd is final. */
+    for (int i = 0; i < 12 && storage.coredump_clear_calls == 0; i++) {
+        storage.now_ms += 1u;
+        assert(honch_core_flush(client) == HONCH_OK);
+    }
+    assert(storage.coredump_frame_count == 3);
+    assert(storage.coredump_final_frames == 1);
+    assert(storage.coredump_clear_calls == 1); /* erase-after-ack, exactly once */
+
+    /* After the erase the source is empty, so no further coredump frames are sent. */
+    int frames_after_clear = storage.coredump_frame_count;
+    storage.now_ms += 1u;
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(storage.coredump_frame_count == frames_after_clear);
+    assert(storage.coredump_clear_calls == 1);
+
+    storage.track_queue_depth = 0;
+    storage.queue_depth = 0u;
+    storage.queued_sequence_count = 0u;
+    client->queued_event_count = 0u;
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
 #endif /* HONCH_ENABLE_CRASH_CAPTURE */
 
 #if HONCH_ENABLE_LOG_CAPTURE
@@ -868,6 +951,14 @@ static honch_status_t fake_post_chunk(
     fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
     if (storage != NULL) {
         storage->post_chunk_calls++;
+        /* Count coredump frames: header bits 2-4 carry source_type (1 = coredump),
+         * bit 6 (0x40) is the `more` flag — a final frame has it clear. */
+        if (body != NULL && body_size > 0u && ((body[0] >> 2u) & 0x7u) == 1u) {
+            storage->coredump_frame_count++;
+            if ((body[0] & 0x40u) == 0u) {
+                storage->coredump_final_frames++;
+            }
+        }
     }
     if (storage != NULL && storage->nested_flush_client != NULL && storage->nested_flush_attempts == 0) {
         storage->nested_flush_attempts++;
@@ -1920,6 +2011,7 @@ int main(void)
     test_report_crash_is_once_only();
     test_crash_uploaded_callback_fires_after_delivery();
     test_crash_uploaded_callback_waits_for_crash_event_delivery();
+    test_coredump_streams_and_erases_after_full_delivery();
 #endif
 #if HONCH_ENABLE_LOG_CAPTURE
     test_log_error_emits_error_event();

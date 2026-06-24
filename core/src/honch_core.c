@@ -1386,6 +1386,9 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     next->connectivity_userdata = config->connectivity_userdata;
     next->crash_uploaded_callback = config->crash_uploaded_callback;
     next->crash_uploaded_userdata = config->crash_uploaded_userdata;
+#if HONCH_ENABLE_CRASH_CAPTURE
+    next->coredump_source = config->coredump_source;
+#endif
 
     honch_status_t status = HONCH_OK;
     bool lifetime_mutex_initialized = false;
@@ -2127,6 +2130,11 @@ honch_status_t honch_core_tick(honch_client_t *client)
     }
     client->flush_in_progress = false;
 #if HONCH_ENABLE_CRASH_CAPTURE
+    /* Stream one coredump chunk per drive (we are online and past spacing). */
+    bool coredump_progressed = false;
+    (void)honch_coredump_upload_step_locked(client, &coredump_progressed);
+    bool coredump_clear_due = client->coredump_clear_due;
+    client->coredump_clear_due = false;
     bool crash_ack_due = client->crash_ack_due;
     client->crash_ack_due = false;
 #endif
@@ -2134,6 +2142,11 @@ honch_status_t honch_core_tick(honch_client_t *client)
 #if HONCH_ENABLE_CRASH_CAPTURE
     if (crash_ack_due && client->crash_uploaded_callback != NULL) {
         client->crash_uploaded_callback(client->crash_uploaded_userdata);
+    }
+    /* erase-after-ack for the raw coredump, outside the lock (a flash erase). */
+    if (coredump_clear_due && client->coredump_source != NULL &&
+        client->coredump_source->clear != NULL) {
+        client->coredump_source->clear(client->coredump_source->ctx);
     }
 #endif
     honch_client_leave(client);
@@ -2186,6 +2199,11 @@ honch_status_t honch_core_flush(honch_client_t *client)
     client->outbound_upload_attempted = false;
     client->flush_in_progress = false;
 #if HONCH_ENABLE_CRASH_CAPTURE
+    /* Stream one coredump chunk per drive (we are online and past spacing). */
+    bool coredump_progressed = false;
+    (void)honch_coredump_upload_step_locked(client, &coredump_progressed);
+    bool coredump_clear_due = client->coredump_clear_due;
+    client->coredump_clear_due = false;
     bool crash_ack_due = client->crash_ack_due;
     client->crash_ack_due = false;
 #endif
@@ -2193,6 +2211,11 @@ honch_status_t honch_core_flush(honch_client_t *client)
 #if HONCH_ENABLE_CRASH_CAPTURE
     if (crash_ack_due && client->crash_uploaded_callback != NULL) {
         client->crash_uploaded_callback(client->crash_uploaded_userdata);
+    }
+    /* erase-after-ack for the raw coredump, outside the lock (a flash erase). */
+    if (coredump_clear_due && client->coredump_source != NULL &&
+        client->coredump_source->clear != NULL) {
+        client->coredump_source->clear(client->coredump_source->ctx);
     }
 #endif
     honch_client_leave(client);
