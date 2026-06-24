@@ -1245,14 +1245,17 @@ static honch_status_t honch_emit_crash_locked(
         return HONCH_OK;
     }
 
-    /* Generate the crash_id that links this $crash summary to its coredump blob. */
-    if (honch_client_random_hex(client, client->coredump_crash_id) != HONCH_OK) {
-        client->coredump_crash_id[0] = '\0';
+    /* Generate the crash_id that links this $crash summary to its coredump blob,
+     * into a local; commit it to the client only once the $crash is actually
+     * emitted, so a no-op re-report can't clobber the live crash's id. */
+    char crash_id[33];
+    if (honch_client_random_hex(client, crash_id) != HONCH_OK) {
+        crash_id[0] = '\0';
     }
     honch_wire_v2_property_t properties[15];
     size_t property_count = 0u;
     honch_status_t status = honch_build_crash_properties(
-        crash_report, client->coredump_crash_id, properties, &property_count);
+        crash_report, crash_id, properties, &property_count);
     if (status != HONCH_OK) {
         return HONCH_OK;
     }
@@ -1280,6 +1283,7 @@ static honch_status_t honch_emit_crash_locked(
         client->crash_reported = true;
         client->crash_pending_ack = true;
         client->crash_event_sequence = crash_sequence;
+        memcpy(client->coredump_crash_id, crash_id, sizeof(client->coredump_crash_id));
     }
     return status == HONCH_ERROR_INVALID_ARGUMENT || status == HONCH_ERROR_REJECTED ?
         HONCH_OK :
@@ -1552,12 +1556,15 @@ honch_status_t honch_core_report_crash(
         return HONCH_OK;
     }
 
-    if (honch_client_random_hex(client, client->coredump_crash_id) != HONCH_OK) {
-        client->coredump_crash_id[0] = '\0';
+    /* Local crash_id; committed to the client only once the $crash is emitted
+     * (under the lock), so a racing no-op re-report can't clobber the live id. */
+    char crash_id[33];
+    if (honch_client_random_hex(client, crash_id) != HONCH_OK) {
+        crash_id[0] = '\0';
     }
     honch_wire_v2_property_t properties[15];
     size_t property_count = 0u;
-    status = honch_build_crash_properties(report, client->coredump_crash_id, properties, &property_count);
+    status = honch_build_crash_properties(report, crash_id, properties, &property_count);
     if (status != HONCH_OK) {
         honch_client_leave(client);
         return status;
@@ -1604,6 +1611,7 @@ honch_status_t honch_core_report_crash(
         client->crash_reported = true;
         client->crash_pending_ack = true;
         client->crash_event_sequence = crash_sequence;
+        memcpy(client->coredump_crash_id, crash_id, sizeof(client->coredump_crash_id));
     }
     honch_client_unlock(client);
     honch_event_context_free(&event_context);

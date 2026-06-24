@@ -102,7 +102,14 @@ Source types:
 | Value | Source | Description |
 |------:|--------|-------------|
 | 0 | events | Compact event message |
-| 1-7 | reserved | Requires a spec update |
+| 1 | coredump | Opaque binary coredump image (e.g. an ESP-IDF ELF coredump), chunked across frames. The body is raw bytes, **not** a compact event message; the CRC16 still covers the complete unchunked image. Receivers route by `source_type` and store/symbolicate the blob rather than decoding events. |
+| 2-7 | reserved | Requires a spec update |
+
+A `coredump` upload uses the identical multi-frame chunk machinery as events
+(init/continuation/more, `message_id`, offset, final CRC). It is sent **direct
+to `/capture`** over the device's own HTTP transport; the mobile relay rejects
+unknown `source_type`s, so coredump frames are not relayed through companion
+apps until the relay is taught to pass them through.
 
 ### Init, Continuation, And Single Frames
 
