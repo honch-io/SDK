@@ -207,6 +207,15 @@ buffered whole in RAM — and erased via `esp_core_dump_image_erase()` only afte
 Honch acknowledges the final chunk. With these options off (or no `coredump`
 partition), crash capture degrades cleanly to the summary-only `$crash` event.
 
+**Task stack:** the upload runs on whichever task drives `honch_tick()` /
+`honch_flush()`, and the coredump path (`esp_core_dump_image_get` +
+`esp_partition_read` + the HTTPS chunk POST) needs materially more stack than a
+plain event flush. Give that task **at least ~8 KB** of stack when coredump
+upload is enabled; a 4 KB task that flushes events fine will stack-overflow
+mid-coredump-upload (it manifests as a reboot loop — the `$crash` summary still
+delivers, but the raw blob never completes). Sizing is the integrator's
+responsibility; the SDK itself buffers only one chunk.
+
 Error tracking is also build-strip modular. `CONFIG_HONCH_ERROR_TRACKING` and
 `CONFIG_HONCH_CRASH_SYMBOLICATION` default to enabled so the feature is
 available without extra Kconfig work. Disable `CONFIG_HONCH_ERROR_TRACKING` to
