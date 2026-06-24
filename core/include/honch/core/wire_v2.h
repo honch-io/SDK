@@ -15,7 +15,11 @@ extern "C" {
 #define HONCH_WIRE_V2_PROTOCOL_VERSION 2u
 
 typedef enum honch_wire_v2_source_type {
-    HONCH_WIRE_V2_SOURCE_EVENTS = 0u
+    HONCH_WIRE_V2_SOURCE_EVENTS = 0u,
+    /* An opaque, chunked binary payload (e.g. an ESP-IDF coredump image) rather
+     * than a compact event message. The frame/chunk machinery is identical; the
+     * body is raw bytes the receiver routes by source_type. */
+    HONCH_WIRE_V2_SOURCE_COREDUMP = 1u
 } honch_wire_v2_source_type_t;
 
 typedef struct honch_wire_v2_context_extension honch_wire_v2_context_extension_t;

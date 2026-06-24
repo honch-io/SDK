@@ -1279,7 +1279,8 @@ static honch_status_t honch_wire_v2_append_svarint(
 static honch_status_t honch_wire_v2_check_frame_spec(const honch_wire_v2_frame_spec_t *spec)
 {
     if (spec == NULL || spec->payload == NULL ||
-        (spec->source_type != HONCH_WIRE_V2_SOURCE_EVENTS) ||
+        (spec->source_type != HONCH_WIRE_V2_SOURCE_EVENTS &&
+         spec->source_type != HONCH_WIRE_V2_SOURCE_COREDUMP) ||
         spec->payload_size > spec->total_message_length ||
         spec->offset > spec->total_message_length ||
         spec->payload_size > spec->total_message_length - spec->offset) {
@@ -1385,7 +1386,9 @@ honch_status_t honch_wire_v2_chunker_begin(
     size_t max_frame_size)
 {
     if (chunker == NULL || message == NULL || message_size == 0u ||
-        source_type != HONCH_WIRE_V2_SOURCE_EVENTS || max_frame_size < 4u) {
+        (source_type != HONCH_WIRE_V2_SOURCE_EVENTS &&
+         source_type != HONCH_WIRE_V2_SOURCE_COREDUMP) ||
+        max_frame_size < 4u) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 

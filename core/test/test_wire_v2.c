@@ -240,6 +240,49 @@ static void test_chunker_splits_message_into_ascending_v2_frames(void)
     assert(memcmp(third, expected_third, sizeof(expected_third)) == 0);
 }
 
+static void test_chunker_emits_coredump_source_type_with_identical_body(void)
+{
+    /* Identical bytes to the events chunker test; only source_type differs. So
+     * the frame headers gain bit 2 (source_type=coredump=1) and EVERYTHING else
+     * -- message_id, lengths, payload, and the CRC over the raw body -- is byte
+     * identical. This proves the coredump source rides the same chunk machinery. */
+    static const uint8_t message[] = {0x01u, 0x02u, 0x03u, 0x04u, 0x05u};
+    honch_wire_v2_chunker_t chunker = {0};
+    uint8_t first[6] = {0};
+    uint8_t second[6] = {0};
+    uint8_t third[6] = {0};
+    size_t first_size = 0u;
+    size_t second_size = 0u;
+    size_t third_size = 0u;
+    bool complete = true;
+
+    assert(honch_wire_v2_chunker_begin(
+        &chunker,
+        7u,
+        message,
+        sizeof(message),
+        HONCH_WIRE_V2_SOURCE_COREDUMP,
+        sizeof(first)) == HONCH_OK);
+    assert(honch_wire_v2_chunker_next(&chunker, first, sizeof(first), &first_size, &complete) == HONCH_OK);
+    assert(!complete);
+    assert(honch_wire_v2_chunker_next(&chunker, second, sizeof(second), &second_size, &complete) == HONCH_OK);
+    assert(!complete);
+    assert(honch_wire_v2_chunker_next(&chunker, third, sizeof(third), &third_size, &complete) == HONCH_OK);
+    assert(complete);
+
+    /* Events headers were 0x42 / 0x62 / 0x22; coredump (source_type=1) sets bit 2. */
+    static const uint8_t expected_first[] = {0x46u, 0x07u, 0x05u, 0x01u, 0x02u, 0x03u};
+    static const uint8_t expected_second[] = {0x66u, 0x07u, 0x03u, 0x04u};
+    static const uint8_t expected_third[] = {0x26u, 0x07u, 0x04u, 0x05u, 0x04u, 0x93u};
+
+    assert(first_size == sizeof(expected_first));
+    assert(second_size == sizeof(expected_second));
+    assert(third_size == sizeof(expected_third));
+    assert(memcmp(first, expected_first, sizeof(expected_first)) == 0);
+    assert(memcmp(second, expected_second, sizeof(expected_second)) == 0);
+    assert(memcmp(third, expected_third, sizeof(expected_third)) == 0);
+}
+
 static void test_event_batch_encoder_writes_required_context_and_single_event(void)
 {
     uint8_t message[128] = {0};
@@ -1332,6 +1375,7 @@ int main(void)
     test_final_frame_rejects_incomplete_payload();
     test_more_frame_rejects_complete_payload();
     test_chunker_splits_message_into_ascending_v2_frames();
+    test_chunker_emits_coredump_source_type_with_identical_body();
     test_event_batch_encoder_writes_required_context_and_single_event();
     test_event_batch_encoder_matches_single_required_context_fixture_frame();
     test_event_batch_encoder_writes_optional_context_metadata();
