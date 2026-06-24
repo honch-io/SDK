@@ -46,6 +46,21 @@ static void test_crc16_ccitt_false_matches_check_value(void)
     assert(honch_wire_v2_crc16(input, sizeof(input)) == 0x29b1u);
 }
 
+static void test_crc16_incremental_matches_one_shot(void)
+{
+    static const uint8_t data[] = {0x01u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x07u, 0x08u};
+    uint16_t one_shot = honch_wire_v2_crc16(data, sizeof(data));
+
+    /* Folding the same bytes in two pieces yields the same CRC -- this is what lets
+     * a coredump be CRC'd while streamed from flash in chunks. */
+    uint16_t running = honch_wire_v2_crc16_update(HONCH_WIRE_V2_CRC16_INITIAL, data, 3u);
+    running = honch_wire_v2_crc16_update(running, data + 3u, sizeof(data) - 3u);
+    assert(running == one_shot);
+
+    /* An empty update is a no-op. */
+    assert(honch_wire_v2_crc16_update(one_shot, NULL, 0u) == one_shot);
+}
+
 static void test_zigzag_i64_matches_wire_edge_cases(void)
 {
     assert(honch_wire_v2_zigzag_i64(0) == 0u);
@@ -1368,6 +1383,7 @@ static void test_event_batch_encoder_rejects_compact_messages_over_sdk_limit(voi
 int main(void)
 {
     test_crc16_ccitt_false_matches_check_value();
+    test_crc16_incremental_matches_one_shot();
     test_zigzag_i64_matches_wire_edge_cases();
     test_single_final_frame_uses_v2_header_varint_id_and_message_crc();
     test_init_frame_includes_total_length_and_no_crc_when_more_frames_follow();

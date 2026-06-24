@@ -41,9 +41,8 @@ int64_t honch_wire_v2_unzigzag_i64(uint64_t value)
     return (int64_t)((value >> 1u) ^ (uint64_t)-(int64_t)(value & 1u));
 }
 
-uint16_t honch_wire_v2_crc16(const uint8_t *data, size_t data_size)
+uint16_t honch_wire_v2_crc16_update(uint16_t crc, const uint8_t *data, size_t data_size)
 {
-    uint16_t crc = 0xffffu;
     for (size_t i = 0u; i < data_size; i++) {
         crc ^= (uint16_t)data[i] << 8u;
         for (size_t bit = 0u; bit < 8u; bit++) {
@@ -55,6 +54,11 @@ uint16_t honch_wire_v2_crc16(const uint8_t *data, size_t data_size)
         }
     }
     return crc;
+}
+
+uint16_t honch_wire_v2_crc16(const uint8_t *data, size_t data_size)
+{
+    return honch_wire_v2_crc16_update(HONCH_WIRE_V2_CRC16_INITIAL, data, data_size);
 }
 
 honch_status_t honch_wire_v2_encode_uvarint(uint64_t value, uint8_t *out, size_t out_size, size_t *written)
