@@ -333,6 +333,13 @@ honch_status_t honch_queue_flush_one_chunk_locked(honch_client_t *client, bool *
 honch_status_t honch_queue_flush_limited_locked(honch_client_t *client, size_t max_batches);
 honch_status_t honch_queue_flush_locked(honch_client_t *client);
 
+honch_status_t honch_coredump_chunk(
+    const honch_coredump_source_t *source,
+    size_t offset,
+    uint8_t *buffer,
+    size_t buffer_size,
+    size_t *out_size);
+
 honch_status_t honch_client_enter(honch_client_t *client);
 void honch_client_leave(honch_client_t *client);
 honch_status_t honch_client_begin_shutdown(honch_client_t *client);
