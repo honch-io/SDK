@@ -864,7 +864,16 @@ static honch_status_t honch_scheduler_check_outbound_spacing_locked(
         return status;
     }
     client->queued_event_count = pending_count;
-    if (pending_count > 0u) {
+    /* An in-flight coredump is pending outbound work too: without this the
+     * event-count-only gate would fall through once the queue drains and let the
+     * blob post a chunk on EVERY flush, saturating the link. Treating it as
+     * pending defers the flush until the spacing window opens — one chunk per
+     * window — and keeps the scheduler re-driving so the upload still finishes. */
+    bool coredump_pending = false;
+#if HONCH_ENABLE_CRASH_CAPTURE
+    coredump_pending = client->coredump_upload_active;
+#endif
+    if (pending_count > 0u || coredump_pending) {
         client->scheduler_flush_requested = true;
         *delayed = true;
     } else {
@@ -2128,19 +2137,34 @@ honch_status_t honch_core_tick(honch_client_t *client)
     if (status == HONCH_OK) {
         honch_scheduler_refresh_queue_request_locked(client);
     }
-    client->flush_in_progress = false;
 #if HONCH_ENABLE_CRASH_CAPTURE
-    /* Stream one coredump chunk per drive (we are online and past spacing). */
+    /* Stream one coredump chunk per drive (we are online and past spacing). The
+     * flush busy-guard stays HELD across this step (flush_in_progress is cleared
+     * only after it): a transport that re-enters flush/tick during the post gets
+     * HONCH_ERROR_BUSY instead of racing the upload state machine. The step also
+     * drops the state lock around its own network post (see honch_coredump.c). */
     bool coredump_progressed = false;
     (void)honch_coredump_upload_step_locked(client, &coredump_progressed);
+    if (coredump_progressed) {
+        /* A coredump chunk is an outbound attempt: space the next drive by
+         * flush_min_interval_ms so the blob can't saturate the link once the
+         * event queue has drained. */
+        honch_scheduler_record_outbound_attempt(client, honch_client_now_millis(client));
+    }
     bool coredump_clear_due = client->coredump_clear_due;
     client->coredump_clear_due = false;
     bool crash_ack_due = client->crash_ack_due;
     client->crash_ack_due = false;
+    /* Single-erase ordering: when a raw coredump source is wired, its clear() is
+     * the SOLE erase of the on-device crash store (fired after the blob's final
+     * ack). The $crash summary callback must NOT also erase — it is delivered
+     * first and would wipe the partition out from under the in-flight blob. */
+    bool fire_crash_callback = crash_ack_due && client->coredump_source == NULL;
 #endif
+    client->flush_in_progress = false;
     honch_client_unlock(client);
 #if HONCH_ENABLE_CRASH_CAPTURE
-    if (crash_ack_due && client->crash_uploaded_callback != NULL) {
+    if (fire_crash_callback && client->crash_uploaded_callback != NULL) {
         client->crash_uploaded_callback(client->crash_uploaded_userdata);
     }
     /* erase-after-ack for the raw coredump, outside the lock (a flash erase). */
@@ -2197,19 +2221,34 @@ honch_status_t honch_core_flush(honch_client_t *client)
     now = honch_client_now_millis(client);
     honch_scheduler_record_flush_result(client, status, now, client->outbound_upload_attempted);
     client->outbound_upload_attempted = false;
-    client->flush_in_progress = false;
 #if HONCH_ENABLE_CRASH_CAPTURE
-    /* Stream one coredump chunk per drive (we are online and past spacing). */
+    /* Stream one coredump chunk per drive (we are online and past spacing). The
+     * flush busy-guard stays HELD across this step (flush_in_progress is cleared
+     * only after it): a transport that re-enters flush/tick during the post gets
+     * HONCH_ERROR_BUSY instead of racing the upload state machine. The step also
+     * drops the state lock around its own network post (see honch_coredump.c). */
     bool coredump_progressed = false;
     (void)honch_coredump_upload_step_locked(client, &coredump_progressed);
+    if (coredump_progressed) {
+        /* A coredump chunk is an outbound attempt: space the next drive by
+         * flush_min_interval_ms so the blob can't saturate the link once the
+         * event queue has drained. */
+        honch_scheduler_record_outbound_attempt(client, honch_client_now_millis(client));
+    }
     bool coredump_clear_due = client->coredump_clear_due;
     client->coredump_clear_due = false;
     bool crash_ack_due = client->crash_ack_due;
     client->crash_ack_due = false;
+    /* Single-erase ordering: when a raw coredump source is wired, its clear() is
+     * the SOLE erase of the on-device crash store (fired after the blob's final
+     * ack). The $crash summary callback must NOT also erase — it is delivered
+     * first and would wipe the partition out from under the in-flight blob. */
+    bool fire_crash_callback = crash_ack_due && client->coredump_source == NULL;
 #endif
+    client->flush_in_progress = false;
     honch_client_unlock(client);
 #if HONCH_ENABLE_CRASH_CAPTURE
-    if (crash_ack_due && client->crash_uploaded_callback != NULL) {
+    if (fire_crash_callback && client->crash_uploaded_callback != NULL) {
         client->crash_uploaded_callback(client->crash_uploaded_userdata);
     }
     /* erase-after-ack for the raw coredump, outside the lock (a flash erase). */

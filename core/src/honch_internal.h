@@ -245,6 +245,7 @@ struct honch_client {
     /* Raw coredump upload (streamed from flash, never buffered whole). */
     const honch_coredump_source_t *coredump_source;
     bool coredump_upload_active;  /* an upload is in progress */
+    bool coredump_done;           /* terminal latch: upload fully delivered or abandoned; never restart */
     bool coredump_clear_due;      /* erase the source, fired outside the lock after final ack */
     size_t coredump_total;        /* image size captured at upload start */
     size_t coredump_offset;       /* next byte to send (advances only on ack) */
@@ -354,6 +355,7 @@ honch_status_t honch_queue_flush_locked(honch_client_t *client);
 
 honch_status_t honch_coredump_chunk(
     const honch_coredump_source_t *source,
+    size_t total,
     size_t offset,
     uint8_t *buffer,
     size_t buffer_size,

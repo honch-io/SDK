@@ -50,7 +50,10 @@ typedef struct fake_state_storage {
     int coredump_clear_calls;
     int coredump_frame_count;
     int coredump_final_frames;
-    int coredump_read_fail_at;
+    int coredump_read_fail_at;     /* fail the Nth coredump read once, then resume */
+    int coredump_read_calls;
+    int coredump_force_retry;      /* return (HONCH_OK, RETRY) for coredump frames */
+    int nested_flush_on_coredump;  /* trigger the re-entrant flush from a coredump post */
 } fake_state_storage_t;
 
 static honch_core_config_t fake_config(
@@ -634,6 +637,12 @@ static size_t fake_coredump_size(void *ctx)
 static int fake_coredump_read(void *ctx, size_t offset, uint8_t *out, size_t len)
 {
     fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
+    storage->coredump_read_calls++;
+    if (storage->coredump_read_fail_at != 0 &&
+        storage->coredump_read_calls == storage->coredump_read_fail_at) {
+        storage->coredump_read_fail_at = 0; /* fail once, then let the resume read succeed */
+        return -1;
+    }
     if (offset + len > storage->coredump_blob_size) {
         return -1;
     }
@@ -652,6 +661,7 @@ static void test_coredump_streams_and_erases_after_full_delivery(void)
 {
     fake_state_storage_t storage = {.queue_push_status = HONCH_OK, .track_queue_depth = 1};
     storage.coredump_blob_size = sizeof(storage.coredump_blob); /* 1300 bytes */
+    storage.post_chunk_result_from_frame_flags = 1; /* conforming server: CHUNK_STORED then ACCEPTED */
     for (size_t i = 0u; i < sizeof(storage.coredump_blob); i++) {
         storage.coredump_blob[i] = (uint8_t)(i * 7u + 3u);
     }
@@ -694,6 +704,282 @@ static void test_coredump_streams_and_erases_after_full_delivery(void)
     assert(honch_core_flush(client) == HONCH_OK);
     assert(storage.coredump_frame_count == frames_after_clear);
     assert(storage.coredump_clear_calls == 1);
+
+    storage.track_queue_depth = 0;
+    storage.queue_depth = 0u;
+    storage.queued_sequence_count = 0u;
+    client->queued_event_count = 0u;
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+/* Fill a storage's coredump blob with deterministic bytes. */
+static void seed_coredump_blob(fake_state_storage_t *storage)
+{
+    storage->coredump_blob_size = sizeof(storage->coredump_blob); /* 1300 bytes */
+    for (size_t i = 0u; i < sizeof(storage->coredump_blob); i++) {
+        storage->coredump_blob[i] = (uint8_t)(i * 7u + 3u);
+    }
+}
+
+static honch_crash_report_t g_coredump_crash = {
+    .kind = HONCH_CRASH_KIND_PANIC,
+    .severity = HONCH_CRASH_SEVERITY_FATAL,
+    .reset_reason = "panic",
+    .coredump_available = 1
+};
+
+/* Critical regression: completion must be LATCHED in client state, not inferred
+ * from size()==0. With clear() == NULL the image is never erased, so size() stays
+ * non-zero forever — the blob must still stream exactly once and never re-upload. */
+static void test_coredump_completion_latched_when_clear_is_null(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK, .track_queue_depth = 1};
+    seed_coredump_blob(&storage);
+    storage.post_chunk_result_from_frame_flags = 1;
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    config.crash_report = &g_coredump_crash;
+    honch_coredump_source_t source = {
+        .size = fake_coredump_size, .read = fake_coredump_read, .clear = NULL, .ctx = &storage
+    };
+    config.coredump_source = &source;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    client->flush_min_interval_ms = 0u;
+
+    for (int i = 0; i < 20; i++) {
+        storage.now_ms += 1u;
+        assert(honch_core_flush(client) == HONCH_OK);
+    }
+    assert(storage.coredump_frame_count == 3);  /* 512 + 512 + 276, streamed ONCE */
+    assert(storage.coredump_final_frames == 1);
+    assert(storage.coredump_clear_calls == 0);  /* clear was NULL */
+    assert(client->coredump_done);              /* terminal latch set */
+    assert(storage.coredump_blob_size == sizeof(storage.coredump_blob)); /* image still present */
+
+    storage.track_queue_depth = 0;
+    storage.queue_depth = 0u;
+    storage.queued_sequence_count = 0u;
+    client->queued_event_count = 0u;
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+/* Critical regression: when a raw coredump source is wired, the $crash summary's
+ * erase-after-ack callback must be SUPPRESSED — it is delivered first and would
+ * wipe the partition out from under the in-flight blob (double-erase). The blob's
+ * clear() is the single erase, fired only after the blob's final frame is acked. */
+static void test_coredump_source_suppresses_summary_erase(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK, .track_queue_depth = 1};
+    seed_coredump_blob(&storage);
+    storage.post_chunk_result_from_frame_flags = 1;
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    config.crash_report = &g_coredump_crash;
+    g_crash_uploaded_calls = 0;
+    config.crash_uploaded_callback = count_crash_uploaded; /* BOTH erase paths wired */
+    honch_coredump_source_t source = {
+        .size = fake_coredump_size, .read = fake_coredump_read, .clear = fake_coredump_clear, .ctx = &storage
+    };
+    config.coredump_source = &source;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    client->flush_min_interval_ms = 0u;
+
+    for (int i = 0; i < 12 && storage.coredump_clear_calls == 0; i++) {
+        storage.now_ms += 1u;
+        assert(honch_core_flush(client) == HONCH_OK);
+    }
+    /* The blob completed (final frame sent) — proof it was NOT wiped mid-upload. */
+    assert(storage.coredump_final_frames == 1);
+    assert(storage.coredump_clear_calls == 1);  /* clear() is the sole erase */
+    assert(g_crash_uploaded_calls == 0);         /* summary callback suppressed */
+
+    storage.track_queue_depth = 0;
+    storage.queue_depth = 0u;
+    storage.queued_sequence_count = 0u;
+    client->queued_event_count = 0u;
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+/* Major regression: a (HONCH_OK, RETRY) post must NOT advance offset/CRC — the
+ * commit decision keys on the transport RESULT, not just status. The chunk is
+ * re-sent and the running CRC is never folded over bytes Capture did not store. */
+static void test_coredump_retry_result_does_not_advance(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK, .track_queue_depth = 1};
+    seed_coredump_blob(&storage);
+    storage.post_chunk_result_from_frame_flags = 1;
+    storage.coredump_force_retry = 1; /* coredump frames return (HONCH_OK, RETRY) */
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    config.crash_report = &g_coredump_crash;
+    honch_coredump_source_t source = {
+        .size = fake_coredump_size, .read = fake_coredump_read, .clear = fake_coredump_clear, .ctx = &storage
+    };
+    config.coredump_source = &source;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    client->flush_min_interval_ms = 0u;
+
+    for (int i = 0; i < 5; i++) {
+        storage.now_ms += 1u;
+        assert(honch_core_flush(client) == HONCH_OK);
+    }
+    assert(storage.coredump_frame_count >= 2);   /* same chunk re-sent each drive */
+    assert(storage.coredump_final_frames == 0);  /* never completes under RETRY */
+    assert(client->coredump_offset == 0u);       /* offset frozen */
+    assert(client->coredump_committed_crc == HONCH_WIRE_V2_CRC16_INITIAL); /* CRC frozen */
+    assert(!client->coredump_done);
+    assert(storage.coredump_clear_calls == 0);
+
+    /* Once the transport accepts, the upload completes cleanly and erases. */
+    storage.coredump_force_retry = 0;
+    for (int i = 0; i < 12 && storage.coredump_clear_calls == 0; i++) {
+        storage.now_ms += 1u;
+        assert(honch_core_flush(client) == HONCH_OK);
+    }
+    assert(storage.coredump_final_frames == 1);
+    assert(storage.coredump_clear_calls == 1);
+
+    storage.track_queue_depth = 0;
+    storage.queue_depth = 0u;
+    storage.queued_sequence_count = 0u;
+    client->queued_event_count = 0u;
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+/* Minor regression: a transient read error must RESUME at the committed offset
+ * under the same (message_id, total), not restart the whole stream from zero. */
+static void test_coredump_resumes_after_transient_read_error(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK, .track_queue_depth = 1};
+    seed_coredump_blob(&storage);
+    storage.post_chunk_result_from_frame_flags = 1;
+    storage.coredump_read_fail_at = 2; /* fail the 2nd read once, then recover */
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    config.crash_report = &g_coredump_crash;
+    honch_coredump_source_t source = {
+        .size = fake_coredump_size, .read = fake_coredump_read, .clear = fake_coredump_clear, .ctx = &storage
+    };
+    config.coredump_source = &source;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    client->flush_min_interval_ms = 0u;
+
+    for (int i = 0; i < 12 && storage.coredump_clear_calls == 0; i++) {
+        storage.now_ms += 1u;
+        assert(honch_core_flush(client) == HONCH_OK);
+    }
+    /* The mid-stream read failure cost a drive but did NOT restart from offset 0:
+     * exactly 3 frames are sent (no duplicate init frame) and the CRC is correct. */
+    assert(storage.coredump_frame_count == 3);
+    assert(storage.coredump_final_frames == 1);
+    assert(storage.coredump_clear_calls == 1);
+
+    storage.track_queue_depth = 0;
+    storage.queue_depth = 0u;
+    storage.queued_sequence_count = 0u;
+    client->queued_event_count = 0u;
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+/* Major regression: a transport that re-enters flush from inside the coredump
+ * post must get HONCH_ERROR_BUSY (the flush busy-guard is held across the step),
+ * not deadlock on the non-recursive state mutex (the lock is released around the
+ * post, so the re-entrant call can acquire it and observe flush_in_progress). */
+static void test_nested_flush_during_coredump_post_returns_busy(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK, .track_queue_depth = 1, .nested_flush_status = HONCH_OK
+    };
+    seed_coredump_blob(&storage);
+    storage.post_chunk_result_from_frame_flags = 1;
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    config.crash_report = &g_coredump_crash;
+    honch_coredump_source_t source = {
+        .size = fake_coredump_size, .read = fake_coredump_read, .clear = fake_coredump_clear, .ctx = &storage
+    };
+    config.coredump_source = &source;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    client->flush_min_interval_ms = 0u;
+    storage.nested_flush_on_coredump = 1;
+    storage.nested_flush_client = client;
+
+    (void)honch_core_flush(client); /* must return, not hang */
+    assert(storage.nested_flush_attempts == 1);
+    assert(storage.nested_flush_status == HONCH_ERROR_BUSY);
+    storage.nested_flush_client = NULL;
+
+    storage.track_queue_depth = 0;
+    storage.queue_depth = 0u;
+    storage.queued_sequence_count = 0u;
+    client->queued_event_count = 0u;
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+/* Major regression: coredump chunks must respect outbound spacing — once events
+ * drain, at most one chunk posts per flush_min_interval_ms window (it can't
+ * saturate the link). */
+static void test_coredump_respects_outbound_spacing(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK, .track_queue_depth = 1, .force_now_ms = 1
+    };
+    seed_coredump_blob(&storage);
+    storage.post_chunk_result_from_frame_flags = 1;
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    config.crash_report = &g_coredump_crash;
+    honch_coredump_source_t source = {
+        .size = fake_coredump_size, .read = fake_coredump_read, .clear = fake_coredump_clear, .ctx = &storage
+    };
+    config.coredump_source = &source;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    client->flush_min_interval_ms = 5000u;
+    storage.now_ms = 1000u;
+
+    /* Flush 1: delivers events + the first coredump chunk, opening the window. */
+    assert(honch_core_flush(client) == HONCH_OK);
+    int after_first = storage.coredump_frame_count;
+    assert(after_first >= 1);
+
+    /* Flush 2 inside the same window is rate-limited — no extra coredump chunk. */
+    assert(honch_core_flush(client) == HONCH_ERROR_RATE_LIMITED);
+    assert(storage.coredump_frame_count == after_first);
+
+    /* Past the window: exactly one more chunk. */
+    storage.now_ms += 5000u;
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(storage.coredump_frame_count == after_first + 1);
 
     storage.track_queue_depth = 0;
     storage.queue_depth = 0u;
@@ -949,20 +1235,32 @@ static honch_status_t fake_post_chunk(
     (void)body;
     (void)body_size;
     fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
+    /* A coredump frame: header bits 2-4 carry source_type (1 = coredump),
+     * bit 6 (0x40) is the `more` flag — a final frame has it clear. */
+    bool is_coredump = body != NULL && body_size > 0u && ((body[0] >> 2u) & 0x7u) == 1u;
     if (storage != NULL) {
         storage->post_chunk_calls++;
-        /* Count coredump frames: header bits 2-4 carry source_type (1 = coredump),
-         * bit 6 (0x40) is the `more` flag — a final frame has it clear. */
-        if (body != NULL && body_size > 0u && ((body[0] >> 2u) & 0x7u) == 1u) {
+        if (is_coredump) {
             storage->coredump_frame_count++;
             if ((body[0] & 0x40u) == 0u) {
                 storage->coredump_final_frames++;
             }
         }
     }
-    if (storage != NULL && storage->nested_flush_client != NULL && storage->nested_flush_attempts == 0) {
+    /* Re-entrancy probe: fire a nested flush from within the post. By default it
+     * fires on the first post (an event frame); nested_flush_on_coredump targets
+     * a coredump post specifically (the lock is released around it, so the nested
+     * call must still hit the flush_in_progress busy-guard, not deadlock). */
+    if (storage != NULL && storage->nested_flush_client != NULL && storage->nested_flush_attempts == 0 &&
+        (!storage->nested_flush_on_coredump || is_coredump)) {
         storage->nested_flush_attempts++;
         storage->nested_flush_status = honch_core_flush(storage->nested_flush_client);
+    }
+    if (storage != NULL && is_coredump && storage->coredump_force_retry) {
+        /* Non-conforming (HONCH_OK, RETRY) on a coredump frame: the uploader must
+         * NOT advance offset/CRC and must re-send the same chunk. */
+        *result = HONCH_TRANSPORT_RETRY;
+        return HONCH_OK;
     }
     if (storage != NULL && storage->post_chunk_result_from_frame_flags) {
         *result = body_size > 0u && (body[0] & 0x40u) != 0u ?
@@ -2012,6 +2310,12 @@ int main(void)
     test_crash_uploaded_callback_fires_after_delivery();
     test_crash_uploaded_callback_waits_for_crash_event_delivery();
     test_coredump_streams_and_erases_after_full_delivery();
+    test_coredump_completion_latched_when_clear_is_null();
+    test_coredump_source_suppresses_summary_erase();
+    test_coredump_retry_result_does_not_advance();
+    test_coredump_resumes_after_transient_read_error();
+    test_nested_flush_during_coredump_post_returns_busy();
+    test_coredump_respects_outbound_spacing();
 #endif
 #if HONCH_ENABLE_LOG_CAPTURE
     test_log_error_emits_error_event();
