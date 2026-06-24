@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 
+#include "honch/core/coredump.h"
 #include "honch/core/platform.h"
 #include "honch/core/status.h"
 #include "honch/core/storage.h"
@@ -124,9 +125,22 @@ typedef struct honch_core_config {
      * reserved $crash event during init. NULL means "no crash to report". */
     const honch_crash_report_t *crash_report;
     /* Invoked once after a reported $crash has been delivered to Capture, so the
-     * port can clear the on-device crash source (erase-after-ack). Optional. */
+     * port can clear the on-device crash source (erase-after-ack). Optional.
+     * IMPORTANT single-erase rule: this callback and coredump_source->clear must
+     * NOT both erase the same backing store. When coredump_source is set the core
+     * SUPPRESSES this callback entirely and lets the blob's clear() perform the
+     * one and only erase (after the blob's final ack) — the summary is delivered
+     * first, so erasing here would wipe the store out from under the in-flight
+     * coredump. Use this callback only when no coredump_source is wired. */
     void (*crash_uploaded_callback)(void *userdata);
     void *crash_uploaded_userdata;
+    /* Optional: a view over the device's raw coredump image (e.g. the ESP-IDF
+     * coredump flash partition). When set and non-empty, the SDK streams the
+     * image to Capture as a `coredump` source after a crash, then clears it via
+     * the source's clear() on full delivery (or on permanent rejection). This
+     * clear() is the SOLE erase of the crash store; see crash_uploaded_callback.
+     * NULL = no raw coredump upload. */
+    const honch_coredump_source_t *coredump_source;
 } honch_core_config_t;
 
 #ifdef __cplusplus

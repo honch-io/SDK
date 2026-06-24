@@ -41,9 +41,8 @@ int64_t honch_wire_v2_unzigzag_i64(uint64_t value)
     return (int64_t)((value >> 1u) ^ (uint64_t)-(int64_t)(value & 1u));
 }
 
-uint16_t honch_wire_v2_crc16(const uint8_t *data, size_t data_size)
+uint16_t honch_wire_v2_crc16_update(uint16_t crc, const uint8_t *data, size_t data_size)
 {
-    uint16_t crc = 0xffffu;
     for (size_t i = 0u; i < data_size; i++) {
         crc ^= (uint16_t)data[i] << 8u;
         for (size_t bit = 0u; bit < 8u; bit++) {
@@ -55,6 +54,11 @@ uint16_t honch_wire_v2_crc16(const uint8_t *data, size_t data_size)
         }
     }
     return crc;
+}
+
+uint16_t honch_wire_v2_crc16(const uint8_t *data, size_t data_size)
+{
+    return honch_wire_v2_crc16_update(HONCH_WIRE_V2_CRC16_INITIAL, data, data_size);
 }
 
 honch_status_t honch_wire_v2_encode_uvarint(uint64_t value, uint8_t *out, size_t out_size, size_t *written)
@@ -1279,7 +1283,8 @@ static honch_status_t honch_wire_v2_append_svarint(
 static honch_status_t honch_wire_v2_check_frame_spec(const honch_wire_v2_frame_spec_t *spec)
 {
     if (spec == NULL || spec->payload == NULL ||
-        (spec->source_type != HONCH_WIRE_V2_SOURCE_EVENTS) ||
+        (spec->source_type != HONCH_WIRE_V2_SOURCE_EVENTS &&
+         spec->source_type != HONCH_WIRE_V2_SOURCE_COREDUMP) ||
         spec->payload_size > spec->total_message_length ||
         spec->offset > spec->total_message_length ||
         spec->payload_size > spec->total_message_length - spec->offset) {
@@ -1290,7 +1295,9 @@ static honch_status_t honch_wire_v2_check_frame_spec(const honch_wire_v2_frame_s
         if (spec->payload_size != spec->total_message_length - spec->offset) {
             return HONCH_ERROR_INVALID_ARGUMENT;
         }
-        if (spec->crc_message != NULL) {
+        if (spec->has_precomputed_crc) {
+            /* CRC supplied directly (streamed payload); no in-RAM whole message. */
+        } else if (spec->crc_message != NULL) {
             if (spec->crc_message_size != spec->total_message_length) {
                 return HONCH_ERROR_INVALID_ARGUMENT;
             }
@@ -1365,9 +1372,14 @@ honch_status_t honch_wire_v2_encode_frame(
     offset += spec->payload_size;
 
     if (!spec->more) {
-        const uint8_t *crc_data = spec->crc_message == NULL ? spec->payload : spec->crc_message;
-        size_t crc_size = spec->crc_message == NULL ? spec->payload_size : spec->crc_message_size;
-        uint16_t crc = honch_wire_v2_crc16(crc_data, crc_size);
+        uint16_t crc;
+        if (spec->has_precomputed_crc) {
+            crc = spec->precomputed_crc;
+        } else {
+            const uint8_t *crc_data = spec->crc_message == NULL ? spec->payload : spec->crc_message;
+            size_t crc_size = spec->crc_message == NULL ? spec->payload_size : spec->crc_message_size;
+            crc = honch_wire_v2_crc16(crc_data, crc_size);
+        }
         out[offset++] = (uint8_t)crc;
         out[offset++] = (uint8_t)(crc >> 8u);
     }
@@ -1385,7 +1397,9 @@ honch_status_t honch_wire_v2_chunker_begin(
     size_t max_frame_size)
 {
     if (chunker == NULL || message == NULL || message_size == 0u ||
-        source_type != HONCH_WIRE_V2_SOURCE_EVENTS || max_frame_size < 4u) {
+        (source_type != HONCH_WIRE_V2_SOURCE_EVENTS &&
+         source_type != HONCH_WIRE_V2_SOURCE_COREDUMP) ||
+        max_frame_size < 4u) {
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 

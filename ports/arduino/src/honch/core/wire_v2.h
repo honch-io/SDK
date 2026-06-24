@@ -15,7 +15,11 @@ extern "C" {
 #define HONCH_WIRE_V2_PROTOCOL_VERSION 2u
 
 typedef enum honch_wire_v2_source_type {
-    HONCH_WIRE_V2_SOURCE_EVENTS = 0u
+    HONCH_WIRE_V2_SOURCE_EVENTS = 0u,
+    /* An opaque, chunked binary payload (e.g. an ESP-IDF coredump image) rather
+     * than a compact event message. The frame/chunk machinery is identical; the
+     * body is raw bytes the receiver routes by source_type. */
+    HONCH_WIRE_V2_SOURCE_COREDUMP = 1u
 } honch_wire_v2_source_type_t;
 
 typedef struct honch_wire_v2_context_extension honch_wire_v2_context_extension_t;
@@ -28,6 +32,12 @@ typedef struct honch_wire_v2_frame_spec {
     size_t payload_size;
     const uint8_t *crc_message;
     size_t crc_message_size;
+    /* For a final frame whose complete message is not held in RAM (a payload
+     * streamed from flash, e.g. a coredump): supply the CRC directly instead of
+     * having the encoder compute it over crc_message. Ignored unless `more` is
+     * false. Leave zeroed for normal in-RAM messages. */
+    bool has_precomputed_crc;
+    uint16_t precomputed_crc;
     honch_wire_v2_source_type_t source_type;
     bool continuation;
     bool more;
@@ -251,7 +261,13 @@ static inline honch_wire_v2_map_pair_t honch_pair(const char *key, honch_wire_v2
 }
 
 uint64_t honch_wire_v2_zigzag_i64(int64_t value);
+/* CRC-16/CCITT-FALSE seed. Start an incremental CRC at this value. */
+#define HONCH_WIRE_V2_CRC16_INITIAL 0xffffu
 uint16_t honch_wire_v2_crc16(const uint8_t *data, size_t data_size);
+/* Incremental CRC-16/CCITT-FALSE: fold more bytes into a running `crc` (seed with
+ * HONCH_WIRE_V2_CRC16_INITIAL). Lets a streamed payload (e.g. a coredump read from
+ * flash in chunks) be CRC'd without holding the whole message in RAM. */
+uint16_t honch_wire_v2_crc16_update(uint16_t crc, const uint8_t *data, size_t data_size);
 honch_status_t honch_wire_v2_encode_uvarint(uint64_t value, uint8_t *out, size_t out_size, size_t *written);
 honch_status_t honch_wire_v2_encode_svarint(int64_t value, uint8_t *out, size_t out_size, size_t *written);
 int64_t honch_wire_v2_unzigzag_i64(uint64_t value);
