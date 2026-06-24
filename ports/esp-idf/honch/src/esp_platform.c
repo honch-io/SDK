@@ -19,9 +19,13 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
+/* Coredump-to-flash is the only requirement: ESP_COREDUMP_ENABLE auto-selects
+ * the ELF format (CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF is select-only and is NOT
+ * emitted to sdkconfig.h in IDF v6, so gating on it silently disabled the whole
+ * path). esp_core_dump_get_summary() returns non-OK for a non-ELF image and is
+ * handled gracefully below, so ENABLE_TO_FLASH alone is the correct gate. */
 #if HONCH_ENABLE_CRASH_SYMBOLICATION && \
-    defined(CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH) && CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH && \
-    defined(CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF) && CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF
+    defined(CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH) && CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH
 #define HONCH_ESP_HAS_COREDUMP_SUMMARY 1
 #include "esp_core_dump.h"
 #endif

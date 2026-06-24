@@ -16,4 +16,10 @@ config HONCH_CRASH_SYMBOLICATION
         coredump summaries so Honch can resolve function and source lines after
         matching symbols are uploaded.
 
+        When the ELF coredump-to-flash options are also enabled
+        (CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH + CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF)
+        and a "coredump" partition exists, the SDK additionally streams the raw
+        coredump image off flash to Honch after a crash and erases it once Honch
+        acknowledges the upload. See the README "Crash coredump upload" section.
+
 endmenu

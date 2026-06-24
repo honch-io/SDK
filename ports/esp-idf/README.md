@@ -162,21 +162,50 @@ summary metadata is enabled, and ESP-IDF exposes a summary for the previous
 crash, the `$crash` event may also include `summary_version`,
 `firmware_build_id`, raw `fault_pc`, raw `backtrace`, `task_name`,
 `exception_cause` (the panic reason), and `coredump_available`.
-Honch does not save coredumps, collect RAM/register/task snapshots, upload
-symbol files, send source code/source paths, or replace ESP-IDF crash forensics
-tooling.
+
+When the full coredump options are enabled (see "Crash coredump upload" below),
+the SDK **also streams the raw ELF coredump image** off flash to Honch after the
+`$crash`, linked to it by `crash_id`, so the backend can symbolicate the full
+crash. The SDK still does not collect live RAM/register snapshots, upload symbol
+files, or send source code/paths — it uploads the coredump ESP-IDF already wrote.
 
 The `$crash` event is best-effort and **erase-after-ack**: it is enqueued during
 `honch_init()` (init still completes if the local queue/storage is full so
-diagnostics never block startup), and once Capture confirms delivery the SDK
-calls `esp_core_dump_image_erase()` so the same crash is not re-reported on the
-next boot. This requires a `coredump` partition plus
-`CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH` and the ELF coredump format; if the
-partition is missing the SDK logs a one-time warning and skips crash capture.
+diagnostics never block startup). The on-flash coredump is erased exactly once,
+**after** its bytes are fully acknowledged — so a crash is never re-reported and
+the partition is never wiped out from under an in-flight upload. (When the raw
+upload is enabled the post-upload erase is the single source of truth; the
+summary-only `esp_core_dump_image_erase()` fallback is used only when no raw
+coredump upload is configured.)
 
-`firmware_build_id` is intended to let backend symbolication match raw crash
-addresses to the exact firmware image. Customers should keep symbol upload and
-address symbolication as a server-side opt-in workflow.
+`firmware_build_id` lets backend symbolication match the uploaded coredump to the
+exact firmware image.
+
+### Crash coredump upload
+
+To upload the full raw coredump (not just the summary), the firmware must let
+ESP-IDF write an ELF coredump to a flash partition; the SDK streams it from
+there. Enable, in `sdkconfig`/`sdkconfig.defaults`:
+
+```ini
+CONFIG_HONCH_CRASH_SYMBOLICATION=y          # default y
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
+CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
+CONFIG_ESP_COREDUMP_CHECKSUM_CRC32=y        # or _SHA256
+```
+
+and add a `coredump` partition to your partition table CSV:
+
+```csv
+# Name,   Type, SubType,  Offset,  Size
+coredump, data, coredump, ,        64K
+```
+
+Size the partition for your worst-case dump (ESP-IDF's default is 64 KB). The
+image is streamed in bounded 512-byte chunks straight from flash — it is never
+buffered whole in RAM — and erased via `esp_core_dump_image_erase()` only after
+Honch acknowledges the final chunk. With these options off (or no `coredump`
+partition), crash capture degrades cleanly to the summary-only `$crash` event.
 
 Error tracking is also build-strip modular. `CONFIG_HONCH_ERROR_TRACKING` and
 `CONFIG_HONCH_CRASH_SYMBOLICATION` default to enabled so the feature is

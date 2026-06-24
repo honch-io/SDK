@@ -26,6 +26,7 @@ list(TRANSFORM HONCH_ESP_PORT_SOURCES PREPEND "${HONCH_ESP_COMPONENT_DIR}/")
 set(HONCH_CORE_SOURCES
     "core/src/honch_capture_transport.c"
     "core/src/honch_core.c"
+    "core/src/honch_coredump.c"
     "core/src/honch_event_record.c"
     "core/src/honch_lifecycle.c"
     "core/src/honch_queue_policy.c"
@@ -42,11 +43,16 @@ set(HONCH_ESP_REQUIRES
     esp_timer
     efuse
     freertos
+    # espcoredump (image/summary API) + esp_partition (stream the raw coredump
+    # image off the coredump partition). These MUST be unconditional: component
+    # requirements are resolved in IDF's early-expansion pass before sdkconfig is
+    # available, so gating them on CONFIG_HONCH_CRASH_SYMBOLICATION silently drops
+    # the dependency and the build fails once the coredump code is compiled in.
+    # With crash capture disabled at build time both components contribute
+    # essentially nothing to the image.
+    espcoredump
+    esp_partition
 )
-
-if(CONFIG_HONCH_CRASH_SYMBOLICATION)
-    list(APPEND HONCH_ESP_REQUIRES espcoredump)
-endif()
 
 idf_component_register(
     SRCS

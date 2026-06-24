@@ -37,18 +37,105 @@ static bool s_fault_snapshot_consumed = false;
 /* The erase-after-ack callback is only meaningful (and esp_core_dump.h is only
  * on the include path) when a flash ELF coredump is actually configured — the
  * same condition esp_platform.c uses to read the crash summary. */
+/* Gate on coredump-to-flash only; ESP_COREDUMP_ENABLE auto-selects the ELF
+ * format and CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF is select-only (absent from
+ * sdkconfig.h in IDF v6), so requiring it silently compiled out crash capture.
+ * See esp_platform.c for the matching summary gate. */
 #if HONCH_ENABLE_CRASH_SYMBOLICATION && \
-    defined(CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH) && CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH && \
-    defined(CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF) && CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF
+    defined(CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH) && CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH
 #define HONCH_ESP_COMPAT_HAS_COREDUMP 1
 #include "esp_core_dump.h"
+#include "esp_partition.h"
 
 /* Erase-after-ack: invoked once the recovered $crash has reached Capture, so the
- * stored coredump is not re-reported on the next boot. */
+ * stored coredump is not re-reported on the next boot. NOTE: when a
+ * coredump_source is also wired (it always is in this build), the core SUPPRESSES
+ * this callback and lets the source's clear() be the single erase — see
+ * honch_esp_coredump_clear and config.h. It is kept wired as the fallback for a
+ * build that streams no raw blob. */
 static void honch_esp_crash_uploaded(void *userdata)
 {
     (void)userdata;
     (void)esp_core_dump_image_erase();
+}
+
+/* Flash-backed view over the ESP-IDF coredump partition for the SDK's streaming
+ * uploader. The image bounds come from esp_core_dump_image_get() (resolved once
+ * and cached); bytes are read straight from the coredump data partition so the
+ * multi-KB ELF is never materialized in RAM. clear() erases the partition after
+ * the blob's final ack (erase-after-ack). */
+typedef struct honch_esp_coredump_ctx {
+    const esp_partition_t *part; /* the coredump data partition */
+    size_t image_offset;         /* image start, relative to the partition */
+    size_t image_size;           /* bytes of the stored coredump image */
+    bool resolved;               /* image_get has been attempted */
+    bool available;              /* a non-empty image is present */
+} honch_esp_coredump_ctx_t;
+
+static honch_esp_coredump_ctx_t s_coredump_ctx;
+static honch_coredump_source_t s_coredump_source;
+
+static bool honch_esp_coredump_resolve(honch_esp_coredump_ctx_t *ctx)
+{
+    if (ctx->resolved) {
+        return ctx->available;
+    }
+    ctx->resolved = true;
+    ctx->available = false;
+
+    size_t addr = 0u;
+    size_t size = 0u;
+    if (esp_core_dump_image_get(&addr, &size) != ESP_OK || size == 0u) {
+        return false;
+    }
+    const esp_partition_t *part = esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_COREDUMP, NULL);
+    if (part == NULL || addr < (size_t)part->address) {
+        return false;
+    }
+    size_t rel = addr - (size_t)part->address;
+    if (rel > part->size || size > part->size - rel) {
+        return false; /* image_get disagrees with the partition bounds */
+    }
+    ctx->part = part;
+    ctx->image_offset = rel;
+    ctx->image_size = size;
+    ctx->available = true;
+    return true;
+}
+
+static size_t honch_esp_coredump_size(void *ctx)
+{
+    honch_esp_coredump_ctx_t *c = (honch_esp_coredump_ctx_t *)ctx;
+    return honch_esp_coredump_resolve(c) ? c->image_size : 0u;
+}
+
+static int honch_esp_coredump_read(void *ctx, size_t offset, uint8_t *out, size_t len)
+{
+    honch_esp_coredump_ctx_t *c = (honch_esp_coredump_ctx_t *)ctx;
+    if (!honch_esp_coredump_resolve(c)) {
+        return -1;
+    }
+    /* Overflow-safe bounds check against the snapshot size. */
+    if (offset > c->image_size || len > c->image_size - offset) {
+        return -1;
+    }
+    if (esp_partition_read(c->part, c->image_offset + offset, out, len) != ESP_OK) {
+        return -1;
+    }
+    return (int)len;
+}
+
+static void honch_esp_coredump_clear(void *ctx)
+{
+    honch_esp_coredump_ctx_t *c = (honch_esp_coredump_ctx_t *)ctx;
+    (void)esp_core_dump_image_erase();
+    /* Re-resolve next boot/crash; the image is now gone. */
+    c->resolved = false;
+    c->available = false;
+    c->part = NULL;
+    c->image_offset = 0u;
+    c->image_size = 0u;
 }
 #endif
 #endif
@@ -493,6 +580,18 @@ honch_err_t honch_init(const honch_config_t *config)
     core_config.crash_report = should_emit_fault_snapshot ? &crash_report : NULL;
 #if HONCH_ESP_COMPAT_HAS_COREDUMP
     core_config.crash_uploaded_callback = honch_esp_crash_uploaded;
+    /* Stream the raw ELF coredump from flash to Capture after the $crash. The
+     * core reads this source's size() once, streams it in bounded chunks, and
+     * calls clear() (the single erase) only after the blob's final ack. Only
+     * armed when a crash is actually being reported this boot. */
+    if (core_config.crash_report != NULL) {
+        s_coredump_ctx = (honch_esp_coredump_ctx_t){0};
+        s_coredump_source.size = honch_esp_coredump_size;
+        s_coredump_source.read = honch_esp_coredump_read;
+        s_coredump_source.clear = honch_esp_coredump_clear;
+        s_coredump_source.ctx = &s_coredump_ctx;
+        core_config.coredump_source = &s_coredump_source;
+    }
 #endif
 #else
     core_config.crash_report = NULL;
