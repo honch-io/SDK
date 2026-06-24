@@ -842,6 +842,15 @@ static bool honch_scheduler_due_locked(honch_client_t *client, uint64_t now)
     if (client->scheduler_flush_requested) {
         return true;
     }
+#if HONCH_ENABLE_CRASH_CAPTURE
+    /* An in-flight coredump is outbound work even with an empty event queue: the
+     * tick() driver must keep firing so the blob streams at the outbound-spacing
+     * cadence, not once per (much longer) flush_interval. Placed after the pause
+     * and retry-backoff gates so a paused/backing-off client still defers. */
+    if (client->coredump_upload_active) {
+        return true;
+    }
+#endif
     return client->flush_interval_seconds > 0u && now >= client->next_interval_flush_ms;
 }
 
@@ -906,7 +915,14 @@ static honch_status_t honch_scheduler_check_connectivity_locked(honch_client_t *
         return status;
     }
     client->queued_event_count = pending_count;
-    if (pending_count == 0u) {
+    /* A pending coredump keeps the drive alive even with an empty event queue —
+     * otherwise this early-return would clear scheduler_flush_requested and the
+     * blob would only advance on the flush_interval timer (the F5 tick() stall). */
+    bool coredump_pending = false;
+#if HONCH_ENABLE_CRASH_CAPTURE
+    coredump_pending = client->coredump_upload_active;
+#endif
+    if (pending_count == 0u && !coredump_pending) {
         client->scheduler_flush_requested = false;
         return HONCH_OK;
     }

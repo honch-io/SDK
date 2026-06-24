@@ -987,6 +987,65 @@ static void test_coredump_respects_outbound_spacing(void)
     client->queued_event_count = 0u;
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
+
+/* Major regression (re-review F5): tick(), not flush(), is the production driver
+ * on ESP/Arduino. A coredump must advance at the outbound-spacing cadence on
+ * tick() even with a drained event queue. Before the scheduler's due-gate and
+ * connectivity-gate learned about an in-flight coredump, tick() only re-drove on
+ * the much longer flush_interval (default 120s/chunk), so a multi-KB blob took
+ * hours and — with RAM-only offset/CRC — never finished on a device that reboots.
+ * Here a 3-frame blob must complete in a handful of 1s spacing windows, NOT the
+ * 3 * 120s = 360 ticks the flush_interval timer alone would need. */
+static void test_coredump_tick_advances_at_spacing_cadence(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK, .track_queue_depth = 1, .force_now_ms = 1
+    };
+    seed_coredump_blob(&storage);
+    storage.post_chunk_result_from_frame_flags = 1;
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    config.crash_report = &g_coredump_crash;
+    honch_coredump_source_t source = {
+        .size = fake_coredump_size, .read = fake_coredump_read, .clear = fake_coredump_clear, .ctx = &storage
+    };
+    config.coredump_source = &source;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(client->flush_interval_seconds == 120u); /* the slow timer that used to gate the blob */
+    client->flush_min_interval_ms = 1000u;          /* 1s spacing window */
+    storage.now_ms = 1000u;
+
+    /* One flush delivers the queued events and posts the first coredump chunk
+     * (upload now in flight, event queue drained) — the device then idles on
+     * tick() alone. */
+    assert(honch_core_flush(client) == HONCH_OK);
+    assert(storage.coredump_frame_count >= 1);
+    assert(storage.coredump_clear_calls == 0);
+
+    /* Drive ONLY via tick(), advancing 1s per tick. Total elapsed stays far below
+     * the 120000ms flush_interval, so if the blob finishes it can ONLY be the
+     * coredump-due gate driving it — not the interval timer. */
+    int ticks = 0;
+    for (; ticks < 20 && storage.coredump_clear_calls == 0; ticks++) {
+        storage.now_ms += 1000u; /* one spacing window per tick */
+        (void)honch_core_tick(client);
+    }
+    assert(storage.coredump_final_frames == 1);
+    assert(storage.coredump_clear_calls == 1);
+    assert(storage.coredump_frame_count == 3);
+    assert(ticks < 10); /* a few 1s windows, not the 120s timer (which never fired here) */
+
+    storage.track_queue_depth = 0;
+    storage.queue_depth = 0u;
+    storage.queued_sequence_count = 0u;
+    client->queued_event_count = 0u;
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
 #endif /* HONCH_ENABLE_CRASH_CAPTURE */
 
 #if HONCH_ENABLE_LOG_CAPTURE
@@ -2316,6 +2375,7 @@ int main(void)
     test_coredump_resumes_after_transient_read_error();
     test_nested_flush_during_coredump_post_returns_busy();
     test_coredump_respects_outbound_spacing();
+    test_coredump_tick_advances_at_spacing_cadence();
 #endif
 #if HONCH_ENABLE_LOG_CAPTURE
     test_log_error_emits_error_event();
