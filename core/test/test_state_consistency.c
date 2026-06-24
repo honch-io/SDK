@@ -400,6 +400,11 @@ static void test_abnormal_reset_emits_crash_event(void)
     assert(coredump != NULL);
     assert(coredump->value.type == HONCH_WIRE_V2_VALUE_TYPE_BOOL);
     assert(coredump->value.bool_value);
+    /* A crash_id linking this summary to its coredump blob is always present. */
+    const honch_wire_v2_property_t *crash_id = find_record_property(&record, "crash_id");
+    assert(crash_id != NULL);
+    assert(crash_id->value.type == HONCH_WIRE_V2_VALUE_TYPE_STRING);
+    assert(crash_id->value.string_value != NULL && crash_id->value.string_value[0] != '\0');
     honch_event_record_free(&record);
 
     assert(honch_core_shutdown(client) == HONCH_OK);

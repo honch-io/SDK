@@ -232,6 +232,7 @@ struct honch_client {
     bool crash_pending_ack;     /* a reported $crash is enqueued, awaiting delivery */
     bool crash_ack_due;         /* the $crash was delivered; fire the callback once, outside the lock */
     uint64_t crash_event_sequence; /* queue sequence of the enqueued $crash, for erase-after-ack */
+    char coredump_crash_id[33]; /* links the $crash summary to its uploaded coredump blob */
     honch_log_error_slot_t log_error_slots[HONCH_LOG_DEDUP_SLOTS];
     uint32_t log_errors_dropped;
 };

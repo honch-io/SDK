@@ -1165,6 +1165,7 @@ static honch_status_t honch_append_crash_string(
  * is structural — nothing the caller passes can shadow these. */
 static honch_status_t honch_build_crash_properties(
     const honch_crash_report_t *report,
+    const char *crash_id,
     honch_wire_v2_property_t *properties,
     size_t *property_count)
 {
@@ -1223,6 +1224,12 @@ static honch_status_t honch_build_crash_properties(
         status = honch_append_typed_property(
             properties, property_count, "coredump_available", honch_bool(true), true);
     }
+    /* Links this $crash summary to its uploaded coredump blob (same id on the
+     * blob's chunks). Present whenever a crash_id was generated for this report. */
+    if (status == HONCH_OK && crash_id != NULL && crash_id[0] != '\0') {
+        status = honch_append_typed_property(
+            properties, property_count, "crash_id", honch_str(crash_id), true);
+    }
     return status;
 }
 
@@ -1238,9 +1245,14 @@ static honch_status_t honch_emit_crash_locked(
         return HONCH_OK;
     }
 
-    honch_wire_v2_property_t properties[14];
+    /* Generate the crash_id that links this $crash summary to its coredump blob. */
+    if (honch_client_random_hex(client, client->coredump_crash_id) != HONCH_OK) {
+        client->coredump_crash_id[0] = '\0';
+    }
+    honch_wire_v2_property_t properties[15];
     size_t property_count = 0u;
-    honch_status_t status = honch_build_crash_properties(crash_report, properties, &property_count);
+    honch_status_t status = honch_build_crash_properties(
+        crash_report, client->coredump_crash_id, properties, &property_count);
     if (status != HONCH_OK) {
         return HONCH_OK;
     }
@@ -1540,9 +1552,12 @@ honch_status_t honch_core_report_crash(
         return HONCH_OK;
     }
 
-    honch_wire_v2_property_t properties[14];
+    if (honch_client_random_hex(client, client->coredump_crash_id) != HONCH_OK) {
+        client->coredump_crash_id[0] = '\0';
+    }
+    honch_wire_v2_property_t properties[15];
     size_t property_count = 0u;
-    status = honch_build_crash_properties(report, properties, &property_count);
+    status = honch_build_crash_properties(report, client->coredump_crash_id, properties, &property_count);
     if (status != HONCH_OK) {
         honch_client_leave(client);
         return status;
