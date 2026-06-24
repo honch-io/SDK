@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 # Every subdirectory that must always contain at least one fixture.
-FIXTURE_DIRS = ["events", "http", "json", "relay", "wire-v2"]
+FIXTURE_DIRS = ["coredump", "events", "http", "json", "relay", "wire-v2"]
 
 
 class FixturesValidTest(unittest.TestCase):

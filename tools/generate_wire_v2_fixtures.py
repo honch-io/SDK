@@ -6,8 +6,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = ROOT / "spec" / "conformance" / "wire-v2"
+COREDUMP_OUT_DIR = ROOT / "spec" / "conformance" / "coredump"
 VERSION = 2
 SOURCE_EVENTS = 0
+SOURCE_COREDUMP = 1
 HEADER_CONTINUATION = 0x20
 HEADER_MORE = 0x40
 KIND_EVENT_BATCH = 1
@@ -234,8 +236,9 @@ def encode_message(context, base_time_ms, events, allow_duplicate_properties=Fal
     return bytes(out), table
 
 
-def frame(message, message_id, payload, offset=0, more=False, continuation=False, corrupt_crc=False):
-    header = VERSION | (SOURCE_EVENTS << 2)
+def frame(message, message_id, payload, offset=0, more=False, continuation=False, corrupt_crc=False,
+          source_type=SOURCE_EVENTS):
+    header = VERSION | (source_type << 2)
     if continuation:
         header |= HEADER_CONTINUATION
     if more:
@@ -272,6 +275,50 @@ def frames_for(message, message_id, cuts):
         })
         start = end
     return frames
+
+
+def coredump_frames(blob, message_id, cuts):
+    """Frame an opaque coredump blob (source_type=1). The CRC on the final frame
+    covers the COMPLETE unchunked blob, identical to the event CRC rule."""
+    if not cuts:
+        return [{
+            "kind": "single",
+            "hex": frame(blob, message_id, blob, source_type=SOURCE_COREDUMP).hex(),
+            "offset": 0,
+        }]
+    frames = []
+    start = 0
+    for index, end in enumerate(cuts + [len(blob)]):
+        payload = blob[start:end]
+        more = end < len(blob)
+        continuation = index != 0
+        kind = "init" if index == 0 else ("continuation" if more else "final")
+        frames.append({
+            "kind": kind,
+            "hex": frame(
+                blob, message_id, payload, offset=start, more=more,
+                continuation=continuation, source_type=SOURCE_COREDUMP).hex(),
+            "offset": start,
+        })
+        start = end
+    return frames
+
+
+def write_coredump_fixture(name, description, blob, message_id, stream_id, cuts=None):
+    fixture = {
+        "wire_format": "honch-wire-v2",
+        "name": name,
+        "description": description,
+        "generated_by": "tools/generate_wire_v2_fixtures.py",
+        "source": "coredump",
+        "source_type": SOURCE_COREDUMP,
+        "stream_id": stream_id,
+        "blob_size": len(blob),
+        "blob_hex": blob.hex(),
+        "frames": coredump_frames(blob, message_id, cuts or []),
+    }
+    COREDUMP_OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (COREDUMP_OUT_DIR / f"{name}.json").write_text(json.dumps(fixture, indent=2, sort_keys=True) + "\n")
 
 
 def expand_event(context, event):
@@ -473,6 +520,28 @@ def main():
         [{"event": "boot", "timestamp_ms": 1700000008000, "properties": []}],
         9,
         204,
+    )
+
+    # Coredump (source_type=1) opaque-blob fixtures. The body is raw bytes, not a
+    # compact event message; the CRC on the final frame still covers the complete
+    # unchunked blob. These pin the cross-SDK framing of a raw coredump upload.
+    small_blob = bytes((i * 31 + 7) & 0xFF for i in range(200))
+    write_coredump_fixture(
+        "coredump-single-frame",
+        "A small coredump blob that fits in one frame: continuation=0, more=0, CRC over the whole blob.",
+        small_blob,
+        0x1000,
+        "crash-7f3a9c2e",
+    )
+    # 1300-byte blob chunked at the SDK's 512-byte boundary: offsets 0, 512, 1024.
+    big_blob = bytes((i * 7 + 3) & 0xFF for i in range(1300))
+    write_coredump_fixture(
+        "coredump-multi-frame",
+        "A 1300-byte coredump streamed as init(512)+continuation(512)+final(276); the final frame carries the CRC of the complete 1300-byte blob.",
+        big_blob,
+        0x1001,
+        "crash-91d4b60a",
+        cuts=[512, 1024],
     )
 
 
