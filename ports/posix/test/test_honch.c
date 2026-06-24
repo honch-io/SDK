@@ -986,6 +986,7 @@ static void test_track_persists_event(void)
     honch_shutdown(client);
 }
 
+#if HONCH_ENABLE_CRASH_CAPTURE
 static void test_signal_breadcrumb_import_reports_crash(void)
 {
     char queue_dir[128];
@@ -1016,6 +1017,7 @@ static void test_signal_breadcrumb_import_reports_crash(void)
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
 }
+#endif /* HONCH_ENABLE_CRASH_CAPTURE */
 
 static void test_packetizer_reads_posix_storage_event(void)
 {
@@ -3218,7 +3220,9 @@ int main(void)
     test_esp_idf_status_aliases();
     test_shutdown_reports_status();
     test_track_persists_event();
+#if HONCH_ENABLE_CRASH_CAPTURE
     test_signal_breadcrumb_import_reports_crash();
+#endif
     test_packetizer_reads_posix_storage_event();
     test_packetizer_sets_monotonic_time_source();
     test_os_buffered_durability_tracks_and_flushes_event();
