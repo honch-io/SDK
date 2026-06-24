@@ -1295,7 +1295,9 @@ static honch_status_t honch_wire_v2_check_frame_spec(const honch_wire_v2_frame_s
         if (spec->payload_size != spec->total_message_length - spec->offset) {
             return HONCH_ERROR_INVALID_ARGUMENT;
         }
-        if (spec->crc_message != NULL) {
+        if (spec->has_precomputed_crc) {
+            /* CRC supplied directly (streamed payload); no in-RAM whole message. */
+        } else if (spec->crc_message != NULL) {
             if (spec->crc_message_size != spec->total_message_length) {
                 return HONCH_ERROR_INVALID_ARGUMENT;
             }
@@ -1370,9 +1372,14 @@ honch_status_t honch_wire_v2_encode_frame(
     offset += spec->payload_size;
 
     if (!spec->more) {
-        const uint8_t *crc_data = spec->crc_message == NULL ? spec->payload : spec->crc_message;
-        size_t crc_size = spec->crc_message == NULL ? spec->payload_size : spec->crc_message_size;
-        uint16_t crc = honch_wire_v2_crc16(crc_data, crc_size);
+        uint16_t crc;
+        if (spec->has_precomputed_crc) {
+            crc = spec->precomputed_crc;
+        } else {
+            const uint8_t *crc_data = spec->crc_message == NULL ? spec->payload : spec->crc_message;
+            size_t crc_size = spec->crc_message == NULL ? spec->payload_size : spec->crc_message_size;
+            crc = honch_wire_v2_crc16(crc_data, crc_size);
+        }
         out[offset++] = (uint8_t)crc;
         out[offset++] = (uint8_t)(crc >> 8u);
     }

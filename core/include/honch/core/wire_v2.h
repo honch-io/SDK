@@ -32,6 +32,12 @@ typedef struct honch_wire_v2_frame_spec {
     size_t payload_size;
     const uint8_t *crc_message;
     size_t crc_message_size;
+    /* For a final frame whose complete message is not held in RAM (a payload
+     * streamed from flash, e.g. a coredump): supply the CRC directly instead of
+     * having the encoder compute it over crc_message. Ignored unless `more` is
+     * false. Leave zeroed for normal in-RAM messages. */
+    bool has_precomputed_crc;
+    uint16_t precomputed_crc;
     honch_wire_v2_source_type_t source_type;
     bool continuation;
     bool more;

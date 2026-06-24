@@ -1380,6 +1380,43 @@ static void test_event_batch_encoder_rejects_compact_messages_over_sdk_limit(voi
         &message_size) == HONCH_ERROR_INVALID_ARGUMENT);
 }
 
+static void test_encode_frame_precomputed_crc_matches_computed(void)
+{
+    static const uint8_t message[] = {0xdeu, 0xadu, 0xbeu, 0xefu, 0x01u, 0x02u};
+    uint8_t out_computed[32] = {0};
+    uint8_t out_precomputed[32] = {0};
+    size_t n_computed = 0u;
+    size_t n_precomputed = 0u;
+
+    /* Final single frame, CRC computed by the encoder over the whole message. */
+    honch_wire_v2_frame_spec_t computed = {
+        .message_id = 9u,
+        .total_message_length = sizeof(message),
+        .offset = 0u,
+        .payload = message,
+        .payload_size = sizeof(message),
+        .crc_message = message,
+        .crc_message_size = sizeof(message),
+        .source_type = HONCH_WIRE_V2_SOURCE_COREDUMP,
+        .continuation = false,
+        .more = false
+    };
+    assert(honch_wire_v2_encode_frame(&computed, out_computed, sizeof(out_computed), &n_computed) == HONCH_OK);
+
+    /* Same frame, CRC supplied directly -- as the streaming coredump uploader does
+     * after folding each flash chunk into a running CRC. Must be byte identical. */
+    honch_wire_v2_frame_spec_t precomputed = computed;
+    precomputed.crc_message = NULL;
+    precomputed.crc_message_size = 0u;
+    precomputed.has_precomputed_crc = true;
+    precomputed.precomputed_crc = honch_wire_v2_crc16(message, sizeof(message));
+    assert(honch_wire_v2_encode_frame(&precomputed, out_precomputed, sizeof(out_precomputed), &n_precomputed) ==
+        HONCH_OK);
+
+    assert(n_computed == n_precomputed);
+    assert(memcmp(out_computed, out_precomputed, n_computed) == 0);
+}
+
 int main(void)
 {
     test_crc16_ccitt_false_matches_check_value();
@@ -1392,6 +1429,7 @@ int main(void)
     test_more_frame_rejects_complete_payload();
     test_chunker_splits_message_into_ascending_v2_frames();
     test_chunker_emits_coredump_source_type_with_identical_body();
+    test_encode_frame_precomputed_crc_matches_computed();
     test_event_batch_encoder_writes_required_context_and_single_event();
     test_event_batch_encoder_matches_single_required_context_fixture_frame();
     test_event_batch_encoder_writes_optional_context_metadata();
