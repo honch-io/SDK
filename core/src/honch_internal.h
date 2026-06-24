@@ -2,6 +2,7 @@
 #define HONCH_INTERNAL_H
 
 #include "honch/core/honch.h"
+#include "honch/core/coredump.h"
 #include "honch/core/wire_v2.h"
 
 #include <stdbool.h>
