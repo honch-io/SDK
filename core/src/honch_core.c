@@ -196,7 +196,7 @@ static honch_status_t honch_append_auto_properties(
     return HONCH_OK;
 }
 
-honch_status_t honch_build_property_pairs(
+static honch_status_t honch_build_property_pairs(
     honch_wire_v2_property_t *out_properties,
     size_t *out_property_count,
     const honch_wire_v2_property_t *user_properties,
@@ -291,7 +291,7 @@ static honch_status_t honch_client_enforce_custom_queue_limit(honch_client_t *cl
     return HONCH_OK;
 }
 
-honch_status_t honch_build_event(
+static honch_status_t honch_build_event(
     honch_client_t *client,
     const char *event_name,
     const honch_wire_v2_property_t *user_properties,
@@ -508,7 +508,7 @@ void honch_lifecycle_queue_tracker_begin(
     };
 }
 
-honch_status_t honch_lifecycle_queue_tracker_record(
+static honch_status_t honch_lifecycle_queue_tracker_record(
     honch_lifecycle_queue_tracker_t *tracker,
     uint64_t sequence)
 {
@@ -624,7 +624,7 @@ honch_status_t honch_track_locked_internal(
     bool check_battery_low,
     const honch_auto_properties_snapshot_t *auto_properties,
     honch_lifecycle_queue_tracker_t *lifecycle_tracker);
-void honch_scheduler_notify_after_enqueue_locked(honch_client_t *client);
+static void honch_scheduler_notify_after_enqueue_locked(honch_client_t *client);
 
 honch_status_t honch_track_locked_internal(
     honch_client_t *client,
@@ -878,7 +878,7 @@ static honch_status_t honch_scheduler_check_connectivity_locked(honch_client_t *
     return HONCH_OK;
 }
 
-void honch_scheduler_notify_after_enqueue_locked(honch_client_t *client)
+static void honch_scheduler_notify_after_enqueue_locked(honch_client_t *client)
 {
     if (client == NULL || client->flush_event_threshold == 0u) {
         return;

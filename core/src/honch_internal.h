@@ -372,8 +372,9 @@ honch_status_t honch_coredump_upload_step_locked(honch_client_t *client, bool *p
 #endif
 
 /* Fault-field byte limits + the two boot-reason helpers that stay in core
- * (used unconditionally by $device_boot) yet are also called from honch_crash.c
- * when error tracking is on. */
+ * (shared across translation units): honch_boot_reset_reason_value feeds the
+ * $device_boot event (honch_lifecycle_events.c) and the $crash properties
+ * (honch_crash.c); honch_fault_string_length backs both. */
 #define HONCH_FAULT_RESET_REASON_MAX_BYTES 64u
 #define HONCH_FAULT_MESSAGE_MAX_BYTES 160u
 #define HONCH_FAULT_COMPONENT_MAX_BYTES 64u
@@ -422,14 +423,10 @@ typedef struct honch_lifecycle_queue_tracker {
 } honch_lifecycle_queue_tracker_t;
 
 honch_status_t honch_append_typed_property(honch_wire_v2_property_t *properties, size_t *property_count, const char *key, honch_wire_v2_value_t value, bool allow_reserved);
-honch_status_t honch_build_property_pairs(honch_wire_v2_property_t *out_properties, size_t *out_property_count, const honch_wire_v2_property_t *user_properties, size_t user_property_count, const honch_wire_v2_property_t *trusted_properties, size_t trusted_property_count, int battery_level, const honch_auto_properties_snapshot_t *auto_properties);
-honch_status_t honch_build_event(honch_client_t *client, const char *event_name, const honch_wire_v2_property_t *user_properties, size_t user_property_count, const honch_wire_v2_property_t *trusted_properties, size_t trusted_property_count, int battery_level, const honch_auto_properties_snapshot_t *auto_properties, honch_payload_t *out);
 void honch_event_context_free(honch_event_context_t *event_context);
 honch_status_t honch_prepare_event_context(honch_client_t *client, honch_event_context_t *event_context);
 honch_status_t honch_client_random_hex(honch_client_t *client, char out[33]);
-void honch_scheduler_notify_after_enqueue_locked(honch_client_t *client);
 void honch_lifecycle_queue_tracker_begin(honch_client_t *client, honch_lifecycle_queue_tracker_t *tracker);
-honch_status_t honch_lifecycle_queue_tracker_record(honch_lifecycle_queue_tracker_t *tracker, uint64_t sequence);
 honch_status_t honch_lifecycle_queue_tracker_rollback(honch_client_t *client, honch_lifecycle_queue_tracker_t *tracker);
 honch_status_t honch_track_locked_internal(honch_client_t *client, const char *event_name, const honch_wire_v2_property_t *properties, size_t property_count, const honch_wire_v2_property_t *trusted_properties, size_t trusted_property_count, int battery_level, bool check_battery_low, const honch_auto_properties_snapshot_t *auto_properties, honch_lifecycle_queue_tracker_t *lifecycle_tracker);
 int honch_read_battery_level(honch_client_t *client);
