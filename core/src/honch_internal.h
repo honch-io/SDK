@@ -373,6 +373,28 @@ void honch_client_lock_destroy(honch_client_t *client, void *mutex);
 honch_status_t honch_client_state_lock(honch_client_t *client);
 void honch_client_state_unlock(honch_client_t *client);
 
+/* Per-event context types shared across the core translation units (promoted
+ * from honch_core.c for the modular decomposition). */
+typedef struct honch_auto_properties_snapshot {
+    honch_wire_v2_property_t *properties;
+    size_t property_count;
+    honch_client_t *client;
+    size_t buffer_index;
+    bool buffer_acquired;
+} honch_auto_properties_snapshot_t;
+
+typedef struct honch_event_context {
+    int battery_level;
+    honch_auto_properties_snapshot_t auto_properties;
+} honch_event_context_t;
+
+typedef struct honch_lifecycle_queue_tracker {
+    uint64_t start_sequence;
+    size_t start_queued_event_count;
+    uint64_t sequences[8];
+    size_t count;
+} honch_lifecycle_queue_tracker_t;
+
 #ifdef __cplusplus
 }
 #endif
