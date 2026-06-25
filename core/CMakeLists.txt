@@ -1,4 +1,7 @@
 option(HONCH_ENABLE_ERROR_TRACKING "Compile Honch automatic error tracking support" ON)
+option(HONCH_ENABLE_CRASH_CAPTURE "Compile Honch crash/$crash capture" ${HONCH_ENABLE_ERROR_TRACKING})
+option(HONCH_ENABLE_LOG_CAPTURE "Compile Honch $error log capture" ${HONCH_ENABLE_ERROR_TRACKING})
+option(HONCH_ENABLE_LIFECYCLE_EVENTS "Compile Honch auto lifecycle events ($device_boot/$firmware_update/$device_shutdown)" ON)
 
 set(HONCH_CORE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_capture_transport.c
@@ -36,6 +39,9 @@ function(honch_configure_core_objects target)
 
     target_compile_definitions(${target} PUBLIC
         HONCH_ENABLE_ERROR_TRACKING=$<BOOL:${HONCH_ENABLE_ERROR_TRACKING}>
+        HONCH_ENABLE_CRASH_CAPTURE=$<BOOL:${HONCH_ENABLE_CRASH_CAPTURE}>
+        HONCH_ENABLE_LOG_CAPTURE=$<BOOL:${HONCH_ENABLE_LOG_CAPTURE}>
+        HONCH_ENABLE_LIFECYCLE_EVENTS=$<BOOL:${HONCH_ENABLE_LIFECYCLE_EVENTS}>
     )
 
     target_compile_options(${target} PRIVATE
