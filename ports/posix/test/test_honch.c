@@ -1426,6 +1426,7 @@ static void test_conformance_boot_event_fixture(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+#if HONCH_ENABLE_SESSIONS
 static void test_conformance_custom_session_event_fixture(void)
 {
     const char *fixture = "spec/conformance/events/custom_event_with_session.json";
@@ -1459,7 +1460,9 @@ static void test_conformance_custom_session_event_fixture(void)
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
 }
+#endif /* HONCH_ENABLE_SESSIONS */
 
+#if HONCH_ENABLE_SESSIONS
 static void test_conformance_session_track_fixture(void)
 {
     const char *fixture = "spec/conformance/events/session-track.json";
@@ -1492,6 +1495,7 @@ static void test_conformance_session_track_fixture(void)
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
 }
+#endif /* HONCH_ENABLE_SESSIONS */
 
 static void test_conformance_identity_reset_fixture(void)
 {
@@ -1655,6 +1659,7 @@ static void test_queue_record_omits_promoted_context_properties(void)
     honch_test_set_transport(NULL, NULL);
 }
 
+#if HONCH_ENABLE_SESSIONS
 static void test_session_events_and_context(void)
 {
     char queue_dir[128];
@@ -1687,6 +1692,7 @@ static void test_session_events_and_context(void)
     honch_shutdown(client);
     honch_test_set_transport(NULL, NULL);
 }
+#endif /* HONCH_ENABLE_SESSIONS */
 
 static void test_lifecycle_events_are_queued(void)
 {
@@ -3235,14 +3241,20 @@ int main(void)
     test_conformance_basic_track_fixture();
     test_conformance_auto_stamp_conflict_fixture();
     test_conformance_boot_event_fixture();
+#if HONCH_ENABLE_SESSIONS
     test_conformance_custom_session_event_fixture();
+#endif
+#if HONCH_ENABLE_SESSIONS
     test_conformance_session_track_fixture();
+#endif
     test_conformance_identity_reset_fixture();
     test_auto_properties_callback_adds_platform_properties();
     test_auto_properties_callback_rejects_invalid_typed_value();
     test_auto_properties_callback_cannot_override_sdk_owned_properties();
     test_queue_record_omits_promoted_context_properties();
+#if HONCH_ENABLE_SESSIONS
     test_session_events_and_context();
+#endif
     test_lifecycle_events_are_queued();
 #if HONCH_ENABLE_ERROR_TRACKING
     test_fault_snapshot_includes_bounded_crash_summary_fields();

@@ -1740,6 +1740,7 @@ static void test_custom_storage_drops_oldest_at_queue_limit(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
+#if HONCH_ENABLE_SESSIONS
 static void test_failed_session_replacement_preserves_old_session(void)
 {
     fake_state_storage_t storage = {
@@ -1773,6 +1774,7 @@ static void test_failed_session_replacement_preserves_old_session(void)
     client->queued_event_count = 0u;
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
+#endif /* HONCH_ENABLE_SESSIONS */
 
 static void test_track_rejects_embedded_nul_property_key(void)
 {
@@ -2398,7 +2400,9 @@ int main(void)
     test_sequence_wrap_rejects_enqueue_without_advancing();
     test_custom_storage_enqueue_updates_cached_queue_depth_without_refresh();
     test_custom_storage_drops_oldest_at_queue_limit();
+#if HONCH_ENABLE_SESSIONS
     test_failed_session_replacement_preserves_old_session();
+#endif
     test_track_rejects_embedded_nul_property_key();
     test_identify_rejects_embedded_nul_trait_key();
     test_state_get_rejects_size_overflow();
