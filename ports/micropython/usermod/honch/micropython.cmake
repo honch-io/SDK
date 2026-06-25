@@ -5,6 +5,7 @@ target_sources(honch_micropython INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/mphal_adapter.c
     ${CMAKE_CURRENT_LIST_DIR}/mpstorage_adapter.c
     ${CMAKE_CURRENT_LIST_DIR}/mptransport_adapter.c
+    ${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_battery.c
     ${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_capture_transport.c
     ${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_core.c
     ${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_coredump.c

@@ -225,13 +225,17 @@ struct honch_client {
     bool uploads_paused;
     bool closing;
     size_t active_calls;
+#if HONCH_ENABLE_BATTERY
     int (*battery_callback)(void);
     int battery_low_threshold;
+#endif
     honch_auto_properties_fn auto_properties_callback;
     void *auto_properties_userdata;
     honch_connectivity_fn connectivity_callback;
     void *connectivity_userdata;
+#if HONCH_ENABLE_BATTERY
     bool battery_low_emitted;
+#endif
     uint64_t sequence;
     size_t queued_event_count;
     /* Automatic error/crash reporting state. */
@@ -428,6 +432,10 @@ void honch_lifecycle_queue_tracker_begin(honch_client_t *client, honch_lifecycle
 honch_status_t honch_lifecycle_queue_tracker_record(honch_lifecycle_queue_tracker_t *tracker, uint64_t sequence);
 honch_status_t honch_lifecycle_queue_tracker_rollback(honch_client_t *client, honch_lifecycle_queue_tracker_t *tracker);
 honch_status_t honch_track_locked_internal(honch_client_t *client, const char *event_name, const honch_wire_v2_property_t *properties, size_t property_count, const honch_wire_v2_property_t *trusted_properties, size_t trusted_property_count, int battery_level, bool check_battery_low, const honch_auto_properties_snapshot_t *auto_properties, honch_lifecycle_queue_tracker_t *lifecycle_tracker);
+int honch_read_battery_level(honch_client_t *client);
+#if HONCH_ENABLE_BATTERY
+honch_status_t honch_emit_battery_low_locked(honch_client_t *client, int battery_level, const honch_auto_properties_snapshot_t *auto_properties, honch_lifecycle_queue_tracker_t *lifecycle_tracker);
+#endif
 
 #if HONCH_ENABLE_CRASH_CAPTURE
 honch_status_t honch_emit_crash_locked(honch_client_t *client, const honch_crash_report_t *crash_report, honch_lifecycle_queue_tracker_t *lifecycle_tracker);

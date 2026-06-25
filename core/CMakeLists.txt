@@ -11,8 +11,10 @@ if(NOT DEFINED HONCH_ENABLE_LOG_CAPTURE)
 endif()
 option(HONCH_ENABLE_LIFECYCLE_EVENTS "Compile Honch auto lifecycle events ($device_boot/$firmware_update/$device_shutdown)" ON)
 option(HONCH_ENABLE_SESSIONS "Compile Honch session tracking ($session_start/$session_end)" ON)
+option(HONCH_ENABLE_BATTERY "Compile Honch battery telemetry ($battery_level/$battery_low)" ON)
 
 set(HONCH_CORE_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_battery.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_capture_transport.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_core.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_coredump.c
@@ -53,6 +55,7 @@ function(honch_configure_core_objects target)
         HONCH_ENABLE_LOG_CAPTURE=$<BOOL:${HONCH_ENABLE_LOG_CAPTURE}>
         HONCH_ENABLE_LIFECYCLE_EVENTS=$<BOOL:${HONCH_ENABLE_LIFECYCLE_EVENTS}>
         HONCH_ENABLE_SESSIONS=$<BOOL:${HONCH_ENABLE_SESSIONS}>
+        HONCH_ENABLE_BATTERY=$<BOOL:${HONCH_ENABLE_BATTERY}>
     )
 
     target_compile_options(${target} PRIVATE

@@ -41,6 +41,14 @@
 #define HONCH_ENABLE_SESSIONS 1
 #endif
 
+/* Battery telemetry ($battery_level auto-property + the $battery_low edge
+ * event) is on by default and compiled out at build time. The public
+ * battery_callback / battery_low_threshold config fields remain; only their
+ * internal use is gated. */
+#ifndef HONCH_ENABLE_BATTERY
+#define HONCH_ENABLE_BATTERY 1
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

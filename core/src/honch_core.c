@@ -227,9 +227,13 @@ honch_status_t honch_build_property_pairs(
     if (status == HONCH_OK) {
         status = honch_append_auto_properties(out_properties, out_property_count, auto_properties);
     }
+#if HONCH_ENABLE_BATTERY
     if (status == HONCH_OK && battery_level >= 0 && battery_level <= 100) {
         status = honch_append_typed_property(out_properties, out_property_count, "$battery_level", honch_i64(battery_level), true);
     }
+#else
+    (void)battery_level;
+#endif
 
     return status;
 }
@@ -330,15 +334,6 @@ honch_status_t honch_build_event(
         out->length = 0u;
     }
     return status;
-}
-
-static int honch_read_battery_level(honch_client_t *client)
-{
-    if (client->battery_callback == NULL) {
-        return -1;
-    }
-
-    return client->battery_callback();
 }
 
 void honch_event_context_free(honch_event_context_t *event_context)
@@ -631,41 +626,6 @@ honch_status_t honch_track_locked_internal(
     honch_lifecycle_queue_tracker_t *lifecycle_tracker);
 void honch_scheduler_notify_after_enqueue_locked(honch_client_t *client);
 
-static honch_status_t honch_emit_battery_low_locked(
-    honch_client_t *client,
-    int battery_level,
-    const honch_auto_properties_snapshot_t *auto_properties,
-    honch_lifecycle_queue_tracker_t *lifecycle_tracker)
-{
-    if (battery_level < 0) {
-        return HONCH_OK;
-    }
-
-    if (battery_level >= client->battery_low_threshold) {
-        client->battery_low_emitted = false;
-        return HONCH_OK;
-    }
-
-    if (client->battery_low_emitted) {
-        return HONCH_OK;
-    }
-
-    client->battery_low_emitted = true;
-    return honch_track_locked_internal(
-        client,
-        "$battery_low",
-        (const honch_wire_v2_property_t[]) {
-            honch_prop("level", honch_i64(battery_level))
-        },
-        1u,
-        NULL,
-        0u,
-        battery_level,
-        false,
-        auto_properties,
-        lifecycle_tracker);
-}
-
 honch_status_t honch_track_locked_internal(
     honch_client_t *client,
     const char *event_name,
@@ -699,9 +659,13 @@ honch_status_t honch_track_locked_internal(
     if (status == HONCH_OK) {
         honch_scheduler_notify_after_enqueue_locked(client);
     }
+#if HONCH_ENABLE_BATTERY
     if (status == HONCH_OK && check_battery_low) {
         status = honch_emit_battery_low_locked(client, battery_level, auto_properties, lifecycle_tracker);
     }
+#else
+    (void)check_battery_low;
+#endif
 
     free(event.data);
     return status;
@@ -1098,10 +1062,12 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     }
     next->durability_mode =
         config->durability_mode == HONCH_DURABILITY_SYNC_ALWAYS ? HONCH_DURABILITY_SYNC_ALWAYS : HONCH_DURABILITY_OS_BUFFERED;
+#if HONCH_ENABLE_BATTERY
     next->battery_callback = config->battery_callback;
     next->battery_low_threshold = config->battery_low_threshold > 0 ?
         config->battery_low_threshold :
         HONCH_DEFAULT_BATTERY_LOW_THRESHOLD;
+#endif
     next->auto_properties_callback = config->auto_properties_callback;
     next->auto_properties_userdata = config->auto_properties_userdata;
     next->connectivity_callback = config->connectivity_callback;
@@ -1606,7 +1572,9 @@ honch_status_t honch_core_reset(honch_client_t *client)
     if (status == HONCH_OK) {
         free(client->session_id);
         client->session_id = NULL;
+#if HONCH_ENABLE_BATTERY
         client->battery_low_emitted = false;
+#endif
     }
     if (status == HONCH_OK) {
         status = honch_client_queue_clear(client);

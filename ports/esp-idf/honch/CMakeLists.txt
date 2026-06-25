@@ -24,6 +24,7 @@ set(HONCH_ESP_PORT_SOURCES
 list(TRANSFORM HONCH_ESP_PORT_SOURCES PREPEND "${HONCH_ESP_COMPONENT_DIR}/")
 
 set(HONCH_CORE_SOURCES
+    "core/src/honch_battery.c"
     "core/src/honch_capture_transport.c"
     "core/src/honch_core.c"
     "core/src/honch_coredump.c"
@@ -87,6 +88,12 @@ if(CONFIG_HONCH_SESSIONS)
     target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_SESSIONS=1)
 else()
     target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_SESSIONS=0)
+endif()
+
+if(CONFIG_HONCH_BATTERY)
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_BATTERY=1)
+else()
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_BATTERY=0)
 endif()
 
 if(CONFIG_HONCH_CRASH_SYMBOLICATION)
