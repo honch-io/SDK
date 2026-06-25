@@ -23,6 +23,51 @@ from .validation import (
     require_value,
 )
 
+# Cap how much of the Python stack we format before the C core's own bound. The
+# $crash `backtrace` property is small (the core keeps the FIRST bytes and drops
+# the rest), so we format CRASH-SITE-FIRST below — truncation then trims the
+# outermost frames, not the ones that located the bug.
+_CRASH_BACKTRACE_MAX_FRAMES = 10
+
+
+def _format_crash_backtrace(exc):
+    """Format an exception's traceback compact and crash-site-first, e.g.
+    `sensor.py:42 in read <- app.py:10 in loop <- main.py:88 in <module>`.
+
+    On MicroPython the readable backtrace is the Python traceback (already
+    file/line/function-resolved) — there is no coredump to symbolicate — so this
+    is what gives a MicroPython `$crash` the "where", not just the "what".
+
+    Returns the formatted string, or None if it can't be produced. MUST NOT raise:
+    it runs inside the excepthook, where a failure must never displace delivery of
+    the original exception."""
+    try:
+        import sys
+        import io
+
+        buf = io.StringIO()
+        sys.print_exception(exc, buf)  # MicroPython: prints most-recent-call-LAST
+        frames = []
+        for raw in buf.getvalue().split("\n"):
+            line = raw.strip()
+            # "File "main.py", line 42, in read"
+            if not line.startswith("File ") or ", line " not in line:
+                continue
+            try:
+                fname = line.split('"', 2)[1]
+                rest = line.split(", line ", 1)[1]
+                lineno = rest.split(",", 1)[0].strip()
+                func = rest.split(" in ", 1)[1].strip() if " in " in rest else "?"
+                frames.append("%s:%s in %s" % (fname, lineno, func))
+            except Exception:
+                continue
+        if not frames:
+            return None
+        frames.reverse()  # crash site first, so it survives a start-truncation
+        return " <- ".join(frames[:_CRASH_BACKTRACE_MAX_FRAMES])
+    except Exception:
+        return None
+
 
 class Honch:
     def __init__(self, **kwargs):
@@ -81,6 +126,9 @@ class Honch:
                     "message": str(exc) or repr(exc),
                     "type": getattr(exc_type, "__name__", "Exception"),
                 }
+                backtrace = _format_crash_backtrace(exc)
+                if backtrace:
+                    report["backtrace"] = backtrace
                 self._call("report_crash", report)
             except Exception:
                 # An excepthook must never raise: a reporting failure must not

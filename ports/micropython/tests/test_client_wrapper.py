@@ -371,6 +371,56 @@ class ClientWrapperTests(unittest.TestCase):
         finally:
             sys.excepthook = saved
 
+    def test_crash_backtrace_is_compact_and_crash_site_first(self):
+        # The $crash backtrace field is small and the core keeps the FIRST bytes,
+        # so the formatter must emit the crash site first. print_exception is
+        # MicroPython-only, so fake it with MicroPython's exact output format.
+        importlib.import_module("honch")
+        from honch.client import _format_crash_backtrace
+
+        import sys
+
+        def fake_print_exception(exc, buf):
+            buf.write(
+                "Traceback (most recent call last):\n"
+                '  File "app.py", line 88, in <module>\n'
+                '  File "app.py", line 10, in loop\n'
+                '  File "sensor.py", line 42, in read\n'
+                "ValueError: bus timeout\n"
+            )
+
+        saved = getattr(sys, "print_exception", None)
+        sys.print_exception = fake_print_exception
+        try:
+            bt = _format_crash_backtrace(ValueError("bus timeout"))
+        finally:
+            if saved is None:
+                del sys.print_exception
+            else:
+                sys.print_exception = saved
+
+        # Crash site (sensor.py:42) first; outermost frame (<module>) last.
+        self.assertEqual(
+            bt, "sensor.py:42 in read <- app.py:10 in loop <- app.py:88 in <module>"
+        )
+
+    def test_crash_backtrace_returns_none_when_unavailable(self):
+        # Must never raise inside the excepthook: if print_exception is missing
+        # (or fails) the formatter degrades to None rather than displacing the crash.
+        importlib.import_module("honch")
+        from honch.client import _format_crash_backtrace
+
+        import sys
+
+        saved = getattr(sys, "print_exception", None)
+        if hasattr(sys, "print_exception"):
+            del sys.print_exception
+        try:
+            self.assertIsNone(_format_crash_backtrace(ValueError("boom")))
+        finally:
+            if saved is not None:
+                sys.print_exception = saved
+
     def test_uninstall_error_hook_restores_previous(self):
         honch = importlib.import_module("honch")
         client = self._make_client(honch)
