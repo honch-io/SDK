@@ -75,6 +75,12 @@ else()
     target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_ERROR_TRACKING=0)
 endif()
 
+if(CONFIG_HONCH_LIFECYCLE_EVENTS)
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_LIFECYCLE_EVENTS=1)
+else()
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_LIFECYCLE_EVENTS=0)
+endif()
+
 if(CONFIG_HONCH_CRASH_SYMBOLICATION)
     target_compile_definitions(${COMPONENT_LIB} PRIVATE HONCH_ENABLE_CRASH_SYMBOLICATION=1)
 else()

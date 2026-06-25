@@ -22,4 +22,12 @@ config HONCH_CRASH_SYMBOLICATION
         coredump image off flash to Honch after a crash and erases it once Honch
         acknowledges the upload. See the README "Crash coredump upload" section.
 
+config HONCH_LIFECYCLE_EVENTS
+    bool "Enable automatic lifecycle events"
+    default y
+    help
+        Emit $device_boot, $firmware_update, and $device_shutdown
+        automatically. Disable to compile these out; the firmware-version
+        baseline is still maintained so re-enabling never spuriously re-emits.
+
 endmenu

@@ -26,6 +26,14 @@
 #define HONCH_ENABLE_LOG_CAPTURE HONCH_ENABLE_ERROR_TRACKING
 #endif
 
+/* Auto-emitted process-lifecycle events ($device_boot, $firmware_update,
+ * $device_shutdown) are on by default and compiled out at build time. A port
+ * that only wants explicit track() calls can strip them; the firmware-version
+ * baseline is still maintained so re-enabling never spuriously re-emits. */
+#ifndef HONCH_ENABLE_LIFECYCLE_EVENTS
+#define HONCH_ENABLE_LIFECYCLE_EVENTS 1
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
