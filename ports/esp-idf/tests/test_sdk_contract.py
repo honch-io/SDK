@@ -402,8 +402,15 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("HONCH_ENABLE_ERROR_TRACKING=0", cmake)
         self.assertIn("HONCH_ENABLE_CRASH_SYMBOLICATION=0", cmake)
         self.assertIn("if(CONFIG_HONCH_CRASH_SYMBOLICATION)", cmake)
-        self.assertIn("list(APPEND HONCH_ESP_REQUIRES espcoredump)", cmake)
-        self.assertNotIn("espcoredump\n        esp_http_client", cmake)
+        # espcoredump / esp_partition are UNCONDITIONAL requirements (not gated on
+        # CONFIG_HONCH_CRASH_SYMBOLICATION): IDF resolves component requirements in
+        # its early-expansion pass before sdkconfig exists, so a CONFIG-gated
+        # requirement is silently dropped and the build fails once the coredump
+        # code compiles in. They live directly in the HONCH_ESP_REQUIRES set.
+        requires = cmake_list_values(cmake, "HONCH_ESP_REQUIRES")
+        self.assertIn("espcoredump", requires)
+        self.assertIn("esp_partition", requires)
+        self.assertNotIn("list(APPEND HONCH_ESP_REQUIRES", cmake)
         self.assertIn("#if HONCH_ENABLE_ERROR_TRACKING", compat)
         self.assertIn("#if HONCH_ENABLE_ERROR_TRACKING", adapter)
 
@@ -718,6 +725,7 @@ class EspIdfChunkWireTest(unittest.TestCase):
             "efuse",
             "freertos",
             "espcoredump",
+            "esp_partition",
         ):
             self.assertIn(dependency, component_dependencies)
 

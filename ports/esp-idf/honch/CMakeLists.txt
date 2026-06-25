@@ -36,6 +36,13 @@ set(HONCH_CORE_SOURCES
 )
 list(TRANSFORM HONCH_CORE_SOURCES PREPEND "${HONCH_CORE_ROOT}/")
 
+# espcoredump (image/summary API) + esp_partition (stream the raw coredump image
+# off the coredump partition) MUST be unconditional requirements: component
+# requirements are resolved in IDF's early-expansion pass before sdkconfig is
+# available, so gating them on CONFIG_HONCH_CRASH_SYMBOLICATION silently drops the
+# dependency and the build fails once the coredump code is compiled in. With crash
+# capture disabled at build time both components contribute essentially nothing to
+# the image.
 set(HONCH_ESP_REQUIRES
     esp_app_format
     esp_http_client
@@ -43,13 +50,6 @@ set(HONCH_ESP_REQUIRES
     esp_timer
     efuse
     freertos
-    # espcoredump (image/summary API) + esp_partition (stream the raw coredump
-    # image off the coredump partition). These MUST be unconditional: component
-    # requirements are resolved in IDF's early-expansion pass before sdkconfig is
-    # available, so gating them on CONFIG_HONCH_CRASH_SYMBOLICATION silently drops
-    # the dependency and the build fails once the coredump code is compiled in.
-    # With crash capture disabled at build time both components contribute
-    # essentially nothing to the image.
     espcoredump
     esp_partition
 )
