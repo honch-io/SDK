@@ -146,6 +146,10 @@ static void honch_esp_coredump_clear(void *ctx)
  * logging is untouched. The default ESP log line is "E (<ts>) <tag>: <msg>"
  * (optionally wrapped in color escapes); we capture tag + message best-effort. */
 static vprintf_like_t s_prev_vprintf = NULL;
+/* Whether we actually installed the chained hook this run. Install is gated on
+ * the runtime config->enable_error_tracking switch, so we must not restore (and
+ * clobber a handler we never replaced) when we skipped it. */
+static bool s_log_hook_installed = false;
 
 static int honch_esp_log_vprintf(const char *fmt, va_list args)
 {
@@ -617,8 +621,14 @@ honch_err_t honch_init(const honch_config_t *config)
 #endif
 #if HONCH_ENABLE_LOG_CAPTURE
     /* Install the chained log hook so ESP_LOGE lines become automatic $error
-     * events. esp_log_set_vprintf returns the previous handler to forward to. */
-    s_prev_vprintf = esp_log_set_vprintf(honch_esp_log_vprintf);
+     * events — but only when error tracking is enabled at runtime, so the
+     * config->enable_error_tracking switch governs log capture and the crash
+     * snapshot consistently (a caller that disables error tracking gets neither).
+     * esp_log_set_vprintf returns the previous handler to forward to. */
+    if (config->enable_error_tracking) {
+        s_prev_vprintf = esp_log_set_vprintf(honch_esp_log_vprintf);
+        s_log_hook_installed = true;
+    }
 #endif
     return HONCH_OK;
 }
@@ -637,9 +647,14 @@ honch_err_t honch_shutdown(void)
         return HONCH_ERR_BUSY;
     }
 #if HONCH_ENABLE_LOG_CAPTURE
-    /* Restore the previous log handler before the client is gone. */
-    (void)esp_log_set_vprintf(s_prev_vprintf != NULL ? s_prev_vprintf : &vprintf);
-    s_prev_vprintf = NULL;
+    /* Restore the previous log handler before the client is gone — only if we
+     * actually installed our hook (when error tracking is off at runtime we
+     * never replaced the handler, so we must not clobber it here). */
+    if (s_log_hook_installed) {
+        (void)esp_log_set_vprintf(s_prev_vprintf != NULL ? s_prev_vprintf : &vprintf);
+        s_prev_vprintf = NULL;
+        s_log_hook_installed = false;
+    }
 #endif
     honch_esp_transport_ops_deinit(&s_transport_ctx);
     honch_esp_event_queue_ops_deinit(&s_storage_ctx);
