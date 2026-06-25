@@ -28,8 +28,19 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertIn("honch_micropython", cmake)
         self.assertIn("${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_capture_transport.c", cmake)
         self.assertIn("${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_core.c", cmake)
+        # honch_core.c calls honch_coredump_upload_step_locked; if the coredump
+        # source is not listed the unix/esp32 builds fail to link it.
+        self.assertIn("${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_coredump.c", cmake)
         self.assertIn("${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_event_record.c", cmake)
         self.assertIn("${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_packetizer.c", cmake)
+
+    def test_unix_makefile_lists_the_same_core_sources(self):
+        # The unix port builds via micropython.mk, not the CMake list — they must
+        # stay in sync, or `make -C ports/unix` fails to link (e.g. a missing
+        # honch_coredump.c surfaces only on the unix build, not the host tests).
+        makefile = self.read("ports/micropython/usermod/honch/micropython.mk")
+        for source in ("honch_core.c", "honch_coredump.c", "honch_wire_v2.c"):
+            self.assertIn(source, makefile)
 
     def test_user_c_module_does_not_override_firmware_heap_size(self):
         cmake = self.read("ports/micropython/usermod/honch/micropython.cmake")
