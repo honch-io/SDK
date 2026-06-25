@@ -10,6 +10,8 @@ option(HONCH_BUILD_EXAMPLES "Build Honch POSIX SDK examples" ON)
 option(HONCH_BUILD_BENCHMARKS "Build Honch POSIX SDK benchmarks" OFF)
 option(HONCH_BUILD_E2E "Build Honch POSIX SDK end-to-end tests" OFF)
 option(HONCH_ENABLE_ERROR_TRACKING "Compile Honch automatic error tracking support" ON)
+option(HONCH_ENABLE_CRASH_CAPTURE "Compile Honch crash/$crash capture" ${HONCH_ENABLE_ERROR_TRACKING})
+option(HONCH_ENABLE_LOG_CAPTURE "Compile Honch $error log capture" ${HONCH_ENABLE_ERROR_TRACKING})
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -87,6 +89,8 @@ function(honch_configure_posix_target target)
 
     target_compile_definitions(${target} PRIVATE
         HONCH_ENABLE_ERROR_TRACKING=$<BOOL:${HONCH_ENABLE_ERROR_TRACKING}>
+        HONCH_ENABLE_CRASH_CAPTURE=$<BOOL:${HONCH_ENABLE_CRASH_CAPTURE}>
+        HONCH_ENABLE_LOG_CAPTURE=$<BOOL:${HONCH_ENABLE_LOG_CAPTURE}>
         _POSIX_C_SOURCE=200809L
     )
 
@@ -134,6 +138,8 @@ if(HONCH_BUILD_TESTS)
     )
     target_compile_definitions(honch_posix_tests PRIVATE
         HONCH_ENABLE_ERROR_TRACKING=$<BOOL:${HONCH_ENABLE_ERROR_TRACKING}>
+        HONCH_ENABLE_CRASH_CAPTURE=$<BOOL:${HONCH_ENABLE_CRASH_CAPTURE}>
+        HONCH_ENABLE_LOG_CAPTURE=$<BOOL:${HONCH_ENABLE_LOG_CAPTURE}>
         HONCH_TESTING
         _POSIX_C_SOURCE=200809L
         _DEFAULT_SOURCE
@@ -155,6 +161,8 @@ if(HONCH_BUILD_TESTS)
     )
     target_compile_definitions(honch_posix_state_consistency_tests PRIVATE
         HONCH_ENABLE_ERROR_TRACKING=$<BOOL:${HONCH_ENABLE_ERROR_TRACKING}>
+        HONCH_ENABLE_CRASH_CAPTURE=$<BOOL:${HONCH_ENABLE_CRASH_CAPTURE}>
+        HONCH_ENABLE_LOG_CAPTURE=$<BOOL:${HONCH_ENABLE_LOG_CAPTURE}>
         _POSIX_C_SOURCE=200809L
         _DEFAULT_SOURCE
         _DARWIN_C_SOURCE
@@ -174,6 +182,8 @@ if(HONCH_BUILD_TESTS)
     )
     target_compile_definitions(honch_posix_durable_delete_tests PRIVATE
         HONCH_ENABLE_ERROR_TRACKING=$<BOOL:${HONCH_ENABLE_ERROR_TRACKING}>
+        HONCH_ENABLE_CRASH_CAPTURE=$<BOOL:${HONCH_ENABLE_CRASH_CAPTURE}>
+        HONCH_ENABLE_LOG_CAPTURE=$<BOOL:${HONCH_ENABLE_LOG_CAPTURE}>
         HONCH_TESTING
         _POSIX_C_SOURCE=200809L
         _DEFAULT_SOURCE
