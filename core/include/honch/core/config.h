@@ -34,6 +34,13 @@
 #define HONCH_ENABLE_LIFECYCLE_EVENTS 1
 #endif
 
+/* Session tracking ($session_start/$session_end + the session_id mutation API)
+ * is on by default and compiled out at build time. The session_id field itself
+ * always remains as core event metadata carried on every event. */
+#ifndef HONCH_ENABLE_SESSIONS
+#define HONCH_ENABLE_SESSIONS 1
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

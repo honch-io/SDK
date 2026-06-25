@@ -30,4 +30,12 @@ config HONCH_LIFECYCLE_EVENTS
         automatically. Disable to compile these out; the firmware-version
         baseline is still maintained so re-enabling never spuriously re-emits.
 
+config HONCH_SESSIONS
+    bool "Enable session tracking"
+    default y
+    help
+        Emit $session_start / $session_end via the session API. Disable to
+        compile the session-tracking code out; the session_id event field is
+        always retained.
+
 endmenu

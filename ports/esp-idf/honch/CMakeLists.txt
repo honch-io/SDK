@@ -33,6 +33,7 @@ set(HONCH_CORE_SOURCES
     "core/src/honch_lifecycle_events.c"
     "core/src/honch_queue_policy.c"
     "core/src/honch_ram_queue.c"
+    "core/src/honch_sessions.c"
     "core/src/honch_support.c"
     "core/src/honch_wire_v2.c"
 )
@@ -80,6 +81,12 @@ if(CONFIG_HONCH_LIFECYCLE_EVENTS)
     target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_LIFECYCLE_EVENTS=1)
 else()
     target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_LIFECYCLE_EVENTS=0)
+endif()
+
+if(CONFIG_HONCH_SESSIONS)
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_SESSIONS=1)
+else()
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_SESSIONS=0)
 endif()
 
 if(CONFIG_HONCH_CRASH_SYMBOLICATION)

@@ -179,6 +179,9 @@ struct honch_client {
     char *dead_directory;
     char *state_directory;
     char *distinct_id;
+    /* Core-owned event metadata: every event carries session_id on the wire,
+     * so it stays in core unconditionally; the optional sessions feature
+     * (HONCH_ENABLE_SESSIONS) owns only the $session_* mutation API. */
     char *session_id;
     honch_wire_v2_property_t build_properties[HONCH_MAX_EVENT_PROPERTIES];
     honch_wire_v2_property_t auto_property_buffers[HONCH_AUTO_PROPERTY_BUFFER_COUNT][HONCH_MAX_AUTO_PROPERTIES];

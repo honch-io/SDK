@@ -16,6 +16,7 @@ SRC_USERMOD_C += \
 	$(HONCH_CORE_DIR)/src/honch_packetizer.c \
 	$(HONCH_CORE_DIR)/src/honch_queue_policy.c \
 	$(HONCH_CORE_DIR)/src/honch_ram_queue.c \
+	$(HONCH_CORE_DIR)/src/honch_sessions.c \
 	$(HONCH_CORE_DIR)/src/honch_support.c \
 	$(HONCH_CORE_DIR)/src/honch_wire_v2.c
 

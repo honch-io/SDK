@@ -10,6 +10,7 @@ if(NOT DEFINED HONCH_ENABLE_LOG_CAPTURE)
     set(HONCH_ENABLE_LOG_CAPTURE ${HONCH_ENABLE_ERROR_TRACKING})
 endif()
 option(HONCH_ENABLE_LIFECYCLE_EVENTS "Compile Honch auto lifecycle events ($device_boot/$firmware_update/$device_shutdown)" ON)
+option(HONCH_ENABLE_SESSIONS "Compile Honch session tracking ($session_start/$session_end)" ON)
 
 set(HONCH_CORE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_capture_transport.c
@@ -22,6 +23,7 @@ set(HONCH_CORE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_packetizer.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_queue_policy.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_ram_queue.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_sessions.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_support.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_wire_v2.c
 )
@@ -50,6 +52,7 @@ function(honch_configure_core_objects target)
         HONCH_ENABLE_CRASH_CAPTURE=$<BOOL:${HONCH_ENABLE_CRASH_CAPTURE}>
         HONCH_ENABLE_LOG_CAPTURE=$<BOOL:${HONCH_ENABLE_LOG_CAPTURE}>
         HONCH_ENABLE_LIFECYCLE_EVENTS=$<BOOL:${HONCH_ENABLE_LIFECYCLE_EVENTS}>
+        HONCH_ENABLE_SESSIONS=$<BOOL:${HONCH_ENABLE_SESSIONS}>
     )
 
     target_compile_options(${target} PRIVATE
