@@ -80,9 +80,14 @@ int main(void)
     EXPECT_EQ_INT(honch_init(&client, &config), HONCH_OK);
 
 #if HONCH_ENABLE_SESSIONS
-    /* Sessions ON: the API works. */
-    EXPECT_EQ_INT(honch_session_start(client, "recording"), HONCH_OK);
+    /* Sessions ON: the API works, including replacing an already-active session.
+     * The second session_start (while the first is live) drives the
+     * old_session_id free path — a regression guard for the session-replacement
+     * double-free (manifests under AddressSanitizer; see the ASan CI job). */
+    EXPECT_EQ_INT(honch_session_start(client, "first"), HONCH_OK);
+    EXPECT_EQ_INT(honch_session_start(client, "second"), HONCH_OK);
     EXPECT_EQ_INT(honch_session_end(client), HONCH_OK);
+    EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
 #else
     /* Sessions OFF: ABI-preserving stubs return NOT_SUPPORTED, and the SDK still
      * functions for explicit events (session_id stays NULL on the wire). */

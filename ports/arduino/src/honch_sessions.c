@@ -125,6 +125,7 @@ honch_status_t honch_core_session_start(honch_client_t *client, const char *sess
     }
     if (status == HONCH_OK) {
         free(old_session_id);
+        old_session_id = NULL;
     }
 
     honch_client_unlock(client);
