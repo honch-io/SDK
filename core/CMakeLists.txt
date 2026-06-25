@@ -7,6 +7,7 @@ set(HONCH_CORE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_crash.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_event_record.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_lifecycle.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_lifecycle_events.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_packetizer.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_queue_policy.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_ram_queue.c

@@ -983,59 +983,6 @@ static honch_status_t honch_new_session_id(honch_client_t *client, char **out)
     return HONCH_OK;
 }
 
-static honch_status_t honch_emit_firmware_update_locked(
-    honch_client_t *client,
-    honch_lifecycle_queue_tracker_t *lifecycle_tracker,
-    bool *firmware_version_pending_save)
-{
-    if (firmware_version_pending_save != NULL) {
-        *firmware_version_pending_save = false;
-    }
-
-    bool changed = false;
-    char *previous_version = NULL;
-    honch_status_t status = honch_state_check_firmware_version(client, &changed, &previous_version);
-    if (status != HONCH_OK) {
-        free(previous_version);
-        return status;
-    }
-    if (!changed) {
-        free(previous_version);
-        return honch_state_save_firmware_version(client);
-    }
-
-    honch_event_context_t event_context = {.battery_level = -1};
-    status = honch_prepare_event_context(client, &event_context);
-    if (status == HONCH_OK) {
-        const honch_wire_v2_property_t properties[] = {
-            honch_prop("previous_version", honch_str(previous_version)),
-            honch_prop("new_version", honch_str(client->firmware_version))
-        };
-        status = honch_track_locked_internal(
-            client,
-            "$firmware_update",
-            properties,
-            sizeof(properties) / sizeof(properties[0]),
-            NULL,
-            0u,
-            event_context.battery_level,
-            true,
-            &event_context.auto_properties,
-            lifecycle_tracker);
-    }
-    honch_event_context_free(&event_context);
-    if (status == HONCH_OK) {
-        if (firmware_version_pending_save != NULL) {
-            *firmware_version_pending_save = true;
-        } else {
-            status = honch_state_save_firmware_version(client);
-        }
-    }
-
-    free(previous_version);
-    return status;
-}
-
 #ifndef HONCH_DEFAULT_SDK_PLATFORM
 #if defined(ARDUINO)
 #define HONCH_DEFAULT_SDK_PLATFORM "arduino-esp32"
@@ -1217,28 +1164,14 @@ honch_status_t honch_core_init(honch_client_t **client, const honch_core_config_
     }
     if (status == HONCH_OK) {
         honch_lifecycle_queue_tracker_begin(next, &lifecycle_tracker);
-        status = honch_emit_firmware_update_locked(next, &lifecycle_tracker, &firmware_version_pending_save);
-    }
-    if (status == HONCH_OK) {
-        honch_event_context_t event_context = {.battery_level = -1};
-        status = honch_prepare_event_context(next, &event_context);
-        if (status == HONCH_OK) {
-            const honch_wire_v2_property_t boot_properties[] = {
-                honch_prop("reset_reason", honch_boot_reset_reason_value(config->crash_report))
-            };
-            status = honch_track_locked_internal(
-                next,
-                "$device_boot",
-                boot_properties,
-                sizeof(boot_properties) / sizeof(boot_properties[0]),
-                NULL,
-                0u,
-                event_context.battery_level,
-                true,
-                &event_context.auto_properties,
-                &lifecycle_tracker);
-        }
-        honch_event_context_free(&event_context);
+#if HONCH_ENABLE_LIFECYCLE_EVENTS
+        status = honch_lifecycle_emit_boot_locked(next, config, &lifecycle_tracker, &firmware_version_pending_save);
+#else
+        /* Lifecycle events compiled out: skip $firmware_update/$device_boot but
+         * still baseline the firmware version so a later re-enable never
+         * spuriously re-emits $firmware_update. */
+        status = honch_state_save_firmware_version(next);
+#endif
     }
     if (status == HONCH_OK && config->crash_report != NULL) {
 #if HONCH_ENABLE_CRASH_CAPTURE
@@ -1887,17 +1820,9 @@ honch_status_t honch_core_shutdown(honch_client_t *client)
      * clean shutdown does not silently drop them. */
     honch_drain_log_errors_locked(client);
 #endif
-    status = honch_track_locked_internal(
-        client,
-        "$device_shutdown",
-        NULL,
-        0u,
-        NULL,
-        0u,
-        event_context.battery_level,
-        true,
-        &event_context.auto_properties,
-        NULL);
+#if HONCH_ENABLE_LIFECYCLE_EVENTS
+    status = honch_lifecycle_emit_shutdown_locked(client, &event_context);
+#endif
     honch_status_t flush_status = honch_queue_flush_limited_locked(client, client->shutdown_flush_max_batches);
     if (status == HONCH_OK) {
         status = flush_status;

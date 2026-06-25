@@ -30,6 +30,7 @@ set(HONCH_CORE_SOURCES
     "core/src/honch_crash.c"
     "core/src/honch_event_record.c"
     "core/src/honch_lifecycle.c"
+    "core/src/honch_lifecycle_events.c"
     "core/src/honch_queue_policy.c"
     "core/src/honch_ram_queue.c"
     "core/src/honch_support.c"

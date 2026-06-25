@@ -432,6 +432,10 @@ honch_status_t honch_emit_crash_locked(honch_client_t *client, const honch_crash
 #if HONCH_ENABLE_LOG_CAPTURE
 void honch_drain_log_errors_locked(honch_client_t *client);
 #endif
+#if HONCH_ENABLE_LIFECYCLE_EVENTS
+honch_status_t honch_lifecycle_emit_boot_locked(honch_client_t *client, const honch_core_config_t *config, honch_lifecycle_queue_tracker_t *lifecycle_tracker, bool *firmware_version_pending_save);
+honch_status_t honch_lifecycle_emit_shutdown_locked(honch_client_t *client, honch_event_context_t *event_context);
+#endif
 
 #ifdef __cplusplus
 }
