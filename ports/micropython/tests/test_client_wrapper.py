@@ -421,6 +421,70 @@ class ClientWrapperTests(unittest.TestCase):
             if saved is not None:
                 sys.print_exception = saved
 
+    def test_run_returns_result_and_reports_nothing_on_success(self):
+        honch = importlib.import_module("honch")
+        client = self._make_client(honch)
+        self.assertEqual(client.run(lambda: 42), 42)
+        self.assertEqual([c for c in client._core.calls if c[0] == "report_crash"], [])
+
+    def test_run_reports_crash_with_traceback_and_reraises(self):
+        honch = importlib.import_module("honch")
+        client = self._make_client(honch)
+
+        import sys
+
+        def fake_print_exception(exc, buf):
+            buf.write(
+                "Traceback (most recent call last):\n"
+                '  File "main.py", line 5, in main\n'
+                "ValueError: boom\n"
+            )
+
+        def boom():
+            raise ValueError("boom")
+
+        saved = getattr(sys, "print_exception", None)
+        sys.print_exception = fake_print_exception
+        try:
+            with self.assertRaises(ValueError):
+                client.run(boom)
+        finally:
+            if saved is None:
+                del sys.print_exception
+            else:
+                sys.print_exception = saved
+
+        reports = [c for c in client._core.calls if c[0] == "report_crash"]
+        self.assertEqual(len(reports), 1)
+        self.assertEqual(reports[0][1]["type"], "ValueError")
+        self.assertIn("main.py:5 in main", reports[0][1].get("backtrace", ""))
+        # A fatal crash must be pushed out before the program exits.
+        self.assertIn(("flush",), client._core.calls)
+
+    def test_run_captures_crash_without_sys_excepthook(self):
+        # The whole point on stock MicroPython (e.g. Pico W): run() does not depend
+        # on sys.excepthook, so it captures the crash even when it is absent.
+        honch = importlib.import_module("honch")
+        client = self._make_client(honch)
+
+        import sys
+
+        saved = getattr(sys, "excepthook", None)
+        if hasattr(sys, "excepthook"):
+            del sys.excepthook
+
+        def boom():
+            raise RuntimeError("no hook needed")
+
+        try:
+            with self.assertRaises(RuntimeError):
+                client.run(boom)
+        finally:
+            if saved is not None:
+                sys.excepthook = saved
+
+        self.assertTrue(any(c[0] == "report_crash" for c in client._core.calls))
+
     def test_uninstall_error_hook_restores_previous(self):
         honch = importlib.import_module("honch")
         client = self._make_client(honch)

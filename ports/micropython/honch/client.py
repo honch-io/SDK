@@ -122,14 +122,7 @@ class Honch:
 
         def honch_excepthook(exc_type, exc, tb):
             try:
-                report = {
-                    "message": str(exc) or repr(exc),
-                    "type": getattr(exc_type, "__name__", "Exception"),
-                }
-                backtrace = _format_crash_backtrace(exc)
-                if backtrace:
-                    report["backtrace"] = backtrace
-                self._call("report_crash", report)
+                self._report_crash(exc_type, exc)
             except Exception:
                 # An excepthook must never raise: a reporting failure must not
                 # replace delivery of the original exception to the next hook.
@@ -141,6 +134,42 @@ class Honch:
         self._honch_excepthook = honch_excepthook
         sys.excepthook = honch_excepthook
         return True
+
+    def _report_crash(self, exc_type, exc):
+        """Build and queue a $crash from an exception, including the Python
+        traceback. Shared by install_error_hook() and run()."""
+        report = {
+            "message": str(exc) or repr(exc),
+            "type": getattr(exc_type, "__name__", "Exception"),
+        }
+        backtrace = _format_crash_backtrace(exc)
+        if backtrace:
+            report["backtrace"] = backtrace
+        self._call("report_crash", report)
+
+    def run(self, fn, *args, **kwargs):
+        """Run your entry point with automatic crash capture, then re-raise.
+
+        Any uncaught exception from `fn` is reported as a $crash (with the Python
+        traceback), flushed so a fatal crash is delivered before the program exits,
+        and then re-raised so behavior is unchanged. Returns `fn`'s result on
+        success.
+
+        Unlike install_error_hook(), this works on EVERY MicroPython build: it uses
+        a plain try/except, not sys.excepthook (which stock firmware often omits).
+        It captures exceptions that propagate out of `fn` — wrap your top-level
+        entry point / main loop with it.
+        """
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:
+            try:
+                self._report_crash(type(exc), exc)
+                self.flush()
+            except Exception:
+                # Reporting/flush failure must never mask the original exception.
+                pass
+            raise
 
     def uninstall_error_hook(self):
         try:
