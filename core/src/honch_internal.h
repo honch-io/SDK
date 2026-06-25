@@ -389,6 +389,8 @@ honch_status_t honch_client_lock_create(honch_client_t *client, void **mutex);
 void honch_client_lock_destroy(honch_client_t *client, void *mutex);
 honch_status_t honch_client_state_lock(honch_client_t *client);
 void honch_client_state_unlock(honch_client_t *client);
+honch_status_t honch_client_lock(honch_client_t *client);
+void honch_client_unlock(honch_client_t *client);
 
 /* Per-event context types shared across the core translation units (promoted
  * from honch_core.c for the modular decomposition). */
@@ -423,6 +425,13 @@ void honch_lifecycle_queue_tracker_begin(honch_client_t *client, honch_lifecycle
 honch_status_t honch_lifecycle_queue_tracker_record(honch_lifecycle_queue_tracker_t *tracker, uint64_t sequence);
 honch_status_t honch_lifecycle_queue_tracker_rollback(honch_client_t *client, honch_lifecycle_queue_tracker_t *tracker);
 honch_status_t honch_track_locked_internal(honch_client_t *client, const char *event_name, const honch_wire_v2_property_t *properties, size_t property_count, const honch_wire_v2_property_t *trusted_properties, size_t trusted_property_count, int battery_level, bool check_battery_low, const honch_auto_properties_snapshot_t *auto_properties, honch_lifecycle_queue_tracker_t *lifecycle_tracker);
+
+#if HONCH_ENABLE_CRASH_CAPTURE
+honch_status_t honch_emit_crash_locked(honch_client_t *client, const honch_crash_report_t *crash_report, honch_lifecycle_queue_tracker_t *lifecycle_tracker);
+#endif
+#if HONCH_ENABLE_LOG_CAPTURE
+void honch_drain_log_errors_locked(honch_client_t *client);
+#endif
 
 #ifdef __cplusplus
 }

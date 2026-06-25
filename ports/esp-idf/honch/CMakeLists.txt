@@ -27,6 +27,7 @@ set(HONCH_CORE_SOURCES
     "core/src/honch_capture_transport.c"
     "core/src/honch_core.c"
     "core/src/honch_coredump.c"
+    "core/src/honch_crash.c"
     "core/src/honch_event_record.c"
     "core/src/honch_lifecycle.c"
     "core/src/honch_queue_policy.c"
