@@ -364,6 +364,23 @@ honch_status_t honch_coredump_chunk(
 honch_status_t honch_coredump_upload_step_locked(honch_client_t *client, bool *progressed);
 #endif
 
+/* Fault-field byte limits + the two boot-reason helpers that stay in core
+ * (used unconditionally by $device_boot) yet are also called from honch_crash.c
+ * when error tracking is on. */
+#define HONCH_FAULT_RESET_REASON_MAX_BYTES 64u
+#define HONCH_FAULT_MESSAGE_MAX_BYTES 160u
+#define HONCH_FAULT_COMPONENT_MAX_BYTES 64u
+#define HONCH_ERROR_TYPE_MAX_BYTES 64u
+#define HONCH_ERROR_CODE_MAX_BYTES 64u
+#define HONCH_FAULT_BUILD_ID_MAX_BYTES 64u
+#define HONCH_FAULT_EXCEPTION_CAUSE_MAX_BYTES 64u
+#define HONCH_FAULT_PC_MAX_BYTES 18u
+#define HONCH_FAULT_BACKTRACE_MAX_BYTES 192u
+#define HONCH_FAULT_TASK_NAME_MAX_BYTES 32u
+
+bool honch_fault_string_length(const char *value, size_t max_length, size_t *out_length);
+honch_wire_v2_value_t honch_boot_reset_reason_value(const honch_crash_report_t *crash_report);
+
 honch_status_t honch_client_enter(honch_client_t *client);
 void honch_client_leave(honch_client_t *client);
 honch_status_t honch_client_begin_shutdown(honch_client_t *client);

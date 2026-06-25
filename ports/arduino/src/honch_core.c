@@ -1036,17 +1036,6 @@ static honch_status_t honch_emit_firmware_update_locked(
     return status;
 }
 
-#define HONCH_FAULT_RESET_REASON_MAX_BYTES 64u
-#define HONCH_FAULT_MESSAGE_MAX_BYTES 160u
-#define HONCH_FAULT_COMPONENT_MAX_BYTES 64u
-#define HONCH_ERROR_TYPE_MAX_BYTES 64u
-#define HONCH_ERROR_CODE_MAX_BYTES 64u
-#define HONCH_FAULT_BUILD_ID_MAX_BYTES 64u
-#define HONCH_FAULT_EXCEPTION_CAUSE_MAX_BYTES 64u
-#define HONCH_FAULT_PC_MAX_BYTES 18u
-#define HONCH_FAULT_BACKTRACE_MAX_BYTES 192u
-#define HONCH_FAULT_TASK_NAME_MAX_BYTES 32u
-
 #ifndef HONCH_DEFAULT_SDK_PLATFORM
 #if defined(ARDUINO)
 #define HONCH_DEFAULT_SDK_PLATFORM "arduino-esp32"
@@ -1055,7 +1044,7 @@ static honch_status_t honch_emit_firmware_update_locked(
 #endif
 #endif
 
-static bool honch_fault_string_length(
+bool honch_fault_string_length(
     const char *value,
     size_t max_length,
     size_t *out_length)
@@ -1082,7 +1071,7 @@ static bool honch_fault_string_length(
     return false;
 }
 
-static honch_wire_v2_value_t honch_boot_reset_reason_value(const honch_crash_report_t *crash_report)
+honch_wire_v2_value_t honch_boot_reset_reason_value(const honch_crash_report_t *crash_report)
 {
     size_t length = 0u;
     if (crash_report != NULL &&
