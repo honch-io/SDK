@@ -28,6 +28,7 @@ static int failures = 0;
 
 #define EXPECT_TRUE(expr) do { if (!(expr)) { fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #expr); failures++; } } while (0)
 #define EXPECT_EQ_INT(a, b) do { int av = (int)(a); int bv = (int)(b); if (av != bv) { fprintf(stderr, "FAIL %s:%d: %s == %s (%d != %d)\n", __FILE__, __LINE__, #a, #b, av, bv); failures++; } } while (0)
+#define EXPECT_STR_CONTAINS(haystack, needle) EXPECT_TRUE(strstr((haystack), (needle)) != NULL)
 
 typedef struct {
     int calls;
@@ -91,6 +92,19 @@ int main(void)
     /* Lifecycle OFF: init emitted no $device_boot/$firmware_update, so the first
      * flush had nothing to send. The SDK still functions for explicit events. */
     EXPECT_EQ_INT(transport.calls, 0);
+    /* Trap: lifecycle OFF must still baseline the firmware version, so a later
+     * build with lifecycle ON sees it unchanged and never re-emits $firmware_update. */
+    char fw_path[320];
+    snprintf(fw_path, sizeof fw_path, "%s/state/fw_version", queue_dir);
+    char fw_stored[64] = {0};
+    FILE *fw_file = fopen(fw_path, "rb");
+    EXPECT_TRUE(fw_file != NULL);
+    if (fw_file != NULL) {
+        size_t read_count = fread(fw_stored, 1u, sizeof(fw_stored) - 1u, fw_file);
+        fw_stored[read_count] = '\0';
+        fclose(fw_file);
+    }
+    EXPECT_STR_CONTAINS(fw_stored, "1.0.0");
     EXPECT_EQ_INT(honch_track(client, "toggle_probe", NULL, 0u), HONCH_OK);
     EXPECT_EQ_INT(honch_flush(client), HONCH_OK);
     EXPECT_EQ_INT(transport.calls, 1);

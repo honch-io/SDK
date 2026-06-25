@@ -1,6 +1,14 @@
 option(HONCH_ENABLE_ERROR_TRACKING "Compile Honch automatic error tracking support" ON)
-option(HONCH_ENABLE_CRASH_CAPTURE "Compile Honch crash/$crash capture" ${HONCH_ENABLE_ERROR_TRACKING})
-option(HONCH_ENABLE_LOG_CAPTURE "Compile Honch $error log capture" ${HONCH_ENABLE_ERROR_TRACKING})
+# Sub-toggles cascade from the umbrella unless explicitly set on the command
+# line. Re-derived plain vars (NOT option()/cache): option() evaluates its
+# default only when the cache entry is first created, so flipping the umbrella
+# in an existing build dir would not re-derive these (a silent mis-strip).
+if(NOT DEFINED HONCH_ENABLE_CRASH_CAPTURE)
+    set(HONCH_ENABLE_CRASH_CAPTURE ${HONCH_ENABLE_ERROR_TRACKING})
+endif()
+if(NOT DEFINED HONCH_ENABLE_LOG_CAPTURE)
+    set(HONCH_ENABLE_LOG_CAPTURE ${HONCH_ENABLE_ERROR_TRACKING})
+endif()
 option(HONCH_ENABLE_LIFECYCLE_EVENTS "Compile Honch auto lifecycle events ($device_boot/$firmware_update/$device_shutdown)" ON)
 
 set(HONCH_CORE_SOURCES
