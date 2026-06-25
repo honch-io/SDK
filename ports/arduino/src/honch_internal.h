@@ -395,6 +395,18 @@ typedef struct honch_lifecycle_queue_tracker {
     size_t count;
 } honch_lifecycle_queue_tracker_t;
 
+honch_status_t honch_append_typed_property(honch_wire_v2_property_t *properties, size_t *property_count, const char *key, honch_wire_v2_value_t value, bool allow_reserved);
+honch_status_t honch_build_property_pairs(honch_wire_v2_property_t *out_properties, size_t *out_property_count, const honch_wire_v2_property_t *user_properties, size_t user_property_count, const honch_wire_v2_property_t *trusted_properties, size_t trusted_property_count, int battery_level, const honch_auto_properties_snapshot_t *auto_properties);
+honch_status_t honch_build_event(honch_client_t *client, const char *event_name, const honch_wire_v2_property_t *user_properties, size_t user_property_count, const honch_wire_v2_property_t *trusted_properties, size_t trusted_property_count, int battery_level, const honch_auto_properties_snapshot_t *auto_properties, honch_payload_t *out);
+void honch_event_context_free(honch_event_context_t *event_context);
+honch_status_t honch_prepare_event_context(honch_client_t *client, honch_event_context_t *event_context);
+honch_status_t honch_client_random_hex(honch_client_t *client, char out[33]);
+void honch_scheduler_notify_after_enqueue_locked(honch_client_t *client);
+void honch_lifecycle_queue_tracker_begin(honch_client_t *client, honch_lifecycle_queue_tracker_t *tracker);
+honch_status_t honch_lifecycle_queue_tracker_record(honch_lifecycle_queue_tracker_t *tracker, uint64_t sequence);
+honch_status_t honch_lifecycle_queue_tracker_rollback(honch_client_t *client, honch_lifecycle_queue_tracker_t *tracker);
+honch_status_t honch_track_locked_internal(honch_client_t *client, const char *event_name, const honch_wire_v2_property_t *properties, size_t property_count, const honch_wire_v2_property_t *trusted_properties, size_t trusted_property_count, int battery_level, bool check_battery_low, const honch_auto_properties_snapshot_t *auto_properties, honch_lifecycle_queue_tracker_t *lifecycle_tracker);
+
 #ifdef __cplusplus
 }
 #endif

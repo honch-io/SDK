@@ -47,7 +47,7 @@ typedef struct honch_auto_property_sink_context {
     size_t *property_count;
 } honch_auto_property_sink_context_t;
 
-static honch_status_t honch_append_typed_property(
+honch_status_t honch_append_typed_property(
     honch_wire_v2_property_t *properties,
     size_t *property_count,
     const char *key,
@@ -196,7 +196,7 @@ static honch_status_t honch_append_auto_properties(
     return HONCH_OK;
 }
 
-static honch_status_t honch_build_property_pairs(
+honch_status_t honch_build_property_pairs(
     honch_wire_v2_property_t *out_properties,
     size_t *out_property_count,
     const honch_wire_v2_property_t *user_properties,
@@ -236,7 +236,7 @@ static honch_status_t honch_build_property_pairs(
 
 static uint64_t honch_client_now_millis(honch_client_t *client);
 static uint64_t honch_client_event_timestamp_millis(honch_client_t *client);
-static honch_status_t honch_client_random_hex(honch_client_t *client, char out[33]);
+honch_status_t honch_client_random_hex(honch_client_t *client, char out[33]);
 static honch_status_t honch_client_init_wire_v2_identity(honch_client_t *client);
 static honch_status_t honch_client_queue_push_recorded(
     honch_client_t *client,
@@ -287,7 +287,7 @@ static honch_status_t honch_client_enforce_custom_queue_limit(honch_client_t *cl
     return HONCH_OK;
 }
 
-static honch_status_t honch_build_event(
+honch_status_t honch_build_event(
     honch_client_t *client,
     const char *event_name,
     const honch_wire_v2_property_t *user_properties,
@@ -341,7 +341,7 @@ static int honch_read_battery_level(honch_client_t *client)
     return client->battery_callback();
 }
 
-static void honch_event_context_free(honch_event_context_t *event_context)
+void honch_event_context_free(honch_event_context_t *event_context)
 {
     if (event_context == NULL) {
         return;
@@ -351,7 +351,7 @@ static void honch_event_context_free(honch_event_context_t *event_context)
     event_context->battery_level = -1;
 }
 
-static honch_status_t honch_prepare_event_context(honch_client_t *client, honch_event_context_t *event_context)
+honch_status_t honch_prepare_event_context(honch_client_t *client, honch_event_context_t *event_context)
 {
     if (client == NULL || event_context == NULL) {
         return HONCH_ERROR_INVALID_ARGUMENT;
@@ -392,7 +392,7 @@ static uint64_t honch_client_event_timestamp_millis(honch_client_t *client)
     return now_ms == 0u ? 1u : now_ms;
 }
 
-static honch_status_t honch_client_random_hex(honch_client_t *client, char out[33])
+honch_status_t honch_client_random_hex(honch_client_t *client, char out[33])
 {
     if (client == NULL || out == NULL) {
         return HONCH_ERROR_INVALID_ARGUMENT;
@@ -499,7 +499,7 @@ static honch_status_t honch_client_queue_consume(honch_client_t *client, uint64_
     return HONCH_ERROR_INVALID_ARGUMENT;
 }
 
-static void honch_lifecycle_queue_tracker_begin(
+void honch_lifecycle_queue_tracker_begin(
     honch_client_t *client,
     honch_lifecycle_queue_tracker_t *tracker)
 {
@@ -513,7 +513,7 @@ static void honch_lifecycle_queue_tracker_begin(
     };
 }
 
-static honch_status_t honch_lifecycle_queue_tracker_record(
+honch_status_t honch_lifecycle_queue_tracker_record(
     honch_lifecycle_queue_tracker_t *tracker,
     uint64_t sequence)
 {
@@ -528,7 +528,7 @@ static honch_status_t honch_lifecycle_queue_tracker_record(
     return HONCH_OK;
 }
 
-static honch_status_t honch_lifecycle_queue_tracker_rollback(
+honch_status_t honch_lifecycle_queue_tracker_rollback(
     honch_client_t *client,
     honch_lifecycle_queue_tracker_t *tracker)
 {
@@ -618,7 +618,7 @@ static void honch_client_unlock(honch_client_t *client)
     honch_client_state_unlock(client);
 }
 
-static honch_status_t honch_track_locked_internal(
+honch_status_t honch_track_locked_internal(
     honch_client_t *client,
     const char *event_name,
     const honch_wire_v2_property_t *properties,
@@ -629,7 +629,7 @@ static honch_status_t honch_track_locked_internal(
     bool check_battery_low,
     const honch_auto_properties_snapshot_t *auto_properties,
     honch_lifecycle_queue_tracker_t *lifecycle_tracker);
-static void honch_scheduler_notify_after_enqueue_locked(honch_client_t *client);
+void honch_scheduler_notify_after_enqueue_locked(honch_client_t *client);
 
 static honch_status_t honch_emit_battery_low_locked(
     honch_client_t *client,
@@ -666,7 +666,7 @@ static honch_status_t honch_emit_battery_low_locked(
         lifecycle_tracker);
 }
 
-static honch_status_t honch_track_locked_internal(
+honch_status_t honch_track_locked_internal(
     honch_client_t *client,
     const char *event_name,
     const honch_wire_v2_property_t *properties,
@@ -914,7 +914,7 @@ static honch_status_t honch_scheduler_check_connectivity_locked(honch_client_t *
     return HONCH_OK;
 }
 
-static void honch_scheduler_notify_after_enqueue_locked(honch_client_t *client)
+void honch_scheduler_notify_after_enqueue_locked(honch_client_t *client)
 {
     if (client == NULL || client->flush_event_threshold == 0u) {
         return;
