@@ -63,6 +63,9 @@ jobs:
           - name: lifecycle-events-off
             flags: "-DHONCH_ENABLE_LIFECYCLE_EVENTS=0"
             ctest: "-R toggle"
+          - name: battery-off
+            flags: "-DHONCH_ENABLE_BATTERY=0"
+            ctest: "-R toggle"
 
     steps:
       - name: Checkout

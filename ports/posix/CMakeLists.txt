@@ -265,6 +265,30 @@ if(HONCH_BUILD_TESTS)
     )
     add_test(NAME honch_posix_session_toggle_tests COMMAND honch_posix_session_toggle_tests)
 
+    add_executable(honch_posix_battery_toggle_tests
+        test/test_battery_toggle.c
+    )
+    target_link_libraries(honch_posix_battery_toggle_tests PRIVATE honch_posix_test)
+    target_include_directories(honch_posix_battery_toggle_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../core/src
+    )
+    target_compile_definitions(honch_posix_battery_toggle_tests PRIVATE
+        HONCH_ENABLE_ERROR_TRACKING=$<BOOL:${HONCH_ENABLE_ERROR_TRACKING}>
+        HONCH_ENABLE_CRASH_CAPTURE=$<BOOL:${HONCH_ENABLE_CRASH_CAPTURE}>
+        HONCH_ENABLE_LOG_CAPTURE=$<BOOL:${HONCH_ENABLE_LOG_CAPTURE}>
+        HONCH_ENABLE_LIFECYCLE_EVENTS=$<BOOL:${HONCH_ENABLE_LIFECYCLE_EVENTS}>
+        HONCH_ENABLE_SESSIONS=$<BOOL:${HONCH_ENABLE_SESSIONS}>
+        HONCH_ENABLE_BATTERY=$<BOOL:${HONCH_ENABLE_BATTERY}>
+        HONCH_TESTING
+        _POSIX_C_SOURCE=200809L
+        _DEFAULT_SOURCE
+        _DARWIN_C_SOURCE
+    )
+    target_compile_options(honch_posix_battery_toggle_tests PRIVATE
+        $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
+    )
+    add_test(NAME honch_posix_battery_toggle_tests COMMAND honch_posix_battery_toggle_tests)
+
     add_test(
         NAME honch_posix_sdk_contract_tests
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_sdk_contract.py
