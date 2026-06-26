@@ -1682,13 +1682,30 @@ honch_status_t honch_core_copy_device_id(honch_client_t *client, char *buffer, s
 
 honch_status_t honch_core_get_queue_stats(honch_client_t *client, honch_queue_stats_t *stats)
 {
-    if (client == NULL || stats == NULL) {
+    honch_status_t status = honch_client_enter(client);
+    if (status != HONCH_OK) {
+        return status;
+    }
+    if (stats == NULL) {
+        honch_client_leave(client);
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
     if (client->event_queue == NULL || client->event_queue->queue_get_stats == NULL) {
+        honch_client_leave(client);
         return HONCH_ERROR_NOT_SUPPORTED;
     }
-    return client->event_queue->queue_get_stats(client->event_queue->ctx, stats);
+    status = honch_client_lock(client);
+    if (status != HONCH_OK) {
+        honch_client_leave(client);
+        return status;
+    }
+    /* Serialize against track/tick/flush like every other thread-safe entry
+     * point — the queue's get_stats reads/derives live count/used_bytes that a
+     * concurrent push/consume (remove_at + memmove) mutates. */
+    status = client->event_queue->queue_get_stats(client->event_queue->ctx, stats);
+    honch_client_unlock(client);
+    honch_client_leave(client);
+    return status;
 }
 
 const char *honch_status_string(honch_status_t status)

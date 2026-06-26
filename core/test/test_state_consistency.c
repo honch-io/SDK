@@ -1278,6 +1278,72 @@ static void build_heavy_event(
     *out_size = payload.length;
 }
 
+/* Lock-discipline test harness: a fake platform mutex that counts successful
+   locks vs unlocks and can be made to fail a single re-acquire. Used by the
+   get_queue_stats-locking and relock-after-POST-failure tests below. */
+static int g_lock_acquired = 0;
+static int g_unlock_calls = 0;
+static int g_fail_next_lock = 0;           /* >0: next lock returns BUSY, then decrements */
+static int g_fail_relock_on_next_post = 0; /* armed: a POST sets g_fail_next_lock=1 (targets the relock) */
+
+static honch_status_t fake_mutex_create(void *ctx, void **mutex)
+{
+    (void)ctx;
+    if (mutex == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    *mutex = malloc(1u);
+    return *mutex != NULL ? HONCH_OK : HONCH_ERROR_OUT_OF_MEMORY;
+}
+
+static void fake_mutex_destroy(void *ctx, void *mutex)
+{
+    (void)ctx;
+    free(mutex);
+}
+
+static honch_status_t fake_mutex_lock(void *ctx, void *mutex)
+{
+    (void)ctx;
+    (void)mutex;
+    if (g_fail_next_lock > 0) {
+        g_fail_next_lock--;
+        return HONCH_ERROR_BUSY;
+    }
+    g_lock_acquired++;
+    return HONCH_OK;
+}
+
+static void fake_mutex_unlock(void *ctx, void *mutex)
+{
+    (void)ctx;
+    (void)mutex;
+    g_unlock_calls++;
+}
+
+static void install_fake_mutex_ops(honch_platform_ops_t *platform)
+{
+    g_lock_acquired = 0;
+    g_unlock_calls = 0;
+    g_fail_next_lock = 0;
+    g_fail_relock_on_next_post = 0;
+    platform->mutex_create = fake_mutex_create;
+    platform->mutex_destroy = fake_mutex_destroy;
+    platform->mutex_lock = fake_mutex_lock;
+    platform->mutex_unlock = fake_mutex_unlock;
+    platform->requires_mutex = true;
+}
+
+static honch_status_t fake_queue_get_stats(void *ctx, honch_queue_stats_t *stats)
+{
+    (void)ctx;
+    if (stats == NULL) {
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    *stats = (honch_queue_stats_t){0};
+    return HONCH_OK;
+}
+
 static honch_status_t fake_post_chunk(
     void *ctx,
     const char *endpoint_url,
@@ -1294,6 +1360,12 @@ static honch_status_t fake_post_chunk(
     (void)body;
     (void)body_size;
     fake_state_storage_t *storage = (fake_state_storage_t *)ctx;
+    /* Arm a single post-release relock failure: the lock is dropped before this
+       POST, so the next state-lock is the re-acquire at queue_policy/coredump. */
+    if (g_fail_relock_on_next_post) {
+        g_fail_relock_on_next_post = 0;
+        g_fail_next_lock = 1;
+    }
     /* A coredump frame: header bits 2-4 carry source_type (1 = coredump),
      * bit 6 (0x40) is the `more` flag — a final frame has it clear. */
     bool is_coredump = body != NULL && body_size > 0u && ((body[0] >> 2u) & 0x7u) == 1u;
@@ -2354,6 +2426,64 @@ static void test_zero_min_spacing_allows_back_to_back_flushes(void)
     assert(honch_core_shutdown(client) == HONCH_OK);
 }
 
+static void test_get_queue_stats_runs_under_the_state_lock(void)
+{
+    fake_state_storage_t storage = {.queue_push_status = HONCH_OK};
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    install_fake_mutex_ops(&platform);
+    queue_ops.queue_get_stats = fake_queue_get_stats;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+
+    int locks_before = g_lock_acquired;
+    int unlocks_before = g_unlock_calls;
+    honch_queue_stats_t stats;
+    assert(honch_core_get_queue_stats(client, &stats) == HONCH_OK);
+    /* Must take (and release) a lock like every other thread-safe entry point —
+       the unfixed version takes none, racing concurrent track/tick on the queue. */
+    assert(g_lock_acquired > locks_before);
+    assert((g_lock_acquired - locks_before) == (g_unlock_calls - unlocks_before));
+
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
+static void test_relock_failure_after_post_keeps_lock_balanced(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .track_queue_depth = 1,
+        .post_chunk_status = HONCH_OK,
+        .post_chunk_result = HONCH_TRANSPORT_ACCEPTED
+    };
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    install_fake_mutex_ops(&platform);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    assert(honch_core_track(client, "relock_probe", NULL, 0u) == HONCH_OK);
+
+    /* The flush drops the state lock around the POST; the POST arms a single
+       relock BUSY. The flush must still complete and must leave the state mutex
+       balanced (no unbalanced unlock on the re-acquire-failure path). */
+    g_fail_relock_on_next_post = 1;
+    honch_status_t flush_status = honch_core_flush(client);
+
+    assert(g_fail_next_lock == 0);             /* the armed relock failure fired */
+    assert(flush_status == HONCH_OK);          /* completed despite the transient relock BUSY */
+    assert(g_lock_acquired == g_unlock_calls); /* no unbalanced give on the state mutex */
+
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
+
 int main(void)
 {
     test_queue_push_uses_honch_event_record_format();
@@ -2422,5 +2552,7 @@ int main(void)
     test_tick_while_paused_does_not_keep_flush_pending();
     test_flush_returns_offline_before_min_spacing_rate_limit();
     test_zero_min_spacing_allows_back_to_back_flushes();
+    test_get_queue_stats_runs_under_the_state_lock();
+    test_relock_failure_after_post_keeps_lock_balanced();
     return 0;
 }

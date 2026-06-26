@@ -167,7 +167,9 @@ honch_status_t honch_coredump_upload_step_locked(honch_client_t *client, bool *p
         client->coredump_frame,
         frame_size,
         &result);
-    honch_status_t relock_status = honch_client_state_lock(client);
+    /* Blocking re-acquire: the lock was released only for the POST above and is
+     * logically still ours, so a try-lock timeout must not abandon it unlocked. */
+    honch_status_t relock_status = honch_client_state_lock_blocking(client);
     if (relock_status != HONCH_OK) {
         return relock_status;
     }

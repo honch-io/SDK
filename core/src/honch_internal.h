@@ -396,6 +396,7 @@ bool honch_client_lock_ops_valid(const honch_platform_ops_t *platform);
 honch_status_t honch_client_lock_create(honch_client_t *client, void **mutex);
 void honch_client_lock_destroy(honch_client_t *client, void *mutex);
 honch_status_t honch_client_state_lock(honch_client_t *client);
+honch_status_t honch_client_state_lock_blocking(honch_client_t *client);
 void honch_client_state_unlock(honch_client_t *client);
 honch_status_t honch_client_lock(honch_client_t *client);
 void honch_client_unlock(honch_client_t *client);

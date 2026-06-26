@@ -1122,7 +1122,9 @@ static honch_status_t honch_queue_flush_one_with_chunk_limit_locked(
         (unsigned long long)post_message_elapsed_ms);
     honch_flush_timing_log(client, timing_message);
 #endif
-    honch_status_t relock_status = honch_client_state_lock(client);
+    /* Blocking re-acquire: the lock was released only for the POST above and is
+     * logically still ours, so a try-lock timeout must not abandon it unlocked. */
+    honch_status_t relock_status = honch_client_state_lock_blocking(client);
     honch_flush_context_free(&flush_context);
     if (relock_status != HONCH_OK) {
         return relock_status;
