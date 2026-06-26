@@ -164,6 +164,11 @@ def main() -> int:
 
     sum_flash = sum(f["flash_bytes"] for f in features.values())
     optional_flash = baseline["flash_bytes"] - core_only["flash_bytes"]
+    # Marginal deltas aren't perfectly additive (shared helper code), but they
+    # should stay close to (baseline - core_only). A large gap means a feature's
+    # "off" build didn't actually strip it — guard against that silently shipping.
+    divergence = abs(sum_flash - optional_flash)
+    tolerance = max(512, round(optional_flash * 0.10))
 
     report = {
         "target": IDF_TARGET,
@@ -183,12 +188,21 @@ def main() -> int:
         "consistency": {
             "sum_of_feature_flash_deltas": sum_flash,
             "baseline_minus_core_only_flash": optional_flash,
+            "divergence_bytes": divergence,
+            "tolerance_bytes": tolerance,
             "note": "deltas are not perfectly additive — features share helper code",
         },
     }
     args.out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(f"\nWrote {args.out}")
     print(json.dumps(report["features"], indent=2))
+    if divergence > tolerance:
+        sys.stderr.write(
+            f"\nERROR: feature-delta sum ({sum_flash} B) diverges from baseline-core "
+            f"({optional_flash} B) by {divergence} B > {tolerance} B tolerance — "
+            "a feature's 'off' build may not be stripping it. Investigate before publishing.\n"
+        )
+        return 1
     return 0
 
 
