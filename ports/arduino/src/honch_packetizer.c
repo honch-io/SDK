@@ -10,7 +10,6 @@
 #define HONCH_PACKETIZER_FLAG_FINAL 0x02u
 #define HONCH_PACKETIZER_HEADER_SIZE 20u
 #define HONCH_PACKETIZER_MAX_CHUNK_PAYLOAD UINT16_MAX
-#define HONCH_PACKETIZER_MAX_MESSAGE_BYTES 4096u
 
 static void honch_packetizer_write_u16(uint8_t *out, uint16_t value)
 {
@@ -107,13 +106,12 @@ static honch_status_t honch_packetizer_read_event(
     return HONCH_OK;
 }
 
-static honch_status_t honch_packetizer_build_wire_v2_message(
+static honch_status_t honch_packetizer_encode_message(
     honch_client_t *client,
     const honch_storage_reader_t *reader,
-    honch_payload_t *message)
+    size_t *message_size)
 {
-    message->data = NULL;
-    message->length = 0u;
+    *message_size = 0u;
     if (client == NULL || reader == NULL ||
         client->device_id == NULL || client->device_model == NULL ||
         client->firmware_version == NULL || client->sdk_platform == NULL ||
@@ -130,24 +128,20 @@ static honch_status_t honch_packetizer_build_wire_v2_message(
         return status;
     }
 
-    uint8_t *buffer = (uint8_t *)malloc(HONCH_PACKETIZER_MAX_MESSAGE_BYTES);
-    if (buffer == NULL) {
-        free(event.data);
-        return HONCH_ERROR_OUT_OF_MEMORY;
-    }
     honch_wire_v2_encode_context_t context = {0};
     honch_core_wire_v2_context_from_client(client, &context);
+    honch_payload_t message = {0};
     status = honch_core_encode_single_wire_v2_event(
         &context,
         &event,
-        buffer,
-        HONCH_PACKETIZER_MAX_MESSAGE_BYTES,
-        message);
+        client->flush_message_buffer,
+        HONCH_WIRE_V2_MAX_FRAME_BYTES,
+        &message);
     free(event.data);
     if (status != HONCH_OK) {
-        free(buffer);
         return status;
     }
+    *message_size = message.length;
     return HONCH_OK;
 }
 
@@ -208,16 +202,13 @@ honch_status_t honch_packetizer_begin(honch_client_t *client, honch_packetizer_t
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    honch_payload_t message = {0};
-    status = honch_packetizer_build_wire_v2_message(client, &reader, &message);
-    if (status != HONCH_OK || message.length == 0u || message.length > UINT32_MAX) {
-        free(message.data);
+    size_t total_size = 0u;
+    status = honch_packetizer_encode_message(client, &reader, &total_size);
+    if (status != HONCH_OK || total_size == 0u || total_size > UINT32_MAX) {
         honch_client_state_unlock(client);
         honch_client_leave(client);
         return status == HONCH_OK ? HONCH_ERROR_INVALID_ARGUMENT : status;
     }
-    size_t total_size = message.length;
-    free(message.data);
 
     *packetizer = (honch_packetizer_t) {
         .client = client,
@@ -243,29 +234,7 @@ honch_status_t honch_packetizer_next(
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
-    honch_status_t status = honch_packetizer_reset_peek_cursor(packetizer->client);
-    if (status != HONCH_OK) {
-        return status;
-    }
-
-    honch_storage_reader_t reader = {0};
-    status = honch_packetizer_peek(packetizer->client, &reader);
-    if (status != HONCH_OK) {
-        return status;
-    }
-    if (reader.read == NULL || reader.sequence != packetizer->sequence) {
-        return HONCH_ERROR_INVALID_ARGUMENT;
-    }
-
-    honch_payload_t message = {0};
-    status = honch_packetizer_build_wire_v2_message(packetizer->client, &reader, &message);
-    if (status != HONCH_OK) {
-        return status;
-    }
-    if (message.length != packetizer->total_size) {
-        free(message.data);
-        return HONCH_ERROR_INVALID_ARGUMENT;
-    }
+    const uint8_t *message = packetizer->client->flush_message_buffer;
 
     size_t remaining = packetizer->total_size - packetizer->offset;
     size_t payload_capacity = buffer_size - HONCH_PACKETIZER_HEADER_SIZE;
@@ -274,7 +243,6 @@ honch_status_t honch_packetizer_next(
     }
     size_t payload_size = remaining < payload_capacity ? remaining : payload_capacity;
     if (payload_size == 0u) {
-        free(message.data);
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
@@ -296,8 +264,7 @@ honch_status_t honch_packetizer_next(
     buffer[18] = 0u;
     buffer[19] = 0u;
 
-    memcpy(buffer + HONCH_PACKETIZER_HEADER_SIZE, message.data + packetizer->offset, payload_size);
-    free(message.data);
+    memcpy(buffer + HONCH_PACKETIZER_HEADER_SIZE, message + packetizer->offset, payload_size);
 
     uint16_t crc = honch_packetizer_frame_crc16(
         buffer,

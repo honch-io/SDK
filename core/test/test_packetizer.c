@@ -22,6 +22,7 @@ typedef struct fake_storage {
     honch_client_t *client;
     bool require_client_lock_on_peek;
     bool peek_saw_client_lock;
+    size_t read_calls;
 } fake_storage_t;
 
 typedef struct fake_clock {
@@ -47,6 +48,7 @@ static honch_status_t fake_reader_read(void *ctx, uint32_t offset, uint8_t *buff
         return HONCH_ERROR_INVALID_ARGUMENT;
     }
 
+    storage->read_calls++;
     memcpy(buffer, storage->message + offset, buffer_size);
     return HONCH_OK;
 }
@@ -466,6 +468,81 @@ static void test_packetizer_reconstructs_boot_relative_timestamps_when_wall_cloc
     free(message.data);
 }
 
+static void test_packetizer_encodes_once_regardless_of_chunk_count(void)
+{
+    honch_payload_t message = build_test_record();
+    fake_storage_t storage = {
+        .message = message.data,
+        .message_size = message.length,
+        .sequence = HONCH_TEST_SEQUENCE,
+        .has_message = true
+    };
+    honch_event_queue_ops_t ops = {0};
+    honch_client_t client = {0};
+    fake_client_with_storage(&client, &storage, &ops);
+    honch_packetizer_t packetizer = {0};
+    uint8_t chunk[HONCH_PACKET_HEADER_SIZE + 2u] = {0};
+    size_t out_size = 0u;
+    bool complete = false;
+
+    assert(honch_packetizer_begin(&client, &packetizer, HONCH_DATA_SOURCE_EVENTS) == HONCH_OK);
+    while (!complete) {
+        assert(honch_packetizer_next(&packetizer, chunk, sizeof(chunk), &out_size, &complete) == HONCH_OK);
+    }
+    assert(honch_packetizer_abort(&packetizer) == HONCH_OK);
+    /* The queued event is read+encoded exactly once (in _begin), never per-chunk. */
+    assert(storage.read_calls == 1u);
+    fake_client_destroy(&client);
+    free(message.data);
+}
+
+static void test_multi_chunk_reassembles_to_full_message(void)
+{
+    honch_payload_t message = build_test_record();
+    fake_storage_t storage = {
+        .message = message.data,
+        .message_size = message.length,
+        .sequence = HONCH_TEST_SEQUENCE,
+        .has_message = true
+    };
+    honch_event_queue_ops_t ops = {0};
+    honch_client_t client = {0};
+    fake_client_with_storage(&client, &storage, &ops);
+    honch_packetizer_t packetizer = {0};
+
+    /* Reference: a single big-buffer chunk carries the whole encoded message. */
+    uint8_t big[512] = {0};
+    size_t big_size = 0u;
+    bool complete = false;
+    assert(honch_packetizer_begin(&client, &packetizer, HONCH_DATA_SOURCE_EVENTS) == HONCH_OK);
+    assert(honch_packetizer_next(&packetizer, big, sizeof(big), &big_size, &complete) == HONCH_OK);
+    assert(complete);
+    size_t full_len = big_size - HONCH_PACKET_HEADER_SIZE;
+    uint8_t full[512] = {0};
+    memcpy(full, big + HONCH_PACKET_HEADER_SIZE, full_len);
+    assert(honch_packetizer_abort(&packetizer) == HONCH_OK);
+
+    /* Tiny chunks: reassembled payloads must equal the full message byte-for-byte. */
+    storage.has_message = true;
+    uint8_t small[HONCH_PACKET_HEADER_SIZE + 3u] = {0};
+    uint8_t reassembled[512] = {0};
+    size_t r = 0u;
+    complete = false;
+    assert(honch_packetizer_begin(&client, &packetizer, HONCH_DATA_SOURCE_EVENTS) == HONCH_OK);
+    while (!complete) {
+        size_t sz = 0u;
+        assert(honch_packetizer_next(&packetizer, small, sizeof(small), &sz, &complete) == HONCH_OK);
+        size_t payload = sz - HONCH_PACKET_HEADER_SIZE;
+        memcpy(reassembled + r, small + HONCH_PACKET_HEADER_SIZE, payload);
+        r += payload;
+    }
+    assert(honch_packetizer_abort(&packetizer) == HONCH_OK);
+    assert(r == full_len);
+    assert(memcmp(reassembled, full, full_len) == 0);
+    fake_client_destroy(&client);
+    free(message.data);
+}
+
 int main(void)
 {
     test_tiny_buffer_rejected();
@@ -477,5 +554,7 @@ int main(void)
     test_confirm_failure_invalidates_packetizer_after_releasing_client();
     test_packetizer_peek_runs_under_client_lock();
     test_packetizer_reconstructs_boot_relative_timestamps_when_wall_clock_is_valid();
+    test_packetizer_encodes_once_regardless_of_chunk_count();
+    test_multi_chunk_reassembles_to_full_message();
     return 0;
 }
