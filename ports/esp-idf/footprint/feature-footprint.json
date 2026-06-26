@@ -1,0 +1,38 @@
+{
+  "target": "esp32",
+  "idf_version": "6.0.1",
+  "sdk_commit": "a7c4362",
+  "optimization": "-Os",
+  "method": "Per-feature marginal footprint of libhonch.a: (all features on) minus (one feature off), summing allocated archive sections only (.text/.literal/.rodata = flash; .data/.bss/.iram = static RAM; debug/metadata excluded). RAM is static .bss/.data only \u2014 runtime queue/buffer RAM is config-driven and not counted here.",
+  "baseline_all_on": {
+    "flash_bytes": 43816,
+    "ram_bytes": 1082
+  },
+  "core_only": {
+    "flash_bytes": 36736,
+    "ram_bytes": 766
+  },
+  "features": {
+    "error-tracking": {
+      "flash_bytes": 4971,
+      "ram_bytes": 316
+    },
+    "lifecycle": {
+      "flash_bytes": 793,
+      "ram_bytes": 0
+    },
+    "sessions": {
+      "flash_bytes": 833,
+      "ram_bytes": 0
+    },
+    "battery": {
+      "flash_bytes": 452,
+      "ram_bytes": 0
+    }
+  },
+  "consistency": {
+    "sum_of_feature_flash_deltas": 7049,
+    "baseline_minus_core_only_flash": 7080,
+    "note": "deltas are not perfectly additive \u2014 features share helper code"
+  }
+}
