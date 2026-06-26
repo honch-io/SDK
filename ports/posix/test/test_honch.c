@@ -1727,7 +1727,7 @@ static void test_lifecycle_events_are_queued(void)
     honch_test_set_transport(NULL, NULL);
 }
 
-#if HONCH_ENABLE_ERROR_TRACKING
+#if HONCH_ENABLE_CRASH_CAPTURE
 static void test_fault_snapshot_includes_bounded_crash_summary_fields(void)
 {
     char queue_dir[128];
@@ -3256,7 +3256,7 @@ int main(void)
     test_session_events_and_context();
 #endif
     test_lifecycle_events_are_queued();
-#if HONCH_ENABLE_ERROR_TRACKING
+#if HONCH_ENABLE_CRASH_CAPTURE
     test_fault_snapshot_includes_bounded_crash_summary_fields();
     test_fault_snapshot_omits_oversized_crash_summary_fields();
 #endif
