@@ -18,6 +18,7 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"
 
 /* Coredump-to-flash is the only requirement: ESP_COREDUMP_ENABLE auto-selects
  * the ELF format (CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF is select-only and is NOT
@@ -119,6 +120,17 @@ static honch_status_t honch_esp_mutex_lock(void *ctx, void *mutex)
     (void)ctx;
     if (mutex == NULL) {
         return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
+    }
+    /* Re-entrancy guard. A non-recursive FreeRTOS mutex re-taken by the task
+     * that already holds it blocks for the timeout and then trips the
+     * vTaskPriorityDisinheritAfterTimeout assert (panic). This happens when the
+     * automatic ESP_LOGE->$error log hook fires while this task already holds
+     * the state lock — e.g. esp-tls logging a handshake failure during a flush
+     * or coredump upload. Refuse the self-take with BUSY so the caller skips
+     * instead of self-deadlocking; honch_core_report_log_error treats a failed
+     * lock as "drop this best-effort $error", which is the right behaviour. */
+    if (xSemaphoreGetMutexHolder((SemaphoreHandle_t)mutex) == xTaskGetCurrentTaskHandle()) {
+        return HONCH_STATUS_ERROR_BUSY;
     }
     return xSemaphoreTake((SemaphoreHandle_t)mutex, honch_esp_lock_ticks(HONCH_ESP_MUTEX_LOCK_TIMEOUT_MS)) == pdTRUE ?
         HONCH_STATUS_OK :
