@@ -13,6 +13,7 @@
 #include <new>
 #include <WiFiClient.h>
 #include <WiFiClientSecure.h>
+#include "honch_gts_roots.h"
 #endif
 
 #define HONCH_ARDUINO_DEFAULT_TRANSPORT_TIMEOUT_MS 8000u
@@ -84,6 +85,22 @@ honch_status_t classify_http_status(int code, honch_transport_result_t *result) 
   return HONCH_ERROR_TRANSPORT;
 }
 
+#ifdef ARDUINO
+// The default Honch endpoint (https://i.honch.io) is behind Google Trust
+// Services; pin the GTS roots for it (a device's CA set may lack the legacy root
+// its chain anchors at). Exact-host match so look-alikes (i.honch.io.evil.com)
+// don't get the pinned trust. Custom/BYO endpoints keep using rootCaPem.
+static bool arduino_endpoint_is_default(const char *endpointUrl) {
+  static const char prefix[] = "https://i.honch.io";
+  const size_t prefix_len = sizeof(prefix) - 1;
+  if (endpointUrl == nullptr || strncmp(endpointUrl, prefix, prefix_len) != 0) {
+    return false;
+  }
+  char next = endpointUrl[prefix_len];
+  return next == '\0' || next == '/' || next == ':';
+}
+#endif
+
 honch_status_t arduino_post_chunk(
     void *ctx,
     const char *endpointUrl,
@@ -115,6 +132,10 @@ honch_status_t arduino_post_chunk(
     } else if (transport->insecureSkipTlsVerify) {
       log_w("Honch: TLS certificate verification disabled (insecureSkipTlsVerify); not for production use");
       secureClient->setInsecure();
+    } else if (arduino_endpoint_is_default(endpointUrl)) {
+      // Default Honch endpoint: trust the Google Trust Services roots directly,
+      // so it verifies without the integrator having to supply a rootCaPem.
+      secureClient->setCACert(HONCH_GTS_ROOTS_PEM);
     }
     if (!http.begin(*secureClient, url.c_str())) {
       delete secureClient;

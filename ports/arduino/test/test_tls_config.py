@@ -105,6 +105,20 @@ class ArduinoTLSConfigTests(unittest.TestCase):
             transport.index("secureClient->setInsecure();"),
         )
 
+    def test_secure_transport_pins_gts_roots_for_default_endpoint(self) -> None:
+        transport = read("ports/arduino/src/honch_arduino_transport.cpp")
+        # The GTS root set is bundled and pinned for the default i.honch.io
+        # endpoint so it verifies without the integrator supplying a rootCaPem.
+        self.assertIn('#include "honch_gts_roots.h"', transport)
+        self.assertIn("secureClient->setCACert(HONCH_GTS_ROOTS_PEM);", transport)
+        self.assertIn('"https://i.honch.io"', transport)
+        # Explicit config wins: an integrator-supplied rootCaPem (and the insecure
+        # escape hatch) take precedence over the default-endpoint GTS pin.
+        self.assertLess(
+            transport.index("secureClient->setInsecure();"),
+            transport.index("secureClient->setCACert(HONCH_GTS_ROOTS_PEM);"),
+        )
+
     def test_secure_transport_does_not_put_tls_client_on_caller_stack(self) -> None:
         transport = read("ports/arduino/src/honch_arduino_transport.cpp")
         readme = read("ports/arduino/README.md")
