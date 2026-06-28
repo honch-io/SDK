@@ -106,6 +106,15 @@ static honch_status_t honch_packetizer_read_event(
     return HONCH_OK;
 }
 
+/* Encodes the wire-v2 message once into client->flush_message_buffer;
+ * honch_packetizer_next() then slices each chunk straight from that buffer with
+ * no per-chunk re-encode. NOTE: flush_message_buffer is shared with the flush
+ * path (honch_queue_policy.c), so a packetizer session owns it for its whole
+ * begin->next->...->done lifetime and must not be interleaved with a flush (or
+ * another packetizer) that reuses the same buffer, or the in-flight message is
+ * clobbered. Safe today because the packetizer has no in-tree production caller;
+ * enforce mutual exclusion (or give it a dedicated buffer) before wiring it into
+ * the live upload path. */
 static honch_status_t honch_packetizer_encode_message(
     honch_client_t *client,
     const honch_storage_reader_t *reader,
