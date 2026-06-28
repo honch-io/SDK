@@ -272,7 +272,7 @@ class ClientWrapperTests(unittest.TestCase):
         }
 
         client = honch.Honch(**base_config)
-        self.assertEqual(client.config.transport_timeout_ms, 2500)
+        self.assertEqual(client.config.transport_timeout_ms, 8000)
 
         for timeout_ms in (0, -1):
             config = dict(base_config)
@@ -372,9 +372,10 @@ class ClientWrapperTests(unittest.TestCase):
             sys.excepthook = saved
 
     def test_crash_backtrace_is_compact_and_crash_site_first(self):
-        # The $crash backtrace field is small and the core keeps the FIRST bytes,
-        # so the formatter must emit the crash site first. print_exception is
-        # MicroPython-only, so fake it with MicroPython's exact output format.
+        # The $crash backtrace field is small and the core drops it wholesale if
+        # over-long, so the formatter must emit the crash site first (and within
+        # the byte budget). print_exception is MicroPython-only, so fake it with
+        # MicroPython's exact output format.
         importlib.import_module("honch")
         from honch.client import _format_crash_backtrace
 
@@ -420,6 +421,65 @@ class ClientWrapperTests(unittest.TestCase):
         finally:
             if saved is not None:
                 sys.print_exception = saved
+
+    def test_crash_backtrace_byte_bounded_keeps_crash_site_first(self):
+        # Regression: the C core's $crash `backtrace` is an ALL-OR-NOTHING field —
+        # honch_append_crash_string drops the WHOLE property when the value is
+        # longer than HONCH_FAULT_BACKTRACE_MAX_BYTES (192); it does not truncate.
+        # So the formatter must keep its output within that byte budget, dropping
+        # the OUTERMOST frames so the crash site survives — otherwise a realistic
+        # multi-frame trace ships with no backtrace at all.
+        importlib.import_module("honch")
+        from honch.client import (
+            _format_crash_backtrace,
+            _CRASH_BACKTRACE_MAX_BYTES,
+        )
+
+        import sys
+
+        # outermost -> innermost (MicroPython prints most-recent-call-LAST); the
+        # crash-site-first join of these 10 frames is ~384 bytes, well over 192.
+        frames_outer_to_inner = [
+            ("main_application.py", 880, "<module>"),
+            ("service_controller.py", 712, "start"),
+            ("event_dispatch_loop.py", 655, "dispatch"),
+            ("hardware_manager.py", 538, "poll_all"),
+            ("peripheral_registry.py", 421, "read_each"),
+            ("i2c_bus_driver.py", 364, "transfer"),
+            ("temperature_sensor.py", 247, "sample"),
+            ("register_protocol.py", 190, "read_word"),
+            ("low_level_io.py", 133, "read_register"),
+            ("fault_inject.py", 42, "boom"),
+        ]
+        lines = ["Traceback (most recent call last):"]
+        for fname, lineno, func in frames_outer_to_inner:
+            lines.append('  File "%s", line %d, in %s' % (fname, lineno, func))
+        lines.append("ValueError: bus timeout")
+        payload = "\n".join(lines) + "\n"
+
+        def fake_print_exception(exc, buf):
+            buf.write(payload)
+
+        saved = getattr(sys, "print_exception", None)
+        sys.print_exception = fake_print_exception
+        try:
+            bt = _format_crash_backtrace(ValueError("bus timeout"))
+        finally:
+            if saved is None:
+                del sys.print_exception
+            else:
+                sys.print_exception = saved
+
+        self.assertIsNotNone(bt)
+        # Fits the core's byte budget, so the property is emitted, not dropped.
+        self.assertLessEqual(len(bt.encode("utf-8")), _CRASH_BACKTRACE_MAX_BYTES)
+        # Crash site (innermost frame) is preserved and comes first.
+        self.assertTrue(bt.startswith("fault_inject.py:42 in boom"))
+        # The outermost frame is the one dropped to fit — never the crash site.
+        self.assertNotIn("main_application.py:880 in <module>", bt)
+        # Surviving frames are intact (no mid-frame garbage from truncation).
+        for frame in bt.split(" <- "):
+            self.assertIn(" in ", frame)
 
     def test_run_returns_result_and_reports_nothing_on_success(self):
         honch = importlib.import_module("honch")

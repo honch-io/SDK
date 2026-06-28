@@ -23,11 +23,17 @@ from .validation import (
     require_value,
 )
 
-# Cap how much of the Python stack we format before the C core's own bound. The
-# $crash `backtrace` property is small (the core keeps the FIRST bytes and drops
-# the rest), so we format CRASH-SITE-FIRST below — truncation then trims the
-# outermost frames, not the ones that located the bug.
+# Cap how much of the Python stack we format before handing it to the C core.
+# The core's $crash `backtrace` is an ALL-OR-NOTHING field: honch_append_crash_string
+# emits it only when its byte length is within HONCH_FAULT_BACKTRACE_MAX_BYTES and
+# DROPS the whole property otherwise (it does not truncate). So we format
+# CRASH-SITE-FIRST and keep only the leading frames that fit the byte budget,
+# dropping the OUTERMOST frames — the crash site survives, not the entry point.
 _CRASH_BACKTRACE_MAX_FRAMES = 10
+# MUST match HONCH_FAULT_BACKTRACE_MAX_BYTES in core/src/honch_core.c. If the core
+# bound changes, change this too (the core silently drops an over-long backtrace).
+_CRASH_BACKTRACE_MAX_BYTES = 192
+_CRASH_BACKTRACE_SEP = " <- "
 
 
 def _format_crash_backtrace(exc):
@@ -63,8 +69,18 @@ def _format_crash_backtrace(exc):
                 continue
         if not frames:
             return None
-        frames.reverse()  # crash site first, so it survives a start-truncation
-        return " <- ".join(frames[:_CRASH_BACKTRACE_MAX_FRAMES])
+        frames.reverse()  # crash site first
+        # Keep crash-site-first frames whose join stays within the core's byte
+        # budget; drop the outermost frames that don't fit (the core would
+        # otherwise drop the entire property). Measure UTF-8 bytes — that's what
+        # the core counts against HONCH_FAULT_BACKTRACE_MAX_BYTES.
+        kept = ""
+        for frame in frames[:_CRASH_BACKTRACE_MAX_FRAMES]:
+            candidate = frame if not kept else kept + _CRASH_BACKTRACE_SEP + frame
+            if len(candidate.encode("utf-8")) > _CRASH_BACKTRACE_MAX_BYTES:
+                break
+            kept = candidate
+        return kept or None
     except Exception:
         return None
 
