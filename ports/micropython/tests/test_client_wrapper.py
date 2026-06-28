@@ -26,8 +26,11 @@ class FakeCoreClient:
     def set_property(self, key, value):
         self.calls.append(("set_property", key, value))
 
-    def report_error(self, report, properties):
-        self.calls.append(("report_error", report, properties))
+    def report_crash(self, report):
+        self.calls.append(("report_crash", report))
+
+    def report_log_error(self, component, message):
+        self.calls.append(("report_log_error", component, message))
 
     def session_start(self, session_name):
         self.calls.append(("session_start", session_name))
@@ -144,7 +147,7 @@ class ClientWrapperTests(unittest.TestCase):
         self.assertNotIn("enable_wire_v2", client._core.config)
 
         client.track("pressed", {"button": "power"})
-        client.report_error("runtime failed", severity="error", error_type="RuntimeError", properties={"handled": False})
+        client.report_log_error("runtime failed", component="camera")
         client.identify("user-1", {"plan": "beta"})
         client.set_property("mode", "hdr")
         client.session_start("recording")
@@ -159,15 +162,7 @@ class ClientWrapperTests(unittest.TestCase):
             client._core.calls,
             [
                 ("track", "pressed", {"button": "power"}),
-                (
-                    "report_error",
-                    {
-                        "message": "runtime failed",
-                        "severity": "error",
-                        "type": "RuntimeError",
-                    },
-                    {"handled": False},
-                ),
+                ("report_log_error", "camera", "runtime failed"),
                 ("identify", "user-1", {"plan": "beta"}),
                 ("set_property", "mode", "hdr"),
                 ("session_start", "recording"),
@@ -277,7 +272,7 @@ class ClientWrapperTests(unittest.TestCase):
         }
 
         client = honch.Honch(**base_config)
-        self.assertEqual(client.config.transport_timeout_ms, 2500)
+        self.assertEqual(client.config.transport_timeout_ms, 8000)
 
         for timeout_ms in (0, -1):
             config = dict(base_config)
@@ -369,11 +364,186 @@ class ClientWrapperTests(unittest.TestCase):
             except ValueError as exc:
                 sys.excepthook(type(exc), exc, None)
 
-            reports = [c for c in client._core.calls if c[0] == "report_error"]
+            reports = [c for c in client._core.calls if c[0] == "report_crash"]
             self.assertEqual(len(reports), 1)
+            self.assertEqual(reports[0][1]["type"], "ValueError")
             self.assertEqual(original_calls, ["original"])
         finally:
             sys.excepthook = saved
+
+    def test_crash_backtrace_is_compact_and_crash_site_first(self):
+        # The $crash backtrace field is small and the core drops it wholesale if
+        # over-long, so the formatter must emit the crash site first (and within
+        # the byte budget). print_exception is MicroPython-only, so fake it with
+        # MicroPython's exact output format.
+        importlib.import_module("honch")
+        from honch.client import _format_crash_backtrace
+
+        import sys
+
+        def fake_print_exception(exc, buf):
+            buf.write(
+                "Traceback (most recent call last):\n"
+                '  File "app.py", line 88, in <module>\n'
+                '  File "app.py", line 10, in loop\n'
+                '  File "sensor.py", line 42, in read\n'
+                "ValueError: bus timeout\n"
+            )
+
+        saved = getattr(sys, "print_exception", None)
+        sys.print_exception = fake_print_exception
+        try:
+            bt = _format_crash_backtrace(ValueError("bus timeout"))
+        finally:
+            if saved is None:
+                del sys.print_exception
+            else:
+                sys.print_exception = saved
+
+        # Crash site (sensor.py:42) first; outermost frame (<module>) last.
+        self.assertEqual(
+            bt, "sensor.py:42 in read <- app.py:10 in loop <- app.py:88 in <module>"
+        )
+
+    def test_crash_backtrace_returns_none_when_unavailable(self):
+        # Must never raise inside the excepthook: if print_exception is missing
+        # (or fails) the formatter degrades to None rather than displacing the crash.
+        importlib.import_module("honch")
+        from honch.client import _format_crash_backtrace
+
+        import sys
+
+        saved = getattr(sys, "print_exception", None)
+        if hasattr(sys, "print_exception"):
+            del sys.print_exception
+        try:
+            self.assertIsNone(_format_crash_backtrace(ValueError("boom")))
+        finally:
+            if saved is not None:
+                sys.print_exception = saved
+
+    def test_crash_backtrace_byte_bounded_keeps_crash_site_first(self):
+        # Regression: the C core's $crash `backtrace` is an ALL-OR-NOTHING field —
+        # honch_append_crash_string drops the WHOLE property when the value is
+        # longer than HONCH_FAULT_BACKTRACE_MAX_BYTES (192); it does not truncate.
+        # So the formatter must keep its output within that byte budget, dropping
+        # the OUTERMOST frames so the crash site survives — otherwise a realistic
+        # multi-frame trace ships with no backtrace at all.
+        importlib.import_module("honch")
+        from honch.client import (
+            _format_crash_backtrace,
+            _CRASH_BACKTRACE_MAX_BYTES,
+        )
+
+        import sys
+
+        # outermost -> innermost (MicroPython prints most-recent-call-LAST); the
+        # crash-site-first join of these 10 frames is ~384 bytes, well over 192.
+        frames_outer_to_inner = [
+            ("main_application.py", 880, "<module>"),
+            ("service_controller.py", 712, "start"),
+            ("event_dispatch_loop.py", 655, "dispatch"),
+            ("hardware_manager.py", 538, "poll_all"),
+            ("peripheral_registry.py", 421, "read_each"),
+            ("i2c_bus_driver.py", 364, "transfer"),
+            ("temperature_sensor.py", 247, "sample"),
+            ("register_protocol.py", 190, "read_word"),
+            ("low_level_io.py", 133, "read_register"),
+            ("fault_inject.py", 42, "boom"),
+        ]
+        lines = ["Traceback (most recent call last):"]
+        for fname, lineno, func in frames_outer_to_inner:
+            lines.append('  File "%s", line %d, in %s' % (fname, lineno, func))
+        lines.append("ValueError: bus timeout")
+        payload = "\n".join(lines) + "\n"
+
+        def fake_print_exception(exc, buf):
+            buf.write(payload)
+
+        saved = getattr(sys, "print_exception", None)
+        sys.print_exception = fake_print_exception
+        try:
+            bt = _format_crash_backtrace(ValueError("bus timeout"))
+        finally:
+            if saved is None:
+                del sys.print_exception
+            else:
+                sys.print_exception = saved
+
+        self.assertIsNotNone(bt)
+        # Fits the core's byte budget, so the property is emitted, not dropped.
+        self.assertLessEqual(len(bt.encode("utf-8")), _CRASH_BACKTRACE_MAX_BYTES)
+        # Crash site (innermost frame) is preserved and comes first.
+        self.assertTrue(bt.startswith("fault_inject.py:42 in boom"))
+        # The outermost frame is the one dropped to fit — never the crash site.
+        self.assertNotIn("main_application.py:880 in <module>", bt)
+        # Surviving frames are intact (no mid-frame garbage from truncation).
+        for frame in bt.split(" <- "):
+            self.assertIn(" in ", frame)
+
+    def test_run_returns_result_and_reports_nothing_on_success(self):
+        honch = importlib.import_module("honch")
+        client = self._make_client(honch)
+        self.assertEqual(client.run(lambda: 42), 42)
+        self.assertEqual([c for c in client._core.calls if c[0] == "report_crash"], [])
+
+    def test_run_reports_crash_with_traceback_and_reraises(self):
+        honch = importlib.import_module("honch")
+        client = self._make_client(honch)
+
+        import sys
+
+        def fake_print_exception(exc, buf):
+            buf.write(
+                "Traceback (most recent call last):\n"
+                '  File "main.py", line 5, in main\n'
+                "ValueError: boom\n"
+            )
+
+        def boom():
+            raise ValueError("boom")
+
+        saved = getattr(sys, "print_exception", None)
+        sys.print_exception = fake_print_exception
+        try:
+            with self.assertRaises(ValueError):
+                client.run(boom)
+        finally:
+            if saved is None:
+                del sys.print_exception
+            else:
+                sys.print_exception = saved
+
+        reports = [c for c in client._core.calls if c[0] == "report_crash"]
+        self.assertEqual(len(reports), 1)
+        self.assertEqual(reports[0][1]["type"], "ValueError")
+        self.assertIn("main.py:5 in main", reports[0][1].get("backtrace", ""))
+        # A fatal crash must be pushed out before the program exits.
+        self.assertIn(("flush",), client._core.calls)
+
+    def test_run_captures_crash_without_sys_excepthook(self):
+        # The whole point on stock MicroPython (e.g. Pico W): run() does not depend
+        # on sys.excepthook, so it captures the crash even when it is absent.
+        honch = importlib.import_module("honch")
+        client = self._make_client(honch)
+
+        import sys
+
+        saved = getattr(sys, "excepthook", None)
+        if hasattr(sys, "excepthook"):
+            del sys.excepthook
+
+        def boom():
+            raise RuntimeError("no hook needed")
+
+        try:
+            with self.assertRaises(RuntimeError):
+                client.run(boom)
+        finally:
+            if saved is not None:
+                sys.excepthook = saved
+
+        self.assertTrue(any(c[0] == "report_crash" for c in client._core.calls))
 
     def test_uninstall_error_hook_restores_previous(self):
         honch = importlib.import_module("honch")
@@ -405,7 +575,7 @@ class ClientWrapperTests(unittest.TestCase):
         sys.excepthook = lambda *a: original_calls.append("original")
         try:
             self.assertTrue(client.install_error_hook())
-            client._core.report_error = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("io error"))
+            client._core.report_crash = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("io error"))
 
             try:
                 raise ValueError("boom")
@@ -418,18 +588,15 @@ class ClientWrapperTests(unittest.TestCase):
         finally:
             sys.excepthook = saved
 
-    def test_report_error_omits_unset_optional_fields(self):
+    def test_report_log_error_forwards_component_and_message(self):
         honch = importlib.import_module("honch")
         client = self._make_client(honch)
 
-        client.report_error("disk full", severity="warning", code="E_DISK")
+        client.report_log_error("disk full", component="storage")
 
-        report = client._core.calls[0][1]
-        # Unset optionals are omitted, not sent as None slots; the C module treats
-        # a missing key the same as None, so this stays on-device-equivalent.
         self.assertEqual(
-            report,
-            {"message": "disk full", "severity": "warning", "code": "E_DISK"},
+            client._core.calls[0],
+            ("report_log_error", "storage", "disk full"),
         )
 
     def test_validation_rules_for_text_fields(self):
@@ -447,9 +614,7 @@ class ClientWrapperTests(unittest.TestCase):
         with self.assertRaises(honch.InvalidArgumentError):
             client.set_property("  ", "x")
         with self.assertRaises(honch.InvalidArgumentError):
-            client.report_error("  ")
-        with self.assertRaises(honch.InvalidArgumentError):
-            client.report_error("ok", severity="loud")
+            client.report_log_error("  ")
 
 
 if __name__ == "__main__":

@@ -16,4 +16,34 @@ config HONCH_CRASH_SYMBOLICATION
         coredump summaries so Honch can resolve function and source lines after
         matching symbols are uploaded.
 
+        When the ELF coredump-to-flash options are also enabled
+        (CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH + CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF)
+        and a "coredump" partition exists, the SDK additionally streams the raw
+        coredump image off flash to Honch after a crash and erases it once Honch
+        acknowledges the upload. See the README "Crash coredump upload" section.
+
+config HONCH_LIFECYCLE_EVENTS
+    bool "Enable automatic lifecycle events"
+    default y
+    help
+        Emit $device_boot, $firmware_update, and $device_shutdown
+        automatically. Disable to compile these out; the firmware-version
+        baseline is still maintained so re-enabling never spuriously re-emits.
+
+config HONCH_SESSIONS
+    bool "Enable session tracking"
+    default y
+    help
+        Emit $session_start / $session_end via the session API. Disable to
+        compile the session-tracking code out; the session_id event field is
+        always retained.
+
+config HONCH_BATTERY
+    bool "Enable battery telemetry"
+    default y
+    help
+        Emit the $battery_level auto-property and the $battery_low edge event.
+        Disable to compile the battery sampling/emission out (the public
+        battery config fields remain).
+
 endmenu

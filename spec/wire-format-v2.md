@@ -102,7 +102,30 @@ Source types:
 | Value | Source | Description |
 |------:|--------|-------------|
 | 0 | events | Compact event message |
-| 1-7 | reserved | Requires a spec update |
+| 1 | coredump | Opaque binary coredump image (e.g. an ESP-IDF ELF coredump), chunked across frames. The body is raw bytes, **not** a compact event message; the CRC16 still covers the complete unchunked image. Receivers route by `source_type` and store/symbolicate the blob rather than decoding events. |
+| 2-7 | reserved | Requires a spec update |
+
+A `coredump` upload uses the identical multi-frame chunk machinery as events
+(init/continuation/more, `message_id`, offset, final CRC). It is sent **direct
+to `/capture`** over the device's own HTTP transport; the mobile relay rejects
+unknown `source_type`s, so coredump frames are not relayed through companion
+apps until the relay is taught to pass them through.
+
+**Acknowledgement contract.** Capture must acknowledge each non-final coredump
+frame with `CHUNK_STORED` and the final frame (the one carrying the CRC) with
+`ACCEPTED`. The SDK commits its streaming offset and running CRC **only** on the
+expected result for the frame; any other result (including a retryable `RETRY`)
+leaves the offset/CRC unchanged and the same chunk is re-sent, so a chunk is
+never folded into the running CRC unless Capture durably stored it. The device
+clears (erases) its on-device coredump image **only** after the final
+`ACCEPTED` — erase-after-ack — or on a permanent rejection (to avoid re-uploading
+a blob Capture will never accept).
+
+**Reconciliation with `$crash`.** The blob's `stream_id` is the `crash_id`
+property of the reserved `$crash` event for the same crash. Streaming begins as
+soon as the `$crash` is emitted, so the blob frames may arrive **before, during,
+or after** the `$crash` event itself; Capture reconciles the blob to its summary
+by `crash_id` and must accept a coredump whose `$crash` has not yet landed.
 
 ### Init, Continuation, And Single Frames
 

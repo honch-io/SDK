@@ -480,7 +480,9 @@ honch_status_t honch_list_files_with_suffix(const char *directory, const char *s
     }
 
     closedir(dir);
-    qsort(list->items, list->count, sizeof(*list->items), honch_compare_entries);
+    if (list->count > 0) {
+        qsort(list->items, list->count, sizeof(*list->items), honch_compare_entries);
+    }
     return HONCH_OK;
 }
 

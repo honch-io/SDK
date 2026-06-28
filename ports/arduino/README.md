@@ -71,19 +71,25 @@ does not perform network I/O;
 delivery remains cooperative through `honch::defaultClient().tick()` or
 explicit flush calls.
 
-Automatic `$error` capture is disabled by default. When
+Automatic crash capture is disabled by default. When
 `config.enableErrorTracking` is true, the wrapper maps panic,
 interrupt/task/other watchdog, brownout, and unknown reset reasons from
-`esp_reset_reason()` into a bounded `$error` event with `source`, `severity`,
-and `reset_reason` properties during `begin()`. It does not install panic
-handlers, save coredumps, collect registers, copy stacks, upload symbol files,
-send source code/source paths, or replace ESP32 crash forensics tooling.
+`esp_reset_reason()` into a bounded `$crash` event with `source`, `severity`,
+and `reset_reason` properties during `begin()`.
+
+This preview wrapper reports the crash **summary** only — it reads the reset
+reason; it does not read or upload the raw ELF coredump image. Streaming the
+full coredump blob (the SDK's `coredump_source` path) is wired on the **ESP-IDF
+port** (`ports/esp-idf`), which enables `esp_core_dump` to flash plus a
+`coredump` partition — see its README "Crash coredump upload" section. The
+streaming uploader is vendored into this library (the core stays byte-identical),
+but the Arduino preview supplies no `coredump_source`, so it stays inert here.
 Define `HONCH_ENABLE_ERROR_TRACKING=0` in the Arduino build flags to compile
 out the wrapper reset-snapshot path entirely.
 
-Call `honch::defaultClient().reportError(report, properties, propertyCount)`
-from normal runtime error paths to queue `$error` with `source="runtime"`.
-Delivery follows the same cooperative `tick()`/`flush()` policy as `track()`.
+Crash reporting is automatic — there is no manual error method. When
+`enableErrorTracking` is set, the wrapper maps the ESP32 reset reason into a
+one-time `$crash` event emitted during `begin()` after an abnormal reset.
 
 All `HonchClass` methods serialize access to the wrapper-owned client pointer.
 Concurrent calls from multiple FreeRTOS tasks are allowed, but only one wrapper
@@ -99,7 +105,7 @@ event threshold is reached. Successful outbound uploads are spaced by
 `flushMinIntervalMs`; leave it at the 15000 ms default for consumer firmware, or
 set it to `HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS` for benchmark or explicit
 high-throughput modes.
-`transportTimeoutMs` bounds each synchronous HTTP POST; leave it at the 2500 ms
+`transportTimeoutMs` bounds each synchronous HTTP POST; leave it at the 8000 ms
 default unless the capture endpoint and network need a different per-request
 timeout. Values above the hard maximum of 10000 ms are clamped.
 

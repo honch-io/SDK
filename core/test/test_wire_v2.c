@@ -46,6 +46,21 @@ static void test_crc16_ccitt_false_matches_check_value(void)
     assert(honch_wire_v2_crc16(input, sizeof(input)) == 0x29b1u);
 }
 
+static void test_crc16_incremental_matches_one_shot(void)
+{
+    static const uint8_t data[] = {0x01u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x07u, 0x08u};
+    uint16_t one_shot = honch_wire_v2_crc16(data, sizeof(data));
+
+    /* Folding the same bytes in two pieces yields the same CRC -- this is what lets
+     * a coredump be CRC'd while streamed from flash in chunks. */
+    uint16_t running = honch_wire_v2_crc16_update(HONCH_WIRE_V2_CRC16_INITIAL, data, 3u);
+    running = honch_wire_v2_crc16_update(running, data + 3u, sizeof(data) - 3u);
+    assert(running == one_shot);
+
+    /* An empty update is a no-op. */
+    assert(honch_wire_v2_crc16_update(one_shot, NULL, 0u) == one_shot);
+}
+
 static void test_zigzag_i64_matches_wire_edge_cases(void)
 {
     assert(honch_wire_v2_zigzag_i64(0) == 0u);
@@ -231,6 +246,49 @@ static void test_chunker_splits_message_into_ascending_v2_frames(void)
     static const uint8_t expected_first[] = {0x42u, 0x07u, 0x05u, 0x01u, 0x02u, 0x03u};
     static const uint8_t expected_second[] = {0x62u, 0x07u, 0x03u, 0x04u};
     static const uint8_t expected_third[] = {0x22u, 0x07u, 0x04u, 0x05u, 0x04u, 0x93u};
+
+    assert(first_size == sizeof(expected_first));
+    assert(second_size == sizeof(expected_second));
+    assert(third_size == sizeof(expected_third));
+    assert(memcmp(first, expected_first, sizeof(expected_first)) == 0);
+    assert(memcmp(second, expected_second, sizeof(expected_second)) == 0);
+    assert(memcmp(third, expected_third, sizeof(expected_third)) == 0);
+}
+
+static void test_chunker_emits_coredump_source_type_with_identical_body(void)
+{
+    /* Identical bytes to the events chunker test; only source_type differs. So
+     * the frame headers gain bit 2 (source_type=coredump=1) and EVERYTHING else
+     * -- message_id, lengths, payload, and the CRC over the raw body -- is byte
+     * identical. This proves the coredump source rides the same chunk machinery. */
+    static const uint8_t message[] = {0x01u, 0x02u, 0x03u, 0x04u, 0x05u};
+    honch_wire_v2_chunker_t chunker = {0};
+    uint8_t first[6] = {0};
+    uint8_t second[6] = {0};
+    uint8_t third[6] = {0};
+    size_t first_size = 0u;
+    size_t second_size = 0u;
+    size_t third_size = 0u;
+    bool complete = true;
+
+    assert(honch_wire_v2_chunker_begin(
+        &chunker,
+        7u,
+        message,
+        sizeof(message),
+        HONCH_WIRE_V2_SOURCE_COREDUMP,
+        sizeof(first)) == HONCH_OK);
+    assert(honch_wire_v2_chunker_next(&chunker, first, sizeof(first), &first_size, &complete) == HONCH_OK);
+    assert(!complete);
+    assert(honch_wire_v2_chunker_next(&chunker, second, sizeof(second), &second_size, &complete) == HONCH_OK);
+    assert(!complete);
+    assert(honch_wire_v2_chunker_next(&chunker, third, sizeof(third), &third_size, &complete) == HONCH_OK);
+    assert(complete);
+
+    /* Events headers were 0x42 / 0x62 / 0x22; coredump (source_type=1) sets bit 2. */
+    static const uint8_t expected_first[] = {0x46u, 0x07u, 0x05u, 0x01u, 0x02u, 0x03u};
+    static const uint8_t expected_second[] = {0x66u, 0x07u, 0x03u, 0x04u};
+    static const uint8_t expected_third[] = {0x26u, 0x07u, 0x04u, 0x05u, 0x04u, 0x93u};
 
     assert(first_size == sizeof(expected_first));
     assert(second_size == sizeof(expected_second));
@@ -1322,9 +1380,47 @@ static void test_event_batch_encoder_rejects_compact_messages_over_sdk_limit(voi
         &message_size) == HONCH_ERROR_INVALID_ARGUMENT);
 }
 
+static void test_encode_frame_precomputed_crc_matches_computed(void)
+{
+    static const uint8_t message[] = {0xdeu, 0xadu, 0xbeu, 0xefu, 0x01u, 0x02u};
+    uint8_t out_computed[32] = {0};
+    uint8_t out_precomputed[32] = {0};
+    size_t n_computed = 0u;
+    size_t n_precomputed = 0u;
+
+    /* Final single frame, CRC computed by the encoder over the whole message. */
+    honch_wire_v2_frame_spec_t computed = {
+        .message_id = 9u,
+        .total_message_length = sizeof(message),
+        .offset = 0u,
+        .payload = message,
+        .payload_size = sizeof(message),
+        .crc_message = message,
+        .crc_message_size = sizeof(message),
+        .source_type = HONCH_WIRE_V2_SOURCE_COREDUMP,
+        .continuation = false,
+        .more = false
+    };
+    assert(honch_wire_v2_encode_frame(&computed, out_computed, sizeof(out_computed), &n_computed) == HONCH_OK);
+
+    /* Same frame, CRC supplied directly -- as the streaming coredump uploader does
+     * after folding each flash chunk into a running CRC. Must be byte identical. */
+    honch_wire_v2_frame_spec_t precomputed = computed;
+    precomputed.crc_message = NULL;
+    precomputed.crc_message_size = 0u;
+    precomputed.has_precomputed_crc = true;
+    precomputed.precomputed_crc = honch_wire_v2_crc16(message, sizeof(message));
+    assert(honch_wire_v2_encode_frame(&precomputed, out_precomputed, sizeof(out_precomputed), &n_precomputed) ==
+        HONCH_OK);
+
+    assert(n_computed == n_precomputed);
+    assert(memcmp(out_computed, out_precomputed, n_computed) == 0);
+}
+
 int main(void)
 {
     test_crc16_ccitt_false_matches_check_value();
+    test_crc16_incremental_matches_one_shot();
     test_zigzag_i64_matches_wire_edge_cases();
     test_single_final_frame_uses_v2_header_varint_id_and_message_crc();
     test_init_frame_includes_total_length_and_no_crc_when_more_frames_follow();
@@ -1332,6 +1428,8 @@ int main(void)
     test_final_frame_rejects_incomplete_payload();
     test_more_frame_rejects_complete_payload();
     test_chunker_splits_message_into_ascending_v2_frames();
+    test_chunker_emits_coredump_source_type_with_identical_body();
+    test_encode_frame_precomputed_crc_matches_computed();
     test_event_batch_encoder_writes_required_context_and_single_event();
     test_event_batch_encoder_matches_single_required_context_fixture_frame();
     test_event_batch_encoder_writes_optional_context_metadata();

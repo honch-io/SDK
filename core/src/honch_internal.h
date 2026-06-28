@@ -2,6 +2,7 @@
 #define HONCH_INTERNAL_H
 
 #include "honch/core/honch.h"
+#include "honch/core/coredump.h"
 #include "honch/core/wire_v2.h"
 
 #include <stdbool.h>
@@ -15,7 +16,11 @@
 #endif
 #define HONCH_DEFAULT_MAX_QUEUED_EVENTS 1000u
 #define HONCH_DEFAULT_MAX_EVENT_BYTES 8192u
-#define HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS 2500u
+/* 8s, not 2.5s: a constrained ESP32 TLS handshake to a Google LB (GTS Root R1 is
+ * RSA-4096) plus the POST routinely needs >2.5s, which timed out (ESP_ERR_HTTP_EAGAIN)
+ * on real hardware. The timeout is a ceiling, so fast paths (POSIX/desktop) are
+ * unaffected; it only buys constrained TLS clients room to complete. */
+#define HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS 8000u
 #define HONCH_DEFAULT_FLUSH_INTERVAL_SECONDS 120u
 #define HONCH_DEFAULT_FLUSH_MIN_INTERVAL_MS 15000u
 #define HONCH_DEFAULT_FLUSH_EVENT_THRESHOLD 20u
@@ -55,9 +60,29 @@
 #error "HONCH_FLUSH_SCRATCH_MAX_EVENTS cannot exceed HONCH_MAX_BATCH_SIZE"
 #endif
 
+/* Automatic $error log capture coalesces identical error lines in a small,
+ * fixed, RAM-bounded table that is drained (enqueued) on flush/tick. */
+#define HONCH_LOG_DEDUP_SLOTS 4u
+#define HONCH_LOG_COMPONENT_STORE_BYTES 32u
+#define HONCH_LOG_MESSAGE_STORE_BYTES 128u
+
+/* Coredump upload reads the flash image one bounded chunk at a time; this caps
+ * the per-step RAM cost (one chunk + its encoded frame), independent of image
+ * size. The encoded frame adds a small header/varint/CRC overhead. */
+#define HONCH_COREDUMP_CHUNK_BYTES 512u
+#define HONCH_COREDUMP_FRAME_BYTES (HONCH_COREDUMP_CHUNK_BYTES + 32u)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef struct honch_log_error_slot {
+    bool active;
+    uint32_t hash;
+    uint32_t count;
+    char component[HONCH_LOG_COMPONENT_STORE_BYTES + 1u];
+    char message[HONCH_LOG_MESSAGE_STORE_BYTES + 1u];
+} honch_log_error_slot_t;
 
 typedef struct honch_atomic_bool {
     bool value;
@@ -158,6 +183,9 @@ struct honch_client {
     char *dead_directory;
     char *state_directory;
     char *distinct_id;
+    /* Core-owned event metadata: every event carries session_id on the wire,
+     * so it stays in core unconditionally; the optional sessions feature
+     * (HONCH_ENABLE_SESSIONS) owns only the $session_* mutation API. */
     char *session_id;
     honch_wire_v2_property_t build_properties[HONCH_MAX_EVENT_PROPERTIES];
     honch_wire_v2_property_t auto_property_buffers[HONCH_AUTO_PROPERTY_BUFFER_COUNT][HONCH_MAX_AUTO_PROPERTIES];
@@ -201,15 +229,42 @@ struct honch_client {
     bool uploads_paused;
     bool closing;
     size_t active_calls;
+#if HONCH_ENABLE_BATTERY
     int (*battery_callback)(void);
     int battery_low_threshold;
+#endif
     honch_auto_properties_fn auto_properties_callback;
     void *auto_properties_userdata;
     honch_connectivity_fn connectivity_callback;
     void *connectivity_userdata;
+#if HONCH_ENABLE_BATTERY
     bool battery_low_emitted;
+#endif
     uint64_t sequence;
     size_t queued_event_count;
+    /* Automatic error/crash reporting state. */
+    void (*crash_uploaded_callback)(void *userdata);
+    void *crash_uploaded_userdata;
+    bool crash_reported;        /* a $crash has been emitted this client lifetime (once-only) */
+    bool crash_pending_ack;     /* a reported $crash is enqueued, awaiting delivery */
+    bool crash_ack_due;         /* the $crash was delivered; fire the callback once, outside the lock */
+    uint64_t crash_event_sequence; /* queue sequence of the enqueued $crash, for erase-after-ack */
+    char coredump_crash_id[33]; /* links the $crash summary to its uploaded coredump blob */
+    honch_log_error_slot_t log_error_slots[HONCH_LOG_DEDUP_SLOTS];
+    uint32_t log_errors_dropped;
+#if HONCH_ENABLE_CRASH_CAPTURE
+    /* Raw coredump upload (streamed from flash, never buffered whole). */
+    const honch_coredump_source_t *coredump_source;
+    bool coredump_upload_active;  /* an upload is in progress */
+    bool coredump_done;           /* terminal latch: upload fully delivered or abandoned; never restart */
+    bool coredump_clear_due;      /* erase the source, fired outside the lock after final ack */
+    size_t coredump_total;        /* image size captured at upload start */
+    size_t coredump_offset;       /* next byte to send (advances only on ack) */
+    uint16_t coredump_committed_crc; /* CRC of bytes [0, coredump_offset), advances only on ack */
+    uint32_t coredump_message_id; /* wire message id for this upload */
+    uint8_t coredump_chunk[HONCH_COREDUMP_CHUNK_BYTES];
+    uint8_t coredump_frame[HONCH_COREDUMP_FRAME_BYTES];
+#endif
 };
 
 bool honch_is_blank(const char *value);
@@ -309,6 +364,35 @@ honch_status_t honch_queue_flush_one_chunk_locked(honch_client_t *client, bool *
 honch_status_t honch_queue_flush_limited_locked(honch_client_t *client, size_t max_batches);
 honch_status_t honch_queue_flush_locked(honch_client_t *client);
 
+honch_status_t honch_coredump_chunk(
+    const honch_coredump_source_t *source,
+    size_t total,
+    size_t offset,
+    uint8_t *buffer,
+    size_t buffer_size,
+    size_t *out_size);
+#if HONCH_ENABLE_CRASH_CAPTURE
+honch_status_t honch_coredump_upload_step_locked(honch_client_t *client, bool *progressed);
+#endif
+
+/* Fault-field byte limits + the two boot-reason helpers that stay in core
+ * (shared across translation units): honch_boot_reset_reason_value feeds the
+ * $device_boot event (honch_lifecycle_events.c) and the $crash properties
+ * (honch_crash.c); honch_fault_string_length backs both. */
+#define HONCH_FAULT_RESET_REASON_MAX_BYTES 64u
+#define HONCH_FAULT_MESSAGE_MAX_BYTES 160u
+#define HONCH_FAULT_COMPONENT_MAX_BYTES 64u
+#define HONCH_ERROR_TYPE_MAX_BYTES 64u
+#define HONCH_ERROR_CODE_MAX_BYTES 64u
+#define HONCH_FAULT_BUILD_ID_MAX_BYTES 64u
+#define HONCH_FAULT_EXCEPTION_CAUSE_MAX_BYTES 64u
+#define HONCH_FAULT_PC_MAX_BYTES 18u
+#define HONCH_FAULT_BACKTRACE_MAX_BYTES 192u
+#define HONCH_FAULT_TASK_NAME_MAX_BYTES 32u
+
+bool honch_fault_string_length(const char *value, size_t max_length, size_t *out_length);
+honch_wire_v2_value_t honch_boot_reset_reason_value(const honch_crash_report_t *crash_report);
+
 honch_status_t honch_client_enter(honch_client_t *client);
 void honch_client_leave(honch_client_t *client);
 honch_status_t honch_client_begin_shutdown(honch_client_t *client);
@@ -316,7 +400,55 @@ bool honch_client_lock_ops_valid(const honch_platform_ops_t *platform);
 honch_status_t honch_client_lock_create(honch_client_t *client, void **mutex);
 void honch_client_lock_destroy(honch_client_t *client, void *mutex);
 honch_status_t honch_client_state_lock(honch_client_t *client);
+honch_status_t honch_client_state_lock_blocking(honch_client_t *client);
 void honch_client_state_unlock(honch_client_t *client);
+honch_status_t honch_client_lock(honch_client_t *client);
+void honch_client_unlock(honch_client_t *client);
+
+/* Per-event context types shared across the core translation units (promoted
+ * from honch_core.c for the modular decomposition). */
+typedef struct honch_auto_properties_snapshot {
+    honch_wire_v2_property_t *properties;
+    size_t property_count;
+    honch_client_t *client;
+    size_t buffer_index;
+    bool buffer_acquired;
+} honch_auto_properties_snapshot_t;
+
+typedef struct honch_event_context {
+    int battery_level;
+    honch_auto_properties_snapshot_t auto_properties;
+} honch_event_context_t;
+
+typedef struct honch_lifecycle_queue_tracker {
+    uint64_t start_sequence;
+    size_t start_queued_event_count;
+    uint64_t sequences[8];
+    size_t count;
+} honch_lifecycle_queue_tracker_t;
+
+honch_status_t honch_append_typed_property(honch_wire_v2_property_t *properties, size_t *property_count, const char *key, honch_wire_v2_value_t value, bool allow_reserved);
+void honch_event_context_free(honch_event_context_t *event_context);
+honch_status_t honch_prepare_event_context(honch_client_t *client, honch_event_context_t *event_context);
+honch_status_t honch_client_random_hex(honch_client_t *client, char out[33]);
+void honch_lifecycle_queue_tracker_begin(honch_client_t *client, honch_lifecycle_queue_tracker_t *tracker);
+honch_status_t honch_lifecycle_queue_tracker_rollback(honch_client_t *client, honch_lifecycle_queue_tracker_t *tracker);
+honch_status_t honch_track_locked_internal(honch_client_t *client, const char *event_name, const honch_wire_v2_property_t *properties, size_t property_count, const honch_wire_v2_property_t *trusted_properties, size_t trusted_property_count, int battery_level, bool check_battery_low, const honch_auto_properties_snapshot_t *auto_properties, honch_lifecycle_queue_tracker_t *lifecycle_tracker);
+int honch_read_battery_level(honch_client_t *client);
+#if HONCH_ENABLE_BATTERY
+honch_status_t honch_emit_battery_low_locked(honch_client_t *client, int battery_level, const honch_auto_properties_snapshot_t *auto_properties, honch_lifecycle_queue_tracker_t *lifecycle_tracker);
+#endif
+
+#if HONCH_ENABLE_CRASH_CAPTURE
+honch_status_t honch_emit_crash_locked(honch_client_t *client, const honch_crash_report_t *crash_report, honch_lifecycle_queue_tracker_t *lifecycle_tracker);
+#endif
+#if HONCH_ENABLE_LOG_CAPTURE
+void honch_drain_log_errors_locked(honch_client_t *client);
+#endif
+#if HONCH_ENABLE_LIFECYCLE_EVENTS
+honch_status_t honch_lifecycle_emit_boot_locked(honch_client_t *client, const honch_core_config_t *config, honch_lifecycle_queue_tracker_t *lifecycle_tracker, bool *firmware_version_pending_save);
+honch_status_t honch_lifecycle_emit_shutdown_locked(honch_client_t *client, honch_event_context_t *event_context);
+#endif
 
 #ifdef __cplusplus
 }

@@ -129,6 +129,23 @@ honch_status_t honch_client_state_lock(honch_client_t *client)
     return honch_client_lock_handle(client, client->state_mutex);
 }
 
+/* Re-acquire the state lock at a point where the critical section logically
+ * still owns it — i.e. after deliberately releasing it around a network POST.
+ * The plain state_lock is a try-lock on some platforms (e.g. esp-idf's 10ms
+ * timed take) and can return HONCH_ERROR_BUSY; a re-acquire MUST NOT fail, or
+ * the caller would run its locked epilogue unlocked and unbalance the mutex.
+ * BUSY just means "timed out, retry" — the underlying take blocks per attempt,
+ * so this is not a busy-spin, and all state-lock holders release promptly. */
+honch_status_t honch_client_state_lock_blocking(honch_client_t *client)
+{
+    for (;;) {
+        honch_status_t status = honch_client_state_lock(client);
+        if (status != HONCH_ERROR_BUSY) {
+            return status;
+        }
+    }
+}
+
 void honch_client_state_unlock(honch_client_t *client)
 {
     if (client == NULL) {

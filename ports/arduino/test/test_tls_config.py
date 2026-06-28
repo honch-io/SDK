@@ -32,6 +32,7 @@ SHARED_ESP_RESET_REASONS = (
     "ESP_RST_JTAG",
     "ESP_RST_EFUSE",
     "ESP_RST_PWR_GLITCH",
+    "ESP_RST_CPU_LOCKUP",
     "ESP_RST_UNKNOWN",
 )
 
@@ -53,9 +54,9 @@ def reset_case_body(source: str, reset_reason: str) -> str:
 def arduino_reset_mapping(source: str, reset_reason: str) -> tuple[str, str, str]:
     body = reset_case_body(source, reset_reason)
     match = re.search(
-        r"honch_arduino_reset_snapshot\(\s*"
-        r"(HONCH_FAULT_KIND_[A-Z_]+),\s*"
-        r"(HONCH_FAULT_SEVERITY_[A-Z_]+),\s*"
+        r"honch_arduino_reset_report\(\s*"
+        r"(HONCH_CRASH_KIND_[A-Z_]+),\s*"
+        r"(HONCH_CRASH_SEVERITY_[A-Z_]+),\s*"
         r'"([^"]+)"\s*\)',
         body,
     )
@@ -68,16 +69,16 @@ def esp_idf_reset_mapping(source: str, reset_reason: str) -> tuple[str, str, str
     body = reset_case_body(source, reset_reason)
     abnormal = re.search(
         r"honch_esp_abnormal_fault_snapshot\(\s*"
-        r"(HONCH_FAULT_KIND_[A-Z_]+),\s*"
+        r"(HONCH_CRASH_KIND_[A-Z_]+),\s*"
         r'"([^"]+)"',
         body,
     )
     if abnormal is not None:
-        return abnormal.group(1), "HONCH_FAULT_SEVERITY_FATAL", abnormal.group(2)
+        return abnormal.group(1), "HONCH_CRASH_SEVERITY_FATAL", abnormal.group(2)
 
     direct = re.search(
-        r"\.kind\s*=\s*(HONCH_FAULT_KIND_[A-Z_]+).*?"
-        r"\.severity\s*=\s*(HONCH_FAULT_SEVERITY_[A-Z_]+).*?"
+        r"\.kind\s*=\s*(HONCH_CRASH_KIND_[A-Z_]+).*?"
+        r"\.severity\s*=\s*(HONCH_CRASH_SEVERITY_[A-Z_]+).*?"
         r'\.reset_reason\s*=\s*"([^"]+)"',
         body,
         re.DOTALL,
@@ -145,7 +146,7 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         self.assertIn("uint32_t transportTimeoutMs = 0;", header)
         self.assertIn("coreConfig.transport_timeout_ms = config.transportTimeoutMs;", adapter)
         self.assertIn("uint32_t transportTimeoutMs;", transport_header)
-        self.assertIn("HONCH_ARDUINO_DEFAULT_TRANSPORT_TIMEOUT_MS 2500u", transport)
+        self.assertIn("HONCH_ARDUINO_DEFAULT_TRANSPORT_TIMEOUT_MS 8000u", transport)
         self.assertIn("HONCH_ARDUINO_MAX_TRANSPORT_TIMEOUT_MS 10000u", transport)
         self.assertIn(
             "ctx->transportTimeoutMs = config.transportTimeoutMs == 0u ?",
@@ -246,20 +247,19 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         public = read("ports/arduino/src/Honch.h")
 
         self.assertIn("bool enableErrorTracking = false;", public)
-        self.assertIn("honch_fault_snapshot_t honch_arduino_fault_snapshot()", adapter)
+        self.assertIn("honch_crash_report_t honch_arduino_crash_report()", adapter)
         self.assertIn("#include <esp_system.h>", platform)
         self.assertIn("esp_reset_reason()", platform)
         self.assertIn("ESP_RST_PANIC", platform)
         self.assertIn("ESP_RST_TASK_WDT", platform)
         self.assertIn("ESP_RST_INT_WDT", platform)
         self.assertIn("ESP_RST_BROWNOUT", platform)
-        self.assertIn("HONCH_FAULT_KIND_PANIC", platform)
-        self.assertIn("HONCH_FAULT_KIND_WATCHDOG", platform)
-        self.assertIn("HONCH_FAULT_KIND_BROWNOUT", platform)
-        self.assertIn("honch_fault_snapshot_t gFaultSnapshot;", wrapper)
-        self.assertIn("gFaultSnapshot = honch_arduino_fault_snapshot();", wrapper)
-        self.assertIn("coreConfig.enable_error_tracking = config.enableErrorTracking;", wrapper)
-        self.assertIn("coreConfig.fault_snapshot = &gFaultSnapshot;", wrapper)
+        self.assertIn("HONCH_CRASH_KIND_PANIC", platform)
+        self.assertIn("HONCH_CRASH_KIND_WATCHDOG", platform)
+        self.assertIn("HONCH_CRASH_KIND_BROWNOUT", platform)
+        self.assertIn("honch_crash_report_t gCrashReport;", wrapper)
+        self.assertIn("gCrashReport = honch_arduino_crash_report();", wrapper)
+        self.assertIn("coreConfig.crash_report = config.enableErrorTracking ? &gCrashReport : nullptr;", wrapper)
 
     def test_arduino_maps_idf_5_1_reset_reasons_without_fatal_unknown(self) -> None:
         platform = read("ports/arduino/src/honch_arduino_platform.cpp")
@@ -274,7 +274,7 @@ class ArduinoTLSConfigTests(unittest.TestCase):
 
         self.assertIn("ESP_RST_PWR_GLITCH", platform)
         self.assertIn('"power_glitch"', platform)
-        self.assertIn("HONCH_FAULT_KIND_BROWNOUT", platform)
+        self.assertIn("HONCH_CRASH_KIND_BROWNOUT", platform)
         self.assertIn("ESP_IDF_VERSION_VAL(5, 1, 0)", platform)
 
     def test_arduino_reset_mapping_matches_esp_idf_port(self) -> None:
@@ -298,8 +298,13 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         self.assertIn("#if HONCH_ENABLE_ERROR_TRACKING", adapter)
         self.assertIn("#if HONCH_ENABLE_ERROR_TRACKING", platform)
         self.assertIn("#if HONCH_ENABLE_ERROR_TRACKING", wrapper)
-        self.assertIn("#if HONCH_ENABLE_ERROR_TRACKING", core)
+        # The portable core gates on the two sub-toggles, both of which default
+        # to the HONCH_ENABLE_ERROR_TRACKING umbrella in config.h.
+        self.assertIn("#if HONCH_ENABLE_CRASH_CAPTURE", core)
+        self.assertIn("#if HONCH_ENABLE_LOG_CAPTURE", core)
         self.assertIn("#ifndef HONCH_ENABLE_ERROR_TRACKING", config)
+        self.assertIn("#ifndef HONCH_ENABLE_CRASH_CAPTURE", config)
+        self.assertIn("#ifndef HONCH_ENABLE_LOG_CAPTURE", config)
 
 
 if __name__ == "__main__":

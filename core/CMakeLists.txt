@@ -1,13 +1,31 @@
 option(HONCH_ENABLE_ERROR_TRACKING "Compile Honch automatic error tracking support" ON)
+# Sub-toggles cascade from the umbrella unless explicitly set on the command
+# line. Re-derived plain vars (NOT option()/cache): option() evaluates its
+# default only when the cache entry is first created, so flipping the umbrella
+# in an existing build dir would not re-derive these (a silent mis-strip).
+if(NOT DEFINED HONCH_ENABLE_CRASH_CAPTURE)
+    set(HONCH_ENABLE_CRASH_CAPTURE ${HONCH_ENABLE_ERROR_TRACKING})
+endif()
+if(NOT DEFINED HONCH_ENABLE_LOG_CAPTURE)
+    set(HONCH_ENABLE_LOG_CAPTURE ${HONCH_ENABLE_ERROR_TRACKING})
+endif()
+option(HONCH_ENABLE_LIFECYCLE_EVENTS "Compile Honch auto lifecycle events ($device_boot/$firmware_update/$device_shutdown)" ON)
+option(HONCH_ENABLE_SESSIONS "Compile Honch session tracking ($session_start/$session_end)" ON)
+option(HONCH_ENABLE_BATTERY "Compile Honch battery telemetry ($battery_level/$battery_low)" ON)
 
 set(HONCH_CORE_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_battery.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_capture_transport.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_core.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_coredump.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_crash.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_event_record.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_lifecycle.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_lifecycle_events.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_packetizer.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_queue_policy.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_ram_queue.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_sessions.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_support.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_wire_v2.c
 )
@@ -33,6 +51,11 @@ function(honch_configure_core_objects target)
 
     target_compile_definitions(${target} PUBLIC
         HONCH_ENABLE_ERROR_TRACKING=$<BOOL:${HONCH_ENABLE_ERROR_TRACKING}>
+        HONCH_ENABLE_CRASH_CAPTURE=$<BOOL:${HONCH_ENABLE_CRASH_CAPTURE}>
+        HONCH_ENABLE_LOG_CAPTURE=$<BOOL:${HONCH_ENABLE_LOG_CAPTURE}>
+        HONCH_ENABLE_LIFECYCLE_EVENTS=$<BOOL:${HONCH_ENABLE_LIFECYCLE_EVENTS}>
+        HONCH_ENABLE_SESSIONS=$<BOOL:${HONCH_ENABLE_SESSIONS}>
+        HONCH_ENABLE_BATTERY=$<BOOL:${HONCH_ENABLE_BATTERY}>
     )
 
     target_compile_options(${target} PRIVATE
@@ -95,6 +118,20 @@ if(HONCH_BUILD_TESTS)
     )
 
     add_test(NAME honch_core_wire_v2_tests COMMAND honch_core_wire_v2_tests)
+
+    add_executable(honch_core_coredump_tests
+        test/test_coredump.c
+    )
+
+    target_link_libraries(honch_core_coredump_tests PRIVATE honch_core)
+    target_include_directories(honch_core_coredump_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_compile_options(honch_core_coredump_tests PRIVATE
+        $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
+    )
+
+    add_test(NAME honch_core_coredump_tests COMMAND honch_core_coredump_tests)
 
     add_executable(honch_core_capture_transport_tests
         test/test_capture_transport.c

@@ -28,15 +28,18 @@ Honch is not silent on the wire. The SDK stamps required context and can
 auto-emit `$device_boot`, `$device_shutdown`, `$firmware_update`,
 `$battery_low`, `$session_start`, and `$session_end`; those auto-emitted
 events create analytics traffic and queue pressure even when the host only
-calls `init`, session, battery, or shutdown APIs. Runtime `$error` reporting is
-available through the SDK `report_error` APIs where ports expose them.
-Automatic boot-after-fault `$error` capture is disabled by default and must be
-explicitly enabled by ports that expose it.
+calls `init`, session, battery, or shutdown APIs. Error and crash reporting is
+**automatic** — there is no manual `report_error` API.
 
-`report_error` queues a normal `$error` analytics event with bounded
-`source="runtime"`, `severity`, `message`, and optional type/component/code/
-backtrace fields plus caller properties. It follows the same queue, tick, flush,
-and retry policy as `track`; it does not perform immediate network I/O.
+The SDK recovers a crash from the previous boot and emits a one-time `$crash`
+event during the next `init()` (panic, watchdog, brownout, stack overflow,
+assert, lockup, unhandled exception, or fatal signal — fidelity tiered by what
+each platform's native fault machinery exposes), and it hooks the platform's
+error-log path so an error the firmware logs becomes a bounded, coalesced
+`$error` event with no host code change. Both ride the normal queue/flush policy
+and never perform immediate network I/O. Capture is on by default and is removed
+only at build time. See `spec/auto-properties.md` for the `$crash`/`$error`
+contract.
 
 Automatic `$error` capture is lightweight crash telemetry, not coredump
 collection. When enabled, ESP-IDF maps platform reset reasons such as panic,

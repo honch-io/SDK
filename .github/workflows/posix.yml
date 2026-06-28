@@ -37,3 +37,80 @@ jobs:
       - name: Test
         working-directory: ports/posix
         run: ctest --test-dir build --output-on-failure
+
+  strip-builds:
+    name: Feature-toggle strip builds
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Full suite must stay green for these strips (their tests are guarded).
+          - name: error-tracking-off
+            flags: "-DHONCH_ENABLE_ERROR_TRACKING=OFF"
+            ctest: ""
+          - name: crash-off-log-on
+            flags: "-DHONCH_ENABLE_CRASH_CAPTURE=0 -DHONCH_ENABLE_LOG_CAPTURE=1"
+            ctest: ""
+          - name: crash-on-log-off
+            flags: "-DHONCH_ENABLE_CRASH_CAPTURE=1 -DHONCH_ENABLE_LOG_CAPTURE=0"
+            ctest: ""
+          - name: sessions-off
+            flags: "-DHONCH_ENABLE_SESSIONS=0"
+            ctest: ""
+          # The full suite assumes lifecycle events are ambient; the off-config is
+          # covered by the dedicated toggle tests only.
+          - name: lifecycle-events-off
+            flags: "-DHONCH_ENABLE_LIFECYCLE_EVENTS=0"
+            ctest: "-R toggle"
+          - name: battery-off
+            flags: "-DHONCH_ENABLE_BATTERY=0"
+            ctest: "-R toggle"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake libcurl4-openssl-dev zlib1g-dev
+
+      - name: Configure (${{ matrix.name }})
+        working-directory: ports/posix
+        run: cmake -S . -B build-strip -DHONCH_BUILD_TESTS=ON ${{ matrix.flags }}
+
+      - name: Build (${{ matrix.name }})
+        working-directory: ports/posix
+        run: cmake --build build-strip
+
+      - name: Test (${{ matrix.name }})
+        working-directory: ports/posix
+        run: ctest --test-dir build-strip --output-on-failure ${{ matrix.ctest }}
+
+  sanitizers:
+    name: ASan + UBSan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake libcurl4-openssl-dev zlib1g-dev
+
+      - name: Configure (ASan + UBSan)
+        working-directory: ports/posix
+        run: cmake -S . -B build-asan -DHONCH_BUILD_TESTS=ON -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g"
+
+      - name: Build
+        working-directory: ports/posix
+        run: cmake --build build-asan
+
+      - name: Test
+        working-directory: ports/posix
+        env:
+          ASAN_OPTIONS: halt_on_error=1:abort_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build-asan --output-on-failure

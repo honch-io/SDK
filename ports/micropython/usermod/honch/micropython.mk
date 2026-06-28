@@ -6,13 +6,18 @@ SRC_USERMOD_C += \
 	$(HONCH_MICROPYTHON_DIR)/mphal_adapter.c \
 	$(HONCH_MICROPYTHON_DIR)/mpstorage_adapter.c \
 	$(HONCH_MICROPYTHON_DIR)/mptransport_adapter.c \
+	$(HONCH_CORE_DIR)/src/honch_battery.c \
 	$(HONCH_CORE_DIR)/src/honch_capture_transport.c \
 	$(HONCH_CORE_DIR)/src/honch_core.c \
+	$(HONCH_CORE_DIR)/src/honch_coredump.c \
+	$(HONCH_CORE_DIR)/src/honch_crash.c \
 	$(HONCH_CORE_DIR)/src/honch_event_record.c \
 	$(HONCH_CORE_DIR)/src/honch_lifecycle.c \
+	$(HONCH_CORE_DIR)/src/honch_lifecycle_events.c \
 	$(HONCH_CORE_DIR)/src/honch_packetizer.c \
 	$(HONCH_CORE_DIR)/src/honch_queue_policy.c \
 	$(HONCH_CORE_DIR)/src/honch_ram_queue.c \
+	$(HONCH_CORE_DIR)/src/honch_sessions.c \
 	$(HONCH_CORE_DIR)/src/honch_support.c \
 	$(HONCH_CORE_DIR)/src/honch_wire_v2.c
 

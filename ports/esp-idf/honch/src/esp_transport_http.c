@@ -18,6 +18,7 @@
 
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
+#include "honch_gts_roots.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 
@@ -119,6 +120,22 @@ static honch_status_t honch_esp_transport_prepare_url(
     return HONCH_STATUS_OK;
 }
 
+/* The default Honch endpoint (https://i.honch.io) is served by Google Trust
+ * Services, whose chain anchors at a root that recent esp_crt_bundle builds
+ * prune, so the system bundle can't verify it. We pin the GTS root set for our
+ * own endpoint (honch_gts_roots.h) and keep the bundle for custom/BYO endpoints.
+ * Exact-host match so look-alikes (i.honch.io.example.com) don't get pinned trust. */
+static bool honch_esp_endpoint_is_default(const char *endpoint_url)
+{
+    static const char prefix[] = "https://i.honch.io";
+    const size_t prefix_len = sizeof(prefix) - 1u;
+    if (endpoint_url == NULL || strncmp(endpoint_url, prefix, prefix_len) != 0) {
+        return false;
+    }
+    char next = endpoint_url[prefix_len];
+    return next == '\0' || next == '/' || next == ':';
+}
+
 static honch_status_t honch_esp_transport_prepare_client(
     honch_esp_transport_t *transport,
     const char *endpoint_url,
@@ -147,11 +164,18 @@ static honch_status_t honch_esp_transport_prepare_client(
         .url = transport->capture_url,
         .method = HTTP_METHOD_POST,
         .timeout_ms = timeout_ms,
-        .crt_bundle_attach = esp_crt_bundle_attach,
         .keep_alive_enable = true,
         .event_handler = honch_esp_http_event_handler,
         .user_data = transport,
     };
+    /* TLS trust: pin the Google Trust Services roots for the default Honch
+     * endpoint (the system cert bundle can't verify its chain on recent
+     * ESP-IDF); use the bundle for custom/BYO endpoints. See honch_gts_roots.h. */
+    if (honch_esp_endpoint_is_default(transport->endpoint_url)) {
+        config.cert_pem = HONCH_GTS_ROOTS_PEM;
+    } else {
+        config.crt_bundle_attach = esp_crt_bundle_attach;
+    }
     transport->http_client = esp_http_client_init(&config);
     if (transport->http_client == NULL) {
         return HONCH_STATUS_ERROR_TRANSPORT;

@@ -24,17 +24,29 @@ set(HONCH_ESP_PORT_SOURCES
 list(TRANSFORM HONCH_ESP_PORT_SOURCES PREPEND "${HONCH_ESP_COMPONENT_DIR}/")
 
 set(HONCH_CORE_SOURCES
+    "core/src/honch_battery.c"
     "core/src/honch_capture_transport.c"
     "core/src/honch_core.c"
+    "core/src/honch_coredump.c"
+    "core/src/honch_crash.c"
     "core/src/honch_event_record.c"
     "core/src/honch_lifecycle.c"
+    "core/src/honch_lifecycle_events.c"
     "core/src/honch_queue_policy.c"
     "core/src/honch_ram_queue.c"
+    "core/src/honch_sessions.c"
     "core/src/honch_support.c"
     "core/src/honch_wire_v2.c"
 )
 list(TRANSFORM HONCH_CORE_SOURCES PREPEND "${HONCH_CORE_ROOT}/")
 
+# espcoredump (image/summary API) + esp_partition (stream the raw coredump image
+# off the coredump partition) MUST be unconditional requirements: component
+# requirements are resolved in IDF's early-expansion pass before sdkconfig is
+# available, so gating them on CONFIG_HONCH_CRASH_SYMBOLICATION silently drops the
+# dependency and the build fails once the coredump code is compiled in. With crash
+# capture disabled at build time both components contribute essentially nothing to
+# the image.
 set(HONCH_ESP_REQUIRES
     esp_app_format
     esp_http_client
@@ -42,11 +54,9 @@ set(HONCH_ESP_REQUIRES
     esp_timer
     efuse
     freertos
+    espcoredump
+    esp_partition
 )
-
-if(CONFIG_HONCH_CRASH_SYMBOLICATION)
-    list(APPEND HONCH_ESP_REQUIRES espcoredump)
-endif()
 
 idf_component_register(
     SRCS
@@ -66,6 +76,24 @@ if(CONFIG_HONCH_ERROR_TRACKING)
     target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_ERROR_TRACKING=1)
 else()
     target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_ERROR_TRACKING=0)
+endif()
+
+if(CONFIG_HONCH_LIFECYCLE_EVENTS)
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_LIFECYCLE_EVENTS=1)
+else()
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_LIFECYCLE_EVENTS=0)
+endif()
+
+if(CONFIG_HONCH_SESSIONS)
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_SESSIONS=1)
+else()
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_SESSIONS=0)
+endif()
+
+if(CONFIG_HONCH_BATTERY)
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_BATTERY=1)
+else()
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC HONCH_ENABLE_BATTERY=0)
 endif()
 
 if(CONFIG_HONCH_CRASH_SYMBOLICATION)

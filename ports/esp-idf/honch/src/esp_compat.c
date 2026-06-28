@@ -9,6 +9,7 @@
 #include "esp_core_adapter.h"
 #include "honch_internal.h"
 
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -32,6 +33,185 @@ static honch_esp_storage_t s_storage_ctx;
 static honch_esp_transport_t s_transport_ctx;
 #if HONCH_ENABLE_ERROR_TRACKING
 static bool s_fault_snapshot_consumed = false;
+
+/* The erase-after-ack callback is only meaningful (and esp_core_dump.h is only
+ * on the include path) when a flash ELF coredump is actually configured — the
+ * same condition esp_platform.c uses to read the crash summary. */
+/* Gate on coredump-to-flash only; ESP_COREDUMP_ENABLE auto-selects the ELF
+ * format and CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF is select-only (absent from
+ * sdkconfig.h in IDF v6), so requiring it silently compiled out crash capture.
+ * See esp_platform.c for the matching summary gate. */
+#if HONCH_ENABLE_CRASH_SYMBOLICATION && \
+    defined(CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH) && CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH
+#define HONCH_ESP_COMPAT_HAS_COREDUMP 1
+#include "esp_core_dump.h"
+#include "esp_partition.h"
+
+/* Erase-after-ack: invoked once the recovered $crash has reached Capture, so the
+ * stored coredump is not re-reported on the next boot. NOTE: when a
+ * coredump_source is also wired (it always is in this build), the core SUPPRESSES
+ * this callback and lets the source's clear() be the single erase — see
+ * honch_esp_coredump_clear and config.h. It is kept wired as the fallback for a
+ * build that streams no raw blob. */
+static void honch_esp_crash_uploaded(void *userdata)
+{
+    (void)userdata;
+    (void)esp_core_dump_image_erase();
+}
+
+/* Flash-backed view over the ESP-IDF coredump partition for the SDK's streaming
+ * uploader. The image bounds come from esp_core_dump_image_get() (resolved once
+ * and cached); bytes are read straight from the coredump data partition so the
+ * multi-KB ELF is never materialized in RAM. clear() erases the partition after
+ * the blob's final ack (erase-after-ack). */
+typedef struct honch_esp_coredump_ctx {
+    const esp_partition_t *part; /* the coredump data partition */
+    size_t image_offset;         /* image start, relative to the partition */
+    size_t image_size;           /* bytes of the stored coredump image */
+    bool resolved;               /* image_get has been attempted */
+    bool available;              /* a non-empty image is present */
+} honch_esp_coredump_ctx_t;
+
+static honch_esp_coredump_ctx_t s_coredump_ctx;
+static honch_coredump_source_t s_coredump_source;
+
+static bool honch_esp_coredump_resolve(honch_esp_coredump_ctx_t *ctx)
+{
+    if (ctx->resolved) {
+        return ctx->available;
+    }
+    ctx->resolved = true;
+    ctx->available = false;
+
+    size_t addr = 0u;
+    size_t size = 0u;
+    if (esp_core_dump_image_get(&addr, &size) != ESP_OK || size == 0u) {
+        return false;
+    }
+    const esp_partition_t *part = esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_COREDUMP, NULL);
+    if (part == NULL || addr < (size_t)part->address) {
+        return false;
+    }
+    size_t rel = addr - (size_t)part->address;
+    if (rel > part->size || size > part->size - rel) {
+        return false; /* image_get disagrees with the partition bounds */
+    }
+    ctx->part = part;
+    ctx->image_offset = rel;
+    ctx->image_size = size;
+    ctx->available = true;
+    return true;
+}
+
+static size_t honch_esp_coredump_size(void *ctx)
+{
+    honch_esp_coredump_ctx_t *c = (honch_esp_coredump_ctx_t *)ctx;
+    return honch_esp_coredump_resolve(c) ? c->image_size : 0u;
+}
+
+static int honch_esp_coredump_read(void *ctx, size_t offset, uint8_t *out, size_t len)
+{
+    honch_esp_coredump_ctx_t *c = (honch_esp_coredump_ctx_t *)ctx;
+    if (!honch_esp_coredump_resolve(c)) {
+        return -1;
+    }
+    /* Overflow-safe bounds check against the snapshot size. */
+    if (offset > c->image_size || len > c->image_size - offset) {
+        return -1;
+    }
+    if (esp_partition_read(c->part, c->image_offset + offset, out, len) != ESP_OK) {
+        return -1;
+    }
+    return (int)len;
+}
+
+static void honch_esp_coredump_clear(void *ctx)
+{
+    honch_esp_coredump_ctx_t *c = (honch_esp_coredump_ctx_t *)ctx;
+    (void)esp_core_dump_image_erase();
+    /* Re-resolve next boot/crash; the image is now gone. */
+    c->resolved = false;
+    c->available = false;
+    c->part = NULL;
+    c->image_offset = 0u;
+    c->image_size = 0u;
+}
+#endif
+#endif
+
+#if HONCH_ENABLE_LOG_CAPTURE
+/* Chained ESP log hook: every error-level (ESP_LOGE) line becomes an automatic
+ * $error event, then is always forwarded to the original log handler so normal
+ * logging is untouched. The default ESP log line is "E (<ts>) <tag>: <msg>"
+ * (optionally wrapped in color escapes); we capture tag + message best-effort. */
+static vprintf_like_t s_prev_vprintf = NULL;
+/* Whether we actually installed the chained hook this run. Install is gated on
+ * the runtime config->enable_error_tracking switch, so we must not restore (and
+ * clobber a handler we never replaced) when we skipped it. */
+static bool s_log_hook_installed = false;
+
+static int honch_esp_log_vprintf(const char *fmt, va_list args)
+{
+    /* Per-task guard so our own reporting (and any logging it triggers) cannot
+     * recurse back into the hook. */
+    static __thread bool in_hook = false;
+
+    if (!in_hook && s_client != NULL && fmt != NULL) {
+        va_list copy;
+        va_copy(copy, args);
+        char line[200];
+        int written = vsnprintf(line, sizeof(line), fmt, copy);
+        va_end(copy);
+
+        if (written > 0) {
+            const char *p = line;
+            if (*p == '\033') { /* skip a leading CSI color sequence */
+                const char *m = strchr(p, 'm');
+                if (m != NULL) {
+                    p = m + 1;
+                }
+            }
+            if (*p == 'E') { /* error level only */
+                const char *after_ts = strstr(p, ") ");
+                if (after_ts != NULL) {
+                    const char *tag = after_ts + 2;
+                    const char *colon = strchr(tag, ':');
+                    if (colon != NULL && colon > tag) {
+                        char tag_buf[24];
+                        size_t tag_len = (size_t)(colon - tag);
+                        if (tag_len >= sizeof(tag_buf)) {
+                            tag_len = sizeof(tag_buf) - 1u;
+                        }
+                        memcpy(tag_buf, tag, tag_len);
+                        tag_buf[tag_len] = '\0';
+
+                        const char *msg = colon[1] == ' ' ? colon + 2 : colon + 1;
+                        char msg_buf[160];
+                        size_t j = 0u;
+                        for (const char *q = msg;
+                             *q != '\0' && *q != '\033' && *q != '\n' && j + 1u < sizeof(msg_buf);
+                             q++) {
+                            msg_buf[j++] = *q;
+                        }
+                        msg_buf[j] = '\0';
+
+                        if (j > 0u) {
+                            in_hook = true;
+                            (void)honch_core_report_log_error(s_client, tag_buf, msg_buf);
+                            in_hook = false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (s_prev_vprintf != NULL) {
+        return s_prev_vprintf(fmt, args);
+    }
+    return vprintf(fmt, args);
+}
 #endif
 
 static char s_api_key[HONCH_ESP_API_KEY_MAX_LENGTH + 1u];
@@ -399,13 +579,26 @@ honch_err_t honch_init(const honch_config_t *config)
 #if HONCH_ENABLE_ERROR_TRACKING
     bool should_emit_fault_snapshot =
         config->enable_error_tracking && !s_fault_snapshot_consumed;
-    core_config.enable_error_tracking = should_emit_fault_snapshot;
-    honch_fault_snapshot_t fault_snapshot = honch_esp_fault_snapshot(
+    honch_crash_report_t crash_report = honch_esp_crash_report(
         should_emit_fault_snapshot && config->enable_crash_symbolication);
-    core_config.fault_snapshot = &fault_snapshot;
+    core_config.crash_report = should_emit_fault_snapshot ? &crash_report : NULL;
+#if HONCH_ESP_COMPAT_HAS_COREDUMP
+    core_config.crash_uploaded_callback = honch_esp_crash_uploaded;
+    /* Stream the raw ELF coredump from flash to Capture after the $crash. The
+     * core reads this source's size() once, streams it in bounded chunks, and
+     * calls clear() (the single erase) only after the blob's final ack. Only
+     * armed when a crash is actually being reported this boot. */
+    if (core_config.crash_report != NULL) {
+        s_coredump_ctx = (honch_esp_coredump_ctx_t){0};
+        s_coredump_source.size = honch_esp_coredump_size;
+        s_coredump_source.read = honch_esp_coredump_read;
+        s_coredump_source.clear = honch_esp_coredump_clear;
+        s_coredump_source.ctx = &s_coredump_ctx;
+        core_config.coredump_source = &s_coredump_source;
+    }
+#endif
 #else
-    core_config.enable_error_tracking = 0;
-    core_config.fault_snapshot = NULL;
+    core_config.crash_report = NULL;
 #endif
 
     honch_client_t *next = NULL;
@@ -426,6 +619,17 @@ honch_err_t honch_init(const honch_config_t *config)
         s_fault_snapshot_consumed = true;
     }
 #endif
+#if HONCH_ENABLE_LOG_CAPTURE
+    /* Install the chained log hook so ESP_LOGE lines become automatic $error
+     * events — but only when error tracking is enabled at runtime, so the
+     * config->enable_error_tracking switch governs log capture and the crash
+     * snapshot consistently (a caller that disables error tracking gets neither).
+     * esp_log_set_vprintf returns the previous handler to forward to. */
+    if (config->enable_error_tracking) {
+        s_prev_vprintf = esp_log_set_vprintf(honch_esp_log_vprintf);
+        s_log_hook_installed = true;
+    }
+#endif
     return HONCH_OK;
 }
 
@@ -442,6 +646,16 @@ honch_err_t honch_shutdown(void)
         honch_esp_shutdown_restore(client);
         return HONCH_ERR_BUSY;
     }
+#if HONCH_ENABLE_LOG_CAPTURE
+    /* Restore the previous log handler before the client is gone — only if we
+     * actually installed our hook (when error tracking is off at runtime we
+     * never replaced the handler, so we must not clobber it here). */
+    if (s_log_hook_installed) {
+        (void)esp_log_set_vprintf(s_prev_vprintf != NULL ? s_prev_vprintf : &vprintf);
+        s_prev_vprintf = NULL;
+        s_log_hook_installed = false;
+    }
+#endif
     honch_esp_transport_ops_deinit(&s_transport_ctx);
     honch_esp_event_queue_ops_deinit(&s_storage_ctx);
     honch_esp_platform_ops_deinit(&s_platform_ctx);
@@ -470,21 +684,6 @@ honch_err_t honch_identify(const char *distinct_id, const honch_property_t *prop
         return err;
     }
     honch_status_t status = honch_core_identify(client, distinct_id, properties, property_count);
-    honch_esp_client_release(client);
-    return honch_esp_status_to_err(status);
-}
-
-honch_err_t honch_report_error(
-    const honch_error_report_t *report,
-    const honch_property_t *properties,
-    size_t property_count)
-{
-    honch_client_t *client = NULL;
-    honch_err_t err = honch_esp_client_acquire(&client);
-    if (err != HONCH_OK) {
-        return err;
-    }
-    honch_status_t status = honch_core_report_error(client, report, properties, property_count);
     honch_esp_client_release(client);
     return honch_esp_status_to_err(status);
 }

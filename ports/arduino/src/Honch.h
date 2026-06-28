@@ -36,10 +36,6 @@ public:
   HonchClass &operator=(const HonchClass &) = delete;
   bool begin(const HonchConfig &config);
   bool track(const char *eventName, const honch_property_t *properties = nullptr, size_t propertyCount = 0);
-  bool reportError(
-      const honch_error_report_t &report,
-      const honch_property_t *properties = nullptr,
-      size_t propertyCount = 0);
   bool identify(const char *distinctId, const honch_property_t *traits = nullptr, size_t traitCount = 0);
   bool setProperty(const char *key, honch_value_t value);
   bool sessionStart(const char *sessionName);

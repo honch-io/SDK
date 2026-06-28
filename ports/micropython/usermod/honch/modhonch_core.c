@@ -17,7 +17,7 @@ extern const mp_obj_type_t honch_micropython_client_type;
 #define HONCH_MP_MAX_TYPED_VALUES 64u
 #define HONCH_MP_MAX_TYPED_PAIRS 64u
 #define HONCH_MP_MAX_PROPERTIES 64u
-#define DEFAULT_TRANSPORT_TIMEOUT_MS 2500u
+#define DEFAULT_TRANSPORT_TIMEOUT_MS 8000u
 
 typedef struct honch_mp_typed_pool {
     honch_value_t values[HONCH_MP_MAX_TYPED_VALUES];
@@ -200,31 +200,6 @@ static const char *honch_mp_map_get_str(mp_obj_t dict_obj, qstr key, const char 
     return mp_obj_str_get_str(elem->value);
 }
 
-static honch_status_t honch_mp_map_get_error_severity(mp_obj_t dict_obj, honch_error_severity_t *out)
-{
-    if (out == NULL) {
-        return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
-    }
-    const char *severity = honch_mp_map_get_str(dict_obj, MP_QSTR_severity, "error");
-    if (strcmp(severity, "info") == 0) {
-        *out = HONCH_ERROR_SEVERITY_INFO;
-        return HONCH_STATUS_OK;
-    }
-    if (strcmp(severity, "warning") == 0) {
-        *out = HONCH_ERROR_SEVERITY_WARNING;
-        return HONCH_STATUS_OK;
-    }
-    if (strcmp(severity, "error") == 0) {
-        *out = HONCH_ERROR_SEVERITY_ERROR;
-        return HONCH_STATUS_OK;
-    }
-    if (strcmp(severity, "fatal") == 0) {
-        *out = HONCH_ERROR_SEVERITY_FATAL;
-        return HONCH_STATUS_OK;
-    }
-    return HONCH_STATUS_ERROR_INVALID_ARGUMENT;
-}
-
 static size_t honch_mp_map_get_size(mp_obj_t dict_obj, qstr key, size_t fallback)
 {
     mp_map_t *map = mp_obj_dict_get_map(dict_obj);
@@ -390,35 +365,46 @@ static mp_obj_t honch_client_track(mp_obj_t self_in, mp_obj_t event_in, mp_obj_t
 }
 static MP_DEFINE_CONST_FUN_OBJ_3(honch_client_track_obj, honch_client_track);
 
-static mp_obj_t honch_client_report_error(mp_obj_t self_in, mp_obj_t report_in, mp_obj_t properties_in)
+/* Automatic crash report from an uncaught Python exception (installed via the
+ * wrapper's sys.excepthook). The report dict carries message/type/backtrace; the
+ * core emits one reserved $crash event. */
+static mp_obj_t honch_client_report_crash(mp_obj_t self_in, mp_obj_t report_in)
 {
     if (!mp_obj_is_type(report_in, &mp_type_dict)) {
         honch_micropython_raise_status(HONCH_STATUS_ERROR_INVALID_ARGUMENT);
         return mp_const_none;
     }
     honch_micropython_client_t *self = honch_get_self(self_in);
-    honch_mp_typed_pool_t pool = {0};
-    honch_property_t properties[HONCH_MP_MAX_PROPERTIES];
-    size_t property_count = 0u;
-    honch_error_report_t report = {0};
-    honch_status_t status = honch_mp_map_get_error_severity(report_in, &report.severity);
-    if (status == HONCH_STATUS_OK) {
-        report.message = honch_mp_map_get_str(report_in, MP_QSTR_message, NULL);
-        report.type = honch_mp_map_get_str(report_in, MP_QSTR_type, NULL);
-        report.component = honch_mp_map_get_str(report_in, MP_QSTR_component, NULL);
-        report.code = honch_mp_map_get_str(report_in, MP_QSTR_code, NULL);
-        report.backtrace = honch_mp_map_get_str(report_in, MP_QSTR_backtrace, NULL);
-        status = honch_mp_properties_from_obj(properties_in, &pool, properties, &property_count);
-    }
-    if (status == HONCH_STATUS_OK) {
-        status = honch_core_report_error(self->client, &report, properties, property_count);
-    }
+    honch_crash_report_t report = {
+        .kind = HONCH_CRASH_KIND_EXCEPTION,
+        .severity = HONCH_CRASH_SEVERITY_FATAL,
+        .reset_reason = "exception",
+        .message = honch_mp_map_get_str(report_in, MP_QSTR_message, NULL),
+        .exception_cause = honch_mp_map_get_str(report_in, MP_QSTR_type, NULL),
+        .component = honch_mp_map_get_str(report_in, MP_QSTR_component, NULL),
+        .backtrace = honch_mp_map_get_str(report_in, MP_QSTR_backtrace, NULL),
+    };
+    honch_status_t status = honch_core_report_crash(self->client, &report);
     if (status != HONCH_STATUS_OK) {
         honch_micropython_raise_status(status);
     }
     return mp_const_none;
 }
-static MP_DEFINE_CONST_FUN_OBJ_3(honch_client_report_error_obj, honch_client_report_error);
+static MP_DEFINE_CONST_FUN_OBJ_2(honch_client_report_crash_obj, honch_client_report_crash);
+
+/* Automatic logged-error capture: a bounded, coalesced $error event. */
+static mp_obj_t honch_client_report_log_error(mp_obj_t self_in, mp_obj_t component_in, mp_obj_t message_in)
+{
+    honch_micropython_client_t *self = honch_get_self(self_in);
+    const char *component = component_in == mp_const_none ? NULL : mp_obj_str_get_str(component_in);
+    const char *message = mp_obj_str_get_str(message_in);
+    honch_status_t status = honch_core_report_log_error(self->client, component, message);
+    if (status != HONCH_STATUS_OK) {
+        honch_micropython_raise_status(status);
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_3(honch_client_report_log_error_obj, honch_client_report_log_error);
 
 static mp_obj_t honch_client_identify(mp_obj_t self_in, mp_obj_t distinct_id_in, mp_obj_t traits_in)
 {
@@ -580,7 +566,8 @@ static MP_DEFINE_CONST_FUN_OBJ_1(honch_client_queue_stats_obj, honch_client_queu
 
 static const mp_rom_map_elem_t honch_client_locals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_track), MP_ROM_PTR(&honch_client_track_obj) },
-    { MP_ROM_QSTR(MP_QSTR_report_error), MP_ROM_PTR(&honch_client_report_error_obj) },
+    { MP_ROM_QSTR(MP_QSTR_report_crash), MP_ROM_PTR(&honch_client_report_crash_obj) },
+    { MP_ROM_QSTR(MP_QSTR_report_log_error), MP_ROM_PTR(&honch_client_report_log_error_obj) },
     { MP_ROM_QSTR(MP_QSTR_identify), MP_ROM_PTR(&honch_client_identify_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_property), MP_ROM_PTR(&honch_client_set_property_obj) },
     { MP_ROM_QSTR(MP_QSTR_session_start), MP_ROM_PTR(&honch_client_session_start_obj) },

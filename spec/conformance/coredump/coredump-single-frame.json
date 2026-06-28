@@ -1,0 +1,18 @@
+{
+  "blob_hex": "0726456483a2c1e0ff1e3d5c7b9ab9d8f71635547392b1d0ef0e2d4c6b8aa9c8e70625446382a1c0dffe1d3c5b7a99b8d7f61534537291b0cfee0d2c4b6a89a8c7e60524436281a0bfdefd1c3b5a7998b7d6f51433527190afceed0c2b4a6988a7c6e504234261809fbeddfc1b3a597897b6d5f4133251708faecdec0b2a496887a6c5e4032241607f9ebddcfb1a39587796b5d4f31231506f8eadcceb0a29486786a5c4e30221405f7e9dbcdbfa1938577695b4d3f211304f6e8daccbea0928476685a4c3e20120",
+  "blob_size": 200,
+  "description": "A small coredump blob that fits in one frame: continuation=0, more=0, CRC over the whole blob.",
+  "frames": [
+    {
+      "hex": "0680200726456483a2c1e0ff1e3d5c7b9ab9d8f71635547392b1d0ef0e2d4c6b8aa9c8e70625446382a1c0dffe1d3c5b7a99b8d7f61534537291b0cfee0d2c4b6a89a8c7e60524436281a0bfdefd1c3b5a7998b7d6f51433527190afceed0c2b4a6988a7c6e504234261809fbeddfc1b3a597897b6d5f4133251708faecdec0b2a496887a6c5e4032241607f9ebddcfb1a39587796b5d4f31231506f8eadcceb0a29486786a5c4e30221405f7e9dbcdbfa1938577695b4d3f211304f6e8daccbea0928476685a4c3e20120bdf0",
+      "kind": "single",
+      "offset": 0
+    }
+  ],
+  "generated_by": "tools/generate_wire_v2_fixtures.py",
+  "name": "coredump-single-frame",
+  "source": "coredump",
+  "source_type": 1,
+  "stream_id": "crash-7f3a9c2e",
+  "wire_format": "honch-wire-v2"
+}

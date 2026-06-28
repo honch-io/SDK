@@ -19,10 +19,70 @@ from .validation import (
     require_distinct_id,
     require_event_name,
     require_properties,
-    require_severity,
     require_text,
     require_value,
 )
+
+# Cap how much of the Python stack we format before handing it to the C core.
+# The core's $crash `backtrace` is an ALL-OR-NOTHING field: honch_append_crash_string
+# emits it only when its byte length is within HONCH_FAULT_BACKTRACE_MAX_BYTES and
+# DROPS the whole property otherwise (it does not truncate). So we format
+# CRASH-SITE-FIRST and keep only the leading frames that fit the byte budget,
+# dropping the OUTERMOST frames — the crash site survives, not the entry point.
+_CRASH_BACKTRACE_MAX_FRAMES = 10
+# MUST match HONCH_FAULT_BACKTRACE_MAX_BYTES in core/src/honch_core.c. If the core
+# bound changes, change this too (the core silently drops an over-long backtrace).
+_CRASH_BACKTRACE_MAX_BYTES = 192
+_CRASH_BACKTRACE_SEP = " <- "
+
+
+def _format_crash_backtrace(exc):
+    """Format an exception's traceback compact and crash-site-first, e.g.
+    `sensor.py:42 in read <- app.py:10 in loop <- main.py:88 in <module>`.
+
+    On MicroPython the readable backtrace is the Python traceback (already
+    file/line/function-resolved) — there is no coredump to symbolicate — so this
+    is what gives a MicroPython `$crash` the "where", not just the "what".
+
+    Returns the formatted string, or None if it can't be produced. MUST NOT raise:
+    it runs inside the excepthook, where a failure must never displace delivery of
+    the original exception."""
+    try:
+        import sys
+        import io
+
+        buf = io.StringIO()
+        sys.print_exception(exc, buf)  # MicroPython: prints most-recent-call-LAST
+        frames = []
+        for raw in buf.getvalue().split("\n"):
+            line = raw.strip()
+            # "File "main.py", line 42, in read"
+            if not line.startswith("File ") or ", line " not in line:
+                continue
+            try:
+                fname = line.split('"', 2)[1]
+                rest = line.split(", line ", 1)[1]
+                lineno = rest.split(",", 1)[0].strip()
+                func = rest.split(" in ", 1)[1].strip() if " in " in rest else "?"
+                frames.append("%s:%s in %s" % (fname, lineno, func))
+            except Exception:
+                continue
+        if not frames:
+            return None
+        frames.reverse()  # crash site first
+        # Keep crash-site-first frames whose join stays within the core's byte
+        # budget; drop the outermost frames that don't fit (the core would
+        # otherwise drop the entire property). Measure UTF-8 bytes — that's what
+        # the core counts against HONCH_FAULT_BACKTRACE_MAX_BYTES.
+        kept = ""
+        for frame in frames[:_CRASH_BACKTRACE_MAX_FRAMES]:
+            candidate = frame if not kept else kept + _CRASH_BACKTRACE_SEP + frame
+            if len(candidate.encode("utf-8")) > _CRASH_BACKTRACE_MAX_BYTES:
+                break
+            kept = candidate
+        return kept or None
+    except Exception:
+        return None
 
 
 class Honch:
@@ -54,47 +114,14 @@ class Honch:
         require_event_name(event_name)
         self._call("track", event_name, require_properties(properties))
 
-    def report_error(
-        self,
-        message,
-        *,
-        severity="error",
-        error_type=None,
-        component=None,
-        code=None,
-        backtrace=None,
-        properties=None,
-    ):
-        require_severity(severity)
-        require_text(message, "error message")
-        # Only include fields that are set. The C module treats a missing key and
-        # a None value identically (honch_mp_map_get_str falls back for both), so
-        # this is behavior-equivalent on-device while avoiding the allocation of
-        # None slots on the error path -- worst exactly when reporting an OOM.
-        report = {
-            "message": message,
-            "severity": severity,
-        }
-        if error_type is not None:
-            report["type"] = error_type
-        if component is not None:
-            report["component"] = component
-        if code is not None:
-            report["code"] = code
-        if backtrace is not None:
-            report["backtrace"] = backtrace
-        self._call("report_error", report, require_properties(properties))
+    def report_log_error(self, message, *, component=None):
+        """Capture a logged error as a bounded, coalesced $error event.
 
-    def run_with_error_tracking(self, fn, *args, **kwargs):
-        try:
-            return fn(*args, **kwargs)
-        except Exception as exc:
-            self.report_error(
-                str(exc) or repr(exc),
-                severity="fatal",
-                error_type=exc.__class__.__name__,
-            )
-            raise
+        Intended to be driven automatically (e.g. from a logging.Handler), not
+        sprinkled through application code.
+        """
+        require_text(message, "error message")
+        self._call("report_log_error", component, message)
 
     def install_error_hook(self):
         try:
@@ -111,11 +138,7 @@ class Honch:
 
         def honch_excepthook(exc_type, exc, tb):
             try:
-                self.report_error(
-                    str(exc) or repr(exc),
-                    severity="fatal",
-                    error_type=getattr(exc_type, "__name__", "Exception"),
-                )
+                self._report_crash(exc_type, exc)
             except Exception:
                 # An excepthook must never raise: a reporting failure must not
                 # replace delivery of the original exception to the next hook.
@@ -127,6 +150,42 @@ class Honch:
         self._honch_excepthook = honch_excepthook
         sys.excepthook = honch_excepthook
         return True
+
+    def _report_crash(self, exc_type, exc):
+        """Build and queue a $crash from an exception, including the Python
+        traceback. Shared by install_error_hook() and run()."""
+        report = {
+            "message": str(exc) or repr(exc),
+            "type": getattr(exc_type, "__name__", "Exception"),
+        }
+        backtrace = _format_crash_backtrace(exc)
+        if backtrace:
+            report["backtrace"] = backtrace
+        self._call("report_crash", report)
+
+    def run(self, fn, *args, **kwargs):
+        """Run your entry point with automatic crash capture, then re-raise.
+
+        Any uncaught exception from `fn` is reported as a $crash (with the Python
+        traceback), flushed so a fatal crash is delivered before the program exits,
+        and then re-raised so behavior is unchanged. Returns `fn`'s result on
+        success.
+
+        Unlike install_error_hook(), this works on EVERY MicroPython build: it uses
+        a plain try/except, not sys.excepthook (which stock firmware often omits).
+        It captures exceptions that propagate out of `fn` — wrap your top-level
+        entry point / main loop with it.
+        """
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:
+            try:
+                self._report_crash(type(exc), exc)
+                self.flush()
+            except Exception:
+                # Reporting/flush failure must never mask the original exception.
+                pass
+            raise
 
     def uninstall_error_hook(self):
         try:

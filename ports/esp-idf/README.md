@@ -136,7 +136,8 @@ values for one app build.
 
 **Lifecycle events** (emitted automatically):
 - `$device_boot` — on init, with `reset_reason` property
-- `$error` — when you call `honch_report_error()`, or when `enable_error_tracking` is true on init after an abnormal ESP reset reason such as panic, watchdog, brownout, or unknown reset
+- `$crash` — on init, when `enable_error_tracking` is true and the previous boot ended in an abnormal ESP reset (panic, watchdog, brownout, CPU lockup, or unknown); emitted once and not re-reported on later boots
+- `$error` — automatically, when the firmware logs an error-level message (hooked from the ESP log path); bounded and coalesced, no manual call
 - `$device_shutdown` — on `honch_shutdown()`, followed by a synchronous flush
 - `$firmware_update` — on boot if firmware version changed and durable state storage is supplied
 - `$battery_low` — when battery drops below threshold (default 15%), emitted once until recovery
@@ -148,38 +149,78 @@ identity and firmware-version state, and queues `$device_boot` before returning.
 It does not perform network I/O; delivery remains cooperative through
 `honch_tick()` or explicit flush calls.
 
-Call `honch_report_error()` from normal task context to queue runtime `$error`
-events. It follows the same queue and flush policy as `honch_track()` and does
-not perform immediate network I/O.
+Crash and error reporting is automatic — there is no manual error API. Logged
+errors (`ESP_LOGE` and friends) are hooked from the ESP log path and emitted as
+bounded, coalesced `$error` events with no code change.
 
-Automatic `$error` capture support is compiled in by default, but boot fault
-capture is disabled unless `enable_error_tracking` is true. When enabled, the
-SDK maps panic, interrupt/task/other watchdog, brownout, and unknown reset
-reasons into a bounded `$error` event with `source`, `severity`, and
-`reset_reason` properties during `honch_init()`.
+Boot crash capture is gated by `enable_error_tracking`. When true, on the next
+`honch_init()` after an abnormal reset the SDK maps panic, interrupt/task/other
+watchdog, brownout, CPU lockup, and unknown reset reasons into a one-time
+`$crash` event with `source`, `severity`, and `reset_reason`.
 When `enable_crash_symbolication` is also true, ESP-IDF flash ELF coredump
 summary metadata is enabled, and ESP-IDF exposes a summary for the previous
-crash, the event may also include `crash_summary_version`,
-`firmware_build_id`, raw `fault_pc`, raw `backtrace`, and `task_name`. The
-shared `$error` contract also supports optional `exception_cause` for ports
-that can provide a bounded CPU exception name.
-Honch does not save coredumps, collect RAM/register/task snapshots, upload
-symbol files, send source code/source paths, or replace ESP-IDF crash forensics
-tooling.
+crash, the `$crash` event may also include `summary_version`,
+`firmware_build_id`, raw `fault_pc`, raw `backtrace`, `task_name`,
+`exception_cause` (the panic reason), and `coredump_available`.
 
-The automatic `$error` event is best-effort. If the SDK cannot enqueue it during
-startup because the local queue or storage is full, `honch_init()` still
-completes so diagnostics do not prevent the device application from starting.
+When the full coredump options are enabled (see "Crash coredump upload" below),
+the SDK **also streams the raw ELF coredump image** off flash to Honch after the
+`$crash`, linked to it by `crash_id`, so the backend can symbolicate the full
+crash. The SDK still does not collect live RAM/register snapshots, upload symbol
+files, or send source code/paths — it uploads the coredump ESP-IDF already wrote.
 
-`firmware_build_id` is intended to let backend symbolication match raw crash
-addresses to the exact firmware image. Customers should keep symbol upload and
-address symbolication as a server-side opt-in workflow.
+The `$crash` event is best-effort and **erase-after-ack**: it is enqueued during
+`honch_init()` (init still completes if the local queue/storage is full so
+diagnostics never block startup). The on-flash coredump is erased exactly once,
+**after** its bytes are fully acknowledged — so a crash is never re-reported and
+the partition is never wiped out from under an in-flight upload. (When the raw
+upload is enabled the post-upload erase is the single source of truth; the
+summary-only `esp_core_dump_image_erase()` fallback is used only when no raw
+coredump upload is configured.)
+
+`firmware_build_id` lets backend symbolication match the uploaded coredump to the
+exact firmware image.
+
+### Crash coredump upload
+
+To upload the full raw coredump (not just the summary), the firmware must let
+ESP-IDF write an ELF coredump to a flash partition; the SDK streams it from
+there. Enable, in `sdkconfig`/`sdkconfig.defaults`:
+
+```ini
+CONFIG_HONCH_CRASH_SYMBOLICATION=y          # default y
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
+CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
+CONFIG_ESP_COREDUMP_CHECKSUM_CRC32=y        # or _SHA256
+```
+
+and add a `coredump` partition to your partition table CSV:
+
+```csv
+# Name,   Type, SubType,  Offset,  Size
+coredump, data, coredump, ,        64K
+```
+
+Size the partition for your worst-case dump (ESP-IDF's default is 64 KB). The
+image is streamed in bounded 512-byte chunks straight from flash — it is never
+buffered whole in RAM — and erased via `esp_core_dump_image_erase()` only after
+Honch acknowledges the final chunk. With these options off (or no `coredump`
+partition), crash capture degrades cleanly to the summary-only `$crash` event.
+
+**Task stack:** the upload runs on whichever task drives `honch_tick()` /
+`honch_flush()`, and the coredump path (`esp_core_dump_image_get` +
+`esp_partition_read` + the HTTPS chunk POST) needs materially more stack than a
+plain event flush. Give that task **at least ~8 KB** of stack when coredump
+upload is enabled; a 4 KB task that flushes events fine will stack-overflow
+mid-coredump-upload (it manifests as a reboot loop — the `$crash` summary still
+delivers, but the raw blob never completes). Sizing is the integrator's
+responsibility; the SDK itself buffers only one chunk.
 
 Error tracking is also build-strip modular. `CONFIG_HONCH_ERROR_TRACKING` and
 `CONFIG_HONCH_CRASH_SYMBOLICATION` default to enabled so the feature is
 available without extra Kconfig work. Disable `CONFIG_HONCH_ERROR_TRACKING` to
-compile out Honch's `$error` emission path. Disable
-`CONFIG_HONCH_CRASH_SYMBOLICATION` to keep automatic reset/error events but
+compile out Honch's `$crash`/`$error` emission path. Disable
+`CONFIG_HONCH_CRASH_SYMBOLICATION` to keep automatic reset/crash events but
 remove raw fault-address collection and the ESP-IDF `espcoredump` component
 dependency.
 
@@ -199,10 +240,10 @@ dependency.
 | `flush_event_threshold`  | No       | 20             | Flush when this many events are queued     |
 | `flush_max_batches`      | No       | 1              | Max batches sent by one `honch_flush()`    |
 | `shutdown_flush_max_batches` | No   | 1              | Max batches sent during `honch_shutdown()` |
-| `transport_timeout_ms`   | No       | 2500           | Per HTTP request timeout, clamped to 1000–10000 ms |
+| `transport_timeout_ms`   | No       | 8000           | Per HTTP request timeout, clamped to 1000–10000 ms |
 | `battery_callback`       | No       | NULL           | Function returning 0-100 or -1             |
 | `battery_low_threshold`  | No       | 15             | Battery level that triggers `$battery_low` |
-| `enable_error_tracking`  | No       | false          | Emit automatic `$error` after abnormal reset |
+| `enable_error_tracking`  | No       | false          | Emit the recovered `$crash` event after an abnormal reset |
 | `enable_crash_symbolication` | No   | false          | Include raw build/address context for symbolication when error tracking is enabled and ESP-IDF coredump summary metadata is available |
 | `connectivity_callback`  | No       | NULL           | Return false while offline or radio is off |
 | `state_storage_ops`      | No       | NULL           | Durable state storage for identity/version |

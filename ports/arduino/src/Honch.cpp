@@ -12,7 +12,7 @@ honch_platform_ops_t g_platformOps;
 honch_event_queue_ops_t g_eventQueueOps;
 honch_transport_ops_t g_transportOps;
 #if HONCH_ENABLE_ERROR_TRACKING
-honch_fault_snapshot_t gFaultSnapshot;
+honch_crash_report_t gCrashReport;
 #endif
 honch_status_t gConfigStatus = HONCH_OK;
 bool (*gConnectivityCallback)() = nullptr;
@@ -46,7 +46,7 @@ honch_core_config_t honch_arduino_make_core_config(const HonchConfig &config) {
     gConfigStatus = honch_arduino_transport_ops_init(&g_transportOps, &g_transport, config);
   }
 #if HONCH_ENABLE_ERROR_TRACKING
-  gFaultSnapshot = honch_arduino_fault_snapshot();
+  gCrashReport = honch_arduino_crash_report();
 #endif
 
   coreConfig.api_key = config.apiKey;
@@ -71,11 +71,9 @@ honch_core_config_t honch_arduino_make_core_config(const HonchConfig &config) {
   coreConfig.connectivity_callback = honch_arduino_connectivity_callback;
   coreConfig.connectivity_userdata = nullptr;
 #if HONCH_ENABLE_ERROR_TRACKING
-  coreConfig.enable_error_tracking = config.enableErrorTracking;
-  coreConfig.fault_snapshot = &gFaultSnapshot;
+  coreConfig.crash_report = config.enableErrorTracking ? &gCrashReport : nullptr;
 #else
-  coreConfig.enable_error_tracking = 0;
-  coreConfig.fault_snapshot = nullptr;
+  coreConfig.crash_report = nullptr;
 #endif
   coreConfig.platform = &g_platformOps;
   coreConfig.state_storage = config.stateStorageOps;
@@ -160,19 +158,6 @@ bool HonchClass::track(const char *eventName, const honch_property_t *properties
     return false;
   }
   bool ok = setLastStatusLocked(honch_core_track(_client, eventName, properties, propertyCount));
-  unlockInstance();
-  return ok;
-}
-
-bool HonchClass::reportError(
-    const honch_error_report_t &report,
-    const honch_property_t *properties,
-    size_t propertyCount) {
-  honch_status_t lockStatus = lockInstance();
-  if (lockStatus != HONCH_OK) {
-    return false;
-  }
-  bool ok = setLastStatusLocked(honch_core_report_error(_client, &report, properties, propertyCount));
   unlockInstance();
   return ok;
 }

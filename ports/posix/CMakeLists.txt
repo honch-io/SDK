@@ -10,6 +10,19 @@ option(HONCH_BUILD_EXAMPLES "Build Honch POSIX SDK examples" ON)
 option(HONCH_BUILD_BENCHMARKS "Build Honch POSIX SDK benchmarks" OFF)
 option(HONCH_BUILD_E2E "Build Honch POSIX SDK end-to-end tests" OFF)
 option(HONCH_ENABLE_ERROR_TRACKING "Compile Honch automatic error tracking support" ON)
+# Sub-toggles cascade from the umbrella unless explicitly set on the command
+# line. Re-derived plain vars (NOT option()/cache): option() evaluates its
+# default only when the cache entry is first created, so flipping the umbrella
+# in an existing build dir would not re-derive these (a silent mis-strip).
+if(NOT DEFINED HONCH_ENABLE_CRASH_CAPTURE)
+    set(HONCH_ENABLE_CRASH_CAPTURE ${HONCH_ENABLE_ERROR_TRACKING})
+endif()
+if(NOT DEFINED HONCH_ENABLE_LOG_CAPTURE)
+    set(HONCH_ENABLE_LOG_CAPTURE ${HONCH_ENABLE_ERROR_TRACKING})
+endif()
+option(HONCH_ENABLE_LIFECYCLE_EVENTS "Compile Honch auto lifecycle events ($device_boot/$firmware_update/$device_shutdown)" ON)
+option(HONCH_ENABLE_SESSIONS "Compile Honch session tracking ($session_start/$session_end)" ON)
+option(HONCH_ENABLE_BATTERY "Compile Honch battery telemetry ($battery_level/$battery_low)" ON)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -87,6 +100,11 @@ function(honch_configure_posix_target target)
 
     target_compile_definitions(${target} PRIVATE
         HONCH_ENABLE_ERROR_TRACKING=$<BOOL:${HONCH_ENABLE_ERROR_TRACKING}>
+        HONCH_ENABLE_CRASH_CAPTURE=$<BOOL:${HONCH_ENABLE_CRASH_CAPTURE}>
+        HONCH_ENABLE_LOG_CAPTURE=$<BOOL:${HONCH_ENABLE_LOG_CAPTURE}>
+        HONCH_ENABLE_LIFECYCLE_EVENTS=$<BOOL:${HONCH_ENABLE_LIFECYCLE_EVENTS}>
+        HONCH_ENABLE_SESSIONS=$<BOOL:${HONCH_ENABLE_SESSIONS}>
+        HONCH_ENABLE_BATTERY=$<BOOL:${HONCH_ENABLE_BATTERY}>
         _POSIX_C_SOURCE=200809L
     )
 
@@ -134,6 +152,11 @@ if(HONCH_BUILD_TESTS)
     )
     target_compile_definitions(honch_posix_tests PRIVATE
         HONCH_ENABLE_ERROR_TRACKING=$<BOOL:${HONCH_ENABLE_ERROR_TRACKING}>
+        HONCH_ENABLE_CRASH_CAPTURE=$<BOOL:${HONCH_ENABLE_CRASH_CAPTURE}>
+        HONCH_ENABLE_LOG_CAPTURE=$<BOOL:${HONCH_ENABLE_LOG_CAPTURE}>
+        HONCH_ENABLE_LIFECYCLE_EVENTS=$<BOOL:${HONCH_ENABLE_LIFECYCLE_EVENTS}>
+        HONCH_ENABLE_SESSIONS=$<BOOL:${HONCH_ENABLE_SESSIONS}>
+        HONCH_ENABLE_BATTERY=$<BOOL:${HONCH_ENABLE_BATTERY}>
         HONCH_TESTING
         _POSIX_C_SOURCE=200809L
         _DEFAULT_SOURCE
@@ -155,6 +178,11 @@ if(HONCH_BUILD_TESTS)
     )
     target_compile_definitions(honch_posix_state_consistency_tests PRIVATE
         HONCH_ENABLE_ERROR_TRACKING=$<BOOL:${HONCH_ENABLE_ERROR_TRACKING}>
+        HONCH_ENABLE_CRASH_CAPTURE=$<BOOL:${HONCH_ENABLE_CRASH_CAPTURE}>
+        HONCH_ENABLE_LOG_CAPTURE=$<BOOL:${HONCH_ENABLE_LOG_CAPTURE}>
+        HONCH_ENABLE_LIFECYCLE_EVENTS=$<BOOL:${HONCH_ENABLE_LIFECYCLE_EVENTS}>
+        HONCH_ENABLE_SESSIONS=$<BOOL:${HONCH_ENABLE_SESSIONS}>
+        HONCH_ENABLE_BATTERY=$<BOOL:${HONCH_ENABLE_BATTERY}>
         _POSIX_C_SOURCE=200809L
         _DEFAULT_SOURCE
         _DARWIN_C_SOURCE
@@ -174,6 +202,11 @@ if(HONCH_BUILD_TESTS)
     )
     target_compile_definitions(honch_posix_durable_delete_tests PRIVATE
         HONCH_ENABLE_ERROR_TRACKING=$<BOOL:${HONCH_ENABLE_ERROR_TRACKING}>
+        HONCH_ENABLE_CRASH_CAPTURE=$<BOOL:${HONCH_ENABLE_CRASH_CAPTURE}>
+        HONCH_ENABLE_LOG_CAPTURE=$<BOOL:${HONCH_ENABLE_LOG_CAPTURE}>
+        HONCH_ENABLE_LIFECYCLE_EVENTS=$<BOOL:${HONCH_ENABLE_LIFECYCLE_EVENTS}>
+        HONCH_ENABLE_SESSIONS=$<BOOL:${HONCH_ENABLE_SESSIONS}>
+        HONCH_ENABLE_BATTERY=$<BOOL:${HONCH_ENABLE_BATTERY}>
         HONCH_TESTING
         _POSIX_C_SOURCE=200809L
         _DEFAULT_SOURCE
@@ -183,6 +216,78 @@ if(HONCH_BUILD_TESTS)
         $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
     )
     add_test(NAME honch_posix_durable_delete_tests COMMAND honch_posix_durable_delete_tests)
+
+    add_executable(honch_posix_lifecycle_toggle_tests
+        test/test_lifecycle_toggle.c
+    )
+    target_link_libraries(honch_posix_lifecycle_toggle_tests PRIVATE honch_posix_test)
+    target_include_directories(honch_posix_lifecycle_toggle_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../core/src
+    )
+    target_compile_definitions(honch_posix_lifecycle_toggle_tests PRIVATE
+        HONCH_ENABLE_ERROR_TRACKING=$<BOOL:${HONCH_ENABLE_ERROR_TRACKING}>
+        HONCH_ENABLE_CRASH_CAPTURE=$<BOOL:${HONCH_ENABLE_CRASH_CAPTURE}>
+        HONCH_ENABLE_LOG_CAPTURE=$<BOOL:${HONCH_ENABLE_LOG_CAPTURE}>
+        HONCH_ENABLE_LIFECYCLE_EVENTS=$<BOOL:${HONCH_ENABLE_LIFECYCLE_EVENTS}>
+        HONCH_ENABLE_SESSIONS=$<BOOL:${HONCH_ENABLE_SESSIONS}>
+        HONCH_ENABLE_BATTERY=$<BOOL:${HONCH_ENABLE_BATTERY}>
+        HONCH_TESTING
+        _POSIX_C_SOURCE=200809L
+        _DEFAULT_SOURCE
+        _DARWIN_C_SOURCE
+    )
+    target_compile_options(honch_posix_lifecycle_toggle_tests PRIVATE
+        $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
+    )
+    add_test(NAME honch_posix_lifecycle_toggle_tests COMMAND honch_posix_lifecycle_toggle_tests)
+
+    add_executable(honch_posix_session_toggle_tests
+        test/test_session_toggle.c
+    )
+    target_link_libraries(honch_posix_session_toggle_tests PRIVATE honch_posix_test)
+    target_include_directories(honch_posix_session_toggle_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../core/src
+    )
+    target_compile_definitions(honch_posix_session_toggle_tests PRIVATE
+        HONCH_ENABLE_ERROR_TRACKING=$<BOOL:${HONCH_ENABLE_ERROR_TRACKING}>
+        HONCH_ENABLE_CRASH_CAPTURE=$<BOOL:${HONCH_ENABLE_CRASH_CAPTURE}>
+        HONCH_ENABLE_LOG_CAPTURE=$<BOOL:${HONCH_ENABLE_LOG_CAPTURE}>
+        HONCH_ENABLE_LIFECYCLE_EVENTS=$<BOOL:${HONCH_ENABLE_LIFECYCLE_EVENTS}>
+        HONCH_ENABLE_SESSIONS=$<BOOL:${HONCH_ENABLE_SESSIONS}>
+        HONCH_ENABLE_BATTERY=$<BOOL:${HONCH_ENABLE_BATTERY}>
+        HONCH_TESTING
+        _POSIX_C_SOURCE=200809L
+        _DEFAULT_SOURCE
+        _DARWIN_C_SOURCE
+    )
+    target_compile_options(honch_posix_session_toggle_tests PRIVATE
+        $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
+    )
+    add_test(NAME honch_posix_session_toggle_tests COMMAND honch_posix_session_toggle_tests)
+
+    add_executable(honch_posix_battery_toggle_tests
+        test/test_battery_toggle.c
+    )
+    target_link_libraries(honch_posix_battery_toggle_tests PRIVATE honch_posix_test)
+    target_include_directories(honch_posix_battery_toggle_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../core/src
+    )
+    target_compile_definitions(honch_posix_battery_toggle_tests PRIVATE
+        HONCH_ENABLE_ERROR_TRACKING=$<BOOL:${HONCH_ENABLE_ERROR_TRACKING}>
+        HONCH_ENABLE_CRASH_CAPTURE=$<BOOL:${HONCH_ENABLE_CRASH_CAPTURE}>
+        HONCH_ENABLE_LOG_CAPTURE=$<BOOL:${HONCH_ENABLE_LOG_CAPTURE}>
+        HONCH_ENABLE_LIFECYCLE_EVENTS=$<BOOL:${HONCH_ENABLE_LIFECYCLE_EVENTS}>
+        HONCH_ENABLE_SESSIONS=$<BOOL:${HONCH_ENABLE_SESSIONS}>
+        HONCH_ENABLE_BATTERY=$<BOOL:${HONCH_ENABLE_BATTERY}>
+        HONCH_TESTING
+        _POSIX_C_SOURCE=200809L
+        _DEFAULT_SOURCE
+        _DARWIN_C_SOURCE
+    )
+    target_compile_options(honch_posix_battery_toggle_tests PRIVATE
+        $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
+    )
+    add_test(NAME honch_posix_battery_toggle_tests COMMAND honch_posix_battery_toggle_tests)
 
     add_test(
         NAME honch_posix_sdk_contract_tests
@@ -222,6 +327,7 @@ if(HONCH_BUILD_EXAMPLES)
     add_subdirectory(example/connected_camera)
     add_subdirectory(example/posix_gpio)
     add_subdirectory(example/identify_merge)
+    add_subdirectory(example/crash_demo)
 endif()
 
 if(HONCH_BUILD_BENCHMARKS)

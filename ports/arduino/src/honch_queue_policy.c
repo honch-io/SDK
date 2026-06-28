@@ -171,14 +171,32 @@ static honch_status_t honch_core_queue_consume_batch(
     if (sequence_count == 0u) {
         return HONCH_OK;
     }
+
+    honch_status_t status;
     if (client->event_queue->queue_consume_batch != NULL) {
-        return client->event_queue->queue_consume_batch(client->event_queue->ctx, sequences, sequence_count);
+        status = client->event_queue->queue_consume_batch(client->event_queue->ctx, sequences, sequence_count);
+    } else {
+        status = HONCH_OK;
+        for (size_t i = 0u; status == HONCH_OK && i < sequence_count; i++) {
+            status = honch_core_queue_consume(client, sequences[i]);
+        }
     }
 
-    honch_status_t status = HONCH_OK;
-    for (size_t i = 0u; status == HONCH_OK && i < sequence_count; i++) {
-        status = honch_core_queue_consume(client, sequences[i]);
+#if HONCH_ENABLE_CRASH_CAPTURE
+    /* Erase-after-ack: the recovered $crash is only safe to clear once the queue
+     * entry that carried it has actually been delivered (consumed) by Capture.
+     * Detect the crash event's sequence in the just-consumed batch; the port
+     * callback is fired later from the flush/tick path with the lock released. */
+    if (status == HONCH_OK && client->crash_pending_ack) {
+        for (size_t i = 0u; i < sequence_count; i++) {
+            if (sequences[i] == client->crash_event_sequence) {
+                client->crash_pending_ack = false;
+                client->crash_ack_due = true;
+                break;
+            }
+        }
     }
+#endif
     return status;
 }
 
@@ -1104,7 +1122,9 @@ static honch_status_t honch_queue_flush_one_with_chunk_limit_locked(
         (unsigned long long)post_message_elapsed_ms);
     honch_flush_timing_log(client, timing_message);
 #endif
-    honch_status_t relock_status = honch_client_state_lock(client);
+    /* Blocking re-acquire: the lock was released only for the POST above and is
+     * logically still ours, so a try-lock timeout must not abandon it unlocked. */
+    honch_status_t relock_status = honch_client_state_lock_blocking(client);
     honch_flush_context_free(&flush_context);
     if (relock_status != HONCH_OK) {
         return relock_status;

@@ -28,8 +28,19 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertIn("honch_micropython", cmake)
         self.assertIn("${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_capture_transport.c", cmake)
         self.assertIn("${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_core.c", cmake)
+        # honch_core.c calls honch_coredump_upload_step_locked; if the coredump
+        # source is not listed the unix/esp32 builds fail to link it.
+        self.assertIn("${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_coredump.c", cmake)
         self.assertIn("${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_event_record.c", cmake)
         self.assertIn("${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_packetizer.c", cmake)
+
+    def test_unix_makefile_lists_the_same_core_sources(self):
+        # The unix port builds via micropython.mk, not the CMake list — they must
+        # stay in sync, or `make -C ports/unix` fails to link (e.g. a missing
+        # honch_coredump.c surfaces only on the unix build, not the host tests).
+        makefile = self.read("ports/micropython/usermod/honch/micropython.mk")
+        for source in ("honch_core.c", "honch_coredump.c", "honch_wire_v2.c"):
+            self.assertIn(source, makefile)
 
     def test_user_c_module_does_not_override_firmware_heap_size(self):
         cmake = self.read("ports/micropython/usermod/honch/micropython.cmake")
@@ -117,7 +128,7 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertIn("mp_call_function_n_kw(post, 1, 3, args)", transport)
         self.assertIn("transport->timeout_ms", transport)
         self.assertIn("honch_mp_map_get_uint(args[0], MP_QSTR_transport_timeout_ms, DEFAULT_TRANSPORT_TIMEOUT_MS)", module)
-        self.assertIn("DEFAULT_TRANSPORT_TIMEOUT_MS = 2500", config)
+        self.assertIn("DEFAULT_TRANSPORT_TIMEOUT_MS = 8000", config)
         self.assertIn("MAX_TRANSPORT_TIMEOUT_MS = 10000", config)
 
     def test_micropython_exposes_flush_spacing_config(self):
@@ -166,9 +177,13 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
             ]
         )
 
-        self.assertIn("def report_error", combined)
-        self.assertIn("MP_QSTR_report_error", combined)
-        self.assertIn("honch_core_report_error", combined)
+        # Automatic capture: uncaught exceptions -> $crash, logged errors -> $error.
+        self.assertIn("def report_log_error", combined)
+        self.assertIn("MP_QSTR_report_crash", combined)
+        self.assertIn("MP_QSTR_report_log_error", combined)
+        self.assertIn("honch_core_report_crash", combined)
+        self.assertIn("honch_core_report_log_error", combined)
+        self.assertNotIn("honch_core_report_error", combined)
         self.assertNotIn("capture_error", combined)
 
     def test_package_metadata_versions_match(self):
