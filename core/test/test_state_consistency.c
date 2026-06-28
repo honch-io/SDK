@@ -318,7 +318,7 @@ static void test_core_applies_embedded_defaults_when_tuning_is_omitted(void)
     honch_client_t *client = NULL;
     assert(honch_core_init(&client, &config) == HONCH_OK);
     assert(client->max_event_bytes == 8192u);
-    assert(client->transport_timeout_ms == 2500u);
+    assert(client->transport_timeout_ms == 8000u);
     assert(client->flush_interval_seconds == 120u);
     assert(client->flush_min_interval_ms == 15000u);
     assert(client->flush_event_threshold == 20u);

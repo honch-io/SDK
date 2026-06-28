@@ -146,7 +146,7 @@ class ArduinoTLSConfigTests(unittest.TestCase):
         self.assertIn("uint32_t transportTimeoutMs = 0;", header)
         self.assertIn("coreConfig.transport_timeout_ms = config.transportTimeoutMs;", adapter)
         self.assertIn("uint32_t transportTimeoutMs;", transport_header)
-        self.assertIn("HONCH_ARDUINO_DEFAULT_TRANSPORT_TIMEOUT_MS 2500u", transport)
+        self.assertIn("HONCH_ARDUINO_DEFAULT_TRANSPORT_TIMEOUT_MS 8000u", transport)
         self.assertIn("HONCH_ARDUINO_MAX_TRANSPORT_TIMEOUT_MS 10000u", transport)
         self.assertIn(
             "ctx->transportTimeoutMs = config.transportTimeoutMs == 0u ?",

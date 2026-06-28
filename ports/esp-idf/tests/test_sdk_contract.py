@@ -458,7 +458,7 @@ class EspIdfChunkWireTest(unittest.TestCase):
         app_main = c_function_body(example, "app_main")
         honch_task = c_function_body(example, "honch_telemetry_task")
 
-        self.assertIn("#define HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS 2500u", internal)
+        self.assertIn("#define HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS 8000u", internal)
         self.assertIn("flush_interval_seconds", public_header)
         self.assertIn("flush_event_threshold", public_header)
         self.assertIn("uint32_t transport_timeout_ms", public_header)
@@ -490,7 +490,7 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("SDK-owned worker task", readme)
         self.assertIn("application-owned FreeRTOS task", readme)
         self.assertIn("transport_timeout_ms", readme)
-        self.assertIn("2500", readme)
+        self.assertIn("8000", readme)
         self.assertIn("raised to the 1000 ms floor", readme)
         self.assertNotIn("disable_background_flush", compat + public_header + readme)
 

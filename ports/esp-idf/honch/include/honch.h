@@ -60,7 +60,7 @@ typedef struct {
     uint32_t flush_event_threshold;      // optional, default 20
     uint32_t flush_max_batches;          // optional, default 1
     uint32_t shutdown_flush_max_batches; // optional, default 1
-    uint32_t transport_timeout_ms;       // optional, default 2500
+    uint32_t transport_timeout_ms;       // optional, default 8000
     int (*battery_callback)(void);       // optional, returns 0-100 or -1 if unknown
     int battery_low_threshold;           // optional, default 15
     bool (*connectivity_callback)(void); // optional, return false while offline/radio off

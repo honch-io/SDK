@@ -105,7 +105,7 @@ event threshold is reached. Successful outbound uploads are spaced by
 `flushMinIntervalMs`; leave it at the 15000 ms default for consumer firmware, or
 set it to `HONCH_FLUSH_MIN_INTERVAL_DISABLED_MS` for benchmark or explicit
 high-throughput modes.
-`transportTimeoutMs` bounds each synchronous HTTP POST; leave it at the 2500 ms
+`transportTimeoutMs` bounds each synchronous HTTP POST; leave it at the 8000 ms
 default unless the capture endpoint and network need a different per-request
 timeout. Values above the hard maximum of 10000 ms are clamped.
 

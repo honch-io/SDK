@@ -240,7 +240,7 @@ dependency.
 | `flush_event_threshold`  | No       | 20             | Flush when this many events are queued     |
 | `flush_max_batches`      | No       | 1              | Max batches sent by one `honch_flush()`    |
 | `shutdown_flush_max_batches` | No   | 1              | Max batches sent during `honch_shutdown()` |
-| `transport_timeout_ms`   | No       | 2500           | Per HTTP request timeout, clamped to 1000–10000 ms |
+| `transport_timeout_ms`   | No       | 8000           | Per HTTP request timeout, clamped to 1000–10000 ms |
 | `battery_callback`       | No       | NULL           | Function returning 0-100 or -1             |
 | `battery_low_threshold`  | No       | 15             | Battery level that triggers `$battery_low` |
 | `enable_error_tracking`  | No       | false          | Emit the recovered `$crash` event after an abnormal reset |

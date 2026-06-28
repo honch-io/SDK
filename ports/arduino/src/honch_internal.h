@@ -16,7 +16,11 @@
 #endif
 #define HONCH_DEFAULT_MAX_QUEUED_EVENTS 1000u
 #define HONCH_DEFAULT_MAX_EVENT_BYTES 8192u
-#define HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS 2500u
+/* 8s, not 2.5s: a constrained ESP32 TLS handshake to a Google LB (GTS Root R1 is
+ * RSA-4096) plus the POST routinely needs >2.5s, which timed out (ESP_ERR_HTTP_EAGAIN)
+ * on real hardware. The timeout is a ceiling, so fast paths (POSIX/desktop) are
+ * unaffected; it only buys constrained TLS clients room to complete. */
+#define HONCH_DEFAULT_TRANSPORT_TIMEOUT_MS 8000u
 #define HONCH_DEFAULT_FLUSH_INTERVAL_SECONDS 120u
 #define HONCH_DEFAULT_FLUSH_MIN_INTERVAL_MS 15000u
 #define HONCH_DEFAULT_FLUSH_EVENT_THRESHOLD 20u
