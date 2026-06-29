@@ -60,6 +60,21 @@ jobs:
             && echo "dispatched sdk-released ($VERSION) to honch-io/platform" \
             || echo "::warning::failed to dispatch to platform — sync its conformance mirror manually"
 
+      - name: Notify docs to bump the advertised SDK version
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+        run: |
+          # secrets can't be used in step-level `if:`, so gate inside the step.
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::RELEASE_PAT not set — skipping docs dispatch (bump docs version manually)"
+            exit 0
+          fi
+          # client_payload.version is the repo-derived semver (not untrusted input).
+          printf '{"event_type":"sdk-released","client_payload":{"version":"%s"}}' "$VERSION" \
+            | gh api repos/honch-io/docs/dispatches --method POST --input - \
+            && echo "dispatched sdk-released ($VERSION) to honch-io/docs" \
+            || echo "::warning::failed to dispatch to docs — bump the docs version manually"
+
       - name: Publish GitHub Release with changelog
         env:
           GH_TOKEN: ${{ github.token }}
