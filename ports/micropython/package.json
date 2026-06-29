@@ -1,5 +1,5 @@
 {
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "Honch analytics SDK wrapper for MicroPython firmware built with the Honch C core user module",
   "license": "Apache-2.0",
   "urls": [

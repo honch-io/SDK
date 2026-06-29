@@ -1,6 +1,6 @@
 {
   "name": "Honch",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "Product analytics for connected ESP32 devices.",
   "keywords": [
     "analytics",

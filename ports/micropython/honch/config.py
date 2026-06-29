@@ -1,7 +1,7 @@
 from .errors import InvalidArgumentError
 
 
-SDK_VERSION = "0.2.4"
+SDK_VERSION = "0.3.0"
 SDK_PLATFORM = "micropython"
 DEFAULT_ENDPOINT_URL = "https://i.honch.io"
 
