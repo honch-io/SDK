@@ -229,6 +229,42 @@ static void test_http_status_mapping(void)
     assert_status_maps(0, HONCH_ERROR_TRANSPORT, HONCH_TRANSPORT_RETRY);
 }
 
+static void test_http_reason_mapping(void)
+{
+    assert(honch_capture_map_http_reason(401) == HONCH_REASON_AUTH_INVALID_KEY);
+    assert(honch_capture_map_http_reason(503) == HONCH_REASON_HTTP_STATUS);
+    assert(honch_capture_map_http_reason(400) == HONCH_REASON_HTTP_STATUS);
+    assert(honch_capture_map_http_reason(429) == HONCH_REASON_HTTP_STATUS);
+    assert(honch_capture_map_http_reason(204) == HONCH_REASON_NONE);
+    assert(honch_capture_map_http_reason(200) == HONCH_REASON_NONE);
+}
+
+static void test_post_chunk_ex_fills_detail_on_auth_error(void)
+{
+    fake_stream_env_t env = {
+        .stream = {.response = "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n"},
+        .connection_type = "wifi"
+    };
+    honch_capture_stream_ops_t stream_ops = fake_stream_ops(&env);
+    honch_capture_transport_t transport = {0};
+    honch_transport_ops_t ops = {0};
+    honch_capture_transport_config_t config = {.stream_ops = &stream_ops};
+    assert(honch_capture_transport_init(&ops, &transport, &config) == HONCH_OK);
+    /* The shared capture transport advertises the detailed variant. */
+    assert(ops.post_chunk_ex != NULL);
+
+    const uint8_t body[] = {0x01, 0x02, 0x03};
+    honch_transport_result_t result = HONCH_TRANSPORT_RETRY;
+    honch_transport_detail_t detail = {0};
+    honch_status_t status = ops.post_chunk_ex(
+        ops.ctx, "http://capture.example/capture", "key", "stream",
+        body, sizeof(body), &result, &detail);
+    assert(status == HONCH_ERROR_REJECTED);
+    assert(result == HONCH_TRANSPORT_AUTH_ERROR);
+    assert(detail.http_status == 401);
+    assert(detail.reason == HONCH_REASON_AUTH_INVALID_KEY);
+}
+
 static void test_capture_transport_posts_chunk_over_stream(void)
 {
     fake_stream_env_t env = {
@@ -303,6 +339,8 @@ int main(void)
     test_endpoint_parsing_adds_capture_path();
     test_capture_request_header_formatting();
     test_http_status_mapping();
+    test_http_reason_mapping();
+    test_post_chunk_ex_fills_detail_on_auth_error();
     test_capture_transport_posts_chunk_over_stream();
     test_capture_transport_closes_unsuccessfully_on_write_failure();
     test_capture_transport_init_validates_required_callbacks();

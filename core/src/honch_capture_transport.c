@@ -191,6 +191,17 @@ honch_status_t honch_capture_map_http_status(int status_code, honch_transport_re
     return HONCH_ERROR_TRANSPORT;
 }
 
+honch_error_reason_t honch_capture_map_http_reason(int status_code)
+{
+    if (status_code == 401) {
+        return HONCH_REASON_AUTH_INVALID_KEY;
+    }
+    if (status_code >= 200 && status_code <= 299) {
+        return HONCH_REASON_NONE;
+    }
+    return HONCH_REASON_HTTP_STATUS;
+}
+
 static honch_status_t honch_capture_write_all(
     honch_capture_transport_t *transport,
     void *stream,
@@ -308,14 +319,15 @@ static honch_status_t honch_capture_read_status(
     return HONCH_OK;
 }
 
-static honch_status_t honch_capture_transport_post_chunk(
+static honch_status_t honch_capture_transport_post_chunk_ex(
     void *ctx,
     const char *endpoint_url,
     const char *api_key,
     const char *stream_id,
     const uint8_t *body,
     size_t body_size,
-    honch_transport_result_t *result)
+    honch_transport_result_t *result,
+    honch_transport_detail_t *detail)
 {
     honch_capture_transport_t *transport = (honch_capture_transport_t *)ctx;
     if (transport == NULL || endpoint_url == NULL || api_key == NULL ||
@@ -328,6 +340,9 @@ static honch_status_t honch_capture_transport_post_chunk(
     honch_status_t status = honch_capture_parse_endpoint(endpoint_url, &endpoint);
     if (status != HONCH_OK) {
         *result = HONCH_TRANSPORT_REJECTED;
+        if (detail != NULL) {
+            detail->reason = HONCH_REASON_INVALID_CONFIG;
+        }
         return status;
     }
 
@@ -371,11 +386,38 @@ static honch_status_t honch_capture_transport_post_chunk(
         status = honch_capture_map_http_status(http_status, result);
     }
 
+    /* Fill the optional detail with whatever the stream layer surfaced. The
+     * shared capture transport works over an abstract stream, so it can only
+     * classify the HTTP outcome precisely; ports with a native transport
+     * (curl CURLcode, esp_err_t) refine connect/TLS/DNS reasons themselves. */
+    if (detail != NULL) {
+        detail->http_status = http_status;
+        if (http_status > 0) {
+            detail->reason = honch_capture_map_http_reason(http_status);
+        } else {
+            /* No HTTP response: a transport-phase failure (open/write/read). */
+            detail->reason = HONCH_REASON_WRITE_FAILED;
+        }
+    }
+
     transport->stream_ops.close(
         transport->stream_ops.ctx,
         stream,
         status == HONCH_OK ? 1 : 0);
     return status;
+}
+
+static honch_status_t honch_capture_transport_post_chunk(
+    void *ctx,
+    const char *endpoint_url,
+    const char *api_key,
+    const char *stream_id,
+    const uint8_t *body,
+    size_t body_size,
+    honch_transport_result_t *result)
+{
+    return honch_capture_transport_post_chunk_ex(
+        ctx, endpoint_url, api_key, stream_id, body, body_size, result, NULL);
 }
 
 honch_status_t honch_capture_transport_init(
@@ -405,6 +447,7 @@ honch_status_t honch_capture_transport_init(
 
     memset(transport_ops, 0, sizeof(*transport_ops));
     transport_ops->post_chunk = honch_capture_transport_post_chunk;
+    transport_ops->post_chunk_ex = honch_capture_transport_post_chunk_ex;
     transport_ops->ctx = transport;
     return HONCH_OK;
 }

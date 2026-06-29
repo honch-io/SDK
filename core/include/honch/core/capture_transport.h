@@ -64,6 +64,9 @@ honch_status_t honch_capture_build_request_head(
     const char *stream_id,
     const char *connection_type);
 honch_status_t honch_capture_map_http_status(int status_code, honch_transport_result_t *result);
+/* Map an HTTP status to a finer reason: 401 -> AUTH_INVALID_KEY, 2xx -> NONE,
+ * any other -> HTTP_STATUS (numeric code carried separately). */
+honch_error_reason_t honch_capture_map_http_reason(int status_code);
 honch_status_t honch_capture_transport_init(
     honch_transport_ops_t *transport_ops,
     honch_capture_transport_t *transport,
