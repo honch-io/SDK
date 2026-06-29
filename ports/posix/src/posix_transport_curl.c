@@ -185,6 +185,25 @@ static honch_error_reason_t honch_posix_map_curl_reason(CURLcode code)
     }
 }
 
+#ifdef HONCH_TESTING
+/* Host self-check for the CURLcode -> reason table. The live failure path is
+ * covered by the on-device / e2e DNS+TLS probes; this pins the mapping itself
+ * without a real network failure. Kept in this TU so the CURLE_* constants stay
+ * with the code under test. Not compiled into the production library. */
+bool honch_posix_curl_reason_selftest(void)
+{
+    return honch_posix_map_curl_reason(CURLE_COULDNT_RESOLVE_HOST) == HONCH_REASON_DNS_FAILED &&
+           honch_posix_map_curl_reason(CURLE_COULDNT_RESOLVE_PROXY) == HONCH_REASON_DNS_FAILED &&
+           honch_posix_map_curl_reason(CURLE_COULDNT_CONNECT) == HONCH_REASON_CONNECT_REFUSED &&
+           honch_posix_map_curl_reason(CURLE_OPERATION_TIMEDOUT) == HONCH_REASON_CONNECT_TIMEOUT &&
+           honch_posix_map_curl_reason(CURLE_SSL_CONNECT_ERROR) == HONCH_REASON_TLS_HANDSHAKE &&
+           honch_posix_map_curl_reason(CURLE_PEER_FAILED_VERIFICATION) == HONCH_REASON_TLS_CERT &&
+           honch_posix_map_curl_reason(CURLE_SEND_ERROR) == HONCH_REASON_WRITE_FAILED &&
+           honch_posix_map_curl_reason(CURLE_RECV_ERROR) == HONCH_REASON_READ_FAILED &&
+           honch_posix_map_curl_reason(CURLE_GOT_NOTHING) == HONCH_REASON_UNKNOWN;
+}
+#endif
+
 static honch_status_t honch_posix_post_chunk_impl(
     honch_client_t *client,
     const char *stream_id,

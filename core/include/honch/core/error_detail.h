@@ -16,7 +16,12 @@ extern "C" {
 typedef struct honch_error_detail {
     honch_status_t           status;           /* coarse code (unchanged contract) */
     honch_error_reason_t     reason;           /* finer cause */
-    honch_transport_result_t transport_result; /* transport classification, if any */
+    honch_transport_result_t transport_result; /* transport classification; only
+                                                * meaningful for a transport-phase
+                                                * failure. A local failure (queue
+                                                * full / encode / OOM) leaves it 0
+                                                * (== HONCH_TRANSPORT_ACCEPTED), so
+                                                * read it together with reason. */
     int                      http_status;      /* HTTP status code, 0 if not applicable */
     int                      os_error;         /* errno / esp_err_t etc., 0 if not applicable */
     const char              *message;          /* short static description, or NULL */

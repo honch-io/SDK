@@ -61,14 +61,16 @@ const char *honch_status_string(honch_status_t status);
 const char *honch_error_reason_string(honch_error_reason_t reason);
 
 /* Format a detail into a single human-readable line in the caller-owned buffer,
- * e.g. "rejected: HTTP 401 — API key invalid or revoked (reason=auth_invalid_key)".
- * Always NUL-terminates when buf_size > 0; truncates safely. Returns the number
- * of bytes written (excluding the NUL), or 0 on NULL/zero-size arguments. */
+ * e.g. "rejected: HTTP 401 - API key invalid or revoked (reason=auth_invalid_key)".
+ * A non-zero os_error is appended as " os_error=<n>". Always NUL-terminates when
+ * buf_size > 0; truncates safely. Returns the number of bytes written (excluding
+ * the NUL), or 0 on NULL/zero-size arguments. */
 size_t honch_error_detail_format(const honch_error_detail_t *detail, char *buf, size_t buf_size);
 
 /* Copy the most recent failure detail into *out. Returns HONCH_OK (out is the
  * zero/"none" state if nothing has failed yet), HONCH_ERROR_INVALID_ARGUMENT on
- * NULL out, or HONCH_ERROR_NOT_INITIALIZED if the client is not usable. */
+ * a NULL client or NULL out, or HONCH_ERROR_NOT_INITIALIZED if the client is
+ * closing/torn down (matching every other honch_core_* accessor). */
 honch_status_t honch_core_get_last_error(honch_client_t *client, honch_error_detail_t *out);
 
 #ifdef __cplusplus

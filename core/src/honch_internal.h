@@ -66,6 +66,14 @@
 #define HONCH_LOG_COMPONENT_STORE_BYTES 32u
 #define HONCH_LOG_MESSAGE_STORE_BYTES 128u
 
+/* SDK-internal log tag. The $error log-capture hook (honch_core_report_log_error)
+ * skips any line whose component equals this, so the SDK's own diagnostics never
+ * become $error events — the recursion guard behind the 0.3.0 log-hook deadlock.
+ * Single source of truth: a port that routes SDK logs back through the hook (the
+ * esp-idf platform log + log-capture hook) MUST tag them with this exact value,
+ * so it lives here rather than being re-spelled as a literal in each port. */
+#define HONCH_LOG_SELF_TAG "honch"
+
 /* Diagnostic auto-log dedup: how many distinct (reason+http_status) failures we
  * remember so identical failures are logged once, not per retry. */
 #define HONCH_DIAG_DEDUP_SLOTS 4u

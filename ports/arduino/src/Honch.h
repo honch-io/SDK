@@ -52,7 +52,7 @@ public:
   // + os_error + message). Returns false if unavailable. lastError() is unchanged.
   bool lastErrorDetail(honch_error_detail_t *out);
   // One human-readable line for the most recent failure, e.g.
-  // "transport error: HTTP 401 - API key invalid or revoked (reason=auth_invalid_key)".
+  // "rejected: HTTP 401 - API key invalid or revoked (reason=auth_invalid_key)".
   const char *lastErrorMessage();
 
 #ifndef ARDUINO

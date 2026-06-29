@@ -2,6 +2,7 @@
  * formatting. Deliberately free of platform/state dependencies so a caller
  * (or a test) can link just this TU without dragging in the full client. */
 #include <stdio.h>
+#include <string.h>
 
 #include "honch/core/honch.h"
 
@@ -121,8 +122,22 @@ size_t honch_error_detail_format(const honch_error_detail_t *detail, char *buf, 
         return 0u;
     }
     /* snprintf returns the length it *would* have written; clamp to what fit. */
-    if ((size_t)written >= buf_size) {
-        return buf_size - 1u;
+    size_t length = (size_t)written >= buf_size ? buf_size - 1u : (size_t)written;
+
+    /* Append the OS/transport error code when present. This is the raw
+     * errno / CURLcode / esp_err_t the transport surfaced — the single most
+     * actionable value for a transport-phase failure (DNS/connect/TLS), and
+     * the part the proactive auto-log line would otherwise drop. Built in a
+     * local buffer and appended only when the base line fully fit AND the whole
+     * suffix fits, so a truncated line is never corrupted and no partial token
+     * is ever emitted. */
+    if (detail->os_error != 0 && length == (size_t)written) {
+        char suffix[24]; /* " os_error=" + INT_MIN (-2147483648) + NUL = 22 */
+        int extra = snprintf(suffix, sizeof(suffix), " os_error=%d", detail->os_error);
+        if (extra > 0 && (size_t)extra < buf_size - length) {
+            memcpy(buf + length, suffix, (size_t)extra + 1u); /* includes the NUL */
+            length += (size_t)extra;
+        }
     }
-    return (size_t)written;
+    return length;
 }

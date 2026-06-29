@@ -169,7 +169,10 @@ honch_status_t arduino_post_chunk_ex(
       delete secureClient;
       *result = HONCH_TRANSPORT_RETRY;
       if (detail != nullptr) {
-        detail->reason = HONCH_REASON_TLS_HANDSHAKE;
+        // begin() only parses the URL / binds the client; no connect or TLS
+        // handshake has happened yet, so report a config-phase failure rather
+        // than naming a network phase that never ran.
+        detail->reason = HONCH_REASON_INVALID_CONFIG;
       }
       return HONCH_ERROR_TRANSPORT;
     }
@@ -177,7 +180,7 @@ honch_status_t arduino_post_chunk_ex(
     if (!http.begin(plainClient, url.c_str())) {
       *result = HONCH_TRANSPORT_RETRY;
       if (detail != nullptr) {
-        detail->reason = HONCH_REASON_CONNECT_REFUSED;
+        detail->reason = HONCH_REASON_INVALID_CONFIG;
       }
       return HONCH_ERROR_TRANSPORT;
     }

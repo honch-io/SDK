@@ -60,7 +60,40 @@ static void test_format_local_failure_no_http(void)
     assert(strstr(buf, "queue_full") != NULL);
 }
 
-/* A2: bounded output — never overruns a tiny buffer, always NUL-terminated. */
+/* A2: a non-zero os_error (errno / CURLcode / esp_err_t) is appended so the
+ * proactive log line carries the most actionable transport-phase value. */
+static void test_format_includes_os_error(void)
+{
+    honch_error_detail_t d = {0};
+    d.status = HONCH_ERROR_TRANSPORT;
+    d.reason = HONCH_REASON_DNS_FAILED;
+    d.message = "DNS resolution failed - check the configured endpoint";
+    d.os_error = 28;
+
+    char buf[200];
+    size_t n = honch_error_detail_format(&d, buf, sizeof(buf));
+    assert(n > 0 && n < sizeof(buf));
+    assert(buf[n] == '\0');
+    assert(strstr(buf, "dns_failed") != NULL);
+    assert(strstr(buf, "os_error=28") != NULL);
+}
+
+/* A2: a zero os_error adds no suffix (the common HTTP-status case). */
+static void test_format_omits_zero_os_error(void)
+{
+    honch_error_detail_t d = {0};
+    d.status = HONCH_ERROR_REJECTED;
+    d.reason = HONCH_REASON_AUTH_INVALID_KEY;
+    d.http_status = 401;
+    d.message = "API key invalid or revoked";
+
+    char buf[200];
+    (void)honch_error_detail_format(&d, buf, sizeof(buf));
+    assert(strstr(buf, "os_error") == NULL);
+}
+
+/* A2: bounded output — never overruns a tiny buffer, always NUL-terminated.
+ * os_error is set here too: the truncated base line must never grow a suffix. */
 static void test_format_truncates_safely(void)
 {
     honch_error_detail_t d = {0};
@@ -68,11 +101,46 @@ static void test_format_truncates_safely(void)
     d.reason = HONCH_REASON_HTTP_STATUS;
     d.http_status = 503;
     d.message = "server unavailable";
+    d.os_error = 42;
 
     char buf[8];
     size_t n = honch_error_detail_format(&d, buf, sizeof(buf));
     assert(buf[sizeof(buf) - 1] == '\0');
     assert(n < sizeof(buf));
+    assert(strstr(buf, "os_error") == NULL); /* no room: suffix must be skipped */
+}
+
+/* A2: the base line fits exactly but there is no room for the os_error suffix —
+ * the suffix must be omitted whole (never a partial token), output unchanged
+ * from the no-os_error case. Pins the all-or-nothing append. */
+static void test_format_os_error_suffix_is_all_or_nothing(void)
+{
+    honch_error_detail_t d = {0};
+    d.status = HONCH_ERROR_REJECTED;        /* "rejected" */
+    d.reason = HONCH_REASON_AUTH_INVALID_KEY; /* "auth_invalid_key" */
+    d.os_error = 7;
+
+    /* Measure the base line (no suffix) first. */
+    char full[128];
+    size_t base = honch_error_detail_format(&(honch_error_detail_t){
+        .status = d.status, .reason = d.reason}, full, sizeof(full));
+
+    /* A buffer that holds the base line + NUL exactly, with no room for " os_error=7". */
+    char tight[64];
+    assert(base + 1u <= sizeof(tight));
+    size_t n = honch_error_detail_format(&d, tight, base + 1u);
+    assert(n == base);
+    assert(tight[base] == '\0');
+    assert(strstr(tight, "os_error") == NULL); /* suffix omitted whole */
+
+    /* One more byte still isn't enough for the full suffix -> still omitted. */
+    n = honch_error_detail_format(&d, tight, base + 2u);
+    assert(strstr(tight, "os_error") == NULL);
+
+    /* Ample room -> the whole suffix appears. */
+    n = honch_error_detail_format(&d, tight, sizeof(tight));
+    assert(strstr(tight, "os_error=7") != NULL);
+    assert(tight[n] == '\0');
 }
 
 /* A2: NULL / zero-size guards never write or crash. */
@@ -91,7 +159,10 @@ int main(void)
     test_reason_string();
     test_format_includes_http_and_reason();
     test_format_local_failure_no_http();
+    test_format_includes_os_error();
+    test_format_omits_zero_os_error();
     test_format_truncates_safely();
+    test_format_os_error_suffix_is_all_or_nothing();
     test_format_null_guards();
     return 0;
 }

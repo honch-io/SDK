@@ -18,6 +18,7 @@
 
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
+#include "esp_idf_version.h"
 #include "esp_tls.h"
 #include "honch/core/capture_transport.h"
 #include "honch_gts_roots.h"
@@ -30,7 +31,7 @@
  * of the bounded queue. Clamp up to a workable minimum. */
 #define HONCH_ESP_MIN_TRANSPORT_TIMEOUT_MS 1000u
 
-static const char *TAG = "honch";
+static const char *TAG = HONCH_LOG_SELF_TAG;
 
 static esp_err_t honch_esp_http_event_handler(esp_http_client_event_t *event)
 {
@@ -210,12 +211,12 @@ static honch_error_reason_t honch_esp_map_err_reason(esp_err_t err)
         case ESP_ERR_HTTP_EAGAIN:
             return HONCH_REASON_CONNECT_TIMEOUT;
 #endif
+#ifdef ESP_ERR_ESP_TLS_CONNECTION_TIMEOUT
+        case ESP_ERR_ESP_TLS_CONNECTION_TIMEOUT:
+            return HONCH_REASON_CONNECT_TIMEOUT;
+#endif
 #ifdef ESP_ERR_MBEDTLS_SSL_HANDSHAKE_FAILED
         case ESP_ERR_MBEDTLS_SSL_HANDSHAKE_FAILED:
-            return HONCH_REASON_TLS_HANDSHAKE;
-#endif
-#ifdef ESP_ERR_ESP_TLS_TLS_CONNECTION_FAILED
-        case ESP_ERR_ESP_TLS_TLS_CONNECTION_FAILED:
             return HONCH_REASON_TLS_HANDSHAKE;
 #endif
         default:
@@ -329,8 +330,27 @@ static honch_status_t honch_esp_post_chunk(
             detail->http_status = status;
             detail->reason = honch_capture_map_http_reason(status);
         } else {
+            /* esp_http_client collapses DNS / connect / TLS-handshake / cert
+             * failures into the coarse ESP_ERR_HTTP_CONNECT. Recover the
+             * underlying esp-tls error so the reason can distinguish them and
+             * carry the finer (0x80xx) code in os_error. tls_flags != 0 means a
+             * certificate verification flag was set -> a cert failure. */
             detail->os_error = (int)err;
             detail->reason = honch_esp_map_err_reason(err);
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+            int tls_low = 0;
+            int tls_flags = 0;
+            esp_err_t tls_high =
+                esp_http_client_get_and_clear_last_tls_error(http_client, &tls_low, &tls_flags);
+            (void)tls_low;
+            if (tls_flags != 0) {
+                detail->reason = HONCH_REASON_TLS_CERT;
+                detail->os_error = (int)tls_high;
+            } else if (tls_high != ESP_OK && tls_high != ESP_ERR_INVALID_STATE) {
+                detail->reason = honch_esp_map_err_reason(tls_high);
+                detail->os_error = (int)tls_high;
+            }
+#endif
         }
     }
 

@@ -370,6 +370,24 @@ static honch_status_t honch_capture_transport_post_chunk_ex(
         transport->timeout_ms,
         &stream);
     if (status != HONCH_OK || stream == NULL) {
+        /* Connection could not be established — the dominant field failure
+         * (DNS / refused / timeout / offline). The abstract stream can't tell
+         * those apart, so classify coarsely from the status it returned rather
+         * than leaving detail at HONCH_REASON_NONE (which the core would only
+         * be able to derive to HONCH_REASON_UNKNOWN). */
+        if (detail != NULL) {
+            switch (status) {
+                case HONCH_ERROR_TIMEOUT:
+                    detail->reason = HONCH_REASON_CONNECT_TIMEOUT;
+                    break;
+                case HONCH_ERROR_OFFLINE:
+                    detail->reason = HONCH_REASON_OFFLINE;
+                    break;
+                default:
+                    detail->reason = HONCH_REASON_CONNECT_REFUSED;
+                    break;
+            }
+        }
         return status == HONCH_OK ? HONCH_ERROR_TRANSPORT : status;
     }
 
@@ -395,7 +413,8 @@ static honch_status_t honch_capture_transport_post_chunk_ex(
         if (http_status > 0) {
             detail->reason = honch_capture_map_http_reason(http_status);
         } else {
-            /* No HTTP response: a transport-phase failure (open/write/read). */
+            /* Connected, but no HTTP response: a write/read-phase failure
+             * (the open-failure case returned earlier with its own reason). */
             detail->reason = HONCH_REASON_WRITE_FAILED;
         }
     }

@@ -91,7 +91,10 @@ static honch_log_level_t honch_diag_level(const honch_error_detail_t *detail)
     }
 }
 
-/* FNV-1a over (reason, http_status); 0 is reserved as "empty slot". */
+/* FNV-1a over (reason, http_status). The dedup table is scanned only over its
+ * live count (honch_diag_already_logged), so unused slots are never read — there
+ * is no empty-slot sentinel. The 0 -> 1 remap is kept only so a stored hash is
+ * always non-zero, harmless either way. */
 static uint32_t honch_diag_hash(const honch_error_detail_t *detail)
 {
     uint32_t h = 2166136261u;

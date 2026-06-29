@@ -19,7 +19,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
-static const char *TAG = "honch";
+static const char *TAG = HONCH_LOG_SELF_TAG;
 #define HONCH_ESP_CLIENT_LOCK_TIMEOUT_MS 10u
 
 static honch_client_t *s_client = NULL;
