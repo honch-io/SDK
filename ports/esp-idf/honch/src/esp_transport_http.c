@@ -334,10 +334,17 @@ static honch_status_t honch_esp_post_chunk(
              * failures into the coarse ESP_ERR_HTTP_CONNECT. Recover the
              * underlying esp-tls error so the reason can distinguish them and
              * carry the finer (0x80xx) code in os_error. tls_flags != 0 means a
-             * certificate verification flag was set -> a cert failure. */
+             * certificate verification flag was set -> a cert failure.
+             *
+             * esp_http_client_get_and_clear_last_tls_error() only exists in
+             * newer ESP-IDF (absent on the v5.3 build floor, present on the
+             * v6.0.x production toolchain), so it is gated to >= 6.0.0 — the
+             * version we have verified ships it. Older IDF falls back to the
+             * coarse esp_err_t reason below, which is still correct, just less
+             * specific (the same graceful degradation old ports get). */
             detail->os_error = (int)err;
             detail->reason = honch_esp_map_err_reason(err);
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
             int tls_low = 0;
             int tls_flags = 0;
             esp_err_t tls_high =
