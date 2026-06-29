@@ -749,6 +749,38 @@ static void honch_pending_flush_clear(honch_client_t *client)
     client->pending_flush_stream_id[0] = '\0';
 }
 
+/* Invoke the transport, preferring the detailed variant. When the port only
+ * provides post_chunk, *detail is left untouched (the caller derives a coarse
+ * reason from the result). */
+static honch_status_t honch_core_invoke_post_chunk(
+    honch_client_t *client,
+    const char *stream_id,
+    const uint8_t *frame,
+    size_t frame_size,
+    honch_transport_result_t *result,
+    honch_transport_detail_t *detail)
+{
+    if (client->transport->post_chunk_ex != NULL) {
+        return client->transport->post_chunk_ex(
+            client->transport->ctx,
+            client->endpoint_url,
+            client->api_key,
+            stream_id,
+            frame,
+            frame_size,
+            result,
+            detail);
+    }
+    return client->transport->post_chunk(
+        client->transport->ctx,
+        client->endpoint_url,
+        client->api_key,
+        stream_id,
+        frame,
+        frame_size,
+        result);
+}
+
 static honch_status_t honch_core_post_wire_v2_message_limited(
     honch_client_t *client,
     const honch_payload_t *message,
@@ -757,7 +789,8 @@ static honch_status_t honch_core_post_wire_v2_message_limited(
     size_t max_chunks,
     size_t *message_offset,
     bool *message_complete,
-    honch_transport_result_t *result)
+    honch_transport_result_t *result,
+    honch_transport_detail_t *out_detail)
 {
     if (client == NULL || message == NULL || result == NULL ||
         client->transport == NULL || client->transport->post_chunk == NULL ||
@@ -804,14 +837,11 @@ static honch_status_t honch_core_post_wire_v2_message_limited(
 #ifdef HONCH_FLUSH_TIMING
         uint64_t post_start_ms = honch_flush_timing_now_ms(client);
 #endif
-        status = client->transport->post_chunk(
-            client->transport->ctx,
-            client->endpoint_url,
-            client->api_key,
-            stream_id,
-            frame,
-            frame_size,
-            result);
+        if (out_detail != NULL) {
+            *out_detail = (honch_transport_detail_t){0};
+        }
+        status = honch_core_invoke_post_chunk(
+            client, stream_id, frame, frame_size, result, out_detail);
 #ifdef HONCH_FLUSH_TIMING
         uint64_t post_elapsed_ms = honch_flush_timing_now_ms(client) - post_start_ms;
         chunk_count++;
@@ -879,6 +909,7 @@ static honch_status_t honch_queue_post_pending_flush_locked(
         .length = client->pending_flush_message_size
     };
     honch_transport_result_t result = HONCH_TRANSPORT_RETRY;
+    honch_transport_detail_t detail = {0};
     bool complete = false;
     honch_status_t status = honch_core_post_wire_v2_message_limited(
         client,
@@ -888,9 +919,11 @@ static honch_status_t honch_queue_post_pending_flush_locked(
         max_chunks,
         &client->pending_flush_message_offset,
         &complete,
-        &result);
+        &result,
+        &detail);
     client->outbound_upload_attempted = true;
     if (status != HONCH_OK) {
+        honch_diag_capture_transport_locked(client, status, result, &detail);
         if (result == HONCH_TRANSPORT_REJECTED || result == HONCH_TRANSPORT_AUTH_ERROR) {
             honch_status_t dead_status = honch_core_queue_dead_letter_batch(
                 client,
@@ -918,11 +951,14 @@ static honch_status_t honch_queue_post_pending_flush_locked(
         *progressed = status == HONCH_OK;
         if (status == HONCH_OK) {
             honch_pending_flush_clear(client);
+            honch_diag_note_success_locked(client);
         }
         return status;
     }
 
     if (result == HONCH_TRANSPORT_REJECTED || result == HONCH_TRANSPORT_AUTH_ERROR) {
+        honch_diag_capture_transport_locked(
+            client, status == HONCH_OK ? HONCH_ERROR_REJECTED : status, result, &detail);
         honch_status_t dead_status = honch_core_queue_dead_letter_batch(
             client,
             client->flush_sequences,
@@ -935,6 +971,8 @@ static honch_status_t honch_queue_post_pending_flush_locked(
         return dead_status;
     }
 
+    honch_diag_capture_transport_locked(
+        client, status == HONCH_OK ? HONCH_ERROR_TRANSPORT : status, result, &detail);
     return status == HONCH_OK ? HONCH_ERROR_TRANSPORT : status;
 }
 
@@ -1099,6 +1137,7 @@ static honch_status_t honch_queue_flush_one_with_chunk_limit_locked(
     uint64_t post_message_start_ms = honch_flush_timing_now_ms(client);
 #endif
     bool message_complete = false;
+    honch_transport_detail_t detail = {0};
     status = honch_core_post_wire_v2_message_limited(
         client,
         &compact_message,
@@ -1107,7 +1146,8 @@ static honch_status_t honch_queue_flush_one_with_chunk_limit_locked(
         max_chunks,
         &client->pending_flush_message_offset,
         &message_complete,
-        &result);
+        &result,
+        &detail);
     client->outbound_upload_attempted = true;
 #ifdef HONCH_FLUSH_TIMING
     uint64_t post_message_elapsed_ms = honch_flush_timing_now_ms(client) - post_message_start_ms;
@@ -1153,11 +1193,14 @@ static honch_status_t honch_queue_flush_one_with_chunk_limit_locked(
         *progressed = status == HONCH_OK;
         if (status == HONCH_OK) {
             honch_pending_flush_clear(client);
+            honch_diag_note_success_locked(client);
         }
         return status;
     }
 
     if (result == HONCH_TRANSPORT_REJECTED || result == HONCH_TRANSPORT_AUTH_ERROR) {
+        honch_diag_capture_transport_locked(
+            client, status == HONCH_OK ? HONCH_ERROR_REJECTED : status, result, &detail);
         honch_status_t dead_status = honch_core_queue_dead_letter_batch(client, sequences, event_count);
         if (dead_status == HONCH_OK) {
             honch_pending_flush_clear(client);
@@ -1167,6 +1210,8 @@ static honch_status_t honch_queue_flush_one_with_chunk_limit_locked(
         return dead_status;
     }
 
+    honch_diag_capture_transport_locked(
+        client, status == HONCH_OK ? HONCH_ERROR_TRANSPORT : status, result, &detail);
     return status == HONCH_OK ? HONCH_ERROR_TRANSPORT : status;
 }
 

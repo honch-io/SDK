@@ -2,6 +2,7 @@
 #define HONCH_CORE_HONCH_H
 
 #include "honch/core/config.h"
+#include "honch/core/error_detail.h"
 #include "honch/core/status.h"
 #include "honch/core/wire_v2.h"
 
@@ -54,6 +55,21 @@ const char *honch_core_get_device_id(honch_client_t *client);
 honch_status_t honch_core_copy_device_id(honch_client_t *client, char *buffer, size_t buffer_size);
 honch_status_t honch_core_get_queue_stats(honch_client_t *client, honch_queue_stats_t *stats);
 const char *honch_status_string(honch_status_t status);
+
+/* Stable snake_case token for a reason code (e.g. "auth_invalid_key"). Returns
+ * "unknown" for an unrecognised value. Never NULL. */
+const char *honch_error_reason_string(honch_error_reason_t reason);
+
+/* Format a detail into a single human-readable line in the caller-owned buffer,
+ * e.g. "rejected: HTTP 401 — API key invalid or revoked (reason=auth_invalid_key)".
+ * Always NUL-terminates when buf_size > 0; truncates safely. Returns the number
+ * of bytes written (excluding the NUL), or 0 on NULL/zero-size arguments. */
+size_t honch_error_detail_format(const honch_error_detail_t *detail, char *buf, size_t buf_size);
+
+/* Copy the most recent failure detail into *out. Returns HONCH_OK (out is the
+ * zero/"none" state if nothing has failed yet), HONCH_ERROR_INVALID_ARGUMENT on
+ * NULL out, or HONCH_ERROR_NOT_INITIALIZED if the client is not usable. */
+honch_status_t honch_core_get_last_error(honch_client_t *client, honch_error_detail_t *out);
 
 #ifdef __cplusplus
 }
