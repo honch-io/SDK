@@ -26,6 +26,15 @@
 #define HONCH_ENABLE_LOG_CAPTURE HONCH_ENABLE_ERROR_TRACKING
 #endif
 
+/* Bounded diagnostic logging: on a failure the core emits one deduped line via
+ * platform->log (WARN for retryable, ERROR for terminal), self-tagged so it
+ * never re-enters the $error log-capture hook. Defaults to the umbrella; the
+ * honch_error_detail_t struct, accessor, and formatter are always compiled —
+ * only this proactive emission is gated. */
+#ifndef HONCH_ENABLE_ERROR_DIAGNOSTICS
+#define HONCH_ENABLE_ERROR_DIAGNOSTICS HONCH_ENABLE_ERROR_TRACKING
+#endif
+
 /* Auto-emitted process-lifecycle events ($device_boot, $firmware_update,
  * $device_shutdown) are on by default and compiled out at build time. A port
  * that only wants explicit track() calls can strip them; the firmware-version

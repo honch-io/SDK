@@ -151,6 +151,8 @@ class EspIdfChunkWireTest(unittest.TestCase):
         self.assertIn("reused_client", transport)
         self.assertIn("client_reset", transport)
         self.assertIn(".post_chunk = honch_esp_post_chunk", transport)
+        # Detailed variant wired so http_status + esp_err_t reason reach last_error.
+        self.assertIn(".post_chunk_ex = honch_esp_post_chunk", transport)
         self.assertIn(".ctx = ctx", transport)
         self.assertNotIn(".ctx = NULL", transport)
         self.assertNotIn("post_batch", transport)

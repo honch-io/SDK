@@ -2,6 +2,7 @@
 // Copyright 2026 Honch Dev
 
 #include "esp_core_adapter.h"
+#include "honch_internal.h" /* HONCH_LOG_SELF_TAG: single source for the SDK log tag */
 
 #include <stddef.h>
 #include <stdint.h>
@@ -31,7 +32,7 @@
 #include "esp_core_dump.h"
 #endif
 
-static const char *TAG = "honch";
+static const char *TAG = HONCH_LOG_SELF_TAG;
 static const int64_t HONCH_MIN_UNIX_TIME_SECONDS = 1577836800;
 #define HONCH_ESP_MUTEX_LOCK_TIMEOUT_MS 10u
 

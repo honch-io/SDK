@@ -189,6 +189,9 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertIn("honch_core_report_log_error", combined)
         self.assertNotIn("honch_core_report_error", combined)
         self.assertNotIn("capture_error", combined)
+        # Structured error context: last_error() returns http_status + reason.
+        self.assertIn("MP_QSTR_last_error", combined)
+        self.assertIn("honch_core_get_last_error", combined)
 
     def test_package_metadata_versions_match(self):
         init_py = self.read("ports/micropython/honch/__init__.py")

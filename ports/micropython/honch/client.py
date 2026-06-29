@@ -110,6 +110,17 @@ class Honch:
     def queue_stats(self):
         return self._call("queue_stats")
 
+    def last_error(self):
+        """Structured detail for the most recent failure.
+
+        Returns a dict ``{status, reason, http, os_error, message, component}``
+        describing why the last operation failed -- e.g.
+        ``{'status': 'rejected', 'reason': 'auth_invalid_key', 'http': 401, ...}``
+        -- instead of a bare status code. ``status`` is ``'ok'`` and ``reason``
+        is ``'none'`` when nothing has failed yet.
+        """
+        return self._call("last_error")
+
     def track(self, event_name, properties=None):
         require_event_name(event_name)
         self._call("track", event_name, require_properties(properties))

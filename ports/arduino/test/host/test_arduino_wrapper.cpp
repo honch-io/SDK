@@ -91,6 +91,24 @@ int main() {
   assert(honch_arduino_host_transport_last_body() != NULL);
   assert(client.shutdown());
 
+  // Structured error detail surfaces an auth failure with HTTP status + reason,
+  // while lastError() stays the coarse string (additive).
+  honch_arduino_host_transport_reset();
+  honch_arduino_host_transport_set_result(HONCH_ERROR_REJECTED, HONCH_TRANSPORT_AUTH_ERROR);
+  honch_arduino_host_transport_set_http_status(401);
+  assert(client.begin(config));
+  assert(client.track("auth_probe"));
+  assert(!client.flush());
+  honch_error_detail_t detail = {};
+  assert(client.lastErrorDetail(&detail));
+  assert(detail.http_status == 401);
+  assert(detail.reason == HONCH_REASON_AUTH_INVALID_KEY);
+  assert(strstr(client.lastErrorMessage(), "401") != nullptr);
+  assert(strcmp(client.lastError(), "rejected") == 0);
+  honch_arduino_host_transport_set_result(HONCH_OK, HONCH_TRANSPORT_ACCEPTED);
+  honch_arduino_host_transport_set_http_status(0);
+  assert(client.shutdown());
+
   assert_http_status(202, HONCH_OK, HONCH_TRANSPORT_CHUNK_STORED);
   assert_http_status(204, HONCH_OK, HONCH_TRANSPORT_ACCEPTED);
   assert_http_status(400, HONCH_ERROR_REJECTED, HONCH_TRANSPORT_REJECTED);

@@ -931,6 +931,17 @@ static void test_esp_idf_status_aliases(void)
     EXPECT_TRUE(strcmp(honch_status_string(HONCH_ERROR_INTERNAL), "internal error") == 0);
 }
 
+/* Defined in posix_transport_curl.c under HONCH_TESTING. */
+bool honch_posix_curl_reason_selftest(void);
+
+static void test_curl_error_maps_to_reason(void)
+{
+    /* The CURLcode -> honch_error_reason_t table (DNS / connect / timeout / TLS
+     * handshake / cert / write / read, default -> unknown). The live failure
+     * path is exercised by the on-device + e2e DNS/wrong-host probes. */
+    EXPECT_TRUE(honch_posix_curl_reason_selftest());
+}
+
 static void test_shutdown_reports_status(void)
 {
     char queue_dir[128];
@@ -3302,6 +3313,7 @@ int main(void)
     test_reset_clears_queued_events();
     test_reset_does_not_queue_event_when_state_reset_fails();
     test_reset_generates_new_identity_and_clears_properties();
+    test_curl_error_maps_to_reason();
 
     if (failures != 0) {
         fprintf(stderr, "%d test failure(s)\n", failures);

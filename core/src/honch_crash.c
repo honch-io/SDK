@@ -301,9 +301,8 @@ honch_status_t honch_core_report_crash(
 }
 
 #if HONCH_ENABLE_LOG_CAPTURE
-/* SDK-internal log tag, so the log hook never reports the SDK's own logs as
- * $error events (recursion guard). */
-#define HONCH_LOG_SELF_TAG "honch"
+/* HONCH_LOG_SELF_TAG (the recursion-guard tag this file's hook checks) is defined
+ * once in honch_internal.h so the ports that route SDK logs share the exact value. */
 
 static void honch_copy_bounded(char *dst, size_t dst_size, const char *src)
 {

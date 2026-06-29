@@ -1144,7 +1144,118 @@ static void test_shutdown_drains_pending_log_errors(void)
      * not just $device_shutdown (+1). */
     assert(storage.queue_push_calls == pushes_before_shutdown + 2);
 }
+
+/* Re-entrancy guard: the diagnostics auto-log line is emitted under the client
+ * state lock during a failed flush. A port that routes SDK logs back through the
+ * $error hook (the esp-idf platform log + log-capture hook — the exact 0.3.0
+ * log-hook deadlock scenario) tags those lines with HONCH_LOG_SELF_TAG, so the
+ * hook must never turn the SDK's own diagnostics into an $error. This test
+ * proves exactly that: the self-tagged line re-enters honch_core_report_log_error
+ * from inside the locked flush and produces NO $error (no extra queue push). The
+ * deadlock-safety itself comes from the guard returning before honch_client_lock
+ * (verified structurally) — this harness uses the internal fallback lock, so it
+ * does not also exercise a real-mutex re-acquire. */
+static honch_client_t *s_reentry_client = NULL;
+static int s_reentry_forward_calls = 0;
+
+static void reentry_forward_log(void *ctx, honch_log_level_t level, const char *message)
+{
+    (void)ctx;
+    (void)level;
+    s_reentry_forward_calls++;
+    if (s_reentry_client != NULL) {
+        /* Mimic esp_platform routing the line under TAG == HONCH_LOG_SELF_TAG. */
+        (void)honch_core_report_log_error(s_reentry_client, HONCH_LOG_SELF_TAG, message);
+    }
+}
+
+static void test_diag_autolog_self_tag_does_not_reenter_error_hook(void)
+{
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .track_queue_depth = 1,
+        .post_chunk_status = HONCH_ERROR_TRANSPORT,
+        .post_chunk_result = HONCH_TRANSPORT_RETRY,
+    };
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+    platform.log = reentry_forward_log;
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+    s_reentry_client = client;
+    s_reentry_forward_calls = 0;
+
+    assert(honch_core_track(client, "reentry_probe", NULL, 0u) == HONCH_OK);
+    int pushes_before = storage.queue_push_calls;
+
+    /* Failing flush -> diagnostics auto-log fires under the state lock -> the
+     * forwarder feeds it back through the hook under the self tag. (A retryable
+     * failure is deferred, so flush itself may still return OK; what matters is
+     * that the diagnostic line was emitted and re-entered the hook safely.) */
+    (void)honch_core_flush(client);
+    assert(s_reentry_forward_calls >= 1); /* the diagnostic line was emitted */
+
+    /* The self-tagged line must NOT have accumulated an $error: a subsequent
+     * (now-succeeding) flush drains the log-error table, so a phantom $error
+     * would show up as an extra queue push. */
+    storage.post_chunk_status = HONCH_OK;
+    storage.post_chunk_result = HONCH_TRANSPORT_ACCEPTED;
+    (void)honch_core_flush(client);
+    assert(storage.queue_push_calls == pushes_before);
+
+    s_reentry_client = NULL;
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
 #endif /* HONCH_ENABLE_LOG_CAPTURE */
+
+/* The honch_core_get_last_error accessor contract: INVALID_ARGUMENT on a NULL
+ * client or NULL out (matching every other honch_core_* accessor), OK + the
+ * zero/"none" state before any failure, and a faithful copy after one. */
+static void test_get_last_error_accessor_contract(void)
+{
+    honch_error_detail_t out = {0};
+    assert(honch_core_get_last_error(NULL, &out) == HONCH_ERROR_INVALID_ARGUMENT);
+
+    fake_state_storage_t storage = {
+        .queue_push_status = HONCH_OK,
+        .track_queue_depth = 1,
+        .post_chunk_status = HONCH_ERROR_REJECTED,
+        .post_chunk_result = HONCH_TRANSPORT_AUTH_ERROR,
+    };
+    honch_platform_ops_t platform;
+    honch_state_storage_ops_t state_ops;
+    honch_event_queue_ops_t queue_ops;
+    honch_transport_ops_t transport;
+    honch_core_config_t config = fake_config(&storage, &platform, &state_ops, &queue_ops, &transport);
+
+    honch_client_t *client = NULL;
+    assert(honch_core_init(&client, &config) == HONCH_OK);
+
+    assert(honch_core_get_last_error(client, NULL) == HONCH_ERROR_INVALID_ARGUMENT);
+
+    honch_error_detail_t before = {0};
+    assert(honch_core_get_last_error(client, &before) == HONCH_OK);
+    assert(before.reason == HONCH_REASON_NONE);
+    assert(before.http_status == 0 && before.os_error == 0);
+
+    assert(honch_core_track(client, "accessor_probe", NULL, 0u) == HONCH_OK);
+    (void)honch_core_flush(client); /* auth rejection -> last_error captured */
+
+    honch_error_detail_t got = {0};
+    assert(honch_core_get_last_error(client, &got) == HONCH_OK);
+    assert(got.status == HONCH_ERROR_REJECTED);
+    assert(got.transport_result == HONCH_TRANSPORT_AUTH_ERROR);
+    assert(got.reason == HONCH_REASON_AUTH_INVALID_KEY); /* derived (no post_chunk_ex) */
+    assert(got.message != NULL);
+
+    storage.post_chunk_status = HONCH_OK;
+    storage.post_chunk_result = HONCH_TRANSPORT_ACCEPTED;
+    assert(honch_core_shutdown(client) == HONCH_OK);
+}
 
 static honch_status_t fake_queue_consume(void *ctx, uint64_t sequence)
 {
@@ -2514,7 +2625,9 @@ int main(void)
     test_identical_log_errors_coalesce();
     test_sdk_self_logs_are_ignored();
     test_shutdown_drains_pending_log_errors();
+    test_diag_autolog_self_tag_does_not_reenter_error_hook();
 #endif
+    test_get_last_error_accessor_contract();
     test_core_state_lock_works_without_platform_lock_callbacks();
     test_init_rejects_mutex_required_platform_without_lock_callbacks();
     test_failed_firmware_update_queue_does_not_advance_persisted_version();

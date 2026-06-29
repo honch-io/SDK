@@ -299,6 +299,36 @@ const char *HonchClass::lastError() {
   return honch_status_string(status);
 }
 
+bool HonchClass::lastErrorDetail(honch_error_detail_t *out) {
+  if (out == nullptr) {
+    return false;
+  }
+  honch_status_t lockStatus = lockInstance();
+  if (lockStatus != HONCH_OK) {
+    return false;
+  }
+  honch_status_t status = _client == nullptr
+                              ? HONCH_ERROR_NOT_INITIALIZED
+                              : honch_core_get_last_error(_client, out);
+  unlockInstance();
+  return status == HONCH_OK;
+}
+
+const char *HonchClass::lastErrorMessage() {
+  honch_error_detail_t detail = {};
+  if (!lastErrorDetail(&detail)) {
+    // Fall back to the coarse string if detail is unavailable.
+    return lastError();
+  }
+  honch_status_t lockStatus = lockInstance();
+  if (lockStatus != HONCH_OK) {
+    return honch_status_string(detail.status);
+  }
+  honch_error_detail_format(&detail, _lastErrorMessage, sizeof(_lastErrorMessage));
+  unlockInstance();
+  return _lastErrorMessage;
+}
+
 #ifndef ARDUINO
 bool HonchClass::hostLockForTest() {
   return lockInstance() == HONCH_OK;

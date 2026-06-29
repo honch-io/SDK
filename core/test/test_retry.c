@@ -1395,9 +1395,200 @@ static void test_network_error_preserves_events(void)
     assert_retry_preserves_events(HONCH_ERROR_TRANSPORT);
 }
 
+/* ---- error-context capture + bounded auto-log (feat/error-context) ---- */
+
+typedef struct diag_log_recorder {
+    size_t count;
+    honch_log_level_t last_level;
+    char last_message[HONCH_DIAG_LINE_BYTES];
+} diag_log_recorder_t;
+
+static void diag_record_log(void *ctx, honch_log_level_t level, const char *message)
+{
+    diag_log_recorder_t *rec = (diag_log_recorder_t *)ctx;
+    rec->count++;
+    rec->last_level = level;
+    snprintf(rec->last_message, sizeof(rec->last_message), "%s", message == NULL ? "" : message);
+}
+
+typedef struct detail_transport {
+    honch_transport_result_t result;
+    honch_status_t status;
+    int http_status;
+    honch_error_reason_t reason;
+} detail_transport_t;
+
+/* Reports rich detail through the detailed variant. */
+static honch_status_t detail_post_chunk_ex(
+    void *ctx, const char *url, const char *key, const char *stream,
+    const uint8_t *body, size_t n,
+    honch_transport_result_t *result, honch_transport_detail_t *detail)
+{
+    (void)url; (void)key; (void)stream; (void)body; (void)n;
+    detail_transport_t *t = (detail_transport_t *)ctx;
+    if (detail != NULL) {
+        detail->http_status = t->http_status;
+        detail->reason = t->reason;
+    }
+    *result = t->result;
+    return t->status;
+}
+
+/* Legacy-style transport: only the coarse result, no detail (post_chunk only). */
+static honch_status_t detail_post_chunk_plain(
+    void *ctx, const char *url, const char *key, const char *stream,
+    const uint8_t *body, size_t n, honch_transport_result_t *result)
+{
+    (void)url; (void)key; (void)stream; (void)body; (void)n;
+    detail_transport_t *t = (detail_transport_t *)ctx;
+    *result = t->result;
+    return t->status;
+}
+
+/* C1: post_chunk_ex detail (http_status + reason) is captured into last_error. */
+static void test_error_capture_from_post_chunk_ex(void)
+{
+    fake_storage_t storage;
+    setup_storage(&storage);
+    detail_transport_t t = {
+        .result = HONCH_TRANSPORT_AUTH_ERROR, .status = HONCH_ERROR_REJECTED,
+        .http_status = 401, .reason = HONCH_REASON_AUTH_INVALID_KEY
+    };
+    honch_event_queue_ops_t storage_ops = {0};
+    honch_transport_ops_t transport_ops = {0};
+    fake_transport_t unused = {0};
+    honch_client_t client = fake_client(&storage, &storage_ops, &unused, &transport_ops);
+    transport_ops.ctx = &t;
+    transport_ops.post_chunk = detail_post_chunk_plain;     /* required non-NULL */
+    transport_ops.post_chunk_ex = detail_post_chunk_ex;     /* preferred */
+
+    assert(honch_queue_flush_locked(&client) == HONCH_ERROR_REJECTED);
+    assert(client.last_error.http_status == 401);
+    assert(client.last_error.reason == HONCH_REASON_AUTH_INVALID_KEY);
+    assert(client.last_error.transport_result == HONCH_TRANSPORT_AUTH_ERROR);
+    assert(client.last_error.status == HONCH_ERROR_REJECTED);
+    assert(client.last_error.message != NULL);
+}
+
+/* C1: a transport with only post_chunk still yields a derived reason (fallback). */
+static void test_error_capture_fallback_without_post_chunk_ex(void)
+{
+    fake_storage_t storage;
+    setup_storage(&storage);
+    detail_transport_t t = {.result = HONCH_TRANSPORT_AUTH_ERROR, .status = HONCH_ERROR_REJECTED};
+    honch_event_queue_ops_t storage_ops = {0};
+    honch_transport_ops_t transport_ops = {0};
+    fake_transport_t unused = {0};
+    honch_client_t client = fake_client(&storage, &storage_ops, &unused, &transport_ops);
+    transport_ops.ctx = &t;
+    transport_ops.post_chunk = detail_post_chunk_plain;
+    transport_ops.post_chunk_ex = NULL; /* legacy port */
+
+    assert(honch_queue_flush_locked(&client) == HONCH_ERROR_REJECTED);
+    assert(client.last_error.http_status == 0);  /* unknown without _ex */
+    assert(client.last_error.reason == HONCH_REASON_AUTH_INVALID_KEY); /* derived from result */
+}
+
+/* C3: identical retryable failures log once (deduped, WARN); a distinct failure
+ * logs again; a success resets the dedup so the next failure logs again. */
+static void test_diagnostic_autolog_dedup_and_reset(void)
+{
+    fake_storage_t storage;
+    detail_transport_t t = {
+        .result = HONCH_TRANSPORT_RETRY, .status = HONCH_ERROR_TRANSPORT,
+        .http_status = 503, .reason = HONCH_REASON_HTTP_STATUS
+    };
+    diag_log_recorder_t rec = {0};
+    honch_platform_ops_t platform = {.log = diag_record_log, .ctx = &rec};
+    honch_event_queue_ops_t storage_ops = {0};
+    honch_transport_ops_t transport_ops = {0};
+    fake_transport_t unused = {0};
+    honch_client_t client = fake_client(&storage, &storage_ops, &unused, &transport_ops);
+    client.platform = &platform;
+    transport_ops.ctx = &t;
+    transport_ops.post_chunk = detail_post_chunk_plain;
+    transport_ops.post_chunk_ex = detail_post_chunk_ex;
+
+    /* Two identical 503 failures -> exactly one WARN line (retries don't spam). */
+    setup_storage(&storage);
+    assert(honch_queue_flush_locked(&client) == HONCH_ERROR_TRANSPORT);
+    setup_storage(&storage);
+    assert(honch_queue_flush_locked(&client) == HONCH_ERROR_TRANSPORT);
+    assert(rec.count == 1u);
+    assert(rec.last_level == HONCH_LOG_WARN);
+    assert(strstr(rec.last_message, "503") != NULL);
+
+    /* A distinct failure (500) logs again. */
+    t.http_status = 500;
+    setup_storage(&storage);
+    assert(honch_queue_flush_locked(&client) == HONCH_ERROR_TRANSPORT);
+    assert(rec.count == 2u);
+
+    /* A success resets the dedup table; the same 503 then logs again. */
+    t.result = HONCH_TRANSPORT_ACCEPTED; t.status = HONCH_OK;
+    setup_storage(&storage);
+    assert(honch_queue_flush_locked(&client) == HONCH_OK);
+    assert(rec.count == 2u); /* success itself logs nothing */
+    t.result = HONCH_TRANSPORT_RETRY; t.status = HONCH_ERROR_TRANSPORT; t.http_status = 503;
+    setup_storage(&storage);
+    assert(honch_queue_flush_locked(&client) == HONCH_ERROR_TRANSPORT);
+    assert(rec.count == 3u);
+}
+
+/* C3: a terminal rejection logs at ERROR level. */
+static void test_diagnostic_autolog_terminal_is_error_level(void)
+{
+    fake_storage_t storage;
+    setup_storage(&storage);
+    detail_transport_t t = {
+        .result = HONCH_TRANSPORT_AUTH_ERROR, .status = HONCH_ERROR_REJECTED,
+        .http_status = 401, .reason = HONCH_REASON_AUTH_INVALID_KEY
+    };
+    diag_log_recorder_t rec = {0};
+    honch_platform_ops_t platform = {.log = diag_record_log, .ctx = &rec};
+    honch_event_queue_ops_t storage_ops = {0};
+    honch_transport_ops_t transport_ops = {0};
+    fake_transport_t unused = {0};
+    honch_client_t client = fake_client(&storage, &storage_ops, &unused, &transport_ops);
+    client.platform = &platform;
+    transport_ops.ctx = &t;
+    transport_ops.post_chunk = detail_post_chunk_plain;
+    transport_ops.post_chunk_ex = detail_post_chunk_ex;
+
+    assert(honch_queue_flush_locked(&client) == HONCH_ERROR_REJECTED);
+    assert(rec.count == 1u);
+    assert(rec.last_level == HONCH_LOG_ERROR);
+    assert(strstr(rec.last_message, "401") != NULL);
+}
+
+/* C2: a local pipeline failure (queue full / encode) is captured into
+ * last_error with a component tag and a human message. (The track-path call
+ * site is a straight-line invocation of this same function; the full integration
+ * path is exercised by the posix + on-device e2e.) */
+static void test_local_failure_capture(void)
+{
+    honch_client_t client = {0}; /* platform NULL -> capture only, no auto-log */
+    honch_diag_capture_local_locked(
+        &client, HONCH_ERROR_QUEUE_FULL, HONCH_REASON_QUEUE_FULL, "queue");
+    assert(client.last_error.status == HONCH_ERROR_QUEUE_FULL);
+    assert(client.last_error.reason == HONCH_REASON_QUEUE_FULL);
+    assert(client.last_error.message != NULL);
+    assert(strcmp(client.last_error.component, "queue") == 0);
+
+    honch_diag_capture_local_locked(
+        &client, HONCH_ERROR_OUT_OF_MEMORY, HONCH_REASON_ENCODE_FAILED, "encode");
+    assert(client.last_error.reason == HONCH_REASON_ENCODE_FAILED);
+    assert(strcmp(client.last_error.component, "encode") == 0);
+}
+
 int main(void)
 {
     atexit(free_tracked_payloads);
+    test_local_failure_capture();
+    test_error_capture_from_post_chunk_ex();
+    test_error_capture_fallback_without_post_chunk_ex();
+    test_diagnostic_autolog_dedup_and_reset();
+    test_diagnostic_autolog_terminal_is_error_level();
     test_hqr1_validate_rejects_embedded_nul_in_required_strings();
     test_hqr1_rejects_values_deeper_than_wire_v2_limit();
     test_hqr1_rejects_duplicate_top_level_property_keys();

@@ -1,4 +1,5 @@
 #include "honch_arduino_adapter.h"
+#include "honch/core/capture_transport.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -25,6 +26,7 @@ namespace {
 struct HostTransportState {
   honch_status_t status = HONCH_OK;
   honch_transport_result_t result = HONCH_TRANSPORT_ACCEPTED;
+  int httpStatus = 0; /* host-test seam: drives post_chunk_ex detail.http_status */
   size_t calls = 0;
   std::string url;
   std::string contentType;
@@ -101,14 +103,37 @@ static bool arduino_endpoint_is_default(const char *endpointUrl) {
 }
 #endif
 
-honch_status_t arduino_post_chunk(
+#ifdef ARDUINO
+/* Map a negative HTTPClient transport error (no HTTP status) to a finer reason. */
+static honch_error_reason_t arduino_map_httpc_error(int code) {
+  switch (code) {
+    case HTTPC_ERROR_CONNECTION_REFUSED:
+      return HONCH_REASON_CONNECT_REFUSED;
+    case HTTPC_ERROR_CONNECTION_LOST:
+      return HONCH_REASON_READ_FAILED;
+    case HTTPC_ERROR_READ_TIMEOUT:
+      return HONCH_REASON_CONNECT_TIMEOUT;
+    case HTTPC_ERROR_SEND_HEADER_FAILED:
+    case HTTPC_ERROR_SEND_PAYLOAD_FAILED:
+      return HONCH_REASON_WRITE_FAILED;
+    case HTTPC_ERROR_NOT_CONNECTED:
+    case HTTPC_ERROR_NO_HTTP_SERVER:
+      return HONCH_REASON_OFFLINE;
+    default:
+      return HONCH_REASON_UNKNOWN;
+  }
+}
+#endif
+
+honch_status_t arduino_post_chunk_ex(
     void *ctx,
     const char *endpointUrl,
     const char *apiKey,
     const char *streamId,
     const uint8_t *body,
     size_t bodySize,
-    honch_transport_result_t *result) {
+    honch_transport_result_t *result,
+    honch_transport_detail_t *detail) {
   honch_arduino_transport_t *transport = static_cast<honch_arduino_transport_t *>(ctx);
   if (transport == nullptr || endpointUrl == nullptr || apiKey == nullptr || body == nullptr ||
       bodySize == 0 || result == nullptr) {
@@ -125,6 +150,9 @@ honch_status_t arduino_post_chunk(
     secureClient = new (std::nothrow) WiFiClientSecure();
     if (secureClient == nullptr) {
       *result = HONCH_TRANSPORT_RETRY;
+      if (detail != nullptr) {
+        detail->reason = HONCH_REASON_OUT_OF_MEMORY;
+      }
       return HONCH_ERROR_OUT_OF_MEMORY;
     }
     if (transport->rootCaPem != nullptr && transport->rootCaPem[0] != '\0') {
@@ -140,11 +168,20 @@ honch_status_t arduino_post_chunk(
     if (!http.begin(*secureClient, url.c_str())) {
       delete secureClient;
       *result = HONCH_TRANSPORT_RETRY;
+      if (detail != nullptr) {
+        // begin() only parses the URL / binds the client; no connect or TLS
+        // handshake has happened yet, so report a config-phase failure rather
+        // than naming a network phase that never ran.
+        detail->reason = HONCH_REASON_INVALID_CONFIG;
+      }
       return HONCH_ERROR_TRANSPORT;
     }
   } else {
     if (!http.begin(plainClient, url.c_str())) {
       *result = HONCH_TRANSPORT_RETRY;
+      if (detail != nullptr) {
+        detail->reason = HONCH_REASON_INVALID_CONFIG;
+      }
       return HONCH_ERROR_TRANSPORT;
     }
   }
@@ -159,6 +196,15 @@ honch_status_t arduino_post_chunk(
   int code = http.POST(const_cast<uint8_t *>(body), bodySize);
   http.end();
   delete secureClient;
+  if (detail != nullptr) {
+    if (code > 0) {
+      detail->http_status = code;
+      detail->reason = honch_capture_map_http_reason(code);
+    } else {
+      detail->os_error = code;
+      detail->reason = arduino_map_httpc_error(code);
+    }
+  }
   return classify_http_status(code, result);
 #else
   g_hostTransport.calls++;
@@ -168,8 +214,25 @@ honch_status_t arduino_post_chunk(
   g_hostTransport.streamId = streamId == nullptr ? "" : streamId;
   g_hostTransport.body.assign(body, body + bodySize);
   *result = g_hostTransport.result;
+  if (detail != nullptr) {
+    detail->http_status = g_hostTransport.httpStatus;
+    detail->reason = g_hostTransport.httpStatus > 0
+                         ? honch_capture_map_http_reason(g_hostTransport.httpStatus)
+                         : HONCH_REASON_NONE;
+  }
   return g_hostTransport.status;
 #endif
+}
+
+honch_status_t arduino_post_chunk(
+    void *ctx,
+    const char *endpointUrl,
+    const char *apiKey,
+    const char *streamId,
+    const uint8_t *body,
+    size_t bodySize,
+    honch_transport_result_t *result) {
+  return arduino_post_chunk_ex(ctx, endpointUrl, apiKey, streamId, body, bodySize, result, nullptr);
 }
 
 } // namespace
@@ -196,6 +259,7 @@ honch_status_t honch_arduino_transport_ops_init(
       arduino_post_chunk,
       nullptr,
       ctx,
+      arduino_post_chunk_ex,
   };
   return HONCH_OK;
 }
@@ -238,6 +302,10 @@ void honch_arduino_host_transport_set_result(
     honch_transport_result_t result) {
   g_hostTransport.status = status;
   g_hostTransport.result = result;
+}
+
+void honch_arduino_host_transport_set_http_status(int httpStatus) {
+  g_hostTransport.httpStatus = httpStatus;
 }
 
 honch_status_t honch_arduino_host_classify_http_status(

@@ -48,6 +48,12 @@ public:
   const char *deviceId();
   bool queueStats(honch_queue_stats_t *stats);
   const char *lastError();
+  // Structured detail for the most recent failure (status + reason + http_status
+  // + os_error + message). Returns false if unavailable. lastError() is unchanged.
+  bool lastErrorDetail(honch_error_detail_t *out);
+  // One human-readable line for the most recent failure, e.g.
+  // "rejected: HTTP 401 - API key invalid or revoked (reason=auth_invalid_key)".
+  const char *lastErrorMessage();
 
 #ifndef ARDUINO
   bool hostLockForTest();
@@ -62,6 +68,7 @@ private:
   honch_client_t *_client;
   void *_instanceMutex;
   std::atomic<honch_status_t> _lastStatus;
+  char _lastErrorMessage[192];
 };
 
 namespace honch {
