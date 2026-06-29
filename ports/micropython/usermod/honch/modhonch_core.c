@@ -564,6 +564,29 @@ static mp_obj_t honch_client_queue_stats(mp_obj_t self_in)
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(honch_client_queue_stats_obj, honch_client_queue_stats);
 
+static mp_obj_t honch_client_last_error(mp_obj_t self_in)
+{
+    honch_micropython_client_t *self = honch_get_self(self_in);
+    honch_error_detail_t detail = {0};
+    honch_status_t status = honch_core_get_last_error(self->client, &detail);
+    if (status != HONCH_STATUS_OK) {
+        honch_micropython_raise_status(status);
+    }
+    const char *status_str = honch_status_string(detail.status);
+    const char *reason_str = honch_error_reason_string(detail.reason);
+    mp_obj_t dict = mp_obj_new_dict(6);
+    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_status), mp_obj_new_str(status_str, strlen(status_str)));
+    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_reason), mp_obj_new_str(reason_str, strlen(reason_str)));
+    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_http), mp_obj_new_int(detail.http_status));
+    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_os_error), mp_obj_new_int(detail.os_error));
+    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_message),
+        detail.message == NULL ? mp_const_none : mp_obj_new_str(detail.message, strlen(detail.message)));
+    mp_obj_dict_store(dict, MP_OBJ_NEW_QSTR(MP_QSTR_component),
+        detail.component == NULL ? mp_const_none : mp_obj_new_str(detail.component, strlen(detail.component)));
+    return dict;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(honch_client_last_error_obj, honch_client_last_error);
+
 static const mp_rom_map_elem_t honch_client_locals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_track), MP_ROM_PTR(&honch_client_track_obj) },
     { MP_ROM_QSTR(MP_QSTR_report_crash), MP_ROM_PTR(&honch_client_report_crash_obj) },
@@ -579,6 +602,7 @@ static const mp_rom_map_elem_t honch_client_locals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_shutdown), MP_ROM_PTR(&honch_client_shutdown_obj) },
     { MP_ROM_QSTR(MP_QSTR_get_device_id), MP_ROM_PTR(&honch_client_get_device_id_obj) },
     { MP_ROM_QSTR(MP_QSTR_queue_stats), MP_ROM_PTR(&honch_client_queue_stats_obj) },
+    { MP_ROM_QSTR(MP_QSTR_last_error), MP_ROM_PTR(&honch_client_last_error_obj) },
 };
 static MP_DEFINE_CONST_DICT(honch_client_locals_dict, honch_client_locals_table);
 

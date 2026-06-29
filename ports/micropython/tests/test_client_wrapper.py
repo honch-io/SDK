@@ -59,6 +59,16 @@ class FakeCoreClient:
     def queue_stats(self):
         return {"depth": 0}
 
+    def last_error(self):
+        return {
+            "status": "rejected",
+            "reason": "auth_invalid_key",
+            "http": 401,
+            "os_error": 0,
+            "message": "API key invalid or revoked",
+            "component": "http",
+        }
+
 
 class ClientWrapperTests(unittest.TestCase):
     def setUp(self):
@@ -141,6 +151,9 @@ class ClientWrapperTests(unittest.TestCase):
 
         self.assertEqual(client.get_device_id(), "device-from-core")
         self.assertEqual(client.queue_stats(), {"depth": 0})
+        last_error = client.last_error()
+        self.assertEqual(last_error["http"], 401)
+        self.assertEqual(last_error["reason"], "auth_invalid_key")
         self.assertEqual(client._core.config["api_key"], "key")
         self.assertEqual(client._core.config["device_id"], "device-1")
         self.assertEqual(client._core.config["batch_size"], 3)
