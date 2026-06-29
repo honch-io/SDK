@@ -11,6 +11,8 @@ SRC_USERMOD_C += \
 	$(HONCH_CORE_DIR)/src/honch_core.c \
 	$(HONCH_CORE_DIR)/src/honch_coredump.c \
 	$(HONCH_CORE_DIR)/src/honch_crash.c \
+	$(HONCH_CORE_DIR)/src/honch_diagnostics.c \
+	$(HONCH_CORE_DIR)/src/honch_error_detail.c \
 	$(HONCH_CORE_DIR)/src/honch_event_record.c \
 	$(HONCH_CORE_DIR)/src/honch_lifecycle.c \
 	$(HONCH_CORE_DIR)/src/honch_lifecycle_events.c \

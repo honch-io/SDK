@@ -29,6 +29,8 @@ set(HONCH_CORE_SOURCES
     "core/src/honch_core.c"
     "core/src/honch_coredump.c"
     "core/src/honch_crash.c"
+    "core/src/honch_diagnostics.c"
+    "core/src/honch_error_detail.c"
     "core/src/honch_event_record.c"
     "core/src/honch_lifecycle.c"
     "core/src/honch_lifecycle_events.c"
