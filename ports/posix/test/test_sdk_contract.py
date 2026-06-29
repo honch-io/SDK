@@ -102,6 +102,9 @@ class PosixChunkWireTest(unittest.TestCase):
         self.assertIn("X-Honch-Stream-Id", transport)
         self.assertIn("HONCH_TRANSPORT_CHUNK_STORED", transport)
         self.assertIn(".post_chunk = honch_posix_transport_post_chunk_ops", transport)
+        # Detailed variant is wired so structured error context (http_status,
+        # CURLcode, reason) reaches honch_core_get_last_error.
+        self.assertIn(".post_chunk_ex = honch_posix_transport_post_chunk_ops_ex", transport)
         self.assertNotIn("post_batch", transport)
         self.assertNotIn("Content-Type: application/cbor", transport)
         self.assertNotIn("Content-Encoding: gzip", transport)
@@ -111,7 +114,10 @@ class PosixChunkWireTest(unittest.TestCase):
         transport = read_sdk("ports/posix/src/posix_transport_curl.c")
         header = read_sdk("ports/posix/include/honch/posix/honch.h")
         init = c_function_body(transport, "honch_posix_transport_ops_init")
-        post = c_global_function_body(transport, "honch_status_t", "honch_posix_transport_post_chunk")
+        # The curl flow lives in the shared detail-aware impl; the public
+        # honch_posix_transport_post_chunk and the post_chunk_ex ops wrapper both
+        # forward to it, so the easy-handle reuse contract is asserted there.
+        post = c_function_body(transport, "honch_posix_post_chunk_impl")
         deinit = c_function_body(transport, "honch_posix_transport_ops_deinit")
 
         self.assertIn("void *curl", header)

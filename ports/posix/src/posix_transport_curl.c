@@ -1,5 +1,6 @@
 #include "honch_internal.h"
 #include "honch/honch.h"
+#include "honch/core/capture_transport.h"
 #include "honch/posix/honch.h"
 
 #include <curl/curl.h>
@@ -81,6 +82,16 @@ static honch_status_t honch_posix_transport_post_chunk_ops(
         result);
 }
 
+static honch_status_t honch_posix_transport_post_chunk_ops_ex(
+    void *ctx,
+    const char *endpoint_url,
+    const char *api_key,
+    const char *stream_id,
+    const uint8_t *body,
+    size_t body_size,
+    honch_transport_result_t *result,
+    honch_transport_detail_t *detail);
+
 honch_status_t honch_posix_transport_ops_init(honch_transport_ops_t *ops, honch_posix_transport_t *ctx)
 {
     if (ops == NULL || ctx == NULL) {
@@ -96,6 +107,7 @@ honch_status_t honch_posix_transport_ops_init(honch_transport_ops_t *ops, honch_
     }
     *ops = (honch_transport_ops_t) {
         .post_chunk = honch_posix_transport_post_chunk_ops,
+        .post_chunk_ex = honch_posix_transport_post_chunk_ops_ex,
         .ctx = ctx
     };
     return HONCH_OK;
@@ -148,12 +160,38 @@ static honch_status_t honch_transport_result_from_chunk_response(long response_c
     return HONCH_ERROR_REJECTED;
 }
 
-honch_status_t honch_posix_transport_post_chunk(
+/* Map a libcurl transport-phase failure (no HTTP response) to a finer reason so
+ * the developer can tell DNS from connect from TLS. */
+static honch_error_reason_t honch_posix_map_curl_reason(CURLcode code)
+{
+    switch (code) {
+        case CURLE_COULDNT_RESOLVE_HOST:
+        case CURLE_COULDNT_RESOLVE_PROXY:
+            return HONCH_REASON_DNS_FAILED;
+        case CURLE_COULDNT_CONNECT:
+            return HONCH_REASON_CONNECT_REFUSED;
+        case CURLE_OPERATION_TIMEDOUT:
+            return HONCH_REASON_CONNECT_TIMEOUT;
+        case CURLE_SSL_CONNECT_ERROR:
+            return HONCH_REASON_TLS_HANDSHAKE;
+        case CURLE_PEER_FAILED_VERIFICATION:
+            return HONCH_REASON_TLS_CERT;
+        case CURLE_SEND_ERROR:
+            return HONCH_REASON_WRITE_FAILED;
+        case CURLE_RECV_ERROR:
+            return HONCH_REASON_READ_FAILED;
+        default:
+            return HONCH_REASON_UNKNOWN;
+    }
+}
+
+static honch_status_t honch_posix_post_chunk_impl(
     honch_client_t *client,
     const char *stream_id,
     const unsigned char *payload,
     size_t payload_size,
-    honch_transport_result_t *result)
+    honch_transport_result_t *result,
+    honch_transport_detail_t *detail)
 {
     if (client == NULL || payload == NULL || payload_size == 0u || result == NULL) {
         return HONCH_ERROR_INVALID_ARGUMENT;
@@ -185,6 +223,10 @@ honch_status_t honch_posix_transport_post_chunk(
             return status;
         }
 
+        if (detail != NULL) {
+            detail->http_status = (int)response_code;
+            detail->reason = honch_capture_map_http_reason((int)response_code);
+        }
         return honch_transport_result_from_chunk_response(response_code, result);
     }
 #endif
@@ -303,10 +345,51 @@ honch_status_t honch_posix_transport_post_chunk(
 
     if (code != CURLE_OK) {
         *result = HONCH_TRANSPORT_RETRY;
+        if (detail != NULL) {
+            detail->os_error = (int)code;
+            detail->reason = honch_posix_map_curl_reason(code);
+        }
         return HONCH_ERROR_TRANSPORT;
     }
 
+    if (detail != NULL) {
+        detail->http_status = (int)response_code;
+        detail->reason = honch_capture_map_http_reason((int)response_code);
+    }
     return honch_transport_result_from_chunk_response(response_code, result);
+}
+
+/* Public symbol unchanged: forwards to the detail-aware impl without detail. */
+honch_status_t honch_posix_transport_post_chunk(
+    honch_client_t *client,
+    const char *stream_id,
+    const unsigned char *payload,
+    size_t payload_size,
+    honch_transport_result_t *result)
+{
+    return honch_posix_post_chunk_impl(client, stream_id, payload, payload_size, result, NULL);
+}
+
+static honch_status_t honch_posix_transport_post_chunk_ops_ex(
+    void *ctx,
+    const char *endpoint_url,
+    const char *api_key,
+    const char *stream_id,
+    const uint8_t *body,
+    size_t body_size,
+    honch_transport_result_t *result,
+    honch_transport_detail_t *detail)
+{
+    (void)endpoint_url;
+    (void)api_key;
+    honch_posix_transport_t *transport = (honch_posix_transport_t *)ctx;
+    return honch_posix_post_chunk_impl(
+        transport == NULL ? NULL : transport->client,
+        stream_id,
+        body,
+        body_size,
+        result,
+        detail);
 }
 
 #ifdef HONCH_TESTING
