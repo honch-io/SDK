@@ -18,6 +18,8 @@
 
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
+#include "esp_tls.h"
+#include "honch/core/capture_transport.h"
 #include "honch_gts_roots.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -185,6 +187,42 @@ static honch_status_t honch_esp_transport_prepare_client(
     return HONCH_STATUS_OK;
 }
 
+/* Map an esp_http_client / esp-tls transport-phase failure (no usable HTTP
+ * status) to a finer reason. Each esp_err_t constant is #ifdef-guarded so the
+ * mapping stays correct across IDF versions where a code may be absent —
+ * unknown codes fall through to the raw os_error the caller also records. */
+static honch_error_reason_t honch_esp_map_err_reason(esp_err_t err)
+{
+    switch (err) {
+#ifdef ESP_ERR_ESP_TLS_CANNOT_RESOLVE_HOSTNAME
+        case ESP_ERR_ESP_TLS_CANNOT_RESOLVE_HOSTNAME:
+            return HONCH_REASON_DNS_FAILED;
+#endif
+#ifdef ESP_ERR_ESP_TLS_FAILED_CONNECT_TO_HOST
+        case ESP_ERR_ESP_TLS_FAILED_CONNECT_TO_HOST:
+            return HONCH_REASON_CONNECT_REFUSED;
+#endif
+#ifdef ESP_ERR_HTTP_CONNECT
+        case ESP_ERR_HTTP_CONNECT:
+            return HONCH_REASON_CONNECT_REFUSED;
+#endif
+#ifdef ESP_ERR_HTTP_EAGAIN
+        case ESP_ERR_HTTP_EAGAIN:
+            return HONCH_REASON_CONNECT_TIMEOUT;
+#endif
+#ifdef ESP_ERR_MBEDTLS_SSL_HANDSHAKE_FAILED
+        case ESP_ERR_MBEDTLS_SSL_HANDSHAKE_FAILED:
+            return HONCH_REASON_TLS_HANDSHAKE;
+#endif
+#ifdef ESP_ERR_ESP_TLS_TLS_CONNECTION_FAILED
+        case ESP_ERR_ESP_TLS_TLS_CONNECTION_FAILED:
+            return HONCH_REASON_TLS_HANDSHAKE;
+#endif
+        default:
+            return HONCH_REASON_UNKNOWN;
+    }
+}
+
 static honch_status_t honch_esp_post_chunk(
     void *ctx,
     const char *endpoint_url,
@@ -192,7 +230,8 @@ static honch_status_t honch_esp_post_chunk(
     const char *stream_id,
     const uint8_t *body,
     size_t body_size,
-    honch_transport_result_t *result)
+    honch_transport_result_t *result,
+    honch_transport_detail_t *detail)
 {
     honch_esp_transport_t *transport = (honch_esp_transport_t *)ctx;
     if (transport == NULL || endpoint_url == NULL || api_key == NULL || body == NULL || body_size == 0u ||
@@ -285,6 +324,16 @@ static honch_status_t honch_esp_post_chunk(
 
     honch_status_t return_status = honch_esp_classify_http_response(err == ESP_OK, status, result);
 
+    if (detail != NULL) {
+        if (err == ESP_OK && status > 0) {
+            detail->http_status = status;
+            detail->reason = honch_capture_map_http_reason(status);
+        } else {
+            detail->os_error = (int)err;
+            detail->reason = honch_esp_map_err_reason(err);
+        }
+    }
+
     if (err != ESP_OK || status == 0 || status == 408 || status == 409) {
 #ifdef HONCH_FLUSH_TIMING
         int64_t cleanup_start_us = esp_timer_get_time();
@@ -320,6 +369,19 @@ static honch_status_t honch_esp_post_chunk(
     return return_status;
 }
 
+/* Coarse variant for the required post_chunk slot: forwards without detail. */
+static honch_status_t honch_esp_post_chunk_plain(
+    void *ctx,
+    const char *endpoint_url,
+    const char *api_key,
+    const char *stream_id,
+    const uint8_t *body,
+    size_t body_size,
+    honch_transport_result_t *result)
+{
+    return honch_esp_post_chunk(ctx, endpoint_url, api_key, stream_id, body, body_size, result, NULL);
+}
+
 static uint64_t honch_esp_retry_after_ms(void *ctx)
 {
     honch_esp_transport_t *transport = (honch_esp_transport_t *)ctx;
@@ -349,7 +411,8 @@ honch_status_t honch_esp_transport_ops_init(
         INT_MAX :
         (int)effective_timeout_ms;
     *ops = (honch_transport_ops_t) {
-        .post_chunk = honch_esp_post_chunk,
+        .post_chunk = honch_esp_post_chunk_plain,
+        .post_chunk_ex = honch_esp_post_chunk,
         .retry_after_ms = honch_esp_retry_after_ms,
         .ctx = ctx
     };
