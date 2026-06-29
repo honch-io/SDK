@@ -86,6 +86,9 @@ honch_err_t honch_reset(void);
 
 const char *honch_get_device_id(void);
 honch_err_t honch_get_queue_stats(honch_queue_stats_t *stats);
+/* Structured detail (reason, http_status, os_error, message) for the most
+ * recent failure. See honch_error_detail_t in the core header. */
+honch_err_t honch_get_last_error(honch_error_detail_t *detail);
 
 #ifdef __cplusplus
 }

@@ -782,3 +782,15 @@ honch_err_t honch_get_queue_stats(honch_queue_stats_t *stats)
     honch_esp_client_release(client);
     return honch_esp_status_to_err(status);
 }
+
+honch_err_t honch_get_last_error(honch_error_detail_t *detail)
+{
+    honch_client_t *client = NULL;
+    honch_err_t err = honch_esp_client_acquire(&client);
+    if (err != HONCH_OK) {
+        return err;
+    }
+    honch_status_t status = honch_core_get_last_error(client, detail);
+    honch_esp_client_release(client);
+    return honch_esp_status_to_err(status);
+}
