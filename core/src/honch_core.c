@@ -649,9 +649,24 @@ honch_status_t honch_track_locked_internal(
         battery_level,
         auto_properties,
         &event);
+    if (status != HONCH_OK) {
+        honch_diag_capture_local_locked(
+            client, status,
+            status == HONCH_ERROR_OUT_OF_MEMORY ? HONCH_REASON_OUT_OF_MEMORY
+                                                : HONCH_REASON_ENCODE_FAILED,
+            "encode");
+    }
     uint64_t sequence = 0u;
     if (status == HONCH_OK) {
         status = honch_client_queue_push_recorded(client, event.data, event.length, &sequence);
+        if (status != HONCH_OK) {
+            honch_diag_capture_local_locked(
+                client, status,
+                status == HONCH_ERROR_QUEUE_FULL ? HONCH_REASON_QUEUE_FULL
+                    : (status == HONCH_ERROR_OUT_OF_MEMORY ? HONCH_REASON_OUT_OF_MEMORY
+                                                           : HONCH_REASON_UNKNOWN),
+                "queue");
+        }
     }
     if (status == HONCH_OK) {
         status = honch_lifecycle_queue_tracker_record(lifecycle_tracker, sequence);

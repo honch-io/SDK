@@ -1561,9 +1561,30 @@ static void test_diagnostic_autolog_terminal_is_error_level(void)
     assert(strstr(rec.last_message, "401") != NULL);
 }
 
+/* C2: a local pipeline failure (queue full / encode) is captured into
+ * last_error with a component tag and a human message. (The track-path call
+ * site is a straight-line invocation of this same function; the full integration
+ * path is exercised by the posix + on-device e2e.) */
+static void test_local_failure_capture(void)
+{
+    honch_client_t client = {0}; /* platform NULL -> capture only, no auto-log */
+    honch_diag_capture_local_locked(
+        &client, HONCH_ERROR_QUEUE_FULL, HONCH_REASON_QUEUE_FULL, "queue");
+    assert(client.last_error.status == HONCH_ERROR_QUEUE_FULL);
+    assert(client.last_error.reason == HONCH_REASON_QUEUE_FULL);
+    assert(client.last_error.message != NULL);
+    assert(strcmp(client.last_error.component, "queue") == 0);
+
+    honch_diag_capture_local_locked(
+        &client, HONCH_ERROR_OUT_OF_MEMORY, HONCH_REASON_ENCODE_FAILED, "encode");
+    assert(client.last_error.reason == HONCH_REASON_ENCODE_FAILED);
+    assert(strcmp(client.last_error.component, "encode") == 0);
+}
+
 int main(void)
 {
     atexit(free_tracked_payloads);
+    test_local_failure_capture();
     test_error_capture_from_post_chunk_ex();
     test_error_capture_fallback_without_post_chunk_ex();
     test_diagnostic_autolog_dedup_and_reset();
