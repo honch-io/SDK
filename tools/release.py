@@ -180,6 +180,65 @@ def sync_vendored_header() -> None:
     (ROOT / VENDORED_HEADER).write_text(src, encoding="utf-8")
 
 
+# ---- changelog ----
+CHANGELOG_FILE = "CHANGELOG.md"
+CHANGELOG_INTRO = """\
+# Changelog
+
+All notable changes to the Honch SDK, across every port. The version is the
+single shared SDK version each port reports on the wire as `$sdk_version`.
+
+This file is maintained **automatically** by `tools/release.py` during the
+version bump (the release pipeline runs that script): each release prepends a
+section below with the commits since the previous release tag. Do not
+hand-edit released sections. Full notes are also on the GitHub Releases page.
+
+"""
+
+
+def _changelog_entries() -> str:
+    """Commits since the previous release tag, one bullet each.
+
+    Mirrors the range + filter the release workflow uses for the PR / GitHub
+    Release notes (.github/workflows/release.yml), so the in-tree CHANGELOG and
+    the published notes agree.
+    """
+    tags = run(
+        ["git", "tag", "-l", "arduino-v*", "--sort=-version:refname"],
+        capture_output=True,
+    ).stdout.splitlines()
+    prev = tags[0].strip() if tags else ""
+    rng = f"{prev}..HEAD" if prev else "HEAD"
+    log = run(["git", "log", "--pretty=format:- %s (%h)", rng], capture_output=True).stdout
+    skip = re.compile(r"^- (release: bump|Merge pull request|Merge branch)")
+    lines = [ln for ln in log.splitlines() if ln and not skip.match(ln)]
+    return "\n".join(lines) if lines else "- (no changes recorded)"
+
+
+def update_changelog(new: str) -> str:
+    """Prepend a dated section for `new` to CHANGELOG.md (create it if missing).
+
+    CHANGELOG.md is append-only history carrying every released version, so it
+    is deliberately NOT in the version-consistency DECLARATIONS (which assert a
+    file contains exactly the *current* version).
+    """
+    from datetime import date
+
+    section = f"## {new} - {date.today().isoformat()}\n\n{_changelog_entries()}\n"
+    path = ROOT / CHANGELOG_FILE
+    if path.exists():
+        text = path.read_text(encoding="utf-8")
+        idx = text.find("\n## ")  # insert above the most recent existing section
+        if idx == -1:
+            updated = text.rstrip("\n") + "\n\n" + section
+        else:
+            updated = text[: idx + 1] + section + "\n" + text[idx + 1 :]
+    else:
+        updated = CHANGELOG_INTRO + section
+    path.write_text(updated, encoding="utf-8")
+    return f"{CHANGELOG_FILE} (prepended {new})"
+
+
 # ---- verification ----
 def regenerate_fixtures() -> None:
     r = run([sys.executable, "tools/generate_wire_v2_fixtures.py"], capture_output=True)
@@ -275,6 +334,7 @@ def main() -> int:
     info(f"bumping {current} -> {c(new, '1')}")
     changed = bump_declarations(new)
     changed += bump_json_fixtures(new)
+    changed.append(update_changelog(new))
     sync_vendored_header()
     for label in changed:
         ok(f"updated {label}")
