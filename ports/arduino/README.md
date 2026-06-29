@@ -4,7 +4,7 @@ Preview Arduino ESP32 wrapper around the canonical Honch C core.
 
 ## Status
 
-Preview `0.2.4`. Use for evaluation or controlled pilots until your product has passed hardware, TLS, offline queue, flush, retry, and power-cycle validation on the target ESP32 board.
+Preview `0.3.0`. Use for evaluation or controlled pilots until your product has passed hardware, TLS, offline queue, flush, retry, and power-cycle validation on the target ESP32 board.
 
 That version (above) is what's published in `library.properties` and reported by
 events in `$sdk_version`. The Arduino wrapper, the vendored C core, and the
