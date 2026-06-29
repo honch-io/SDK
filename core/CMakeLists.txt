@@ -19,6 +19,7 @@ set(HONCH_CORE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_core.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_coredump.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_crash.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_error_detail.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_event_record.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_lifecycle.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_lifecycle_events.c
@@ -143,6 +144,17 @@ if(HONCH_BUILD_TESTS)
     )
 
     add_test(NAME honch_core_capture_transport_tests COMMAND honch_core_capture_transport_tests)
+
+    add_executable(honch_core_error_detail_tests
+        test/test_error_detail.c
+    )
+
+    target_link_libraries(honch_core_error_detail_tests PRIVATE honch_core)
+    target_compile_options(honch_core_error_detail_tests PRIVATE
+        $<$<C_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wpedantic -Werror>
+    )
+
+    add_test(NAME honch_core_error_detail_tests COMMAND honch_core_error_detail_tests)
 
     add_executable(honch_core_state_consistency_tests
         test/test_state_consistency.c

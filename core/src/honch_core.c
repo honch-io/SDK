@@ -1708,42 +1708,7 @@ honch_status_t honch_core_get_queue_stats(honch_client_t *client, honch_queue_st
     return status;
 }
 
-const char *honch_status_string(honch_status_t status)
-{
-    switch (status) {
-        case HONCH_OK:
-            return "ok";
-        case HONCH_ERROR_INVALID_ARGUMENT:
-            return "invalid argument";
-        case HONCH_ERROR_OUT_OF_MEMORY:
-            return "out of memory";
-        case HONCH_ERROR_IO:
-            return "io error";
-        case HONCH_ERROR_TRANSPORT:
-            return "transport error";
-        case HONCH_ERROR_RATE_LIMITED:
-            return "rate limited";
-        case HONCH_ERROR_SERVER:
-            return "server error";
-        case HONCH_ERROR_REJECTED:
-            return "rejected";
-        case HONCH_ERROR_NOT_INITIALIZED:
-            return "not initialized";
-        case HONCH_ERROR_ALREADY_INITIALIZED:
-            return "already initialized";
-        case HONCH_ERROR_QUEUE_FULL:
-            return "queue full";
-        case HONCH_ERROR_TIMEOUT:
-            return "timeout";
-        case HONCH_ERROR_INTERNAL:
-            return "internal error";
-        case HONCH_ERROR_BUSY:
-            return "busy";
-        case HONCH_ERROR_NOT_SUPPORTED:
-            return "not supported";
-        case HONCH_ERROR_OFFLINE:
-            return "offline";
-        default:
-            return "unknown";
-    }
-}
+/* honch_status_string lives in honch_error_detail.c alongside the other stable
+ * stringifiers (honch_error_reason_string), so a caller can link the
+ * platform-free stringifier/formatter TU without dragging in the full client.
+ * The symbol and its returned strings are unchanged (frozen contract). */
