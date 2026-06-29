@@ -454,4 +454,23 @@ honch_status_t honch_lifecycle_emit_shutdown_locked(honch_client_t *client, honc
 }
 #endif
 
+/* Optional allocator hook (add-only, opt-in, OFF by default -- no effect on any
+ * port that does not define HONCH_USE_MP_ALLOC).
+ *
+ * A port may route the core's heap allocations through its own allocator by
+ * defining HONCH_USE_MP_ALLOC and providing honch_port_*(). The MicroPython port
+ * enables this to allocate from the MicroPython GC heap instead of the tiny rp2
+ * system/newlib heap, which cyw43/lwIP/mbedtls exhaust once Wi-Fi is up -- making
+ * honch_core_init's ~18KB calloc fault/hang on constrained boards (Pico W). */
+#ifdef HONCH_USE_MP_ALLOC
+void *honch_port_malloc(size_t size);
+void *honch_port_calloc(size_t count, size_t size);
+void *honch_port_realloc(void *ptr, size_t size);
+void honch_port_free(void *ptr);
+#define malloc honch_port_malloc
+#define calloc honch_port_calloc
+#define realloc honch_port_realloc
+#define free honch_port_free
+#endif
+
 #endif

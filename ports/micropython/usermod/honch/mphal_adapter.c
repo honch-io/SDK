@@ -62,7 +62,9 @@ void honch_micropython_raise_status(honch_status_t status)
     mp_raise_msg_varg(&mp_type_RuntimeError, MP_ERROR_TEXT("%s"), honch_status_string(status));
 }
 
-static uint64_t honch_mp_now_ms(void *ctx)
+/* Monotonic milliseconds since boot (time.ticks_ms / utime.ticks_ms). This is the
+ * uptime clock -- NOT wall-clock time -- and is always available. */
+static uint64_t honch_mp_uptime_ms(void *ctx)
 {
     (void)ctx;
     nlr_buf_t nlr;
@@ -84,9 +86,53 @@ static uint64_t honch_mp_now_ms(void *ctx)
     return (uint64_t)mp_obj_get_int(value);
 }
 
-static uint64_t honch_mp_uptime_ms(void *ctx)
+/* Wall-clock Unix-epoch milliseconds from the system RTC (time.time()), or 0 if
+ * unavailable. MicroPython's embedded ports (rp2/esp32/stm32) count time.time()
+ * from 2000-01-01, while the unix host port counts from 1970-01-01; we detect the
+ * port epoch once via time.gmtime(0) and add the offset so the result is always a
+ * true Unix-epoch value. Returns 0 (not a partial value) on any error so callers
+ * fall back to uptime. NOTE: rp2/Pico W has no battery-backed RTC, so time.time()
+ * reads 2000-01-01 until the integrator sets it (e.g. ntptime.settime() after the
+ * network is up); the core's HONCH_MIN_UNIX_TIME_MS guard treats an unset clock as
+ * invalid and falls back to uptime. */
+static uint64_t honch_mp_wallclock_ms(void)
 {
-    return honch_mp_now_ms(ctx);
+    static int64_t epoch_offset_s = -1; /* -1 = not yet detected (single-threaded VM) */
+    nlr_buf_t nlr;
+    if (nlr_push(&nlr) != 0) {
+        return 0u;
+    }
+    mp_obj_t time_module = mp_import_name(MP_QSTR_time, mp_const_none, MP_OBJ_NEW_SMALL_INT(0));
+    if (epoch_offset_s < 0) {
+        mp_obj_t gmtime_fn = mp_load_attr(time_module, MP_QSTR_gmtime);
+        mp_obj_t tm = mp_call_function_1(gmtime_fn, MP_OBJ_NEW_SMALL_INT(0));
+        mp_obj_t *items = NULL;
+        size_t n = 0u;
+        mp_obj_get_array(tm, &n, &items);
+        /* tm[0] is the epoch year: 2000 on embedded, 1970 on the unix host. */
+        epoch_offset_s = (n > 0u && mp_obj_get_int(items[0]) == 2000) ? 946684800 : 0;
+    }
+    mp_obj_t time_fn = mp_load_attr(time_module, MP_QSTR_time);
+    mp_obj_t secs_obj = mp_call_function_0(time_fn);
+    uint64_t secs;
+    if (mp_obj_is_float(secs_obj)) {
+        secs = (uint64_t)mp_obj_get_float(secs_obj);
+    } else {
+        secs = (uint64_t)mp_obj_get_int(secs_obj);
+    }
+    nlr_pop();
+    return (secs + (uint64_t)epoch_offset_s) * 1000u;
+}
+
+/* Wall-clock epoch milliseconds for event timestamps, with uptime fallback when
+ * the RTC is unset -- mirrors the esp-idf port (gettimeofday else esp_timer). */
+static uint64_t honch_mp_now_ms(void *ctx)
+{
+    uint64_t wall_ms = honch_mp_wallclock_ms();
+    if (wall_ms >= HONCH_MIN_UNIX_TIME_MS) {
+        return wall_ms;
+    }
+    return honch_mp_uptime_ms(ctx);
 }
 
 static honch_status_t honch_mp_random_bytes(void *ctx, uint8_t *buffer, size_t buffer_size)

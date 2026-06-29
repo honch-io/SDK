@@ -1,4 +1,5 @@
 #include "honch/core/ram_queue.h"
+#include "honch_internal.h"  /* route this TU's malloc/calloc/free through the port allocator hook (HONCH_USE_MP_ALLOC) like the other core TUs */
 
 #include <stdlib.h>
 #include <string.h>
