@@ -1708,6 +1708,29 @@ honch_status_t honch_core_get_queue_stats(honch_client_t *client, honch_queue_st
     return status;
 }
 
+honch_status_t honch_core_get_last_error(honch_client_t *client, honch_error_detail_t *out)
+{
+    honch_status_t status = honch_client_enter(client);
+    if (status != HONCH_OK) {
+        return status;
+    }
+    if (out == NULL) {
+        honch_client_leave(client);
+        return HONCH_ERROR_INVALID_ARGUMENT;
+    }
+    status = honch_client_lock(client);
+    if (status != HONCH_OK) {
+        honch_client_leave(client);
+        return status;
+    }
+    /* Serialize against track/tick/flush: the failure paths write last_error
+     * under this same state lock. */
+    *out = client->last_error;
+    honch_client_unlock(client);
+    honch_client_leave(client);
+    return HONCH_OK;
+}
+
 /* honch_status_string lives in honch_error_detail.c alongside the other stable
  * stringifiers (honch_error_reason_string), so a caller can link the
  * platform-free stringifier/formatter TU without dragging in the full client.

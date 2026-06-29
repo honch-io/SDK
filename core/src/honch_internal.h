@@ -66,6 +66,12 @@
 #define HONCH_LOG_COMPONENT_STORE_BYTES 32u
 #define HONCH_LOG_MESSAGE_STORE_BYTES 128u
 
+/* Diagnostic auto-log dedup: how many distinct (reason+http_status) failures we
+ * remember so identical failures are logged once, not per retry. */
+#define HONCH_DIAG_DEDUP_SLOTS 4u
+/* Buffer for one formatted diagnostic line (honch_error_detail_format output). */
+#define HONCH_DIAG_LINE_BYTES 192u
+
 /* Coredump upload reads the flash image one bounded chunk at a time; this caps
  * the per-step RAM cost (one chunk + its encoded frame), independent of image
  * size. The encoded frame adds a small header/varint/CRC overhead. */
@@ -252,6 +258,15 @@ struct honch_client {
     char coredump_crash_id[33]; /* links the $crash summary to its uploaded coredump blob */
     honch_log_error_slot_t log_error_slots[HONCH_LOG_DEDUP_SLOTS];
     uint32_t log_errors_dropped;
+    /* Most recent failure detail, copied out by honch_core_get_last_error.
+     * message/component point to static literals, so the struct is copy-safe. */
+    honch_error_detail_t last_error;
+#if HONCH_ENABLE_ERROR_DIAGNOSTICS
+    /* Dedup of emitted diagnostic log lines (hash of reason+http_status); reset
+     * on a successful flush so a recurring failure logs again after recovery. */
+    uint32_t diag_log_hashes[HONCH_DIAG_DEDUP_SLOTS];
+    size_t diag_log_hash_count;
+#endif
 #if HONCH_ENABLE_CRASH_CAPTURE
     /* Raw coredump upload (streamed from flash, never buffered whole). */
     const honch_coredump_source_t *coredump_source;
@@ -395,6 +410,22 @@ honch_wire_v2_value_t honch_boot_reset_reason_value(const honch_crash_report_t *
 
 honch_status_t honch_client_enter(honch_client_t *client);
 void honch_client_leave(honch_client_t *client);
+
+/* Diagnostics (honch_diagnostics.c). Capture functions run under the client
+ * state lock; they always record client->last_error and then emit one deduped
+ * log line when HONCH_ENABLE_ERROR_DIAGNOSTICS is on. */
+void honch_diag_capture_transport_locked(
+    honch_client_t *client,
+    honch_status_t status,
+    honch_transport_result_t result,
+    const honch_transport_detail_t *detail);
+void honch_diag_capture_local_locked(
+    honch_client_t *client,
+    honch_status_t status,
+    honch_error_reason_t reason,
+    const char *component);
+void honch_diag_log_failure_locked(honch_client_t *client);
+void honch_diag_note_success_locked(honch_client_t *client);
 honch_status_t honch_client_begin_shutdown(honch_client_t *client);
 bool honch_client_lock_ops_valid(const honch_platform_ops_t *platform);
 honch_status_t honch_client_lock_create(honch_client_t *client, void **mutex);

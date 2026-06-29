@@ -19,6 +19,7 @@ set(HONCH_CORE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_core.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_coredump.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_crash.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_diagnostics.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_error_detail.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_event_record.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/honch_lifecycle.c
@@ -177,6 +178,8 @@ if(HONCH_BUILD_TESTS)
 
     add_executable(honch_core_retry_tests
         test/test_retry.c
+        src/honch_diagnostics.c
+        src/honch_error_detail.c
         src/honch_event_record.c
         src/honch_lifecycle.c
         src/honch_queue_policy.c
