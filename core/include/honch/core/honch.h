@@ -66,6 +66,11 @@ const char *honch_error_reason_string(honch_error_reason_t reason);
  * of bytes written (excluding the NUL), or 0 on NULL/zero-size arguments. */
 size_t honch_error_detail_format(const honch_error_detail_t *detail, char *buf, size_t buf_size);
 
+/* Copy the most recent failure detail into *out. Returns HONCH_OK (out is the
+ * zero/"none" state if nothing has failed yet), HONCH_ERROR_INVALID_ARGUMENT on
+ * NULL out, or HONCH_ERROR_NOT_INITIALIZED if the client is not usable. */
+honch_status_t honch_core_get_last_error(honch_client_t *client, honch_error_detail_t *out);
+
 #ifdef __cplusplus
 }
 #endif
