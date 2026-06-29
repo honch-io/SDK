@@ -96,7 +96,7 @@ size_t honch_error_detail_format(const honch_error_detail_t *detail, char *buf, 
     int written;
     if (detail->http_status > 0 && detail->message != NULL) {
         written = snprintf(
-            buf, buf_size, "%s: HTTP %d — %s (reason=%s)",
+            buf, buf_size, "%s: HTTP %d - %s (reason=%s)",
             honch_status_string(detail->status), detail->http_status,
             detail->message, honch_error_reason_string(detail->reason));
     } else if (detail->http_status > 0) {
