@@ -5,6 +5,7 @@ target_sources(honch_micropython INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/mphal_adapter.c
     ${CMAKE_CURRENT_LIST_DIR}/mpstorage_adapter.c
     ${CMAKE_CURRENT_LIST_DIR}/mptransport_adapter.c
+    ${CMAKE_CURRENT_LIST_DIR}/honch_mpy_alloc.c
     ${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_battery.c
     ${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_capture_transport.c
     ${CMAKE_CURRENT_LIST_DIR}/../../../../core/src/honch_core.c
@@ -30,6 +31,7 @@ target_include_directories(honch_micropython INTERFACE
 
 target_compile_definitions(honch_micropython INTERFACE
     MICROPY_PY_HONCH_CORE=1
+    HONCH_USE_MP_ALLOC=1
 )
 
 target_link_libraries(usermod INTERFACE honch_micropython)

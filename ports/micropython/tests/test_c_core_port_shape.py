@@ -113,19 +113,23 @@ class MicroPythonCCorePortShapeTests(unittest.TestCase):
         self.assertNotIn("enable_wire_v2", config)
         self.assertNotIn("enable_wire_v2", client)
 
-    def test_micropython_transport_passes_configured_timeout_to_requests(self):
+    def test_micropython_transport_passes_configured_timeout_to_transport(self):
         transport = self.read("ports/micropython/usermod/honch/mptransport_adapter.c")
         module = self.read("ports/micropython/usermod/honch/modhonch_core.c")
         config = self.read("ports/micropython/honch/config.py")
 
-        self.assertIn("honch_mp_timeout_seconds", transport)
+        # The configured timeout is validated/clamped and threaded into the bounded
+        # honch_transport.post_chunk helper (which replaced urequests.post: urequests'
+        # settimeout does not bound connect()/handshake on rp2, wedging the VM).
         self.assertIn("#define HONCH_MP_MAX_TRANSPORT_TIMEOUT_MS 10000u", transport)
         self.assertIn("if (timeout_ms == 0u)", transport)
         self.assertIn("return HONCH_STATUS_ERROR_INVALID_ARGUMENT;", transport)
         self.assertIn("if (timeout_ms > HONCH_MP_MAX_TRANSPORT_TIMEOUT_MS)", transport)
         self.assertIn("timeout_ms = HONCH_MP_MAX_TRANSPORT_TIMEOUT_MS;", transport)
-        self.assertIn('MP_OBJ_NEW_QSTR(qstr_from_str("timeout"))', transport)
-        self.assertIn("mp_call_function_n_kw(post, 1, 3, args)", transport)
+        self.assertIn('mp_import_name(qstr_from_str("honch_transport")', transport)
+        self.assertIn('mp_load_attr(transport_mod, qstr_from_str("post_chunk"))', transport)
+        # honch_transport.post_chunk(url, body, headers, timeout_ms) -> 4 positional args
+        self.assertIn("mp_call_function_n_kw(post, 4, 0, args)", transport)
         self.assertIn("transport->timeout_ms", transport)
         self.assertIn("honch_mp_map_get_uint(args[0], MP_QSTR_transport_timeout_ms, DEFAULT_TRANSPORT_TIMEOUT_MS)", module)
         self.assertIn("DEFAULT_TRANSPORT_TIMEOUT_MS = 8000", config)

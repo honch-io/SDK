@@ -1,4 +1,5 @@
 #include "honch_micropython.h"
+#include "honch_internal.h"  /* route this file's malloc/free to the GC heap (HONCH_USE_MP_ALLOC) */
 
 #include <stdlib.h>
 #include <string.h>
@@ -34,14 +35,6 @@ static honch_status_t honch_mp_chunk_url(const char *endpoint_url, char **out)
     return honch_mp_endpoint_url(endpoint_url, "/capture", out);
 }
 
-static unsigned int honch_mp_timeout_seconds(unsigned int timeout_ms)
-{
-    if (timeout_ms == 0u) {
-        return 0u;
-    }
-    return (timeout_ms + 999u) / 1000u;
-}
-
 static honch_status_t honch_mp_post_chunk(
     void *ctx,
     const char *endpoint_url,
@@ -70,8 +63,13 @@ static honch_status_t honch_mp_post_chunk(
         return HONCH_STATUS_ERROR_TRANSPORT;
     }
 
-    mp_obj_t requests = mp_import_name(MP_QSTR_urequests, mp_const_none, MP_OBJ_NEW_SMALL_INT(0));
-    mp_obj_t post = mp_load_attr(requests, MP_QSTR_post);
+    /* Use the frozen honch_transport helper instead of urequests.post: it does a
+     * non-blocking connect bounded by a hard deadline so a flaky / transitional
+     * Wi-Fi link raises promptly (mapped to TRANSPORT/TIMEOUT -> core retry/backoff)
+     * rather than blocking connect() forever and wedging this single-threaded VM.
+     * urequests/requests' settimeout does NOT bound connect()/handshake on rp2. */
+    mp_obj_t transport_mod = mp_import_name(qstr_from_str("honch_transport"), mp_const_none, MP_OBJ_NEW_SMALL_INT(0));
+    mp_obj_t post = mp_load_attr(transport_mod, qstr_from_str("post_chunk"));
     mp_obj_t headers = mp_obj_new_dict(3);
     mp_obj_dict_store(headers, mp_obj_new_str("Content-Type", 12), mp_obj_new_str("application/vnd.honch.chunk", 27));
     mp_obj_dict_store(headers, mp_obj_new_str("X-Honch-Project-Key", 19), mp_obj_new_str(api_key, strlen(api_key)));
@@ -79,20 +77,15 @@ static honch_status_t honch_mp_post_chunk(
         mp_obj_dict_store(headers, mp_obj_new_str("X-Honch-Stream-Id", 17), mp_obj_new_str(stream_id, strlen(stream_id)));
     }
 
-    unsigned int timeout_seconds = honch_mp_timeout_seconds(transport->timeout_ms);
-    mp_obj_t args[7] = {
+    /* honch_transport.post_chunk(url, body, headers, timeout_ms) -> int HTTP status */
+    mp_obj_t args[4] = {
         mp_obj_new_str(url, strlen(url)),
-        MP_OBJ_NEW_QSTR(MP_QSTR_data),
         mp_obj_new_bytes(body, body_size),
-        MP_OBJ_NEW_QSTR(MP_QSTR_headers),
         headers,
-        MP_OBJ_NEW_QSTR(qstr_from_str("timeout")),
-        mp_obj_new_int_from_uint(timeout_seconds),
+        mp_obj_new_int_from_uint(transport->timeout_ms),
     };
-    mp_obj_t response = mp_call_function_n_kw(post, 1, 3, args);
-    mp_obj_t status_obj = mp_load_attr(response, MP_QSTR_status_code);
+    mp_obj_t status_obj = mp_call_function_n_kw(post, 4, 0, args);
     int http_status = mp_obj_get_int(status_obj);
-    (void)honch_micropython_call_noarg_attr(response, MP_QSTR_close);
 
     nlr_pop();
     free(url);
