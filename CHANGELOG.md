@@ -8,6 +8,23 @@ version bump (the release pipeline runs that script): each release prepends a
 section below with the commits since the previous release tag. Do not
 hand-edit released sections. Full notes are also on the GitHub Releases page.
 
+## 0.3.1 - 2026-07-02
+
+- fix(esp-idf): gate esp-tls error recovery to IDF >= 6.0.0 (f4765e5)
+- fix(error-context): surface os_error in the log line + finer transport reasons (9185602)
+- feat(core): declare honch_core_get_last_error in public header (42e190a)
+- fix(build): add honch_diagnostics.c + honch_error_detail.c to esp-idf/micropython source lists (5543262)
+- feat(esp-idf): expose honch_get_last_error singleton accessor (d44703e)
+- feat(micropython): Client.last_error() returns structured detail dict (39d2c0c)
+- feat(arduino): lastErrorDetail/lastErrorMessage + post_chunk_ex; re-sync core (a8097dc)
+- feat(esp-idf): surface structured error detail via post_chunk_ex (440b54b)
+- feat(posix): surface structured error detail via post_chunk_ex (7a67c3c)
+- feat(core): capture last_error for local pipeline failures (520ff66)
+- fix(core): use ASCII separator in error formatter for serial terminals (ae2190f)
+- feat(core): capture last_error + bounded self-tagged diagnostic log (376add7)
+- feat(core): plumb transport detail via optional post_chunk_ex (6fef7c4)
+- feat(core): add honch_error_detail_t, reason enum, and one-line formatter (655347b)
+
 ## 0.3.0 - 2026-06-29
 
 - ci(release): dispatch sdk-released to the docs repo on release (7b59825)
