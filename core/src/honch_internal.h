@@ -9,7 +9,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define HONCH_SDK_VERSION "0.3.0"
+#define HONCH_SDK_VERSION "0.3.1"
 #define HONCH_DEFAULT_BATCH_SIZE 20u
 #ifndef HONCH_MAX_BATCH_SIZE
 #define HONCH_MAX_BATCH_SIZE 50u

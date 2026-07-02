@@ -40,7 +40,7 @@ BASE_CONTEXT = {
     "$device_model": "model-x",
     "$firmware_version": "1.0.0",
     "$sdk_platform": "posix",
-    "$sdk_version": "0.3.0",
+    "$sdk_version": "0.3.1",
     "$environment": "production",
 }
 CONTEXT_IDS = {

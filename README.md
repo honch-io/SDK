@@ -6,10 +6,10 @@ Product analytics SDKs for connected hardware. This repository contains the shar
 
 | Platform | Public status | Version | Path |
 | --- | --- | --- | --- |
-| ESP-IDF | Stable | `0.3.0` | [`ports/esp-idf/`](ports/esp-idf/) |
-| C/POSIX | Stable | `0.3.0` | [`ports/posix/`](ports/posix/) |
-| MicroPython | Stable | `0.3.0` | [`ports/micropython/`](ports/micropython/) |
-| Arduino ESP32 | Preview | `0.3.0` | [`ports/arduino/`](ports/arduino/) |
+| ESP-IDF | Stable | `0.3.1` | [`ports/esp-idf/`](ports/esp-idf/) |
+| C/POSIX | Stable | `0.3.1` | [`ports/posix/`](ports/posix/) |
+| MicroPython | Stable | `0.3.1` | [`ports/micropython/`](ports/micropython/) |
+| Arduino ESP32 | Preview | `0.3.1` | [`ports/arduino/`](ports/arduino/) |
 
 Stable SDKs are supported integration paths for product work. Preview SDKs are usable for evaluation and controlled pilots, but production rollout should wait for product-specific validation on the target hardware.
 

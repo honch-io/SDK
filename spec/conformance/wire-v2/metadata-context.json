@@ -7,7 +7,7 @@
       "$environment": "production",
       "$firmware_version": "1.0.0",
       "$sdk_platform": "posix",
-      "$sdk_version": "0.3.0",
+      "$sdk_version": "0.3.1",
       "capabilities": 3,
       "device_time_source": 1,
       "distinct_id": "user-1",
@@ -33,7 +33,7 @@
       "model-x",
       "1.0.0",
       "posix",
-      "0.3.0",
+      "0.3.1",
       "production",
       "gateway_batch",
       "alpha",
@@ -51,7 +51,7 @@
         "$environment": "production",
         "$firmware_version": "1.0.0",
         "$sdk_platform": "posix",
-        "$sdk_version": "0.3.0"
+        "$sdk_version": "0.3.1"
       },
       "timestamp": 1700000008000
     }
@@ -59,7 +59,7 @@
   "expected_capture_response_code": 204,
   "frames": [
     {
-      "hex": "0209020101c08e96ffbc310a06757365722d31086465766963652d31076d6f64656c2d7805312e302e3005706f73697805302e332e300a70726f64756374696f6e0d676174657761795f626174636805616c70686104626f6f740a0107000207010307020407030507040607050707060903010a030380010a010f070801090000dcee",
+      "hex": "0209020101c08e96ffbc310a06757365722d31086465766963652d31076d6f64656c2d7805312e302e3005706f73697805302e332e310a70726f64756374696f6e0d676174657761795f626174636805616c70686104626f6f740a0107000207010307020407030507040607050707060903010a030380010a010f070801090000a00f",
       "kind": "single"
     }
   ],
